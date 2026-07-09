@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回数组中元素的累加和构成的数组。"
 ---
 
 # array_cum_sum

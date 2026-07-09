@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "定义监控报警项及其处理办法，包括 FE/BE 可用性、集群负载等。"
 toc_max_heading_level: 4
 ---
 

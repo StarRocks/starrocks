@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CloudCanal 是可视化数据迁移和同步工具，支持将多种数据源的数据实时同步到 StarRocks。"
 ---
 
 # 使用 CloudCanal 导入

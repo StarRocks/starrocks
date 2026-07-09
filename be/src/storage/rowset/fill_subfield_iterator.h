@@ -17,8 +17,8 @@
 #include <memory>
 
 #include "column/column_access_path.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 // FillSubfieldIterator is a wrapper/proxy on complex type(STRUCT) column iterator that will

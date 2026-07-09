@@ -20,6 +20,7 @@
 #include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/serde/column_array_serde.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "compute_env/spill/block_manager.h"
@@ -36,8 +37,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::pipeline {
 
@@ -487,7 +487,7 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         }
     };
 
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(flush_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
@@ -563,7 +563,7 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
             _update_io_task_status(status);
         }
     };
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_runtime_state()->workgroup(), std::move(load_task));
     io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();

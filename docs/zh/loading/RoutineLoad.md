@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建和管理 Routine Load 作业，从 Apache Kafka Topic 持续流式导入数据至 StarRocks 表。"
 keywords: ['Routine Load']
 ---
 
@@ -392,10 +393,10 @@ StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRo
 
 | Avro           |StarRocks                                        |
 | -------------- | ------------------------------------------------ |
-| record         | 将 RECORD 类型的字段或者其子字段中作为 JSON 导入 |
+| record         | STRUCT，或将 RECORD 类型的字段或者其子字段中作为 JSON 导入 |
 | enums          | STRING                                           |
 | arrays         | ARRAY                                            |
-| maps           | JSON                                             |
+| maps           | MAP 或 JSON                                             |
 | union(T, null) | NULLABE(T)                                       |
 | fixed          | STRING                                           |
 

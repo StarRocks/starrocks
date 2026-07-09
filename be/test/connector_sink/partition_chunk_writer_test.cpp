@@ -29,18 +29,18 @@
 #include "connector/connector_chunk_sink.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/iceberg_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
 #include "runtime/chunk_helper.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
+using FileCommitResult = formats::FileCommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
@@ -144,9 +144,9 @@ public:
 
     void set_flush_batch_size(int64_t flush_batch_size) { _flush_batch_size = flush_batch_size; }
 
-    CommitResult close() override {
+    FileCommitResult close() override {
         size_t num_rows = WriterHelper::instance()->commit();
-        CommitResult commit_result = {
+        FileCommitResult commit_result = {
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,
                 .file_statistics =
@@ -174,7 +174,7 @@ public:
     MOCK_METHOD(const std::string&, filename, (), (const, override));
 };
 
-class MockPoller : public AsyncFlushStreamPoller {
+class MockPoller : public formats::AsyncFlushStreamPoller {
 public:
     MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
 };

@@ -39,6 +39,7 @@
 #include <string>
 
 #include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -48,7 +49,6 @@
 #include "storage/delta_column_group.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/options.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/tablet_schema.h"
 

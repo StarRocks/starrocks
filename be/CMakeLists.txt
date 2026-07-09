@@ -194,6 +194,7 @@ option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires br
 option(WITH_BENCH "Build binary with bench" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
 option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
@@ -312,6 +313,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
+    # GCC 15's libstdc++ annotates __find_if (used by std::find_if/any_of/all_of/remove_if) with
+    # "#pragma GCC unroll 4". clang treats that as an explicit unroll request and emits
+    # -Wpass-failed=transform-warning when the predicate is not trivially unrollable, which -Werror
+    # turns into a build failure. These are missed-optimization diagnostics, not correctness issues,
+    # so keep the warning but do not let it fail the build.
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=pass-failed")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -412,11 +419,6 @@ endif()
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-endif()
-
-if (ENABLE_QUERY_DEBUG_TRACE)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
-    message(STATUS "enable query debug trace")
 endif()
 
 if (ENABLE_FAULT_INJECTION)
@@ -536,44 +538,53 @@ else()
     set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
 endif()
 
+include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
+
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Webserver
+    HttpService
     Tools
+    AgentServer
+    Script
+    ModuleBootstrap
+    Orchestration
+    DataWorkflows
     ${WL_START_GROUP}
-    Agent
     Connector
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry
     Exec
-    ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
-    FileSystem
-    Formats
-    FormatsIO
-    Storage
-    Rowset
-    Runtime
-    Udf
-    Util
-    Script
-    orc
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
+    Storage
+    # The concrete format libraries must be linked ahead of the thirdparty
+    # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
+    # the Formats aggregate lets CMake append its concrete members after that
+    # group as transitive deps, which leaves FormatAvro's avro/avrocpp
+    # references unresolved. List the members explicitly, with FormatCore last,
+    # to keep them ahead of their thirdparty archives.
+    Formats
+    FormatParquet
+    FormatOrc
+    FormatAvro
+    FormatJson
+    FormatCsv
+    FormatCore
+    ExecRuntime
     ComputeEnv
     ExecPrimitive
-    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
-    Serde
+    StoragePrimitive
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:Expr> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
-    RuntimeEnv
-    RuntimeCore
+    $<TARGET_FILE:HdfsFileSystem>
+    Runtime
     Platform
-    $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
-    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:FileSystem>
     $<TARGET_FILE:IO>
-    StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
@@ -638,6 +649,7 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    arrow_testing
     arrow_flight
     arrow_flight_sql
     gRPC::grpc
@@ -678,6 +690,7 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
 
@@ -854,7 +867,7 @@ if (APPLE)
         list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
     endif()
 else()
-    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -liberty -lc -lm -ldl -rdynamic -pthread)
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -lc -lm -ldl -rdynamic -pthread)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
@@ -870,9 +883,10 @@ endif()
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
-set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+set (TEST_LINK_LIBS
+    Orchestration
+    ${STARROCKS_LINK_LIBS}
     ConnectorBuiltinRegistry
-    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock
@@ -929,7 +943,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
-    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -950,7 +964,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
-    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
@@ -962,11 +976,14 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
-add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/fs_ext)
+add_subdirectory(${SRC_DIR}/exec_primitive)
+add_subdirectory(${SRC_DIR}/connector_primitive)
+add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/module)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)
@@ -975,17 +992,19 @@ add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/platform)
+add_subdirectory(${SRC_DIR}/storage_primitive)
 add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/data_workflows)
+add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
-add_subdirectory(${SRC_DIR}/serde)
+add_subdirectory(${SRC_DIR}/exprs_ext)
+add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
-add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
 if (BUILD_FORMAT_LIB)

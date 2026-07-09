@@ -51,13 +51,16 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
@@ -123,6 +126,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
@@ -919,12 +923,31 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
-    // call before first scheduling
+    // called by the scheduler every time this job is scheduled, i.e. whenever it is in
+    // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
+    // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        this.computeResource = acquireComputeResource();
+    }
+
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. Only the scheduling path (prepare()) writes the field, so
+    // validation-only callers (partition checks at CREATE/ALTER) acquire a local resource to
+    // route their broker RPC to the right warehouse without racing the scheduler/refresh paths
+    // that read computeResource under the job lock. An unavailable warehouse is rethrown as a
+    // checked LoadException so that every caller handles it as a regular job/DDL failure: the
+    // scheduler in particular only catches StarRocksException per job, and an escaping
+    // RuntimeException would abort the whole scheduler round and stall all other routine load
+    // jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        try {
+            return warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
@@ -1738,9 +1761,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     private String jobPropertiesToJsonString() {
         Map<String, String> jobProperties = Maps.newHashMap();
-        jobProperties.put("partitions",
-                partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
-        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
+        jobProperties.put("partitions", partitions == null ? STAR_STRING
+                : partitions.getPartitionNames().stream().map(ParseUtil::backquote).collect(Collectors.joining(",")));
+        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : columnDescsToSql(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
@@ -1759,6 +1782,29 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columnDescs.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            ImportColumnDesc desc = columnDescs.get(i);
+            sb.append(ParseUtil.backquote(desc.getColumnName()));
+            if (desc.getExpr() != null) {
+                sb.append("=").append(ExprToSql.toSql(desc.getExpr()));
+            }
+        }
+        return sb.toString();
+    }
+
+    // Escape a value for embedding in a double-quoted SQL string literal: backslash first, then
+    // double quote. Pairs with the parser's escapeBackSlash() so the emitted DDL parses back to
+    // the original value. escapeJava is unsuitable here: it emits \\uXXXX for non-ASCII chars,
+    // which escapeBackSlash() cannot decode, silently corrupting e.g. CJK jsonpaths.
+    private static String escapeForDoubleQuotedSql(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     public String jobPropertiesToSql() {
@@ -1789,13 +1835,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(getFormat()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONPATHS).append("\"=\"");
-        sb.append(getJsonPaths()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonPaths())).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
         sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
-        sb.append(getJsonRoot()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonRoot())).append("\",\n");
 
         if (!Strings.isNullOrEmpty(getEnvelope())) {
             sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
@@ -1816,7 +1862,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
-            sb.append(getMergeCondition()).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(getMergeCondition())).append("\",\n");
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
@@ -1957,10 +2003,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
+        // Backquote the job name and table name so that reserved-keyword or special-character
+        // identifiers (e.g. `order`) can be re-parsed when the statement is deserialized on FE
+        // restart; otherwise getLoadDesc() fails to parse and routineLoadDesc is lost. ParseUtil
+        // .backquote also escapes embedded backticks (a -> `a`, a`b -> `a``b`), which naive
+        // string concatenation does not.
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
                         " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
-                name, tableName, originLoadDesc.toSql());
+                ParseUtil.backquote(name), ParseUtil.backquote(tableName), originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatementInfo(sql, 0);
     }

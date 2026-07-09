@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+description: "StarRocks クエリプロファイルから出力される演算子別メトリクスの権威ある参照情報。"
+keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
 ---
 

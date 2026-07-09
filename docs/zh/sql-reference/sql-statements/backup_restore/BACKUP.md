@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将StarRocks中的数据库、表、物化视图、逻辑视图和UDF备份到远程存储仓库。"
 keywords: ['beifen']
 ---
 

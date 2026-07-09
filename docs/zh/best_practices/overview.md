@@ -2,6 +2,7 @@
 sidebar_position: 1
 sidebar_label: '概述'
 keywords: ['nei cun', 'S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
+description: "StarRocks best practices for efficient table design covering partitioning, clustering, and bucketing to improve query performance and reduce costs."
 ---
 
 # 最佳实践

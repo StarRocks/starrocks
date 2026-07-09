@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Set time zone in StarRocks at session or global level using the time_zone parameter, ensuring consistency with FE deployment timezone before data import."
 ---
 
 # 设置时区

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v2.2.0 以降、Java プログラミング言語を使用してカスタム UDF を開発できます。"
 sidebar_position: 0.9
 ---
 

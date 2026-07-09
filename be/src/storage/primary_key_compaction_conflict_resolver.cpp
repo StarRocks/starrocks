@@ -14,19 +14,22 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include <fmt/format.h>
+
 #include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/primary_index.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -56,6 +59,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 // a per-chunk threshold of 1, reverting to pre-patch behaviour.
                 const size_t batch_rows_threshold =
                         static_cast<size_t>(std::max<int32_t>(1, config::primary_key_compaction_replace_batch_rows));
+                // Metadata row counts, used only to advance the mapper past a lost segment (see below).
+                const auto seg_num_rows = output_segment_num_rows();
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
                     // only hold pkey, so can use larger chunk size
@@ -152,6 +157,47 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                             dv->init(params.new_version, tmp_deletes.data(), tmp_deletes.size());
                         }
                         handle_delvec_result_func(params.rowset_id + segment_id, dv, tmp_deletes.size());
+                    } else {
+                        // itr == nullptr: get_each_segment_iterator only leaves a null slot for a
+                        // physically-lost segment tolerated by experimental_lake_ignore_lost_segment, so
+                        // with the flag off this is an unexpected bug -- fail loudly rather than silently
+                        // leaving stale index entries.
+                        RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                              fmt::format("unexpected null segment iterator at position {} (rssid {})",
+                                                          segment_id, params.rowset_id + segment_id));
+                        RETURN_ERROR_IF_FALSE(
+                                segment_id < seg_num_rows.size(),
+                                fmt::format("lost segment at position {} (rssid {}) has no metadata row count; cannot "
+                                            "advance the rows-mapper past it",
+                                            segment_id, params.rowset_id + segment_id));
+                        // Lost segment: its data is gone, so we cannot read its PKs to update the primary
+                        // index -- those keys are left pointing at the input rowsets that apply_opcompaction
+                        // then deletes (stale until an index rebuild; same class as a lost input segment). We
+                        // must still advance the rows-mapper by this segment's row count so the following
+                        // segments stay aligned (otherwise they would read this segment's mapper values and
+                        // produce wrong delvecs). The lost segment is skipped on read, so it needs no delvec.
+                        const uint32_t lost_rows = seg_num_rows[segment_id];
+                        if (lost_rows == kUnknownSegmentNumRows) {
+                            return Status::InternalError(
+                                    fmt::format("output rowset segment {} has no num_rows in metadata; cannot advance "
+                                                "rows-mapper past a lost segment (rssid: {})",
+                                                segment_id, params.rowset_id + segment_id));
+                        }
+                        LOG(WARNING) << "ignore lost segment in compaction conflict resolution, tablet: "
+                                     << params.tablet_id << ", rssid: " << (params.rowset_id + segment_id) << ", left "
+                                     << lost_rows << " PK index entries stale (skipped)";
+                        // Advance the mapper in vector_chunk_size batches, reusing one buffer, to bound
+                        // transient memory (the running CRC accumulates across next_values calls, so a
+                        // chunked read is byte-identical to one big read).
+                        uint32_t remaining = lost_rows;
+                        std::vector<uint64_t> skipped;
+                        while (remaining > 0) {
+                            const uint32_t n =
+                                    std::min<uint32_t>(remaining, static_cast<uint32_t>(config::vector_chunk_size));
+                            skipped.clear();
+                            RETURN_IF_ERROR(mapper_iter.next_values(n, &skipped));
+                            remaining -= n;
+                        }
                     }
                 }
                 return Status::OK();
@@ -179,10 +225,32 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                 // up to K parallel per-segment reads (each on its own RAF) and
                 // pipeline our processing of segment N against the still-pending
                 // downloads for segments N+1..N+K-1.
+                // This path only needs each segment's row count (never its data), so a null slot -- a
+                // physically-lost segment tolerated by experimental_lake_ignore_lost_segment -- falls back
+                // to the metadata row count. That keeps the rows-mapper aligned and the delvec (built purely
+                // from the mapper values) is still generated correctly.
+                const auto seg_num_rows = output_segment_num_rows();
                 std::vector<size_t> per_segment_rows;
                 per_segment_rows.reserve(segments.size());
-                for (const auto& seg : segments) {
-                    per_segment_rows.push_back(seg->num_rows());
+                for (size_t i = 0; i < segments.size(); i++) {
+                    if (segments[i] != nullptr) {
+                        per_segment_rows.push_back(segments[i]->num_rows());
+                        continue;
+                    }
+                    // A null segment only comes from a physically-lost segment tolerated by the flag; with
+                    // the flag off it is an unexpected bug -- fail loudly.
+                    RETURN_ERROR_IF_FALSE(
+                            config::experimental_lake_ignore_lost_segment,
+                            fmt::format("unexpected null segment at position {} during compaction conflict resolution",
+                                        i));
+                    if (i < seg_num_rows.size() && seg_num_rows[i] != kUnknownSegmentNumRows) {
+                        per_segment_rows.push_back(seg_num_rows[i]);
+                    } else {
+                        return Status::InternalError(fmt::format(
+                                "cannot determine row count for a lost segment (index {}) during compaction "
+                                "conflict resolution",
+                                i));
+                    }
                 }
                 RETURN_IF_ERROR(mapper_iter.prepare_segments(per_segment_rows));
 
@@ -194,10 +262,23 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                     std::vector<uint64_t> rssid_rowids;
                     {
                         const int64_t t0 = MonotonicMicros();
-                        RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                        RETURN_IF_ERROR(mapper_iter.next_values(per_segment_rows[segment_id], &rssid_rowids));
                         mapper_read_us_accum += MonotonicMicros() - t0;
                     }
-                    DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
+                    DCHECK(per_segment_rows[segment_id] == rssid_rowids.size());
+                    if (segments[segment_id] == nullptr) {
+                        // Lost segment (experimental_lake_ignore_lost_segment). We already advanced the
+                        // rows-mapper above so the following segments stay aligned. Record its position
+                        // and emit an empty delvec placeholder (keeps delvecs 1:1 with ssts); the caller
+                        // then skips both the SST ingest and the delvec for this position, so the PK
+                        // index never references the lost rssid -- consistent with the read path, where a
+                        // lost segment contributes neither data nor index entries.
+                        _lost_segment_positions.insert(static_cast<uint32_t>(segment_id));
+                        DelVectorPtr dv = std::make_shared<DelVector>();
+                        dv->init(params.new_version, nullptr, 0);
+                        handle_delvec_result_func(params.rowset_id + segment_id, dv, 0);
+                        continue;
+                    }
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;
                         const uint32_t rowid = rssid_rowids[i] & 0xffffffff;

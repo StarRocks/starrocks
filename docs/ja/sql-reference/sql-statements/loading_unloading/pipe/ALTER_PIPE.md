@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "パイプのプロパティ設定を変更します。"
 ---
 
 # ALTER PIPE

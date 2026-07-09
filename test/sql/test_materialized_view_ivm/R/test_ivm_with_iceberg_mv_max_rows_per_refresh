@@ -1,0 +1,103 @@
+-- name: test_ivm_with_iceberg_mv_max_rows_per_refresh
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t_batch (k int, v bigint);
+-- result:
+-- !result
+insert into t_batch values (1, 10), (2, 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_batch
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_batch WITH SYNC MODE;
+SELECT count(*) FROM test_mv_batch;
+-- result:
+2
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv_batch';
+admin set frontend config ("mv_max_rows_per_refresh" = "2");
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (3, 30);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (4, 40);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (5, 50);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (6, 60);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (7, 70);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (8, 80);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_batch;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv_batch")
+-- result:
+None
+-- !result
+SELECT count(*) FROM test_mv_batch;
+-- result:
+8
+-- !result
+SELECT k, v FROM test_mv_batch ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+7	70
+8	80
+-- !result
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+-- result:
+3
+-- !result
+admin set frontend config ("mv_max_rows_per_refresh" = "100000000");
+-- result:
+-- !result
+drop materialized view test_mv_batch;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

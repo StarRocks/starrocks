@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL operators are functions used for comparison widely in WHERE clauses of SELECT statements."
 sidebar_label: "WHERE and Operators"
 ---
 

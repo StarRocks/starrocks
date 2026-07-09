@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 VARIANT 对象指定路径中提取类型化值的函数族。"
 ---
 
 # get_variant

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load 不支持重新执行成功的导入作业且标签不可复用。"
 ---
 
 # Broker Load 导入常见问题

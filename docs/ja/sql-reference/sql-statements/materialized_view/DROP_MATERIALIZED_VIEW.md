@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "マテリアライズドビューを削除します。"
 ---
 
 # DROP MATERIALIZED VIEW

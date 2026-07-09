@@ -38,6 +38,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -54,6 +55,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -205,8 +207,19 @@ public class PublishVersionTask extends AgentTask {
         if (!droppedTablets.isEmpty()) {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
+        // This callback runs on every load transaction's publish completion and only mutates
+        // Replica state of the tables these tablets belong to. Take a table-scoped intensive
+        // lock instead of a full DB-WRITE so unrelated tables in the same DB are not serialized.
+        Set<Long> tableIdSet = new HashSet<>();
+        for (TabletMeta tabletMeta : tablets.getTabletMetaList(tabletIds)) {
+            long tableId = tabletMeta.getTableId();
+            if (tableId != TabletInvertedIndex.NOT_EXIST_VALUE) {
+                tableIdSet.add(tableId);
+            }
+        }
+        List<Long> tableIdList = new ArrayList<>(tableIdSet);
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -221,7 +234,7 @@ public class PublishVersionTask extends AgentTask {
                 replica.updateRowCount(reportedVersion, minReadableVersion, replica.getDataSize(), replica.getRowCount());
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

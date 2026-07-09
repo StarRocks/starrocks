@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
 ---
 
 # 查询外部数据

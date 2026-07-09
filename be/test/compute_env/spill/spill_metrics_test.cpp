@@ -16,7 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
+
+#include "base/testutil/assert.h"
+#include "common/thread/threadpool.h"
 
 namespace starrocks {
 
@@ -27,6 +31,10 @@ void assert_metric_value(MetricRegistry* registry, const std::string& name, cons
     auto* metric = registry->get_metric(name, labels);
     ASSERT_NE(nullptr, metric);
     ASSERT_EQ(value, metric->to_string());
+}
+
+void assert_metric_value(MetricRegistry* registry, const std::string& name, const std::string& value) {
+    assert_metric_value(registry, name, MetricLabels::EmptyLabels, value);
 }
 
 } // namespace
@@ -69,6 +77,45 @@ TEST(SpillMetricsTest, InstallRegistersLocalAndRemoteMetrics) {
     ASSERT_NE(nullptr, remote);
     remote->trigger_total->increment(8);
     assert_metric_value(&registry, "query_spill_trigger_total", remote_labels, "8");
+
+    metrics.load_spill_remote_bytes_read_total.increment(9);
+    assert_metric_value(&registry, "load_spill_remote_bytes_read_total", "9");
+
+    metrics.load_spill_local_blocks_write_total.increment(10);
+    assert_metric_value(&registry, "load_spill_local_blocks_write_total", "10");
+}
+
+TEST(SpillMetricsTest, InstallRegistersUncoveredReasonCounter) {
+    MetricRegistry registry("test_registry");
+    SpillMetrics metrics(&registry);
+    metrics.install(&registry);
+
+    ASSERT_NE(nullptr, metrics.parked_with_uncovered_reason_total());
+
+    metrics.parked_with_uncovered_reason_total()->increment(2);
+    assert_metric_value(&registry, "spill_parked_with_uncovered_reason_total", MetricLabels::EmptyLabels, "2");
+}
+
+TEST(SpillMetricsTest, RegisterLoadSpillThreadPoolMetrics) {
+    MetricRegistry registry("test_registry");
+    SpillMetrics metrics(&registry);
+    std::unique_ptr<ThreadPool> threadpool;
+    ASSERT_OK(ThreadPoolBuilder("spill_metric_tst")
+                      .set_min_threads(0)
+                      .set_max_threads(3)
+                      .set_max_queue_size(5)
+                      .build(&threadpool));
+
+    metrics.load_spill_block_merge.register_metrics(&registry, "load_spill_block_merge", threadpool.get());
+    metrics.tablet_internal_parallel_merge.register_metrics(&registry, "tablet_internal_parallel_merge",
+                                                            threadpool.get());
+
+    registry.trigger_hook();
+
+    assert_metric_value(&registry, "load_spill_block_merge_threadpool_size", "3");
+    assert_metric_value(&registry, "load_spill_block_merge_queue_count", "0");
+    assert_metric_value(&registry, "tablet_internal_parallel_merge_threadpool_size", "3");
+    assert_metric_value(&registry, "tablet_internal_parallel_merge_queue_count", "0");
 }
 
 } // namespace starrocks

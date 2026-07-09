@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shared-nothing と Shared-data クラスタ間でサポートされている機能の違いを比較します。"
 sidebar_label: "機能の違い"
 ---
 

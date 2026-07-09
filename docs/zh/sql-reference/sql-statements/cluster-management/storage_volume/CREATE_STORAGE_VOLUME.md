@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE STORAGE VOLUME creates a storage volume for a remote storage system."
 ---
 
 # CREATE STORAGE VOLUME

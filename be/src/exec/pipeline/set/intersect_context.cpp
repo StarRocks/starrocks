@@ -14,7 +14,9 @@
 
 #include "exec/pipeline/set/intersect_context.h"
 
+#include "exprs/expr.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

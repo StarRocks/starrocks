@@ -18,28 +18,19 @@
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load_spill/load_spill_merge_input_batch.h"
 #include "compute_env/spill/block_group.h"
-#include "compute_env/spill/options.h"
-#include "compute_env/spill/serde.h"
-#include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/vacuum.h"
-#include "storage/load_chunk_spiller.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_engine.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
-                                                                 std::unique_ptr<LoadSpillPipelineMergeTask> task,
+                                                                 std::unique_ptr<LoadSpillMergeInputBatch> task,
                                                                  const Schema* schema, std::atomic<bool>* quit_flag,
                                                                  RuntimeProfile::Counter* write_io_timer)
         : _writer(std::move(writer)),
@@ -50,7 +41,7 @@ TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(_writer->tablet_id()) + "-" + std::to_string(_writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
-                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                      RuntimeEnv::GetInstance()->compaction_mem_tracker());
 }
 
 TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
@@ -134,6 +125,10 @@ void TabletInternalParallelMergeTask::run() {
 
 void TabletInternalParallelMergeTask::cancel() {
     update_status(Status::Cancelled("TabletInternalParallelMergeTask cancelled"));
+}
+
+int64_t TabletInternalParallelMergeTask::slot_idx() const {
+    return _task->slot_idx;
 }
 
 void TabletInternalParallelMergeTask::update_status(const Status& st) {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "triggersはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # triggers

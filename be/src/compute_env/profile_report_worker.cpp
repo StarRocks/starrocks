@@ -1,0 +1,177 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "compute_env/profile_report_worker.h"
+
+#include <sstream>
+#include <utility>
+
+#include "base/time/time.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/logging.h"
+#include "common/thread/thread.h"
+#include "common/util/misc.h"
+
+namespace starrocks {
+
+Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    if (_non_pipeline_report_tasks.find(fragment_instance_id) != _non_pipeline_report_tasks.end()) {
+        std::stringstream msg;
+        msg << "Fragment instance " << print_id(fragment_instance_id) << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
+    }
+
+    VLOG(3) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+    _non_pipeline_report_tasks.emplace(fragment_instance_id, NonPipelineReportTask(UnixMillis(), TQueryType::LOAD));
+    return Status::OK();
+}
+
+void ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    _non_pipeline_report_tasks.erase(fragment_instance_id);
+}
+
+void ProfileReportWorker::_unregister_non_pipeline_loads(const std::vector<TUniqueId>& fragment_instance_ids) {
+    if (fragment_instance_ids.empty()) {
+        return;
+    }
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    for (const auto& fragment_instance_id : fragment_instance_ids) {
+        VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+        _non_pipeline_report_tasks.erase(fragment_instance_id);
+    }
+}
+
+Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+    std::lock_guard lg(_pipeline_report_mutex);
+    PipeLineReportTaskKey key(query_id, fragment_instance_id);
+    if (_pipeline_report_tasks.find(key) != _pipeline_report_tasks.end()) {
+        std::stringstream msg;
+        msg << "Query id " << print_id(query_id) << ", Fragment instance " << print_id(fragment_instance_id)
+            << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
+    }
+    VLOG(3) << "register_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
+    _pipeline_report_tasks.emplace(std::move(key), PipelineReportTask(UnixMillis(), TQueryType::LOAD));
+    return Status::OK();
+}
+
+void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+    VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
+            << ", fragment_instance_id=" << print_id(fragment_instance_id);
+    std::lock_guard lg(_pipeline_report_mutex);
+    _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
+}
+
+void ProfileReportWorker::_unregister_pipeline_loads(const std::vector<PipeLineReportTaskKey>& tasks) {
+    if (tasks.empty()) {
+        return;
+    }
+    std::lock_guard lg(_pipeline_report_mutex);
+    for (const auto& task : tasks) {
+        VLOG(3) << "unregister_pipeline_load query_id=" << print_id(task.query_id)
+                << ", fragment_instance_id=" << print_id(task.fragment_instance_id);
+        _pipeline_report_tasks.erase(task);
+    }
+}
+
+void ProfileReportWorker::_start_report_profile() {
+    int64_t cur_ms = UnixMillis();
+
+    // report non pipeline load task
+    std::vector<TUniqueId> non_pipeline_need_report_fragment_ids;
+    {
+        std::lock_guard lg(_non_pipeline_report_mutex);
+
+        for (const auto& iter : _non_pipeline_report_tasks) {
+            if (iter.second.task_type != TQueryType::LOAD) {
+                continue;
+            }
+            const int64_t last_report_ms = iter.second.last_report_time;
+            if (cur_ms - last_report_ms >= config::profile_report_interval * 1000) {
+                non_pipeline_need_report_fragment_ids.push_back(iter.first);
+            }
+        }
+    }
+
+    DCHECK(_options.report_non_pipeline_fragments != nullptr);
+    auto non_pipeline_fragment_ids_to_unregister =
+            _options.report_non_pipeline_fragments(non_pipeline_need_report_fragment_ids);
+    _unregister_non_pipeline_loads(non_pipeline_fragment_ids_to_unregister);
+
+    // report pipeline load task
+    std::vector<PipeLineReportTaskKey> pipeline_need_report_query_fragment_ids;
+    {
+        std::lock_guard lg(_pipeline_report_mutex);
+
+        for (const auto& iter : _pipeline_report_tasks) {
+            if (iter.second.task_type != TQueryType::LOAD) {
+                continue;
+            }
+            const int64_t last_report_ms = iter.second.last_report_time;
+            if (cur_ms - last_report_ms >= config::profile_report_interval * 1000) {
+                pipeline_need_report_query_fragment_ids.push_back(iter.first);
+            }
+        }
+    }
+
+    DCHECK(_options.report_pipeline_fragments != nullptr);
+    auto pipeline_tasks_to_unregister = _options.report_pipeline_fragments(pipeline_need_report_query_fragment_ids);
+    _unregister_pipeline_loads(pipeline_tasks_to_unregister);
+}
+
+void ProfileReportWorker::execute() {
+    LOG(INFO) << "ProfileReportWorker start working.";
+
+    while (!_stop.load(std::memory_order_consume)) {
+        _start_report_profile();
+
+        // interval can be changed by config dynamically
+        int32_t interval = config::profile_report_interval;
+        if (interval <= 0) {
+            LOG(WARNING) << "profile_report_interval config is illegal: " << interval << ", force set to 1";
+            interval = 1;
+        }
+
+        nap_sleep(interval, [this] { return _stop.load(std::memory_order_consume); });
+    }
+    LOG(INFO) << "ProfileReportWorker going to exit.";
+}
+
+ProfileReportWorker::ProfileReportWorker(ProfileReportWorkerOptions options) : _options(std::move(options)) {
+    DCHECK(_options.report_non_pipeline_fragments != nullptr);
+    DCHECK(_options.report_pipeline_fragments != nullptr);
+    if (_options.start_worker_thread) {
+        _thread = std::thread([this] { execute(); });
+        Thread::set_thread_name(_thread, "profile_report");
+    }
+}
+
+ProfileReportWorker::~ProfileReportWorker() {
+    close();
+}
+
+void ProfileReportWorker::close() {
+    _stop.store(true, std::memory_order_release);
+    if (_thread.joinable()) {
+        _thread.join();
+    }
+}
+
+} // namespace starrocks

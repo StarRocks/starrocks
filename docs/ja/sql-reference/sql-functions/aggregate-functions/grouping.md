@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "列が集計列であるかどうかを示します。"
 ---
 
 # grouping

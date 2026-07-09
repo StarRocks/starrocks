@@ -47,3 +47,11 @@ select cast(PARSE_JSON('[{"star" : "rocks", "length": 5, "numbers": [1, 4, 7], "
 -- result:
 [{"star":"rocks","length":5,"numbers":[1,4,7],"nest":{"col1":1,"col2":2,"col3":3}},{"star":"rockses","length":33,"numbers":[2,5,9],"nest":{"col1":3,"col2":6,"col3":9}}]
 -- !result
+select cast(PARSE_JSON('{"x":1}') as struct<`a[` int>);
+-- result:
+[REGEX].*Not support cast JSON to STRUCT.*
+-- !result
+select cast(PARSE_JSON('{"a.b":7}') as struct<`a.b` int>);
+-- result:
+{"a.b":null}
+-- !result

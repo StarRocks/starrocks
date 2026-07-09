@@ -24,3 +24,20 @@ index d02e9ba..89c9308 100644
  
  #include <sasl.h>
  #include <saslplug.h>
+diff --git a/saslauthd/md5.c b/saslauthd/md5.c
+index 27938c8..4546f22 100644
+--- a/saslauthd/md5.c
++++ b/saslauthd/md5.c
+@@ -400,3 +400,3 @@ void _saslauthd_hmac_md5_init(HMAC_MD5_CTX *hmac,
+-  MD5_memset(&k_ipad, 0, sizeof(k_ipad));
+-  MD5_memset(&k_opad, 0, sizeof(k_opad));
+-  MD5_memset(&tk, 0, sizeof(tk));
++  MD5_memset(k_ipad, 0, sizeof(k_ipad));
++  MD5_memset(k_opad, 0, sizeof(k_opad));
++  MD5_memset(tk, 0, sizeof(tk));
+@@ -427 +427 @@ void _saslauthd_hmac_md5_precalc(HMAC_MD5_STATE *state,
+-  MD5_memset(&hmac, 0, sizeof(hmac));
++  MD5_memset((POINTER)&hmac, 0, sizeof(hmac));
+@@ -435 +435 @@ void _saslauthd_hmac_md5_import(HMAC_MD5_CTX *hmac,
+-  MD5_memset(hmac, 0, sizeof(HMAC_MD5_CTX));
++  MD5_memset((POINTER)hmac, 0, sizeof(HMAC_MD5_CTX));

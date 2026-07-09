@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use AUTO INCREMENT columns and Global Dictionary in StarRocks to replace string keys with integer IDs, accelerating COUNT(DISTINCT) and join operations."
 sidebar_position: 100
 ---
 

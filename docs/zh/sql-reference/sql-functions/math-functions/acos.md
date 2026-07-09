@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算数值的反余弦值（单位为弧度）。"
 ---
 
 # acos

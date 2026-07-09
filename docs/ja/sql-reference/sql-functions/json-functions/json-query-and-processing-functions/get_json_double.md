@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたパスからJSON文字列内の浮動小数点値を抽出します。"
 ---
 
 # get_json_double

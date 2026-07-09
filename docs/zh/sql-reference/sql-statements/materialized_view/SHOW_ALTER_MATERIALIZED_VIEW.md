@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "查看同步物化视图的构建状态。"
 ---
 
 # SHOW ALTER MATERIALIZED VIEW

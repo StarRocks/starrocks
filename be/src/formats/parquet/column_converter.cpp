@@ -22,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -93,13 +94,14 @@ public:
     Int96ToDateTimeConverter() = default;
     ~Int96ToDateTimeConverter() override = default;
 
-    Status init(const std::string& timezone);
+    Status init(const std::string& timezone, bool as_timestamp_ntz);
     // convert column from int96 to timestamp
     Status convert(const Column* src, Column* dst) override;
 
 private:
     int _offset = 0;
     cctz::time_zone _ctz;
+    bool _as_timestamp_ntz = false;
 };
 
 class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
@@ -126,15 +128,21 @@ private:
     int64_t _scale_to_nano_factor = 0;
 };
 
-template <typename SourceType, typename DestType>
+template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
 void convert_int_to_int(const SourceType* __restrict__ src, DestType* __restrict__ dst, size_t size) {
     for (size_t i = 0; i < size; i++) {
-        dst[i] = DestType(src[i]);
+        if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+            // Reinterpret the source through its unsigned bit pattern before widening so a
+            // high-bit unsigned value is zero-extended instead of sign-extended.
+            dst[i] = DestType(static_cast<std::make_unsigned_t<SourceType>>(src[i]));
+        } else {
+            dst[i] = DestType(src[i]);
+        }
     }
 }
 
 // Support int => int and float => double
-template <typename SourceType, typename DestType>
+template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
 class NumericToNumericConverter final : public ColumnConverter {
 public:
     NumericToNumericConverter() = default;
@@ -159,13 +167,13 @@ public:
 
         size_t size = dst_null_data.size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
-        convert_int_to_int<SourceType, DestType>(src_data.data(), dst_data.data(), size);
+        convert_int_to_int<SourceType, DestType, kSourceUnsigned>(src_data.data(), dst_data.data(), size);
         dst_nullable_column->set_has_null(src_nullable_column->has_null());
         return Status::OK();
     }
 };
 
-template <typename SourceType, LogicalType DestType>
+template <typename SourceType, LogicalType DestType, bool kSourceUnsigned = false>
 class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
@@ -206,7 +214,14 @@ public:
                 has_null = true;
                 continue;
             }
-            DestPrimitiveType value = src_data[i];
+            DestPrimitiveType value;
+            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+                // Reinterpret the source through its unsigned bit pattern so a high-bit
+                // unsigned value is zero-extended instead of sign-extended.
+                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
+            } else {
+                value = src_data[i];
+            }
             if (_scale_type == DecimalScaleType::kScaleUp) {
                 value *= _scale_factor;
             } else if (_scale_type == DecimalScaleType::kScaleDown) {
@@ -428,6 +443,23 @@ Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst)
     return Status::OK();
 }
 
+template <typename DestType>
+static std::unique_ptr<ColumnConverter> make_int32_numeric_converter(bool src_unsigned) {
+    if (src_unsigned) {
+        return std::make_unique<NumericToNumericConverter<int32_t, DestType, true>>();
+    }
+    return std::make_unique<NumericToNumericConverter<int32_t, DestType, false>>();
+}
+
+template <LogicalType DestType>
+static std::unique_ptr<ColumnConverter> make_int32_decimal_converter(bool src_unsigned, int32_t src_scale,
+                                                                     int32_t dst_scale) {
+    if (src_unsigned) {
+        return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, true>>(src_scale, dst_scale);
+    }
+    return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, false>>(src_scale, dst_scale);
+}
+
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
@@ -448,21 +480,22 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::INT32: {
+        const bool src_unsigned = is_unsigned_integer(schema_element);
         if (col_type != LogicalType::TYPE_INT) {
             need_convert = true;
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int8_t>>();
+            *converter = make_int32_numeric_converter<int8_t>(src_unsigned);
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int16_t>>();
+            *converter = make_int32_numeric_converter<int16_t>(src_unsigned);
             break;
         case LogicalType::TYPE_BIGINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int64_t>>();
+            *converter = make_int32_numeric_converter<int64_t>(src_unsigned);
             break;
         case LogicalType::TYPE_DOUBLE:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, double>>();
+            *converter = make_int32_numeric_converter<double>(src_unsigned);
             break;
         case LogicalType::TYPE_TIME:
             *converter = std::make_unique<Int32ToTimeConverter>();
@@ -478,19 +511,16 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             // rejection
         case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMALV2>>(field.scale, 9);
+            *converter = make_int32_decimal_converter<TYPE_DECIMALV2>(src_unsigned, field.scale, 9);
             break;
         case LogicalType::TYPE_DECIMAL32:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL32>>(field.scale,
-                                                                                                typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL32>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         case LogicalType::TYPE_DECIMAL64:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL64>>(field.scale,
-                                                                                                typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL64>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         case LogicalType::TYPE_DECIMAL128:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL128>>(field.scale,
-                                                                                                 typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL128>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         default:
             break;
@@ -595,7 +625,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         need_convert = true;
         if (col_type == LogicalType::TYPE_DATETIME) {
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
-            RETURN_IF_ERROR(_converter->init(timezone));
+            RETURN_IF_ERROR(_converter->init(timezone, typeDescriptor.datetime_is_ntz));
             *converter = std::move(_converter);
         }
         break;
@@ -750,7 +780,8 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::init(const std::string& timezone) {
+Status Int96ToDateTimeConverter::init(const std::string& timezone, bool as_timestamp_ntz) {
+    _as_timestamp_ntz = as_timestamp_ntz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
@@ -783,6 +814,12 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 Timestamp timestamp =
                         (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                if (_as_timestamp_ntz) {
+                    // Paimon TIMESTAMP (NTZ): the INT96 stores the wall clock, so keep it as-is
+                    // instead of shifting by the session timezone the way Hive/Spark INT96 needs.
+                    dst_data[i].set_timestamp(timestamp);
+                    continue;
+                }
                 int offset = _offset;
                 if constexpr (!FAST_TZ) {
                     offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
@@ -883,6 +920,14 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 int64_t seconds = src_data[i] / _second_mask;
                 int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+                // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
+                // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
+                // floor split the FE boundary computation uses. Without this, of_epoch_second packs
+                // a negative microsecond into the timestamp and corrupts the value.
+                if (nanoseconds < 0) {
+                    seconds -= 1;
+                    nanoseconds += NANOSECS_PER_SEC;
+                }
 
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;

@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer.mv;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -26,6 +28,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
@@ -47,6 +50,7 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -54,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -125,6 +130,15 @@ public class IVMAnalyzer {
                     // approx_count_distinct / ndv: HLL state union is well-defined.
                     .put(FunctionSet.APPROX_COUNT_DISTINCT,  args -> args.length == 1)
                     .put(FunctionSet.NDV,                    args -> args.length == 1)
+                    // bitmap_agg: exact distinct count. bitmap_union(to_bitmap(col)) normalizes to this;
+                    // BITMAP state unions associatively, so the delta merge is well-defined.
+                    .put(FunctionSet.BITMAP_AGG,             args -> args.length == 1)
+                    // bitmap_union/hll_union/percentile_union: the argument is already a metric sketch
+                    // (from bitmap_hash/hll_hash/percentile_hash, or a metric column), unioned
+                    // associatively like bitmap_agg.
+                    .put(FunctionSet.BITMAP_UNION,           args -> args.length == 1 && args[0].isBitmapType())
+                    .put(FunctionSet.HLL_UNION,              args -> args.length == 1 && args[0].isHllType())
+                    .put(FunctionSet.PERCENTILE_UNION,       args -> args.length == 1 && args[0].isPercentile())
                     .build();
 
     private static boolean isFixedOrFloat(Type t) {
@@ -135,9 +149,29 @@ public class IVMAnalyzer {
         return t.isDate() || t.isDatetime();
     }
 
+    // Mirror QueryTransformer.aggregate's grouping-key derivation: dedup, and drop constant keys
+    // unless every key is constant (then keep the first, like aggregate()'s groupAllConst). The
+    // synthesized DISTINCT GROUP BY and the encoded __ROW_ID__ must use the same keys the refresh
+    // aggregate groups by, or the merge join probes a different key set (no-match / duplicate rows).
+    private static List<Expr> normalizeGroupKeys(List<Expr> keys) {
+        boolean allConstant = keys.stream().allMatch(Expr::isConstant);
+        List<Expr> normalized = Lists.newArrayList();
+        for (Expr key : keys) {
+            if (key.isConstant() && !(allConstant && normalized.isEmpty())) {
+                continue;
+            }
+            if (!normalized.contains(key)) {
+                normalized.add(key);
+            }
+        }
+        return normalized;
+    }
+
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
+    // null at CREATE -> deduce per keys; non-null at refresh -> use the MV's pinned version.
+    private Integer pinnedEncodeRowIdVersion;
 
     public IVMAnalyzer(ConnectContext connectContext,
                        CreateMaterializedViewStatement statement,
@@ -160,22 +194,33 @@ public class IVMAnalyzer {
      * - If incremental refresh is supported, the result must not be none.
      */
     public Optional<IVMAnalyzeResult> rewrite(MaterializedView.RefreshMode refreshMode) {
+        return rewriteInternal(refreshMode, null, refreshMode.isIncremental());
+    }
+
+    public Optional<IVMAnalyzeResult> rewriteForRefresh(MaterializedView.RefreshMode refreshMode,
+                                                        int pinnedEncodeRowIdVersion) {
+        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion, false);
+    }
+
+    private Optional<IVMAnalyzeResult> rewriteInternal(MaterializedView.RefreshMode refreshMode,
+                                                       Integer pinnedVersion, boolean runTrial) {
         if (!refreshMode.isIncremental() && !refreshMode.isAuto()) {
             return Optional.empty();
         }
+        this.pinnedEncodeRowIdVersion = pinnedVersion;
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            // Retractable queries produce their own __ROW_ID__ (encode(group_by_keys)); non-retractable
-            // append-only scans rely on storage AUTO_INCREMENT.
-            boolean isRetractable = rewriteImpl(queryRelation);
-            RowIdStrategy strategy = isRetractable
+            // A query that computes its own __ROW_ID__ (e.g. an aggregate's encode(group_by_keys)) uses
+            // QUERY_COMPUTED; an append-only scan without one relies on storage AUTO_INCREMENT.
+            boolean hasComputedRowId = rewriteImpl(queryRelation);
+            RowIdStrategy strategy = hasComputedRowId
                     ? RowIdStrategy.QUERY_COMPUTED
                     : RowIdStrategy.AUTO_INCREMENT;
             // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
             // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
-            // longer matches the BE state-union path. INCREMENTAL only.
-            if (refreshMode.isIncremental()) {
+            // longer matches the BE state-union path. CREATE only; refresh builds the real plan next.
+            if (runTrial) {
                 IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
             }
             IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
@@ -202,28 +247,28 @@ public class IVMAnalyzer {
         if (queryRelation instanceof SelectRelation) {
             SelectRelation selectRelation = (SelectRelation) queryRelation;
             // For SelectRelation, we rewrite it to support incremental view maintenance.
-            return checkSelectRelation(selectRelation);
+            return rewriteSelectRelation(selectRelation);
         } else if (queryRelation instanceof SetOperationRelation) {
-            return checkSetRelation((SetOperationRelation) queryRelation);
+            return rewriteSetRelation((SetOperationRelation) queryRelation);
         } else if (queryRelation instanceof SubqueryRelation) {
-            return checkSubqueryRelation((SubqueryRelation) queryRelation);
+            return rewriteSubqueryRelation((SubqueryRelation) queryRelation);
         } else {
             throw new SemanticException("IVMAnalyzer can only handle SelectRelation/UnionRelation, but got: %s",
                     queryRelation.getClass().getSimpleName());
         }
     }
 
-    private boolean checkSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
+    private boolean rewriteSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
         QueryStatement subQueryStatement = subqueryRelation.getQueryStatement();
-        boolean isChildRetractable = rewriteImpl(subQueryStatement.getQueryRelation());
-        if (isChildRetractable) {
+        boolean childHasComputedRowId = rewriteImpl(subQueryStatement.getQueryRelation());
+        if (childHasComputedRowId) {
             throw new SemanticException("IVMAnalyzer does not support subquery relation, " +
                     "but got: %s", subqueryRelation.getClass().getSimpleName());
         }
         return false;
     }
 
-    private boolean checkSetRelation(SetOperationRelation setOperationRelation) throws AnalysisException {
+    private boolean rewriteSetRelation(SetOperationRelation setOperationRelation) throws AnalysisException {
         if (!(setOperationRelation instanceof UnionRelation)) {
             throw new SemanticException("IVMAnalyzer can only handle UnionRelation, " +
                     "but got: %s", setOperationRelation.getClass().getSimpleName());
@@ -246,8 +291,8 @@ public class IVMAnalyzer {
                 throw new SemanticException("UnionRelation in IVMAnalyzer should not have aggregate functions, " +
                         "but got: %s", aggregateExprs);
             }
-            boolean isChildRetractable = checkRelation(selectChild);
-            if (isChildRetractable) {
+            boolean childHasComputedRowId = rewriteRelation(selectChild);
+            if (childHasComputedRowId) {
                 throw new SemanticException("IVMAnalyzer does not support UnionRelation with retractable sink, " +
                         "but got: %s", unionRelation.getClass().getSimpleName());
             }
@@ -255,7 +300,7 @@ public class IVMAnalyzer {
         return false;
     }
 
-    private boolean checkSelectRelation(SelectRelation selectRelation) throws AnalysisException {
+    private boolean rewriteSelectRelation(SelectRelation selectRelation) throws AnalysisException {
         if (CollectionUtils.isNotEmpty(selectRelation.getOutputAnalytic())) {
             throw new SemanticException("IVMAnalyzer does not support window functions, " +
                     "but got: %s", selectRelation.getOutputAnalytic());
@@ -271,13 +316,21 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support HAVING with aggregate functions, " +
                     "but got: %s", ExprToSql.toSql(selectRelation.getHaving()));
         }
-        boolean isRetractable = checkAggregate(selectRelation);
+        // GROUPING SETS / ROLLUP / CUBE have no IVM delta rule (they lower to a Repeat operator), and
+        // GROUP BY ALL would fold the prepended __ROW_ID__ output into the grouping keys and double-encode
+        // the row id at refresh. Only plain GROUP BY keeps the encoded __ROW_ID__ aligned with the keys.
+        GroupByClause groupByClause = selectRelation.getGroupByClause();
+        if (groupByClause != null && groupByClause.getGroupingType() != GroupByClause.GroupingType.GROUP_BY) {
+            throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
+                    groupByClause.getGroupingType());
+        }
+        boolean hasComputedRowId = rewriteAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
-        isRetractable |= checkRelation(innerRelation);
-        return isRetractable;
+        hasComputedRowId |= rewriteRelation(innerRelation);
+        return hasComputedRowId;
     }
 
-    private boolean checkRelation(Relation relation) throws AnalysisException {
+    private boolean rewriteRelation(Relation relation) throws AnalysisException {
         if (relation == null) {
             return false;
         }
@@ -288,11 +341,11 @@ public class IVMAnalyzer {
             if (!IVM_SUPPORTED_JOIN_OPS.contains(joinType)) {
                 throw new SemanticException("IVMAnalyzer does not support join type: %s", joinType);
             }
-            if (checkRelation(joinRelation.getLeft())) {
+            if (rewriteRelation(joinRelation.getLeft())) {
                 throw new SemanticException("IVMAnalyzer does not support with retractable left input, " +
                         "but got: %s", joinRelation.getLeft());
             }
-            if (checkRelation(joinRelation.getRight())) {
+            if (rewriteRelation(joinRelation.getRight())) {
                 throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
                         "but got: %s", joinRelation.getRight());
             }
@@ -319,9 +372,26 @@ public class IVMAnalyzer {
         }
     }
 
-    private boolean checkAggregate(SelectRelation selectRelation) throws AnalysisException {
+    private boolean rewriteAggregate(SelectRelation selectRelation) throws AnalysisException {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
         List<Expr> groupByExprs = selectRelation.getGroupBy();
+
+        // SELECT DISTINCT <outputs> is GROUP BY <outputs> with no aggregates, but the optimizer only
+        // lowers DISTINCT to a group-by at refresh. Rewrite it to a real GROUP BY so CREATE and refresh
+        // share the QUERY_COMPUTED path with a matching __ROW_ID__ join key. Re-analysis re-derives
+        // isDistinct from the SelectList and groupBy from the GroupByClause, so set both at the source.
+        if (selectRelation.isDistinct() && CollectionUtils.isEmpty(groupByExprs)) {
+            List<Expr> distinctKeys = normalizeGroupKeys(selectRelation.getOutputExpression());
+            // normalizeGroupKeys keeps a lone constant only when every output is constant
+            // (SELECT DISTINCT 1) -- that has no real grouping key, so leave it to the gate below
+            // (AUTO_INCREMENT) rather than synthesizing a constant GROUP BY (an ordinal on re-parse).
+            if (distinctKeys.stream().anyMatch(expr -> !expr.isConstant())) {
+                selectRelation.getSelectList().setIsDistinct(false);
+                selectRelation.setGroupByClause(new GroupByClause(
+                        ExprUtils.cloneAndResetList(distinctKeys), GroupByClause.GroupingType.GROUP_BY));
+                groupByExprs = distinctKeys;
+            }
+        }
 
         // Gate on GROUP BY, not aggregates: the refresh path (IvmDeltaAggregateRule) keys on
         // GROUP BY, so a GROUP BY-only query must also get QUERY_COMPUTED row ids here — else the
@@ -333,8 +403,18 @@ public class IVMAnalyzer {
             return false;
         }
 
+        // Select items that are exactly one aggregate call; only these can collapse (a wrapped
+        // aggregate like bitmap_count(bitmap_union(x)) still needs the hidden state column).
+        Set<Expr> bareAggregateItems = Sets.newHashSet();
+        for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+            if (item.getExpr() instanceof FunctionCallExpr) {
+                bareAggregateItems.add(item.getExpr());
+            }
+        }
+
         // getAggregate() is non-null post-analysis, so for no aggregates this loop just no-ops.
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
+        Set<IVMAggFunctionInfo> collapsedInfos = Sets.newIdentityHashSet();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
             // Distinct flag is dropped by the combinator rewrite below, so incremental
@@ -348,16 +428,23 @@ public class IVMAnalyzer {
             // Whitelist gate: only (function, argument-type) combinations validated end-to-end
             // are allowed. Unsupported combinations would either fail at refresh time or silently
             // produce wrong data; reject them here so the user sees a clear CREATE-time error.
-            checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
+            validateAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 
             IVMAggFunctionInfo aggFunctionInfo = new IVMAggFunctionInfo(aggFuncExpr, aggFuncName,
                     intermediateAggFuncExpr, newAggFuncName);
-            Expr stateMergeFuncExpr = buildStateMergeFuncExpr(aggFunctionInfo);
-
             newAggFuncInfos.add(aggFunctionInfo);
-            substitutionMap.put(aggFuncExpr, stateMergeFuncExpr);
+
+            // A metric-state union's finalize is the identity (the merged state IS the result), so
+            // the select item itself becomes the state column — no separate hidden copy. The refresh
+            // side finds it via IvmRewriter.bindStateColumnsForAggregate.
+            if (isCollapsibleUnionAggregate(aggFuncExpr, bareAggregateItems)) {
+                collapsedInfos.add(aggFunctionInfo);
+                substitutionMap.put(aggFuncExpr, intermediateAggFuncExpr);
+            } else {
+                substitutionMap.put(aggFuncExpr, buildStateMergeFuncExpr(aggFunctionInfo));
+            }
         }
 
         List<FunctionCallExpr> newAggFuncs = newAggFuncInfos.stream()
@@ -365,12 +452,15 @@ public class IVMAnalyzer {
                 .toList();
         selectRelation.setAggregate(newAggFuncs);
 
-        // Build the row ID function expression
-        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(groupByExprs);
+        // Build the row ID from the group keys, normalized like the refresh aggregate (see normalizeGroupKeys).
+        List<Expr> rowIdKeys = normalizeGroupKeys(groupByExprs);
+        int encodeRowIdVersion = (pinnedEncodeRowIdVersion != null)
+                ? IvmOpUtils.getEncodeRowIdVersionChecked(pinnedEncodeRowIdVersion)
+                : IvmOpUtils.deduceEncodeRowIdVersion(rowIdKeys);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
-        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
+        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, rowIdKeys);
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> newItems = Lists.newArrayList();
         // add row_id func expr
@@ -382,8 +472,11 @@ public class IVMAnalyzer {
                     Expr newExpr = substituteWithMap(item.getExpr().clone(), substitutionMap);
                     newItems.add(new SelectListItem(newExpr, item.getAlias()));
                 });
-        // add agg state func expr
+        // add agg state func expr (collapsed unions already sit in the select items above)
         for (IVMAggFunctionInfo aggFunctionInfo : newAggFuncInfos) {
+            if (collapsedInfos.contains(aggFunctionInfo)) {
+                continue;
+            }
             newItems.add(new SelectListItem(aggFunctionInfo.newAggFunc, aggFunctionInfo.newAggFuncName));
         }
         selectList.setItems(newItems);
@@ -396,10 +489,25 @@ public class IVMAnalyzer {
                     Expr newExpr = substituteWithMap(expr.clone(), substitutionMap);
                     newOutputExpressions.add(newExpr);
                 });
-        // add extra exprs
+        // add extra exprs (collapsed unions already sit in the substituted outputs above)
         newAggFuncInfos.stream()
+                .filter(aggFunctionInfo -> !collapsedInfos.contains(aggFunctionInfo))
                 .forEach(aggFunctionInfo -> newOutputExpressions.add(aggFunctionInfo.newAggFunc));
         selectRelation.setOutputExpr(newOutputExpressions);
+
+        // __ROW_ID__ is now output column 1, so a positional GROUP BY ordinal would re-resolve to it
+        // on re-analysis -- the aggregate would group by the encoded row id and the merge join would
+        // re-encode it, splitting one group across rows. Shift ordinals past the prepended column.
+        GroupByClause groupByClause = selectRelation.getGroupByClause();
+        if (groupByClause != null && groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUP_BY) {
+            ArrayList<Expr> shiftedKeys = Lists.newArrayList();
+            for (Expr key : groupByClause.getGroupingExprs()) {
+                shiftedKeys.add(key instanceof IntLiteral
+                        ? new IntLiteral(((IntLiteral) key).getLongValue() + 1)
+                        : key);
+            }
+            selectRelation.setGroupByClause(new GroupByClause(shiftedKeys, GroupByClause.GroupingType.GROUP_BY));
+        }
         return true;
     }
 
@@ -407,7 +515,7 @@ public class IVMAnalyzer {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
     }
 
-    private static void checkAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
+    private static void validateAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
         Predicate<Type[]> rule = IVM_SUPPORTED_AGG_FUNCTIONS.get(aggFuncName.toLowerCase());
         if (rule == null) {
             throw new SemanticException(
@@ -457,8 +565,23 @@ public class IVMAnalyzer {
         return aggStateFuncExpr;
     }
 
+    /**
+     * True when the aggregate's state column can double as its visible output column. Requires
+     * both an identity finalize (bitmap_union/hll_union/percentile_union: the merged state IS the
+     * result value) and a select item that is exactly this aggregate (so that item can carry the
+     * state). A genuine agg-state union combinator (avg_union over an AGG_STATE_UNION column)
+     * satisfies the same identity property and should join this predicate when IVM supports it.
+     */
+    private static boolean isCollapsibleUnionAggregate(FunctionCallExpr aggFuncExpr, Set<Expr> bareAggregateItems) {
+        return AggStateUtils.METRIC_STATE_UNION_FUNCTIONS.contains(aggFuncExpr.getFunctionName())
+                && bareAggregateItems.contains(aggFuncExpr);
+    }
+
     private Expr buildStateMergeFuncExpr(IVMAggFunctionInfo aggFunctionInfo) throws AnalysisException {
-        String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunctionInfo.aggFuncName);
+        Function origFn = aggFunctionInfo.aggFunc.getFn();
+        String aggFuncName = origFn != null
+                ? AggStateUtils.getBaseAggFuncName(origFn)
+                : AggStateUtils.getAggFuncNameOfCombinator(aggFunctionInfo.aggFuncName);
         String stateMergeFuncName = AggStateUtils.stateMergeFunctionName(aggFuncName);
         SlotRef slotRef = new SlotRef(null, aggFunctionInfo.newAggFuncName);
         // <func>_state_merge(<slotRef>)

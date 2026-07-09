@@ -16,14 +16,14 @@
 
 #include <memory>
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/olap_fixed_morsel_queue.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
-#include "exec/pipeline/scan/split_morsel_queue.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/fixed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
+#include "storage/query/bucket_sequence_morsel_queue.h"
+#include "storage/query/olap_dynamic_morsel_queue.h"
+#include "storage/query/olap_fixed_morsel_queue.h"
+#include "storage/query/olap_morsel_queue.h"
+#include "storage/query/split_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
@@ -72,7 +72,10 @@ TEST_F(MorselQueueCapabilityTest, bucket_sequence_queue_is_olap_and_ticket_capab
     BucketSequenceMorselQueue queue(std::move(nested_queue));
 
     EXPECT_NE(nullptr, dynamic_cast<OlapMorselQueue*>(&queue));
-    EXPECT_NE(nullptr, dynamic_cast<TicketedMorselQueue*>(&queue));
+    auto* ticketed_queue = dynamic_cast<TicketedMorselQueue*>(&queue);
+    ASSERT_NE(nullptr, ticketed_queue);
+    EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(false));
+    EXPECT_TRUE(ticketed_queue->should_attach_ticket_checker(true));
 }
 
 } // namespace starrocks::pipeline

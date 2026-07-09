@@ -40,6 +40,7 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         len = (scalar_type.__isset.len) ? scalar_type.len : -1;
         scale = (scalar_type.__isset.scale) ? scalar_type.scale : -1;
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
+        datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
             type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
@@ -117,6 +118,9 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         }
         if (precision != -1) {
             scalar_type.__set_precision(precision);
+        }
+        if (datetime_is_ntz) {
+            scalar_type.__set_datetime_is_ntz(true);
         }
     }
 }

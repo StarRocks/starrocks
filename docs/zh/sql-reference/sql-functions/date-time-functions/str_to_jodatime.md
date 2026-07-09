@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将Joda格式字符串转换为指定Joda DateTime格式的DATETIME值。"
 ---
 
 # str_to_jodatime

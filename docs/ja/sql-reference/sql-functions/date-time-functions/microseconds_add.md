@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付値にマイクロ秒単位の時間間隔を追加します。"
 ---
 
 # microseconds_add

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 Routine Load 从 Apache Pulsar 主题持续导入 CSV 和 JSON 格式数据到 StarRocks。"
 ---
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 

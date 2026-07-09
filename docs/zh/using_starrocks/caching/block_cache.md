@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 存算分离集群中配置和使用 Data Cache，将远程存储的数据块缓存到本地磁盘以加速查询。"
 sidebar_position: 20
 toc_max_heading_level: 2
 keywords: ['huan cun']

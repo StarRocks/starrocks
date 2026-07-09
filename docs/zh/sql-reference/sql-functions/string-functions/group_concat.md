@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将分组中的多个非NULL值连接成一个字符串，使用指定的分隔符或默认逗号。"
 ---
 
 # group_concat

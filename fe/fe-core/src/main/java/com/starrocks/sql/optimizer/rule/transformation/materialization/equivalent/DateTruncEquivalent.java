@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import java.util.Set;
 
 import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
+import static com.starrocks.sql.common.TimeUnitUtils.WEEK;
 
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
@@ -149,6 +150,16 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
             int oldTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(oldChild0.getVarchar());
             int newTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(newChild0.getVarchar());
             if (oldTimeUnit > newTimeUnit) {
+                return null;
+            }
+            // 'week' buckets do not nest inside larger calendar units: a week that straddles a
+            // month/quarter/year boundary is split across two of them, so a week-grain value
+            // cannot be rolled up to a coarser unit without mis-bucketing those rows.
+            // DATE_TRUNC_SUPPORTED_TIME_MAP ranks WEEK(5) between DAY(4) and MONTH(6), which
+            // would otherwise admit this invalid rollup (the sibling TIME_MAP omits week for the
+            // same reason). Finer-than-week units (day/hour/...) do nest inside a week, so
+            // day->week etc. stay allowed; only week rolled up to a different unit is rejected.
+            if (WEEK.equalsIgnoreCase(oldChild0.getVarchar()) && oldTimeUnit != newTimeUnit) {
                 return null;
             }
             CallOperator rewritten = (CallOperator) newCall.clone();

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日付のISO標準週を1から53の範囲内の整数で返します。"
 ---
 
 # week_iso

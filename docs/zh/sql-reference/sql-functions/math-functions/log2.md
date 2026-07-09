@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算以2为底的数值对数。"
 ---
 
 # log2

@@ -14,13 +14,17 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <orc/OrcFile.hh>
+#include <string>
+#include <vector>
 
 #include "cache/scan/shared_buffered_input_stream.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 namespace starrocks {
 
 class RandomAccessFile;
+struct FormatScannerStats;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:
@@ -62,7 +66,7 @@ public:
     void set_lazy_column_coalesce_counter(std::atomic<int32_t>* lazy_column_coalesce_counter) {
         _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     }
-    void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
+    void set_app_stats(FormatScannerStats* stats) { _app_stats = stats; }
     bool isIOCoalesceEnabled() const override;
     bool isIOAdaptiveCoalesceEnabled() const override;
     bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const override;
@@ -77,6 +81,6 @@ private:
     uint64_t _length;
     SharedBufferedInputStream* _sb_stream;
     std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
-    HdfsScanStats* _app_stats = nullptr;
+    FormatScannerStats* _app_stats = nullptr;
 };
 } // namespace starrocks

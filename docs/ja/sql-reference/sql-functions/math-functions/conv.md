@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値をある数値基数システムから別のシステムに変換し、結果を文字列で返します。"
 ---
 
 # conv

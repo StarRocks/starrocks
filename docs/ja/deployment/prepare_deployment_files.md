@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x86 または ARM ベースの CPU 向け StarRocks デプロイメントファイルの準備方法。"
 ---
 
 # デプロイメントファイルの準備
@@ -61,6 +62,8 @@ v3.1.14、v3.2.10、および v3.3.3 から、StarRocks は `starrocks/{Componen
 :::note
 
 v3.1.14、v3.2.10、および v3.3.3 より前のバージョンでは、StarRocks は `starrocks/artifacts-ubuntu` および `starrocks/artifacts-centos7` リポジトリで Docker イメージを提供しています。
+
+v4.2 以降、CentOS 7 ビルドディストリビューションは廃止され、Rocky Linux 9 に置き換えられます。v4.2 以降は `starrocks/artifacts-rocky9` を使用してください。`starrocks/artifacts-centos7` は v4.1 以前のバージョンでのみ利用可能です。
 
 :::
 

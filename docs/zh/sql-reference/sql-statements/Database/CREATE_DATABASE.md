@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE DATABASE is used to create databases."
 ---
 
 # CREATE DATABASE

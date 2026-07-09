@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg Catalog 存储过程支持快照管理、分支管理、数据维护和元数据操作。"
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
 ---
 

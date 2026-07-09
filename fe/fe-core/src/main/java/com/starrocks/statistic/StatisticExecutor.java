@@ -291,6 +291,22 @@ public class StatisticExecutor {
         }
     }
 
+    // Best-effort cleanup of the stale raw-keyed rows superseded by a fresh hashed-key write.
+    // Failure just means the raw row lingers a bit longer (until this partition/column is
+    // collected again); it must never fail the collection job that just succeeded.
+    public boolean dropExternalStatRawPartitions(ConnectContext statsConnectCtx, String rawTableUUID,
+                                                 List<String> partitionNames, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
+        LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, Lists.newArrayList(columnName));
+        LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -561,6 +577,12 @@ public class StatisticExecutor {
             if (analyzeStatus.getStartTime() == null) {
                 analyzeStatus.setStartTime(LocalDateTime.now());
             }
+            // Switch warehouse FIRST: setCurrentWarehouse() replaces sessionVariable with a
+            // fresh clone of defaultSessionVariable, which would discard the enable_profile
+            // override (and any prior overrides) applied next.
+            if (resetWarehouse) {
+                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
+            }
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
@@ -568,9 +590,6 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
             statsConnectCtx.setStatisticsConnection(true);
-            if (resetWarehouse) {
-                statsConnectCtx.setCurrentWarehouse(Config.lake_background_warehouse);
-            }
             statsJob.collect(statsConnectCtx, analyzeStatus);
             LOG.info("execute statistics job successfully, duration={}, job={}", watch.toString(), statsJob);
         } catch (Exception e) {
@@ -608,6 +627,14 @@ public class StatisticExecutor {
                     ExternalHistogramStatsMeta histogramStatsMeta = new ExternalHistogramStatsMeta(
                             statsJob.getCatalogName(), db.getFullName(), table.getName(), columnName,
                             statsJob.getAnalyzeType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+                    // Persist the table UUID (best-effort) so followers can invalidate the connector histogram
+                    // cache during journal replay without resolving external table metadata.
+                    try {
+                        histogramStatsMeta.setTableUUID(table.getUUID());
+                    } catch (Exception e) {
+                        LOG.warn("Failed to resolve table UUID for external histogram stats meta, table: {}.{}.{}",
+                                statsJob.getCatalogName(), db.getFullName(), table.getName(), e);
+                    }
 
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
@@ -689,6 +716,15 @@ public class StatisticExecutor {
                             new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
                                     sampledPartitions, allPartitionSize);
                     externalBasicStatsMeta.addColumnStatsMeta(meta);
+                }
+                // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
+                // during journal replay without resolving external table metadata. If the UUID can't be
+                // resolved, leave it null and replay will fall back to the metadata-based path.
+                try {
+                    externalBasicStatsMeta.setTableUUID(table.getUUID());
+                } catch (Exception e) {
+                    LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(), e);
                 }
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr()

@@ -29,8 +29,9 @@
 namespace starrocks {
 class Segment;
 class TabletColumn;
-class WritableFile;
 class TabletIndex;
+class ThreadPool;
+class WritableFile;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -56,8 +57,8 @@ class IndexFileWriter;
 class AddIndexSchemaChange {
 public:
     AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
-                         VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
-                         int64_t alter_version);
+                         VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build, int64_t alter_version,
+                         ThreadPool* lake_schema_change_pool = nullptr);
 
     ~AddIndexSchemaChange();
 
@@ -101,6 +102,7 @@ private:
     void cleanup_written_idx_files();
 
     TabletManager* _tablet_mgr;
+    ThreadPool* _lake_schema_change_pool;
     const int64_t _txn_id;
     VersionedTablet _base_tablet;
     VersionedTablet _new_tablet;

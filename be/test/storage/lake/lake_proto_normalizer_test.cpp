@@ -169,8 +169,9 @@ TEST(LakeProtoNormalizerTest, round_trip_save_then_load_is_consistent) {
     EXPECT_EQ(0, reloaded.deprecated_segment_size_size());
 }
 
-// A segment removed from segment_metas (e.g. partial-compaction trim) must NOT be resurrected from
-// the stale legacy arrays at save time: before_save rebuilds legacy from segment_metas.
+// A segment removed from segment_metas (e.g. partial-compaction trim) must NOT be resurrected from the
+// legacy arrays at save time. In production the metadata is after-loaded first (legacy arrays cleared),
+// so the trim leaves deprecated_segments empty and before_save rebuilds it from the trimmed segment_metas.
 TEST(LakeProtoNormalizerTest, before_save_does_not_resurrect_removed_segment) {
     RowsetMetadataPB rs;
     for (int i = 0; i < 3; ++i) {
@@ -178,19 +179,50 @@ TEST(LakeProtoNormalizerTest, before_save_does_not_resurrect_removed_segment) {
         s->set_filename("seg" + std::to_string(i) + ".dat");
         s->set_size(100);
     }
-    ASSERT_OK(normalize_rowset_before_save(&rs));
-    ASSERT_EQ(3, rs.deprecated_segments_size());
-
-    // Now drop the middle segment from the canonical list, leaving legacy stale.
+    // Canonical in-memory state: after-load has cleared the legacy arrays. Now trim the middle segment.
     rs.mutable_segment_metas()->erase(rs.mutable_segment_metas()->begin() + 1);
     ASSERT_EQ(2, rs.segment_metas_size());
-    ASSERT_EQ(3, rs.deprecated_segments_size()); // legacy still stale here
+    ASSERT_EQ(0, rs.deprecated_segments_size());
 
     ASSERT_OK(normalize_rowset_before_save(&rs));
-    // Legacy rebuilt to exactly match segment_metas; the removed segment is gone.
+    // Legacy rebuilt to exactly match segment_metas; the removed segment is gone, none resurrected.
     ASSERT_EQ(2, rs.deprecated_segments_size());
     EXPECT_EQ("seg0.dat", rs.deprecated_segments(0));
     EXPECT_EQ("seg2.dat", rs.deprecated_segments(1));
+}
+
+// Fail-closed: an un-normalized legacy-shaped rowset (more legacy names than segment_metas slots, i.e.
+// after-load was skipped) must be REFUSED at before-save rather than silently truncated -- the no-extend
+// rebuild would otherwise drop the tail names and make the tablet unreadable.
+TEST(LakeProtoNormalizerTest, before_save_rejects_unnormalized_legacy_longer_than_segment_metas) {
+    RowsetMetadataPB rs;
+    rs.add_segment_metas()->set_num_rows(10); // 1 segment_metas, no filename
+    rs.add_deprecated_segments("s0.dat");     // 2 real legacy names -> longer than segment_metas
+    rs.add_deprecated_segments("s1.dat");
+
+    auto status = normalize_rowset_before_save(&rs);
+    EXPECT_TRUE(status.is_corruption()) << status.to_string();
+    // Refused before mutating anything: the real names are intact, not truncated.
+    ASSERT_EQ(2, rs.deprecated_segments_size());
+    EXPECT_EQ("s0.dat", rs.deprecated_segments(0));
+    EXPECT_EQ("s1.dat", rs.deprecated_segments(1));
+}
+
+// Fail-closed analog for op_write dels / rewrite_segments: legacy arrays longer than the structured
+// arrays are refused rather than truncated. (The `*_meta_size() > 0` qualifier still lets the legitimate
+// "old producer wrote only the legacy array" case through -- see before_save_preserves_legacy_when_segment_metas_empty.)
+TEST(LakeProtoNormalizerTest, before_save_rejects_unnormalized_op_write_legacy_longer_than_meta) {
+    TxnLogPB::OpWrite del_op;
+    del_op.add_dels_meta(); // 1 dels_meta, no name
+    del_op.add_deprecated_dels("d0");
+    del_op.add_deprecated_dels("d1"); // 2 legacy del names -> longer
+    EXPECT_TRUE(normalize_op_write_before_save(&del_op).is_corruption());
+
+    TxnLogPB::OpWrite rewrite_op;
+    rewrite_op.add_rewrite_segments_meta(); // 1 rewrite_segments_meta, no name
+    rewrite_op.add_deprecated_rewrite_segments("rw0");
+    rewrite_op.add_deprecated_rewrite_segments("rw1"); // 2 legacy -> longer
+    EXPECT_TRUE(normalize_op_write_before_save(&rewrite_op).is_corruption());
 }
 
 // A rowset must be either fully bundled or fully standalone. before_save rejects a mixed state,
@@ -280,6 +312,134 @@ TEST(LakeProtoNormalizerTest, opwrite_dels_and_rewrite_segments_round_trip) {
     EXPECT_EQ(0, old_op.deprecated_dels_size());
     EXPECT_EQ(0, old_op.deprecated_del_encryption_metas_size());
     EXPECT_EQ(0, old_op.deprecated_rewrite_segments_size());
+}
+
+// ---- before_save: non-destructive on un-normalized (legacy-shaped) input ------------------------
+
+// The bug: an old worker (pre-refactor proto) sends a rowset whose segment_metas carry sort-key fields
+// but NO filename, with the real names only in deprecated_segments. A destructive before_save would
+// clear deprecated_segments and rebuild it from the empty filename() -> [""]. before_save must back-fill
+// filename from the legacy arrays first, so BOTH the legacy arrays and segment_metas keep the real names.
+TEST(LakeProtoNormalizerTest, before_save_backfills_filename_from_legacy_when_segment_metas_lacks_file_attrs) {
+    RowsetMetadataPB rs;
+    auto* s0 = rs.add_segment_metas();
+    s0->set_num_rows(10);
+    s0->set_segment_idx(0);
+    auto* s1 = rs.add_segment_metas();
+    s1->set_num_rows(20);
+    s1->set_segment_idx(1);
+    rs.add_deprecated_segments("seg0.dat");
+    rs.add_deprecated_segments("seg1.dat");
+    rs.add_deprecated_segment_size(100);
+    rs.add_deprecated_segment_size(200);
+
+    ASSERT_OK(normalize_rowset_before_save(&rs));
+
+    // Legacy arrays preserved (NOT emptied / not [""]).
+    ASSERT_EQ(2, rs.deprecated_segments_size());
+    EXPECT_EQ("seg0.dat", rs.deprecated_segments(0));
+    EXPECT_EQ("seg1.dat", rs.deprecated_segments(1));
+    // segment_metas back-filled with the real file attrs; pre-existing fields preserved.
+    ASSERT_EQ(2, rs.segment_metas_size());
+    EXPECT_EQ("seg0.dat", rs.segment_metas(0).filename());
+    EXPECT_EQ(100, rs.segment_metas(0).size());
+    EXPECT_EQ(10, rs.segment_metas(0).num_rows());
+    EXPECT_EQ("seg1.dat", rs.segment_metas(1).filename());
+    EXPECT_EQ(200, rs.segment_metas(1).size());
+}
+
+// after_load -> before_save -> after_load is stable; filenames survive every hop even when the first
+// save sees un-normalized legacy-shaped input.
+TEST(LakeProtoNormalizerTest, before_save_after_load_round_trip_is_stable_for_legacy_shaped_input) {
+    RowsetMetadataPB rs;
+    rs.add_segment_metas()->set_num_rows(10); // sort-key-only, no filename
+    rs.add_segment_metas()->set_num_rows(20);
+    rs.add_deprecated_segments("seg0.dat");
+    rs.add_deprecated_segments("seg1.dat");
+
+    ASSERT_OK(normalize_rowset_before_save(&rs));
+    ASSERT_EQ(2, rs.deprecated_segments_size());
+    EXPECT_EQ("seg0.dat", rs.deprecated_segments(0));
+
+    normalize_rowset_after_load(&rs);
+    EXPECT_EQ(0, rs.deprecated_segments_size()); // canonical in memory
+    EXPECT_EQ("seg0.dat", rs.segment_metas(0).filename());
+
+    ASSERT_OK(normalize_rowset_before_save(&rs));
+    ASSERT_EQ(2, rs.deprecated_segments_size());
+    EXPECT_EQ("seg0.dat", rs.deprecated_segments(0));
+    EXPECT_EQ("seg1.dat", rs.deprecated_segments(1));
+}
+
+// When a segment's name is absent from BOTH segment_metas and deprecated_segments, before_save must not
+// crash and must not fabricate a name (it can only emit the empty value; the loud log is the signal).
+TEST(LakeProtoNormalizerTest, before_save_empty_filename_in_both_does_not_fabricate) {
+    RowsetMetadataPB rs;
+    rs.add_segment_metas()->set_num_rows(10); // no filename, and no deprecated_segments either
+
+    ASSERT_OK(normalize_rowset_before_save(&rs));
+
+    ASSERT_EQ(1, rs.segment_metas_size());
+    EXPECT_TRUE(rs.segment_metas(0).filename().empty());
+    ASSERT_EQ(1, rs.deprecated_segments_size());
+    EXPECT_EQ("", rs.deprecated_segments(0)); // emitted, not fabricated
+}
+
+// op_write dels / rewrite_segments: before_save back-fills names from the legacy arrays for
+// un-normalized input (mirrors the rowset path), preserving the legacy arrays.
+TEST(LakeProtoNormalizerTest, before_save_backfills_op_write_dels_and_rewrite_from_legacy) {
+    TxnLogPB::OpWrite op;
+    // dels_meta / rewrite_segments_meta entries exist but lack names; real names in the legacy arrays.
+    op.add_dels_meta();
+    op.add_dels_meta();
+    op.add_deprecated_dels("del0");
+    op.add_deprecated_dels("del1");
+    op.add_rewrite_segments_meta();
+    op.add_deprecated_rewrite_segments("rw0");
+
+    ASSERT_OK(normalize_op_write_before_save(&op));
+
+    ASSERT_EQ(2, op.deprecated_dels_size());
+    EXPECT_EQ("del0", op.deprecated_dels(0));
+    EXPECT_EQ("del1", op.deprecated_dels(1));
+    EXPECT_EQ("del0", op.dels_meta(0).name());
+    EXPECT_EQ("del1", op.dels_meta(1).name());
+    ASSERT_EQ(1, op.deprecated_rewrite_segments_size());
+    EXPECT_EQ("rw0", op.deprecated_rewrite_segments(0));
+    EXPECT_EQ("rw0", op.rewrite_segments_meta(0).name());
+}
+
+// A present-but-EMPTY name (set_filename("") -> has_filename()==true) must still be recovered from the
+// legacy array, not persisted as "". The name back-fill guards key on has_X() || X().empty() exactly so
+// an empty name is treated as "needs filling"; an empty name resolves to ".../data/" and is never valid.
+TEST(LakeProtoNormalizerTest, before_save_recovers_present_but_empty_filename_from_legacy) {
+    RowsetMetadataPB rs;
+    auto* s0 = rs.add_segment_metas();
+    s0->set_num_rows(10);
+    s0->set_filename(""); // present-but-empty: has_filename() is true, so a has_filename()-only guard would skip it
+    rs.add_deprecated_segments("seg0.dat"); // real name survives only in the legacy array
+
+    ASSERT_OK(normalize_rowset_before_save(&rs));
+
+    EXPECT_EQ("seg0.dat", rs.segment_metas(0).filename()); // recovered, not left ""
+    ASSERT_EQ(1, rs.deprecated_segments_size());
+    EXPECT_EQ("seg0.dat", rs.deprecated_segments(0)); // rebuilt from the recovered name, not [""]
+}
+
+// op_write analog: present-but-empty del / rewrite names are recovered from the legacy arrays too.
+TEST(LakeProtoNormalizerTest, before_save_recovers_present_but_empty_op_write_names_from_legacy) {
+    TxnLogPB::OpWrite op;
+    op.add_dels_meta()->set_name(""); // present-but-empty
+    op.add_deprecated_dels("del0");
+    op.add_rewrite_segments_meta()->set_name(""); // present-but-empty
+    op.add_deprecated_rewrite_segments("rw0");
+
+    ASSERT_OK(normalize_op_write_before_save(&op));
+
+    EXPECT_EQ("del0", op.dels_meta(0).name());
+    EXPECT_EQ("del0", op.deprecated_dels(0));
+    EXPECT_EQ("rw0", op.rewrite_segments_meta(0).name());
+    EXPECT_EQ("rw0", op.deprecated_rewrite_segments(0));
 }
 
 } // namespace starrocks::lake

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从主键表中查找值并在优化器评估时返回结果。"
 ---
 
 # lookup_string

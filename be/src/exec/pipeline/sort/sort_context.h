@@ -21,16 +21,16 @@
 
 #include "column/chunk.h"
 #include "column/chunk_slice.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sorting.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 
@@ -70,7 +70,15 @@ public:
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
     bool is_partition_ready() const;
+    // First non-OK task_status() among the partition spillers, or OK if none errored (see has_output()).
+    Status spiller_task_status() const;
     void cancel();
+
+    // Subscribe a source driver's observer to every non-empty partition spiller's source list, so that a
+    // flush-all ("partition ready") or restore completion of any partition wakes the source. The sort source
+    // merges all partitions, so unlike the single-spiller agg source it creates one subscription per spilled
+    // partition. Unconditional per spiller: the poller gate lives inside SpillEventObservable::subscribe_source.
+    void subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer);
 
     StatusOr<ChunkPtr> pull_chunk();
 

@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metric_group.h"
 
 namespace starrocks {
 
@@ -48,11 +49,30 @@ public:
     IntGauge* local_disk_bytes_used() { return _local_disk_bytes_used.get(); }
     IntGauge* remote_disk_bytes_used() { return _remote_disk_bytes_used.get(); }
 
+    // Counter for the BlockReason check that runs when an operator parks. It increments when a wakeable
+    // operator parks with a block_reason() that its covered_wakeups() mask does not list. In debug builds
+    // this is a DCHECK instead. A non-zero value means the wakeup table has a gap: the operator may sleep
+    // with nobody left to wake it. This is the counter to alert on.
+    IntCounter* parked_with_uncovered_reason_total() { return _parked_with_uncovered_reason_total.get(); }
+
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_write_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_write_total, MetricUnit::BYTES);
+
+    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
+    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
+
 private:
     LabeledCounters _local;
     LabeledCounters _remote;
     std::unique_ptr<IntGauge> _local_disk_bytes_used;
     std::unique_ptr<IntGauge> _remote_disk_bytes_used;
+    std::unique_ptr<IntCounter> _parked_with_uncovered_reason_total;
     MetricRegistry* _registry = nullptr;
 };
 

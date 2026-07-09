@@ -16,8 +16,12 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
@@ -26,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
@@ -126,5 +131,95 @@ public class PreSplitTargetsTest {
             Assertions.assertNull(PreSplitTargets.findEligibleTable(mock(Database.class), table),
                     "fully eligible table must return null (no skip reason)");
         }
+    }
+
+    /**
+     * Stub an {@link OlapTable} whose single physical partition's base index
+     * holds {@code tabletCount} tablets. {@code tabletCount < 0} stubs a missing
+     * base index instead.
+     */
+    private static OlapTable tableWithSinglePartition(int tabletCount) {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(10L);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getId()).thenReturn(100L);
+        when(table.getPhysicalPartitions()).thenReturn(List.of(partition));
+        if (tabletCount < 0) {
+            when(partition.getIndex(10L)).thenReturn(null);
+        } else {
+            MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+            when(partition.getIndex(10L)).thenReturn(baseIndex);
+            List<Tablet> tablets = new ArrayList<>();
+            for (int i = 0; i < tabletCount; i++) {
+                Tablet tablet = mock(Tablet.class);
+                when(tablet.getId()).thenReturn(1000L + i);
+                tablets.add(tablet);
+            }
+            when(baseIndex.getTablets()).thenReturn(tablets);
+        }
+        return table;
+    }
+
+    @Test
+    public void resolvesSinglePartitionSingleTabletTarget() {
+        // Positive control: exactly one physical partition with one base tablet -> target.
+        OlapTable table = tableWithSinglePartition(1);
+        PreSplitTargets.EligibleTarget target =
+                PreSplitTargets.findEligibleTarget(mock(Database.class), table);
+        Assertions.assertNotNull(target);
+        Assertions.assertEquals(100L, target.partitionId());
+        Assertions.assertEquals(1000L, target.oldTabletId());
+    }
+
+    @Test
+    public void skipsWhenNoUniquePhysicalPartition() {
+        // Zero or multiple physical partitions cannot resolve a single target.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getPhysicalPartitions()).thenReturn(List.of(
+                mock(PhysicalPartition.class), mock(PhysicalPartition.class)));
+        assertResolveSkips(table, SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    @Test
+    public void skipsWhenBaseIndexMissing() {
+        // Base index gone (catalog raced an alter) -> metadata-not-resolved.
+        assertResolveSkips(tableWithSinglePartition(-1), SkipReason.METADATA_NOT_RESOLVED);
+    }
+
+    @Test
+    public void skipsWhenPartitionAlreadySplit() {
+        // The common re-load case: the partition was already split into multiple tablets.
+        assertResolveSkips(tableWithSinglePartition(4), SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+    }
+
+    @Test
+    public void skipsWhenPartitionHasNoTablet() {
+        // Zero base tablets also folds into the multi-tablet bucket (index present, count != 1).
+        assertResolveSkips(tableWithSinglePartition(0), SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+    }
+
+    /**
+     * Asserts {@code findEligibleTarget} returns {@code null} and bumps the
+     * {@code eligibility_skipped} counter under {@code expectedReason} exactly
+     * once — the recording is internal to the resolver, so callers (the
+     * single-partition hooks) need not remember it.
+     */
+    private static void assertResolveSkips(OlapTable table, SkipReason expectedReason) {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            long baseline = skipBucket(expectedReason);
+            Assertions.assertNull(PreSplitTargets.findEligibleTarget(mock(Database.class), table),
+                    "ineligible target must resolve to null");
+            Assertions.assertEquals(baseline + 1L, skipBucket(expectedReason),
+                    expectedReason.name().toLowerCase() + " bucket must increment by one");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    private static long skipBucket(SkipReason reason) {
+        return MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                .getMetric(reason.name().toLowerCase()).getValue().longValue();
     }
 }

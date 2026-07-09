@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SMT、DataX、DBT、CloudCanal などのサードパーティツールおよびエコシステム統合によるデータロード。"
 ---
 
 # ツールを使用したデータロード

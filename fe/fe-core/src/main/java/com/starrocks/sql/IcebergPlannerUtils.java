@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
@@ -32,6 +33,7 @@ import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Shared utilities for Iceberg DML planners (DeletePlanner, UpdatePlanner, future MergePlanner).
@@ -40,6 +42,25 @@ public class IcebergPlannerUtils {
 
     public static PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
                                                              List<ColumnRefOperator> outputColumns) {
+        List<String> names = outputColumns.stream()
+                .map(ColumnRefOperator::getName)
+                .collect(Collectors.toList());
+        return createShuffleProperty(icebergTable, outputColumns, names);
+    }
+
+    /**
+     * Overload that matches partition columns by explicit column names rather than
+     * ColumnRefOperator.getName(). Needed for MERGE INTO where CASE expressions cause
+     * ColumnRefFactory to assign generic names like "case", losing the original column name.
+     *
+     * @param outputColumnNames the column names from the Analyzer's SELECT list aliases
+     */
+    public static PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
+                                                             List<ColumnRefOperator> outputColumns,
+                                                             List<String> outputColumnNames) {
+        Preconditions.checkArgument(outputColumns.size() == outputColumnNames.size(),
+                "output columns size %s does not match output column names size %s",
+                outputColumns.size(), outputColumnNames.size());
         if (!icebergTable.isPartitioned()) {
             return new PhysicalPropertySet();
         }
@@ -47,9 +68,9 @@ public class IcebergPlannerUtils {
         List<String> partitionColNames = icebergTable.getPartitionColumnNames();
         List<Integer> partitionColumnIds = Lists.newArrayList();
         for (String partCol : partitionColNames) {
-            for (ColumnRefOperator outputCol : outputColumns) {
-                if (outputCol.getName().equalsIgnoreCase(partCol)) {
-                    partitionColumnIds.add(outputCol.getId());
+            for (int i = 0; i < outputColumnNames.size(); i++) {
+                if (outputColumnNames.get(i).equalsIgnoreCase(partCol)) {
+                    partitionColumnIds.add(outputColumns.get(i).getId());
                     break;
                 }
             }
@@ -59,8 +80,17 @@ public class IcebergPlannerUtils {
             return new PhysicalPropertySet();
         }
 
+        return createHashShuffleProperty(partitionColumnIds);
+    }
+
+    /**
+     * Builds a required property that hash-distributes the plan output by the given
+     * optimizer column ids.
+     */
+    private static PhysicalPropertySet createHashShuffleProperty(List<Integer> columnIds) {
+        Preconditions.checkArgument(!columnIds.isEmpty(), "shuffle column ids must not be empty");
         HashDistributionDesc distributionDesc = new HashDistributionDesc(
-                partitionColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                columnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionProperty distributionProperty = DistributionProperty.createProperty(
                 DistributionSpec.createHashDistributionSpec(distributionDesc));
         return new PhysicalPropertySet(distributionProperty);

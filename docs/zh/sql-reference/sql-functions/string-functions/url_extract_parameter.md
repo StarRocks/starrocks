@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从 URL 的 query 部分获取指定参数名称的取值。"
 ---
 
 # url_extract_parameter

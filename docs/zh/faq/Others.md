@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 使用中的其他常见问题。"
 ---
 
 # 其他问题
@@ -258,7 +259,7 @@ SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE ta
 
 ## 如何防止因同时执行导入任务和分区创建任务而导致的表达式分区冲突？
 
-目前，对于使用表达式分区策略的表，导入任务期间创建的分区会与 ALTER TABLE 任务创建的分区发生冲突。由于导入任务具有优先级，任何冲突的 ALTER 任务都将失败。为避免出现此问题，请考虑以下方式规避：
+目前，对于使用表达式分区策略的表，导入任务期间创建的分区可能会与 ALTER TABLE 任务创建的分区发生冲突。由于导入任务具有优先级，冲突的 ALTER 任务会被取消或失败。该冲突仅适用于会重写数据或表级元数据的 ALTER 操作，例如完整的 schema change、rollup 或 `OPTIMIZE`。纯元数据的 ALTER 操作不再发生冲突：当 FE 配置项 `enable_concurrent_add_partition_during_alter` 设置为 `true`（默认值）时，分区创建可以与存算分离模式下的 ADD/DROP INDEX 快速路径任务以及 fast schema evolution 的瞬态元数据更新状态并发执行。对于仍受影响的 ALTER 类型，请考虑以下方式规避：
 
 - 如果使用粒度较大的时间分区（例如，按日或月分区），可以避免 ALTER 操作跨越时间边界执行，从而降低分区创建失败的风险。
 - 如果使用粒度较小的时间分区（例如，按小时分区），则可以手动创建未来一段时间的分区，从而保证 ALTER 任务执行过程中不会有导入任务创建新分区。建议使用 [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) 功能，在不 Commit 事务的情况下执行 INSERT 语句，从而触发分区创建。这样就可以在不影响实际数据的情况下创建必要的分区。下面的示例演示了如何为未来 8 小时创建分区：

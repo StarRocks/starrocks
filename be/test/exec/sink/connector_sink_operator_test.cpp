@@ -26,21 +26,20 @@
 #include "base/utility/defer_op.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/async_flush_stream_poller.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/partition_chunk_writer_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "formats/io/async_flush_output_stream.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
 using Stream = formats::AsyncFlushOutputStream;
 
 class NoopWritableFile : public WritableFile {
@@ -92,12 +91,32 @@ public:
     }
 };
 
+class NoopConnectorSinkOperatorFactory final : public OperatorFactory {
+public:
+    NoopConnectorSinkOperatorFactory()
+            : OperatorFactory(0, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
+};
+
 class TestConnectorChunkSink final : public connector::ConnectorChunkSink {
 public:
     explicit TestConnectorChunkSink(RuntimeState* state)
             : ConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {}
 
-    void callback_on_commit(const CommitResult& result) override {}
+    void callback_on_commit(const connector::CommitResult& result) override {}
+
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                connector::SinkMemoryManager* sink_mem_mgr) override {
+        if (_stream_to_enqueue != nullptr) {
+            poller->enqueue(_stream_to_enqueue);
+            _stream_to_enqueue.reset();
+        }
+        if (_op_mem_mgr != nullptr) {
+            return Status::OK();
+        }
+        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+    }
 
     Status finish() override {
         if (!_finish_status.ok()) {
@@ -112,7 +131,12 @@ public:
     void set_finished(bool finished) { _finished = finished; }
     void set_finish_status(Status status) { _finish_status = std::move(status); }
 
+    void set_operator_mem_mgr_for_test(connector::SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
+
+    void set_stream_to_enqueue_for_test(std::shared_ptr<Stream> stream) { _stream_to_enqueue = std::move(stream); }
+
 private:
+    std::shared_ptr<Stream> _stream_to_enqueue;
     bool _finished = true;
     Status _finish_status = Status::OK();
 };
@@ -153,14 +177,14 @@ protected:
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>(TUniqueId(), TUniqueId(), TQueryOptions(),
                                                                             TQueryGlobals(), ExecEnv::GetInstance()));
         _runtime_state = _fragment_context->runtime_state();
-        _runtime_state->set_fragment_ctx(_fragment_context);
+        _runtime_state->set_fragment_ctx(_fragment_context, &_fragment_context->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
     }
 
     void TearDown() override {}
 
     void init_mem_trackers() {
-        auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+        auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
         _query_pool_tracker =
                 std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 100, "query_pool_ut", process_tracker);
         _query_tracker =
@@ -193,17 +217,8 @@ std::shared_ptr<connector::HiveChunkSinkContext> make_hive_sink_context(Fragment
     return sink_ctx;
 }
 
-// Build a real factory so direct-construction tests can pass `&factory` instead of `nullptr`
-// to satisfy the DCHECK(_runtime_access != nullptr) added by the Operator refactor.
-std::unique_ptr<ConnectorSinkOperatorFactory> make_factory(FragmentContext* fragment_context) {
-    auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
-    return std::make_unique<ConnectorSinkOperatorFactory>(/*id=*/0, std::move(provider),
-                                                          make_hive_sink_context(fragment_context), fragment_context);
-}
-
 TEST_F(ConnectorSinkOperatorTest, test_factory) {
     {
-        auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
@@ -218,19 +233,19 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context;
-        auto op_factory =
-                std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
+        auto provider = std::make_unique<connector::HiveChunkSinkProvider>(sink_ctx);
+        auto op_factory = std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), _fragment_context);
         auto op = op_factory->create(1, 0);
         EXPECT_OK(op->prepare(_runtime_state));
     }
 }
 
 TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instance_tracker) {
-    auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 100;
-    connector::AsyncFlushStreamPoller poller;
+    formats::AsyncFlushStreamPoller poller;
     std::vector<connector::PartitionChunkWriterPtr> writers;
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -241,16 +256,19 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
-    ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const CommitResult&) {}));
+    auto op_mem_mgr_impl = std::make_unique<connector::PartitionChunkWriterMemoryManager>();
+    auto* op_mem_mgr = op_mem_mgr_impl.get();
+    ASSERT_EQ(sink_mem_mgr->register_child_manager(std::move(op_mem_mgr_impl)), op_mem_mgr);
+    ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     std::atomic<int32_t> num_sinkers{0};
-    auto factory = make_factory(_fragment_context);
-    auto op = std::make_shared<ConnectorSinkOperator>(factory.get(), 0, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                      0, std::move(chunk_sink),
-                                                      std::make_unique<connector::AsyncFlushStreamPoller>(),
-                                                      sink_mem_mgr, op_mem_mgr, _fragment_context, num_sinkers);
+    NoopConnectorSinkOperatorFactory factory;
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      num_sinkers);
+    ASSERT_OK(op->prepare(_runtime_state));
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -262,7 +280,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
 }
 
 TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_instance_tracker) {
-    auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 64;
@@ -276,25 +294,27 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
     ASSERT_OK(stream->close());
 
-    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
-    io_poller->enqueue(stream);
-    stream.reset();
-
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
+    auto op_mem_mgr_impl = std::make_unique<connector::PartitionChunkWriterMemoryManager>();
+    auto* op_mem_mgr = op_mem_mgr_impl.get();
+    ASSERT_EQ(sink_mem_mgr->register_child_manager(std::move(op_mem_mgr_impl)), op_mem_mgr);
     std::vector<connector::PartitionChunkWriterPtr> writers;
-    connector::AsyncFlushStreamPoller empty_poller;
-    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const CommitResult&) {}));
+    formats::AsyncFlushStreamPoller empty_poller;
+    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     chunk_sink->set_finished(true);
-    // num_sinkers stays at 0, so set_finishing decrements to -1, skips the
-    // last-sinker audit report path, and only exercises the memory-tracker behavior under test.
+    chunk_sink->set_stream_to_enqueue_for_test(stream);
+    // num_sinkers stays at 0, so set_finishing decrements to -1, skips the last-sinker
+    // audit report path, and only exercises the memory-tracker behavior under test.
     std::atomic<int32_t> num_sinkers{0};
-    auto factory = make_factory(_fragment_context);
-    auto op = std::make_shared<ConnectorSinkOperator>(factory.get(), 0, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                      0, std::move(chunk_sink), std::move(io_poller), sink_mem_mgr,
-                                                      op_mem_mgr, _fragment_context, num_sinkers);
+    NoopConnectorSinkOperatorFactory factory;
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      num_sinkers);
+    ASSERT_OK(op->prepare(_runtime_state));
+    stream.reset();
     ASSERT_OK(op->set_finishing(_runtime_state));
 
     {
@@ -318,22 +338,21 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_report_on_non_last_sink
     ASSIGN_OR_ASSERT_FAIL(query_ctx, exec_env->query_context_mgr()->get_or_register(query_id));
     query_ctx->set_query_id(query_id);
     query_ctx->set_total_fragments(1);
-    query_ctx->set_delivery_expire_seconds(60);
-    query_ctx->set_query_expire_seconds(60);
-    query_ctx->extend_delivery_lifetime();
-    query_ctx->extend_query_lifetime();
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
     query_ctx->set_final_sink();
-    query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     _fragment_context->set_query_id(query_id);
     _fragment_context->set_fragment_instance_id(fragment_id);
     _fragment_context->set_workgroup(exec_env->workgroup_manager()->get_default_workgroup());
-    _runtime_state->set_query_ctx(query_ctx);
+    _runtime_state->set_query_ctx(query_ctx, &query_ctx->query_runtime_state(), query_ctx->object_pool());
 
-    auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
-    ConnectorSinkOperatorFactory factory(0, std::move(provider), make_hive_sink_context(_fragment_context),
-                                         _fragment_context);
+    auto provider = std::make_unique<connector::HiveChunkSinkProvider>(make_hive_sink_context(_fragment_context));
+    ConnectorSinkOperatorFactory factory(0, std::move(provider), _fragment_context);
 
     auto op0 = factory.create(/*degree_of_parallelism=*/2, /*driver_sequence=*/0);
     auto op1 = factory.create(/*degree_of_parallelism=*/2, /*driver_sequence=*/1);
@@ -363,22 +382,21 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_reports_on_last_sinker) {
     ASSIGN_OR_ASSERT_FAIL(query_ctx, exec_env->query_context_mgr()->get_or_register(query_id));
     query_ctx->set_query_id(query_id);
     query_ctx->set_total_fragments(1);
-    query_ctx->set_delivery_expire_seconds(60);
-    query_ctx->set_query_expire_seconds(60);
-    query_ctx->extend_delivery_lifetime();
-    query_ctx->extend_query_lifetime();
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
     query_ctx->set_final_sink();
-    query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     _fragment_context->set_query_id(query_id);
     _fragment_context->set_fragment_instance_id(fragment_id);
     _fragment_context->set_workgroup(exec_env->workgroup_manager()->get_default_workgroup());
-    _runtime_state->set_query_ctx(query_ctx);
+    _runtime_state->set_query_ctx(query_ctx, &query_ctx->query_runtime_state(), query_ctx->object_pool());
 
-    auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
-    ConnectorSinkOperatorFactory factory(0, std::move(provider), make_hive_sink_context(_fragment_context),
-                                         _fragment_context);
+    auto provider = std::make_unique<connector::HiveChunkSinkProvider>(make_hive_sink_context(_fragment_context));
+    ConnectorSinkOperatorFactory factory(0, std::move(provider), _fragment_context);
 
     auto op = factory.create(/*degree_of_parallelism=*/1, /*driver_sequence=*/0);
 
@@ -405,18 +423,18 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_claim_audit_marker_on_f
     ASSIGN_OR_ASSERT_FAIL(query_ctx, exec_env->query_context_mgr()->get_or_register(query_id));
     query_ctx->set_query_id(query_id);
     query_ctx->set_total_fragments(1);
-    query_ctx->set_delivery_expire_seconds(60);
-    query_ctx->set_query_expire_seconds(60);
-    query_ctx->extend_delivery_lifetime();
-    query_ctx->extend_query_lifetime();
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
     query_ctx->set_final_sink();
-    query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     _fragment_context->set_query_id(query_id);
     _fragment_context->set_fragment_instance_id(fragment_id);
     _fragment_context->set_workgroup(exec_env->workgroup_manager()->get_default_workgroup());
-    _runtime_state->set_query_ctx(query_ctx);
+    _runtime_state->set_query_ctx(query_ctx, &query_ctx->query_runtime_state(), query_ctx->object_pool());
 
     init_mem_trackers();
 
@@ -427,16 +445,18 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_claim_audit_marker_on_f
     chunk_sink->set_finish_status(Status::InternalError("simulated iceberg commit failure"));
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
+    auto op_mem_mgr_impl = std::make_unique<connector::PartitionChunkWriterMemoryManager>();
+    auto* op_mem_mgr = op_mem_mgr_impl.get();
+    ASSERT_EQ(sink_mem_mgr->register_child_manager(std::move(op_mem_mgr_impl)), op_mem_mgr);
     std::vector<connector::PartitionChunkWriterPtr> writers;
-    connector::AsyncFlushStreamPoller empty_poller;
-    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const CommitResult&) {}));
+    formats::AsyncFlushStreamPoller empty_poller;
+    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
+    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
 
-    auto factory = make_factory(_fragment_context);
-    auto op = std::make_shared<ConnectorSinkOperator>(factory.get(), 0, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                      0, std::move(chunk_sink),
-                                                      std::make_unique<connector::AsyncFlushStreamPoller>(),
-                                                      sink_mem_mgr, op_mem_mgr, _fragment_context, num_sinkers);
+    NoopConnectorSinkOperatorFactory factory;
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      num_sinkers);
 
     Status finishing_status = op->set_finishing(_runtime_state);
     EXPECT_FALSE(finishing_status.ok()) << "set_finishing should propagate finish() failure";

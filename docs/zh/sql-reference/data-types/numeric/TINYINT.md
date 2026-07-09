@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TINYINT 是 1 字节有符号整数，取值范围为 [-128, 127]。"
 ---
 
 # TINYINT

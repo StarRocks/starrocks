@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarGo コマンドラインツールで複数 StarRocks クラスターをデプロイ、管理、アップグレード、起動/停止します。"
 ---
 
 # StarGo を使用した StarRocks のデプロイと管理

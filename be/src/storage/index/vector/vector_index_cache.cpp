@@ -18,11 +18,20 @@
 
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 
 namespace starrocks {
 
-VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker) : _cache(capacity) {
-    _cache.set_mem_tracker(tracker);
+VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics)
+        : _cache(capacity), _metrics(metrics == nullptr ? VectorIndexCacheMetrics::instance() : metrics) {
+    // The HNSW/tenann index lives in the normal heap, so the global allocator hook
+    // already charges its bytes to the process tracker once during load. Accounting
+    // them additively on the vector_index tracker (a child of process) would count
+    // the same bytes a second time on process and spuriously trip the process
+    // mem_limit. Use the excluding-root variant so the vector_index tracker labels
+    // the usage without re-adding it to process.
+    _cache.set_mem_tracker_excluding_root(tracker);
+    _update_metrics();
 }
 
 // Drain IndexRefs outside _cache._lock before ~DynamicCache acquires it.
@@ -60,6 +69,11 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
     return true;
 }
 
+void VectorIndexCache::SetCapacity(size_t new_capacity) {
+    _cache.set_capacity(new_capacity);
+    _update_metrics();
+}
+
 void VectorIndexCache::Insert(const tenann::CacheKey& key, tenann::IndexRef ref, tenann::IndexCacheHandle* handle) {
     Entry* entry = _cache.get_or_create(key.to_string());
     {
@@ -67,6 +81,7 @@ void VectorIndexCache::Insert(const tenann::CacheKey& key, tenann::IndexRef ref,
         entry->value().set_ref(ref);
         _cache.update_object_size(entry, entry->value().memory_usage());
     }
+    _update_metrics();
     *handle = _wrap(entry, std::move(ref));
 }
 
@@ -87,12 +102,14 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
             } catch (const std::exception& e) {
                 g.unlock();
                 _cache.remove(entry);
+                _update_metrics();
                 LOG(ERROR) << "VectorIndexCache loader threw for key " << key.to_string() << ": " << e.what();
                 return false;
             }
             if (loaded == nullptr) {
                 g.unlock();
                 _cache.remove(entry);
+                _update_metrics();
                 LOG(ERROR) << "VectorIndexCache loader returned null IndexRef for key " << key.to_string();
                 return false;
             }
@@ -104,16 +121,24 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
     if (warm_hit) {
         _hit_count.fetch_add(1, std::memory_order_relaxed);
     }
+    _update_metrics();
     *handle = _wrap(entry, std::move(ref));
     return true;
 }
 
 // Deleter captures _cache as a raw pointer; handles MUST be released before
-// ExecEnv::destroy() — _wait_for_fragments_finish() is the drain boundary.
+// StorageEnv::destroy_vector_index_cache() runs after query/vector users drain.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
     Cache* cache = &_cache;
     return tenann::IndexCacheHandle(
             std::move(ref), std::shared_ptr<void>(entry, [cache](void* p) { cache->release(static_cast<Entry*>(p)); }));
+}
+
+void VectorIndexCache::_update_metrics() const {
+    if (_metrics == nullptr) {
+        return;
+    }
+    _metrics->update(capacity(), memory_usage(), lookup_count(), hit_count());
 }
 
 } // namespace starrocks

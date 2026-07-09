@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the type name of a VARIANT value as a string."
 ---
 
 # variant_typeof

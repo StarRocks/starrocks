@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたフォーマットに従って日付または時刻の文字列をDATE値に変換します。"
 ---
 
 # to_tera_date

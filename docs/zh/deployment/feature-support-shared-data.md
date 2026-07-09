@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "存算分离集群功能支持版本和能力边界，包括部署、存储、缓存和压缩等。"
 sidebar_label: "能力边界"
 ---
 

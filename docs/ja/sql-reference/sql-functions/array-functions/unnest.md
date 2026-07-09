@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UNNEST は配列を受け取り、その要素をテーブルの複数の行に変換するテーブル関数です。"
 ---
 
 # unnest

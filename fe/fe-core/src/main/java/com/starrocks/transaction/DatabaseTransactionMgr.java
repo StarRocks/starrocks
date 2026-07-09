@@ -371,9 +371,13 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-            // "No rows were imported from upstream" and abort transaction.
+            // "No rows were imported from upstream" and abort transaction. A shadow-rewrite txn is exempt
+            // too: an empty-partition range rewrite produces zero rows but must still commit so the flip
+            // can anchor an empty op_schema_change@W on that partition (the BE converter tolerates an empty
+            // source). Without this it would abort with ERR_NO_ROWS_IMPORTED and cancel the schema change.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
-                    && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                    && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING
+                    && !transactionState.isShadowRewrite()) {
                 throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
@@ -624,9 +628,35 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        transactionState.writeLock();
+        // Keep a stable reference to the object whose writeLock we actually acquire,
+        // so the finally block always unlocks the same object. The local
+        // `transactionState` reference may be reassigned to `latest` below when a
+        // concurrent commit has replaced the map entry; unlocking that reassigned
+        // object (which this thread never locked) would throw IllegalMonitorStateException
+        // and leak the lock on the original object.
+        final TransactionState lockedState = transactionState;
+        lockedState.writeLock();
         TransactionState copiedState = null;
         try {
+            // Re-fetch the latest TransactionState under writeLock. Between releasing
+            // readLock above and acquiring writeLock here, a concurrent commit path may
+            // have COW'd a new TransactionState object and replaced the map entry via
+            // unprotectUpsertTransactionState. The local `transactionState` reference
+            // would then point at a stale snapshot whose status is still PREPARED, even
+            // though the canonical map entry has already advanced to COMMITTED. Without
+            // this re-fetch, unprotectAbortTransaction's status-guard reads from the
+            // stale copy, the abort proceeds, and the freshly committed map entry gets
+            // overwritten with an ABORTED state carrying version=-1.
+            TransactionState latest;
+            readLock();
+            try {
+                latest = unprotectedGetTransactionState(transactionId);
+            } finally {
+                readUnlock();
+            }
+            if (latest != null && latest != transactionState) {
+                transactionState = latest;
+            }
             // COW
             copiedState = new TransactionState(transactionState);
             // before state transform
@@ -652,7 +682,7 @@ public class DatabaseTransactionMgr {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
 
         if (copiedState.getTransactionStatus() != TransactionStatus.ABORTED) {
@@ -887,6 +917,24 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Return the time in milliseconds that the oldest committed-but-not-yet-visible transaction has been
+    // pending publish, i.e. (currentTimeMs - oldest commit time). Returns 0 when there is no committed
+    // transaction. A continuously growing value indicates that version publishing is stuck or lagging
+    // behind commits.
+    public long getMaxCommittedTxnPendingPublishMs(long currentTimeMs) {
+        readLock();
+        try {
+            long oldestCommitTime = idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> transactionState.getTransactionStatus() == TransactionStatus.COMMITTED)
+                    .mapToLong(TransactionState::getCommitTime)
+                    .min()
+                    .orElse(0L);
+            return oldestCommitTime <= 0 ? 0L : Math.max(0L, currentTimeMs - oldestCommitTime);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
@@ -983,11 +1031,15 @@ public class DatabaseTransactionMgr {
                     // 1. Replication transactions: may have non-consecutive versions
                     // 2. DELETE transactions: each delete predicate needs its own version
                     //    to ensure proper ordering during tablet merge operations
+                    // 3. Shadow-rewrite transactions: allocate no partition version, so they must
+                    //    never be mixed into a normal-version batch (the version-adjacency check and
+                    //    checkTxnStateBatchConsistent() would otherwise see the sentinel version).
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
                     if (tableInfo == null
                             || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE
+                            || state.isShadowRewrite()) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
@@ -1066,6 +1118,7 @@ public class DatabaseTransactionMgr {
                     if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                             !txn.isVersionOverwrite() &&
                             !partitionCommitInfo.isDoubleWrite() &&
+                            !txn.isShadowRewrite() &&
                             partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
@@ -1229,6 +1282,7 @@ public class DatabaseTransactionMgr {
                         if (copiedState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !copiedState.isVersionOverwrite() &&
                                 !partitionCommitInfo.isDoubleWrite() &&
+                                !copiedState.isShadowRewrite() &&
                                 physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
                             if (copiedState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
@@ -1466,6 +1520,11 @@ public class DatabaseTransactionMgr {
                     LOG.warn("partition {} is dropped, skip and remove it from transaction state {}",
                             partitionId,
                             transactionState);
+                    continue;
+                }
+                // A shadow-rewrite txn allocates no partition version; its PartitionCommitInfo keeps
+                // its sentinel version (-1) and is converted to an op_schema_change log at publish.
+                if (transactionState.isShadowRewrite()) {
                     continue;
                 }
                 long parentPartitionId = partition.getParentId();

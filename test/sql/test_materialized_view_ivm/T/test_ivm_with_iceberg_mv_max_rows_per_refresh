@@ -1,0 +1,61 @@
+-- name: test_ivm_with_iceberg_mv_max_rows_per_refresh
+-- mv_max_rows_per_refresh must split a large incremental delta into multiple bounded task runs
+-- on the asynchronous IVM path. Sync refresh always uses the whole delta, so this drives an
+-- async REFRESH and counts the resulting INCREMENTAL task runs.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t_batch (k int, v bigint);
+insert into t_batch values (1, 10), (2, 20);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Unpartitioned IVM MV -> pure-IVM refresh path.
+CREATE MATERIALIZED VIEW test_mv_batch
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch;
+
+-- Establish the TVR baseline (one run over the initial 2 rows).
+[UC]REFRESH MATERIALIZED VIEW test_mv_batch WITH SYNC MODE;
+SELECT count(*) FROM test_mv_batch;
+
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv_batch';
+
+-- Bound each refresh to 2 rows of delta.
+admin set frontend config ("mv_max_rows_per_refresh" = "2");
+
+-- Six single-row commits -> a 6-row delta spread over six snapshots.
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (3, 30);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (4, 40);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (5, 50);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (6, 60);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (7, 70);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_batch values (8, 80);
+
+-- Async refresh: the 6-row delta is split into multiple bounded INCREMENTAL runs.
+[UC]REFRESH MATERIALIZED VIEW test_mv_batch;
+function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv_batch")
+
+-- Data is fully and correctly refreshed.
+SELECT count(*) FROM test_mv_batch;
+SELECT k, v FROM test_mv_batch ORDER BY k;
+
+-- The delta was processed as multiple INCREMENTAL runs, not one.
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+
+admin set frontend config ("mv_max_rows_per_refresh" = "100000000");
+drop materialized view test_mv_batch;
+drop catalog mv_iceberg_${uuid0};

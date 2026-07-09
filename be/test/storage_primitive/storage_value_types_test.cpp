@@ -17,17 +17,17 @@
 #include <unordered_map>
 
 #include "gtest/gtest.h"
-#include "storage/primitive/aggregate_type.h"
-#include "storage/primitive/edit_version.h"
-#include "storage/primitive/flat_json_config.h"
-#include "storage/primitive/primary_key_encoding_types.h"
-#include "storage/primitive/storage_enums.h"
-#include "storage/primitive/storage_ids.h"
-#include "storage/primitive/storage_stats.h"
-#include "storage/primitive/storage_version.h"
-#include "storage/primitive/type_utils.h"
-#include "storage/primitive/vector_search_option.h"
-#include "storage/primitive/zone_map_detail.h"
+#include "storage_primitive/aggregate_type.h"
+#include "storage_primitive/edit_version.h"
+#include "storage_primitive/flat_json_config.h"
+#include "storage_primitive/primary_key_encoding_types.h"
+#include "storage_primitive/storage_enums.h"
+#include "storage_primitive/storage_ids.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/storage_version.h"
+#include "storage_primitive/type_utils.h"
+#include "storage_primitive/vector_search_option.h"
+#include "storage_primitive/zone_map_detail.h"
 
 namespace starrocks {
 
@@ -253,7 +253,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     option.query_params = {{"metric_type", "l2"}};
     option.vector_range = 0.5;
     option.result_order = 1;
-    option.use_ivfpq = true;
+    option.refine_distance = true;
     option.pq_refine_factor = 2.5;
     option.k_factor = 1.5;
 
@@ -268,7 +268,7 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     EXPECT_EQ("l2", option.query_params["metric_type"]);
     EXPECT_DOUBLE_EQ(0.5, option.vector_range);
     EXPECT_EQ(1, option.result_order);
-    EXPECT_TRUE(option.use_ivfpq);
+    EXPECT_TRUE(option.refine_distance);
     EXPECT_DOUBLE_EQ(2.5, option.pq_refine_factor);
     EXPECT_DOUBLE_EQ(1.5, option.k_factor);
 }

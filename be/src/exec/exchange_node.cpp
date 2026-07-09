@@ -39,6 +39,7 @@
 #include "common/runtime_profile.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
@@ -47,8 +48,8 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -277,7 +278,8 @@ StatusOr<pipeline::OpFactories> ExchangeNode::decompose_to_pipeline(pipeline::Pi
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
             // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
             // stream to satisfied the ordering property
-            operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), operators);
+            operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), operators);
         } else {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
                     context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
@@ -300,8 +302,9 @@ StatusOr<pipeline::OpFactories> ExchangeNode::decompose_to_pipeline(pipeline::Pi
         pipeline::may_add_chunk_accumulate_operator(operators, context, id());
     }
 
-    operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);
-    operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
+    operators = ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, operators);
+    operators =
+            ::starrocks::pipeline::builder::maybe_interpolate_collect_stats(context, runtime_state(), id(), operators);
 
     return operators;
 }

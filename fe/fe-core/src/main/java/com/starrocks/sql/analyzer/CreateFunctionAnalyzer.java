@@ -331,6 +331,66 @@ public class CreateFunctionAnalyzer {
         }
     }
 
+    private static final String ARROW_FIELD_VECTOR = "org.apache.arrow.vector.FieldVector";
+
+    /** Read and validate the {@code input} property ("scalar" default, or "arrow"). */
+    private static String getAndCheckInputType(CreateFunctionStmt stmt) {
+        String inputType = stmt.getProperties().getOrDefault(CreateFunctionStmt.INPUT_TYPE,
+                CreateFunctionStmt.INPUT_TYPE_SCALAR);
+        if (!inputType.equalsIgnoreCase(CreateFunctionStmt.INPUT_TYPE_ARROW) &&
+                !inputType.equalsIgnoreCase(CreateFunctionStmt.INPUT_TYPE_SCALAR)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown input type:" + inputType);
+        }
+        return inputType.toLowerCase();
+    }
+
+    private static boolean isArrowInput(String inputType) {
+        return CreateFunctionStmt.INPUT_TYPE_ARROW.equals(inputType);
+    }
+
+    /** True if {@code c} is (or implements/extends) org.apache.arrow.vector.FieldVector, by name. */
+    private static boolean isArrowFieldVector(Class<?> c) {
+        if (c == null || c.isPrimitive()) {
+            return false;
+        }
+        if (ARROW_FIELD_VECTOR.equals(c.getName())) {
+            return true;
+        }
+        for (Class<?> iface : c.getInterfaces()) {
+            if (isArrowFieldVector(iface)) {
+                return true;
+            }
+        }
+        return isArrowFieldVector(c.getSuperclass());
+    }
+
+    /**
+     * Require every parameter (varargs component included) and the return type of {@code method}
+     * to be an Apache Arrow {@code FieldVector}. Shared by scalar / UDAF / UDTF arrow validation.
+     */
+    private void checkArrowFieldVectorSignature(JavaUDFInternalClass owner, Method method,
+                                                int paramOffset, boolean checkReturn) {
+        if (checkReturn && !isArrowFieldVector(method.getReturnType())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, String.format(
+                    "arrow-input UDF class '%s' method '%s' must return an %s",
+                    owner.getCanonicalName(), method.getName(), ARROW_FIELD_VECTOR));
+        }
+        Parameter[] params = method.getParameters();
+        for (int i = paramOffset; i < params.length; i++) {
+            Class<?> ptype = params[i].getType();
+            Class<?> effective = ptype.isArray() ? ptype.getComponentType() : ptype;
+            if (!isArrowFieldVector(effective)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, String.format(
+                        "arrow-input UDF class '%s' method '%s' parameter '%s' must be an %s",
+                        owner.getCanonicalName(), method.getName(), params[i].getName(), ARROW_FIELD_VECTOR));
+            }
+        }
+    }
+
+    private void checkArrowFieldVectorSignature(JavaUDFInternalClass owner, Method method) {
+        checkArrowFieldVectorSignature(owner, method, 0, true);
+    }
+
     private void checkStarrocksJarUdfClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
@@ -352,9 +412,28 @@ public class CreateFunctionAnalyzer {
         }
     }
 
+    /**
+     * Validate the {@code evaluate} signature of a vectorized ("input"="arrow") scalar UDF: every
+     * argument and the return value must be an Apache Arrow {@code FieldVector}. The SQL&lt;-&gt;Java
+     * scalar-type mapping enforced for boxed UDFs is intentionally skipped here — arrow columns
+     * carry their own type, and the BE builds the arrow schema from the declared SQL arg types.
+     */
+    private void checkStarrocksArrowJarUdfClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass) {
+        FunctionArgsDef argsDef = stmt.getArgsDef();
+        Method method = mainClass.getMethod(CreateFunctionStmt.EVAL_METHOD_NAME, true);
+        mainClass.checkMethodNonStaticAndPublic(method);
+        mainClass.checkArgumentCount(method, argsDef.getArgTypes().length, argsDef.isVariadic());
+        checkArrowFieldVectorSignature(mainClass, method);
+    }
+
     private Function analyzeStarrocksJarUdf(CreateFunctionStmt stmt, String checksum,
                                             JavaUDFInternalClass handleClass, ConnectContext context) {
-        checkStarrocksJarUdfClass(stmt, handleClass);
+        String inputType = getAndCheckInputType(stmt);
+        if (isArrowInput(inputType)) {
+            checkStarrocksArrowJarUdfClass(stmt, handleClass);
+        } else {
+            checkStarrocksJarUdfClass(stmt, handleClass);
+        }
 
         FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(
                 stmt.getFunctionRef(),
@@ -363,12 +442,16 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        Function function = ScalarFunction.createUdf(
+        ScalarFunction function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, handleClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation),
+                objectFile, handleClass.getCanonicalName(), "", "",
+                !CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation),
                 cloudConfiguration);
         function.setChecksum(checksum);
+        if (isArrowInput(inputType)) {
+            function.setInputType(inputType);
+        }
         return function;
     }
 
@@ -393,7 +476,7 @@ public class CreateFunctionAnalyzer {
     }
 
     private void checkStarrocksJarUdafClass(CreateFunctionStmt stmt, JavaUDFInternalClass mainClass,
-                                            JavaUDFInternalClass udafStateClass) {
+                                            JavaUDFInternalClass udafStateClass, boolean arrowInput) {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         Map<String, String> properties = stmt.getProperties();
@@ -421,9 +504,12 @@ public class CreateFunctionAnalyzer {
             mainClass.checkReturnJavaType(method, void.class);
             mainClass.checkArgumentCount(method, argsDef.getArgTypes().length + 1, argsDef.isVariadic());
             mainClass.checkParamJavaType(method, udafStateClass.clazz, method.getParameters()[0]);
-            
+
             // Validate parameter types
-            if (argsDef.isVariadic()) {
+            if (arrowInput) {
+                // arrow UDAF: value args after the State are Apache Arrow FieldVectors (whole batch).
+                checkArrowFieldVectorSignature(mainClass, method, 1, false);
+            } else if (argsDef.isVariadic()) {
                 mainClass.checkVarargsParameters(method, argsDef.getArgTypes(), 1);
             } else {
                 for (int i = 0; i < argsDef.getArgTypes().length; i++) {
@@ -481,9 +567,16 @@ public class CreateFunctionAnalyzer {
 
         Map<String, String> properties = stmt.getProperties();
         boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));
+        String inputType = getAndCheckInputType(stmt);
+        if (isArrowInput(inputType) && isAnalyticFn) {
+            // Window (analytic) UDFs use the frame-based update path, which does not yet support
+            // arrow input. Aggregate arrow UDFs are supported for global / sorted aggregation.
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "arrow input is not supported for window functions (analytic=true) yet");
+        }
 
         checkStarrocksJarUdafStateClass(stmt, mainClass, udafStateClass);
-        checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass);
+        checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass, isArrowInput(inputType));
         AggregateFunction.AggregateFunctionBuilder builder =
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
@@ -491,7 +584,10 @@ public class CreateFunctionAnalyzer {
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName())
                 .cloudConfiguration(cloudConfiguration)
-                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
+                .setIsolationType(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation));
+        if (isArrowInput(inputType)) {
+            builder.inputType(inputType);
+        }
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;
@@ -507,16 +603,27 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
+        String inputType = getAndCheckInputType(stmt);
         {
-            // TYPE[] process(INPUT)
+            // TYPE[] process(INPUT)  (arrow: TYPE[][] process(FieldVector...))
             Method method = mainClass.getMethod(CreateFunctionStmt.PROCESS_METHOD_NAME, true);
             mainClass.checkMethodNonStaticAndPublic(method);
             mainClass.checkArgumentCount(method, argsDef.getArgTypes().length, argsDef.isVariadic());
-            
-            // Validate parameter types — STRUCT support requires threading the Parameter's
-            // parameterized type for nested record-class binding, so use the recursive
-            // scalar-style validator.
-            if (argsDef.isVariadic()) {
+
+            if (isArrowInput(inputType)) {
+                // arrow UDTF: every argument is an Apache Arrow FieldVector (whole batch); the
+                // per-row output stays boxed, so process must return T[][] (one T[] per input row).
+                checkArrowFieldVectorSignature(mainClass, method, 0, false);
+                Class<?> ret = method.getReturnType();
+                if (!ret.isArray() || !ret.getComponentType().isArray()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, String.format(
+                            "arrow-input UDTF class '%s' method '%s' must return a 2-D array (T[][])",
+                            mainClass.getCanonicalName(), method.getName()));
+                }
+            } else if (argsDef.isVariadic()) {
+                // Validate parameter types — STRUCT support requires threading the Parameter's
+                // parameterized type for nested record-class binding, so use the recursive
+                // scalar-style validator.
                 mainClass.checkVarargsParameters(method, argsDef.getArgTypes(), 0);
             } else {
                 for (int i = 0; i < method.getParameters().length; i++) {
@@ -535,6 +642,9 @@ public class CreateFunctionAnalyzer {
         tableFunction.setLocation(new HdfsURI(objectFile));
         tableFunction.setSymbolName(mainClass.getCanonicalName());
         tableFunction.setCloudConfiguration(cloudConfiguration);
+        if (isArrowInput(inputType)) {
+            tableFunction.setInputType(inputType);
+        }
         return tableFunction;
     }
 
@@ -1075,7 +1185,7 @@ public class CreateFunctionAnalyzer {
                 objectFile(objectFile).
                 inputType(inputType).
                 symbolName(symbol).
-                isolation(!"shared".equalsIgnoreCase(isolation)).
+                isolation(!CreateFunctionStmt.ISOLATION_SHARED.equalsIgnoreCase(isolation)).
                 content(content);
         ScalarFunction function = scalarFunctionBuilder.build();
         function.setChecksum(checksum);

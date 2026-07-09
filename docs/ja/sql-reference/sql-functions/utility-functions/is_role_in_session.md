@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ロールが現在のセッションでアクティブかどうかを確認します。"
 ---
 
 # is_role_in_session

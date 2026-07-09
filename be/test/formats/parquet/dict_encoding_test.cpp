@@ -213,4 +213,81 @@ TEST(DictEncodingReadTest, BinaryPageTest) {
     constexpr LogicalType DICT_TYPE = LogicalType::TYPE_INT;
     dict_encoding_test<DICT_TYPE, TARGET_TYPE>();
 }
+
+// Build a ready-to-read DictDecoder<Slice> backed by an int-keyed dictionary, mirroring the setup
+// in dict_encoding_test().
+static void setup_slice_dict_decoder(DictDecoder<Slice>* decoder, FakeDictDecoder<TYPE_VARCHAR>* inner_decoder,
+                                     faststring* backing) {
+    faststring fs;
+    RleEncoder<int32_t> encoder(&fs, 32);
+    for (size_t i = 0; i < 4096; ++i) {
+        encoder.Put(i % 9 + 1, 10);
+    }
+    backing->resize(fs.length() + 1);
+    backing->data()[0] = 32;
+    memcpy(backing->data() + 1, fs.data(), fs.length());
+    ASSERT_OK(decoder->set_data(Slice(backing->data(), backing->length())));
+    ASSERT_OK(decoder->set_dict(10, 10, inner_decoder));
+}
+
+// DictDecoder<Slice> must reject a non-binary destination column instead of blindly down-casting it
+// to BinaryColumn. This guards the path that could otherwise let a temporary Int32 dict-code column
+// reach a string slot. Exercises both the filtered _next_batch_value() path and the
+// next_value_batch_with_nulls() path.
+TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
+    constexpr size_t count = 100;
+
+    // 1. _next_batch_value() with a filter: a binary destination succeeds.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        filter[0] = 0;
+        ASSERT_OK(decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECT_EQ(dst.get()->size(), count);
+    }
+
+    // 2. _next_batch_value() with a filter: a non-binary destination is rejected.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        auto st = decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get());
+        ASSERT_FALSE(st.ok());
+    }
+
+    // 3. next_value_batch_with_nulls(): a non-binary destination is rejected.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        NullInfos infos;
+        infos.reset_with_capacity(count);
+        infos.num_nulls = 0;
+        for (size_t i = 0; i < count; ++i) {
+            infos.nulls_data()[i] = i % 2;
+            infos.num_nulls += infos.nulls_data()[i];
+        }
+        // num_ranges > 2 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
+        infos.num_ranges = count / 2;
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        auto st = decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get());
+        ASSERT_FALSE(st.ok());
+    }
+}
 } // namespace starrocks::parquet

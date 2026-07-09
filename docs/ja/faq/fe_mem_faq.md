@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks FE ヒープメモリ問題の診断・トラブルシューティング方法。"
 sidebar_label: FE メモリ
 ---
 

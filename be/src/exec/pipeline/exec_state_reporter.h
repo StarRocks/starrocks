@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 
@@ -39,6 +40,8 @@ public:
             RuntimeProfile* load_channel_profile, const Status& status, bool done);
 
     static Status report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr);
+
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done);
 
     void submit(std::function<void()>&& report_task, bool priority = false);
 

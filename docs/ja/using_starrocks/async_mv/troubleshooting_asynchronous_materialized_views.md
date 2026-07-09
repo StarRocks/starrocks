@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Troubleshooting guide for asynchronous materialized views in StarRocks: diagnose and fix refresh failures, query rewrite issues, and data consistency problems."
 sidebar_position: 30
 ---
 

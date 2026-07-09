@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "External Catalog を使用した外部データソースの管理をお勧めします。外部テーブルは廃止される可能性があります。"
 ---
 
 # 外部テーブル

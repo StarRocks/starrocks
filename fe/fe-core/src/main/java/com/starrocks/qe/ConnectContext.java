@@ -238,6 +238,12 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
+    // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
+    private final Set<String> viewExpansionPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     // Control whether to read Iceberg caches without populating/updating them for the current execution.
@@ -283,6 +289,19 @@ public class ConnectContext {
 
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
+
+    // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
+    // instead of physicalPartition.getVisibleVersion() for each entry in this map.
+    // Null means no override (normal visible-version path).
+    private Map<Long, Long> scanVersionOverride = null;
+
+    public void setScanVersionOverride(Map<Long, Long> scanVersionOverride) {
+        this.scanVersionOverride = scanVersionOverride;
+    }
+
+    public Map<Long, Long> getScanVersionOverride() {
+        return scanVersionOverride;
+    }
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -370,6 +389,13 @@ public class ConnectContext {
 
     /**
      * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     * <p>
+     * Note: callers that subsequently invoke {@link #setCurrentWarehouse(String)} or
+     * {@link #setCurrentWarehouseId(long)} must re-apply
+     * {@code setEnableMaterializedViewRewrite(false)} (and any other per-context
+     * session-variable override) AFTER the warehouse switch, because setCurrentWarehouse
+     * replaces the sessionVariable with a fresh clone of the global default and silently
+     * discards earlier overrides.
      */
     public static ConnectContext buildInner() {
         ConnectContext connectContext = new ConnectContext();
@@ -1275,6 +1301,10 @@ public class ConnectContext {
         return relationAliasCaseInsensitive;
     }
 
+    public Set<String> getViewExpansionPath() {
+        return viewExpansionPath;
+    }
+
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -1432,6 +1462,19 @@ public class ConnectContext {
     }
 
     /**
+     * Returns the session variable name that governs the timeout for the current execution context,
+     * used when building timeout-hint messages.
+     */
+    public String getTimeoutHintVariable() {
+        if (isExecLoadType()) {
+            return SessionVariable.INSERT_TIMEOUT;
+        } else if (isMetadataContext()) {
+            return SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
+        }
+        return SessionVariable.QUERY_TIMEOUT;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
@@ -1486,7 +1529,7 @@ public class ConnectContext {
                             tableName, tableTimeout, pendingTime);
                 } else {
                     msg = String.format("please increase the '%s' session variable, pending time:%s",
-                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                            getTimeoutHintVariable(), pendingTime);
                 }
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "covar_pop 返回两个表达式的总体协方差，支持作为窗口函数使用。"
 ---
 
 # covar_pop

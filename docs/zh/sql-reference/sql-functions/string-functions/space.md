@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回由指定数量的空格组成的字符串。"
 ---
 
 # space

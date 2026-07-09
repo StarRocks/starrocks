@@ -117,18 +117,60 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash32() {
+        ConstantOperator operator = ScalarOperatorFunctions.xxHash32(ConstantOperator.createNull(VarcharType.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(IntegerType.INT, operator.getType());
+
+        assertEquals(-83855367, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello")).getInt());
+
+        assertEquals(96518622, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("starrocks")).getInt());
+
+        assertEquals(-920844969, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("world")).getInt());
+
+        assertEquals(-349168521, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("abcdefghijklmnopQRST")).getInt());
+
+        assertEquals(531093706, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("0123456789abcdefXYZ")).getInt());
+    }
+
+    @Test
     public void xxHash64() {
         ConstantOperator operator = ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(VarcharType.VARCHAR));
         assertTrue(operator.isNull());
         assertEquals(IntegerType.BIGINT, operator.getType());
 
-        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(2794345569481354659L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("hello")).getBigint());
+
+        assertEquals(-4658618225489912820L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("starrocks")).getBigint());
+
+        assertEquals(8004569595807101537L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("world")).getBigint());
+    }
+
+    @Test
+    public void xxHash3_64() {
+        ConstantOperator operator =
+                ScalarOperatorFunctions.xxHash3_64(ConstantOperator.createNull(VarcharType.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(IntegerType.BIGINT, operator.getType());
+
+        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("NULL")).getBigint());
 
-        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
 
-        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
                 ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
     }

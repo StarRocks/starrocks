@@ -1,0 +1,56 @@
+-- name: test_iceberg_transform_zero_width
+create table t0 (
+  i32 int not null,
+  i64 bigint not null,
+  d32 decimal(9,2) not null,
+  s   varchar(20) not null,
+  dt  date not null,
+  ts  datetime not null
+) PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+insert into t0 values (5, 5, 10.65, 'abc', '2024-01-01', '2024-01-01 12:00:00');
+-- result:
+-- !result
+[UC] select __iceberg_transform_truncate(i32, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_truncate(i64, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_truncate(d32, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(i32, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(i64, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(d32, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(s, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(dt, 0) from t0;
+-- result:
+-- !result
+[UC] select __iceberg_transform_bucket(ts, 0) from t0;
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select __iceberg_transform_truncate(i32, 10) from t0;
+-- result:
+0
+-- !result
+select __iceberg_transform_bucket(i32, 8) from t0;
+-- result:
+7
+-- !result
+drop table t0;
+-- result:
+-- !result

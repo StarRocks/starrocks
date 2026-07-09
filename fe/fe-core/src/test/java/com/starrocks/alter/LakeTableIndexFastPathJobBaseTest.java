@@ -275,6 +275,204 @@ public class LakeTableIndexFastPathJobBaseTest {
         }
     }
 
+    @Test
+    public void testCancelImpl_FinishedRewriting_NonForceRefused() throws Exception {
+        // A non-force cancel out of FINISHED_REWRITING must be REFUSED: the job
+        // has reserved commit version V and bumped nextVersion to V+1 but not
+        // yet published V. Releasing the table here would leave a version-chain
+        // hole that hangs subsequent loads on publish. The operator must use the
+        // force escape hatch instead.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertFalse(job.cancelImpl("err", false));
+            // Still in FINISHED_REWRITING; table never released to NORMAL.
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+            verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+            assertFalse(job.isForceSkippedAtCommitted());
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForceHealsVersionChain() throws Exception {
+        // A force cancel out of FINISHED_REWRITING must no-op publish the reserved
+        // commit version V on BE and advance FE's VisibleVersion to V before
+        // releasing the table, so the version chain is healthy when new loads
+        // race in. visibleVersion V-1 -> V.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.isFileBundling()).thenReturn(false);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(new ArrayList<>());
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean())).thenReturn(true);
+
+            assertTrue(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.isForceSkippedAtCommitted());
+            // VisibleVersion advanced V-1 (4) -> V (5); table released.
+            verify(pp).setVisibleVersion(eq(5L), anyLong());
+            verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForcePublishFailsStaysRewriting() throws Exception {
+        // If the no-op publish RPC fails, the force cancel must NOT proceed:
+        // leave the job in FINISHED_REWRITING so the operator can retry, and do
+        // not mark it force-skipped (replay must not bump VisibleVersion).
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(new ArrayList<>());
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean())).thenReturn(false);
+
+            assertFalse(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+            verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+            verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_NonForceTableDroppedStillCancels() throws Exception {
+        // The FINISHED_REWRITING refusal only applies while the table still
+        // exists (&& tableStillExists). If the table was dropped, there is no
+        // version chain to heal, so even a non-force cancel must proceed.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        GlobalStateMgr gsm = buildLockableGsm(db, null); // table dropped
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("err", false));
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForceTableDroppedSkipsPublish() throws Exception {
+        // Force cancel with the table already dropped: no no-op publish, no
+        // VisibleVersion bump, marker stays false, job still cancels. Utils must
+        // never be touched.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        GlobalStateMgr gsm = buildLockableGsm(db, null); // table dropped
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("force skip", true));
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean()), never());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersionWithSkip_FileBundlingDispatchesAggregate() throws Exception {
+        // The no-op publish must be keyed on the table's CURRENT file-bundling
+        // format so V is written in the format subsequent loads expect:
+        // isFileBundling()==true -> useAggregatePublish=true is passed through.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.isFileBundling()).thenReturn(true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(new ArrayList<>());
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean())).thenReturn(true);
+
+            assertTrue(job.cancelImpl("force skip", true));
+
+            // useAggregatePublish (last arg) must be true for a file-bundling table.
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), eq(true)), times(1));
+        }
+    }
+
+    @Test
+    public void testCopyForPersist_PreservesForceSkippedMarker() throws Exception {
+        // The force-skip marker must survive copyForPersist() so it is captured
+        // in the edit log / image and replay can reproduce the VisibleVersion
+        // bump. Locks the persist link that the replay tests rely on.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "forceSkippedAtCommitted", true);
+        AlterJobV2 copy = job.copyForPersist();
+        assertTrue(copy.isForceSkippedAtCommitted());
+    }
+
     // -------- replay --------
 
     private LakeTableAddIndexJob makeReplayDriver(AlterJobV2.JobState state) throws Exception {
@@ -286,13 +484,10 @@ public class LakeTableIndexFastPathJobBaseTest {
 
     private void runReplay(LakeTableAddIndexJob target, LakeTableAddIndexJob other,
                            Database db, OlapTable table) {
-        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
-        LocalMetastore lm = mock(LocalMetastore.class);
-        when(lm.getDb(2L)).thenReturn(db);
-        if (db != null) {
-            when(lm.getTable(2L, 3L)).thenReturn(table);
-        }
-        when(gsm.getLocalMetastore()).thenReturn(lm);
+        // replay() now takes the table WRITE lock around its catalog mutations
+        // (mirroring the live path), so the GSM mock must expose a real
+        // LockManager. Reuse the same lockable wiring as the cancelImpl tests.
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             target.replay(other);
@@ -385,11 +580,150 @@ public class LakeTableIndexFastPathJobBaseTest {
     }
 
     @Test
+    public void testReplay_FinishedRewritingBumpsNextVersion() throws Exception {
+        // Regression: the live runRunningJob bumps each partition's nextVersion
+        // to commitVersion+1 at FINISHED_REWRITING. Replay must reproduce it,
+        // otherwise the partition stays one version behind and a later job that
+        // asserts nextVersion == its reserved commitVersion (e.g.
+        // LakeTableSchemaChangeJob.updateNextVersion) aborts journal replay.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        verify(pp).setNextVersion(13L);
+    }
+
+    @Test
+    public void testReplay_FinishedBumpsNextVersionWhenStale() throws Exception {
+        // FINISHED replay must reproduce BOTH the nextVersion bump (in case the
+        // image predates the FINISHED_REWRITING journal) and the visibleVersion
+        // bump.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(pp.getVisibleVersion()).thenReturn(11L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(pp).setNextVersion(13L);
+        verify(pp).setVisibleVersion(12L, 12345L);
+    }
+
+    @Test
+    public void testReplay_NextVersionBumpIsIdempotent() throws Exception {
+        // A later operation already advanced the partition past commitVersion+1
+        // (e.g. replay-after-checkpoint); replay must not regress nextVersion.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(20L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(pp, never()).setNextVersion(anyLong());
+    }
+
+    @Test
+    public void testReplay_CancelledBumpsNextVersionWhenReserved() throws Exception {
+        // Force-cancelled out of FINISHED_REWRITING: the version was reserved
+        // and nextVersion bumped on the live FE, so replay must reproduce it.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 12L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(12L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        verify(pp).setNextVersion(13L);
+    }
+
+    @Test
     public void testReplay_CancelledFlipsToNormal() throws Exception {
         LakeTableAddIndexJob target = newJob();
         LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
         OlapTable table = mock(OlapTable.class);
         runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
+    public void testReplay_CancelledForceSkippedAdvancesVisibleVersion() throws Exception {
+        // A job force-cancelled out of FINISHED_REWRITING no-op published V on BE
+        // and the live path advanced VisibleVersion to V. Replay must reproduce
+        // BOTH the nextVersion bump and the VisibleVersion bump (forceSkipped
+        // marker copied from the persisted job), so a recovered FE matches the
+        // leader byte-for-byte.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "forceSkippedAtCommitted", true);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(5L);
+        when(pp.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+
+        assertTrue(target.isForceSkippedAtCommitted());
+        verify(pp).setNextVersion(6L);
+        verify(pp).setVisibleVersion(5L, 12345L);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
+    public void testReplay_CancelledNotForceSkippedSkipsVisibleVersion() throws Exception {
+        // A cancel that never reached FINISHED_REWRITING (forceSkipped=false)
+        // must NOT advance VisibleVersion on replay — only the nextVersion bump
+        // (no-op when commitVersionMap is empty) and the NORMAL flip.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.CANCELLED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getNextVersion()).thenReturn(5L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+
+        assertFalse(target.isForceSkippedAtCommitted());
+        verify(pp).setNextVersion(6L);
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
         verify(table).setState(OlapTable.OlapTableState.NORMAL);
     }
 
@@ -1099,5 +1433,52 @@ public class LakeTableIndexFastPathJobBaseTest {
         assertNotSame(p2t, getField(copy, "partitionToTablets"));
         assertNotSame(t2i, getField(copy, "tabletToIndexMetaId"));
         assertNotSame(commit, getField(copy, "commitVersionMap"));
+    }
+
+    @Test
+    public void testReplay_FinishedIgnoresPartitionOutsideCommitVersionMap() throws Exception {
+        // Concurrent ADD PARTITION (now allowed while this job runs) can add a partition that is
+        // NOT in the job's commitVersionMap. Replay of FINISHED must only touch the owned
+        // (commitVersionMap) partitions and never look up / version-bump the concurrently-added one.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        PhysicalPartition owned = mock(PhysicalPartition.class);
+        when(owned.getNextVersion()).thenReturn(5L);
+        when(owned.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(owned);
+
+        runReplay(target, other, new Database(2L, "db"), table);
+
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        verify(owned).setVisibleVersion(5L, 12345L);
+        // The concurrently-added partition (200) is outside commitVersionMap: replay must never touch it.
+        verify(table, never()).getPhysicalPartition(200L);
+    }
+
+    @Test
+    public void testReplay_FinishedToleratesMissingOwnedPartition() throws Exception {
+        // A commitVersionMap partition that was dropped resolves to null; replay's pp != null
+        // guards must keep journal apply from crashing.
+        LakeTableAddIndexJob target = newJob();
+        LakeTableAddIndexJob other = makeReplayDriver(AlterJobV2.JobState.FINISHED);
+        Map<Long, Long> commitMap = new HashMap<>();
+        commitMap.put(100L, 5L);
+        setField(other, "commitVersionMap", commitMap);
+        setField(other, "finishedTimeMs", 12345L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        when(table.getPhysicalPartition(100L)).thenReturn(null);
+
+        // Must not throw despite the missing partition.
+        runReplay(target, other, new Database(2L, "db"), table);
+        verify(table).setState(OlapTable.OlapTableState.NORMAL);
     }
 }

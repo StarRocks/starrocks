@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将整数表达式间隔添加到日期或日期时间表达式中。"
 ---
 
 # timestampadd

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ベンチマーク catalog は TPC-H、TPC-DS、SSB スキーマに対するクエリをデータロードなしで実行。"
 toc_max_heading_level: 4
 ---
 

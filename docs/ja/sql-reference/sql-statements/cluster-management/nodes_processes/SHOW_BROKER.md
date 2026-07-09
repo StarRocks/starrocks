@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BROKER は、StarRocks クラスターに追加されたすべてのブローカーの情報を表示します。"
 ---
 
 # SHOW BROKER

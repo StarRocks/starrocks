@@ -10,7 +10,6 @@
 #include "base/hash/crc32c.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/coding.h"
 

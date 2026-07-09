@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "start_rangeとend_range（排他的）の範囲内でビットマップ値から要素を抽出します。"
 ---
 
 # bitmap_subset_in_range

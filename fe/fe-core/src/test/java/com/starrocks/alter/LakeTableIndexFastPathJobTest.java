@@ -497,4 +497,23 @@ public class LakeTableIndexFastPathJobTest {
         assertNotNull(job.getDropInfos());
         assertNotNull(job.getDropBfColumns());
     }
+
+    @Test
+    public void testAllowConcurrentPartitionCreation() {
+        // The lake ADD/DROP INDEX fast-path jobs are metadata-only and tolerate concurrent
+        // partition creation; they declare the capability so the partition-creation guards
+        // can proceed instead of rejecting/cancelling.
+        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>());
+        assertTrue(addJob.allowConcurrentPartitionCreation());
+
+        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>());
+        assertTrue(dropJob.allowConcurrentPartitionCreation());
+
+        // A full-rewrite schema-change job (shared-nothing or lake) must NOT declare the
+        // capability: it registers shadow meta and iterates the live partition list.
+        assertFalse(new SchemaChangeJobV2(1L, 2L, 3L, "t", 60_000L).allowConcurrentPartitionCreation());
+        assertFalse(new LakeTableSchemaChangeJob(1L, 2L, 3L, "t", 60_000L).allowConcurrentPartitionCreation());
+    }
 }

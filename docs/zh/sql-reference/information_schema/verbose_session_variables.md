@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "verbose_session_variables 提供包括默认值的会话变量详细信息。"
 ---
 
 # verbose_session_variables

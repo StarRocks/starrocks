@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "テーブルにデータを挿入またはテーブルをデータで上書きします。"
 ---
 
 # INSERT

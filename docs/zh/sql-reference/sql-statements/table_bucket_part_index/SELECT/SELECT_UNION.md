@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UNION combines results from multiple queries into a single result set."
 sidebar_label: "UNION"
 ---
 

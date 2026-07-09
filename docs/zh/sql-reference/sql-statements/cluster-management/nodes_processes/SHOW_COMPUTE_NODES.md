@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW COMPUTE NODES 查看当前集群中所有 CN 节点的相关信息。"
 ---
 
 # SHOW COMPUTE NODES

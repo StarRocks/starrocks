@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "json_path式によって位置を特定できる要素がJSONオブジェクトに含まれているかどうかを確認します。"
 ---
 
 # json_exists

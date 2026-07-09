@@ -154,7 +154,7 @@ public class SharedDataStorageVolumeMgrTest {
 
             @Mock
             public void updateFileStore(FileStoreInfo fsInfo) {
-                FileStoreInfo fileStoreInfo = fileStores.get(fsInfo.getFsKey());
+                fileStores.get(fsInfo.getFsKey());
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
             }
         };
@@ -271,7 +271,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
         Assertions.assertTrue(svm.exists(svName));
 
         {
@@ -501,6 +501,27 @@ public class SharedDataStorageVolumeMgrTest {
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSharedKey());
         Assertions.assertEquals("sas_token",
                 sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getSasToken());
+
+        // Test ADLS2 OAuth2 with client endpoint (was broken by a typo: azure_adls2_oauth2_oauth2_client_endpoint)
+        Config.azure_adls2_shared_key = "";
+        Config.azure_adls2_sas_token = "";
+        Config.azure_adls2_oauth2_use_managed_identity = false;
+        Config.azure_adls2_oauth2_tenant_id = "tenant_id";
+        Config.azure_adls2_oauth2_client_id = "client_id";
+        Config.azure_adls2_oauth2_client_secret = "client_secret";
+        Config.azure_adls2_oauth2_client_endpoint = "https://login.microsoftonline.com/tenant_id";
+        sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assertions.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getEndpoint());
+        Assertions.assertEquals("tenant_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getTenantId());
+        Assertions.assertEquals("client_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getClientId());
+        Assertions.assertEquals("client_secret",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getClientSecret());
+        Assertions.assertEquals("https://login.microsoftonline.com/tenant_id",
+                sv.getCloudConfiguration().toFileStoreInfo().getAdls2FsInfo().getCredential().getAuthorityHost());
 
         Config.cloud_native_storage_type = "GS";
         Config.gcp_gcs_use_compute_engine_service_account = "true";
@@ -784,7 +805,7 @@ public class SharedDataStorageVolumeMgrTest {
         svm.save(imageWriter);
 
         InputStream in = new ByteArrayInputStream(out.toByteArray());
-        DataInputStream dis = new DataInputStream(in);
+        new DataInputStream(in);
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
@@ -887,7 +908,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n2", "<hdfs_host>:<hdfs_port>");
-        String svKey = svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
         Assertions.assertEquals(true, svm.exists(svName));
 
         storageParams.put("dfs.client.failover.proxy.provider",

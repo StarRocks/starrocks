@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：統計情報収集とストレージに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -78,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `enable_external_predicate_columns_collection`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：クエリ最適化時に外部（非ネイティブ）テーブルの述語列使用状況（WHERE/JOIN/GROUP BY で使用される列）を記録するかどうかを指定します。StarRocks はこの使用状況情報を利用して、幅の広い外部テーブルで ANALYZE が統計情報を収集する列の範囲を絞り込みます。無効にすると外部テーブルの述語列は記録されなくなり、ANALYZE はすべての列の統計情報を収集するようフォールバックします。
+- 導入時期：v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- デフォルト：168
+- タイプ：Long
+- 単位：Hours
+- 変更可能：Yes
+- 説明：記録された外部テーブルの述語列使用状況の有効期限 (TTL) です。`last_used` がこの値より古いエントリは、定期的な vacuum ジョブによって削除されます。vacuum を無効にするには負の値 (例: -1) を設定します。外部テーブルの ANALYZE は内部テーブルよりもはるかに低い頻度で実行されるため、デフォルトは 1 週間になっています。内部テーブルのデフォルトである 24 時間のような短い TTL では、2 回の収集の間に使用状況情報が削除されてしまいます。
+- 導入時期：v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：外部テーブルの述語列クエリ (自動 ANALYZE の列選択時など) に応答するためのインメモリキャッシュの TTL です。値を小さくすると新しく記録された使用状況がより早く反映されますが、基盤となるストレージテーブルへのクエリ負荷が増加します。値を大きくするとその負荷は減りますが、データが古くなります。
+- 導入時期：v4.2.0
+
 ## ストレージ
 
 ### `alter_table_timeout_second`
@@ -87,6 +115,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：スキーマ変更操作 (ALTER TABLE) のタイムアウト期間。
+- 導入時期：-
+
+### `enable_concurrent_add_partition_during_alter`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
 - 導入時期：-
 
 ### `capacity_used_percent_high_water`
@@ -553,6 +590,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：古いタブレットを分割できる新しいタブレットの最大数。
 - 導入時期：v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- デフォルト：2147483648 (2 GB)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：タブレットのプリスプリットで生成されるタブレットの最小サイズ。プリスプリット時のコンピュートノード数へのアライメントを制限し、ノード数の多いクラスターで小さなロードが多数の極小タブレットに分割されないようにします。`tablet_reshard_target_size` 以下にする必要があります。
+- 導入時期：v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - デフォルト：259200000 (72 hours)
@@ -578,6 +624,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：Broker Load に対してサンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
+- 導入時期：v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込み（INSERT-from-OLAP-table）に対して、サンプリングベースのタブレット事前分割を有効にするかどうか。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -629,7 +684,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
-1. `enable_tablet_pre_split_for_insert_from_files = false` と `enable_tablet_pre_split_for_broker_load = false` を同時に設定します。新規取り込みは即座に事前分割をスキップします。
+1. 3 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`。新規取り込みは即座に事前分割をスキップします。
 2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 

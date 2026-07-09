@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXCLUDE keyword filters specified columns from SELECT * results, available from StarRocks v4.0."
 sidebar_label: "EXCLUDE"
 ---
 

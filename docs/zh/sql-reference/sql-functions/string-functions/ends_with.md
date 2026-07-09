@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "判断字符串是否以指定后缀结尾。"
 ---
 
 # ends_with

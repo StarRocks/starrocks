@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "4 バイト浮動小数点数で約 7 桁の有効数字精度。"
 ---
 
 # FLOAT

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "warehouse_metrics は各ウェアハウスのメトリックに関する情報を提供します。"
 ---
 
 # warehouse_metrics

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値式の2進数表現を指定されたビット数だけ左にシフトします。"
 ---
 
 # bit_shift_left

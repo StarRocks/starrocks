@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 部署常见问题及解决方案。"
 ---
 
 # 部署常见问题

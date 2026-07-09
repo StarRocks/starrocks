@@ -46,6 +46,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -365,7 +366,6 @@ public class PlanFragmentBuilder {
             List<ExecGroup> colocateExecGroups =
                     execPlan.getExecGroups().stream().filter(ExecGroup::isColocateExecGroup).collect(
                             Collectors.toList());
-            final List<ExecGroup> execGroups = execPlan.getExecGroups();
             for (PlanFragment fragment : fragments) {
                 fragment.assignColocateExecGroups(fragment.getPlanRoot(), colocateExecGroups);
             }
@@ -978,18 +978,26 @@ public class PlanFragmentBuilder {
                     dispatch = RangeColocateScanDispatch.forTable(referenceTable);
                 }
 
-                // Filter out empty partitions from all selected partitions, original selected partition ids may be
-                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                // Filter out logical partitions that have no non-empty physical sub-partition. The result
+                // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
+                // other consumer of getSelectedPartitionIds()/setSelectedPartitionIds() in this codebase --
+                // restricted to those logical partitions with at least one non-empty physical sub-partition.
                 // eg:
                 // partition        : 10001 -> (tablet_1)
                 //  subpartition1   : 10002 -> (tablet_2)
-                //  subpartition2   : 10004 -> (tablet_3)
-                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                //  subpartition2   : 10004 -> (empty)
+                // original selected partition id: 10001
                 // after:
-                // selected partition ids   : 10002
+                // selected partition ids   : 10001 (unchanged -- still the logical id, deduplicated)
                 // selected tablet ids      : tablet_2
                 // total tablets num        : 1
-                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
+                Set<Long> selectedNonEmptyPartitionIds = Sets.newLinkedHashSet();
+                // Accumulate the whole-scan bucketSeq across every sub-partition into one map (rather than a
+                // fresh per-sub-partition map that overwrites), so the dispatch-time alignment guard in
+                // OlapScanNode.getBucketNums() validates the complete assignment instead of only the last
+                // sub-partition's slice. This mirrors the legacy OlapScanNode.computeScanRangeLocations path.
+                Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     List<TKeyRange> partitionRange = List.of();
@@ -1004,7 +1012,6 @@ public class PlanFragmentBuilder {
                             continue;
                         }
                         selectedNonEmptyPartitionIds.add(partitionId);
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
@@ -1019,6 +1026,10 @@ public class PlanFragmentBuilder {
                             if (rangeColocateMap != null) {
                                 tabletId2BucketSeq.putAll(rangeColocateMap);
                             } else {
+                                // Range-colocate but transiently unaligned: fall back to position-based
+                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
+                                // on the colocate-dispatch path by validating this built assignment against
+                                // the aligned mapping, so no unaligned observation needs to be recorded here.
                                 for (int i = 0; i < allTabletIds.size(); i++) {
                                     tabletId2BucketSeq.put(allTabletIds.get(i), i);
                                 }
@@ -1029,14 +1040,13 @@ public class PlanFragmentBuilder {
                                 tabletId2BucketSeq.put(allTabletIds.get(i), i);
                             }
                         }
-                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
                                 localBeId);
                     }
                 }
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
@@ -2031,7 +2041,11 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                // task_runs and materialized_view_refresh_jobs key JOB_ID by a string (UUID), so
+                                // skip the numeric push-down and let the predicate be a normal scan filter.
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)
+                                        && !scanNode.getTableName().equalsIgnoreCase(
+                                                MaterializedViewRefreshJobsSystemTable.NAME)) {
                                     scanNode.setJobId(constantOperator.getBigint());
                                 }
                                 break;
@@ -3898,7 +3912,7 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
-            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            context.getDescTbl().createTupleDescriptor();
 
             Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
@@ -4715,6 +4729,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
 
@@ -4725,6 +4740,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
                 List<ColumnRefOperator> fetchRefColumns = rowIdToFetchRefColumns.get(entry.getKey());

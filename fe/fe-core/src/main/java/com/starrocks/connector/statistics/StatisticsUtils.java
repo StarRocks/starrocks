@@ -83,6 +83,7 @@ public class StatisticsUtils {
         statisticsBuilder.setOutputRowCount(Config.default_statistics_output_row_count);
         statisticsBuilder.addColumnStatistics(
                 columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown())));
+        statisticsBuilder.setStatsSource(Statistics.StatsSource.NONE);
         return statisticsBuilder.build();
     }
 

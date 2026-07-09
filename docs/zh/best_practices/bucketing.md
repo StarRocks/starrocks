@@ -1,5 +1,6 @@
 ---
 sidebar_position: 30
+description: "Field guide to choosing between hash bucketing and random bucketing in StarRocks, including mechanics, trade-offs, and use case recommendations."
 ---
 
 # 分桶

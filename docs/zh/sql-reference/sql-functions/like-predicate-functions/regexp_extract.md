@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回字符串中匹配指定正则表达式的第一个子字符串。"
 ---
 
 # regexp_extract

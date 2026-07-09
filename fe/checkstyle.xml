@@ -69,6 +69,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <property name="allowNonPrintableEscapes" value="true"/>
         </module>
         <module name="UnusedImports"/>
+        <module name="UnusedLocalVariable"/>
         <module name="IllegalImport">
             <property name="regexp" value="true"/>
             <!-- reject all references from shaded modules -->

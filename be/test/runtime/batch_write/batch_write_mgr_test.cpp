@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/batch_write_mgr.h"
+#include "exec/batch_write/batch_write_mgr.h"
 
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
@@ -23,13 +23,14 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/http_load_params.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
+#include "platform/http/http_headers.h"
 
 namespace starrocks {
 
@@ -62,7 +63,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
@@ -129,6 +130,31 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
         auto batch_write = status_or_batch_write.value();
         ASSERT_FALSE(batch_write->contain_pipe(ctx));
     }
+}
+
+TEST_F(BatchWriteMgrTest, stream_load_context_handle_cancel_and_close_batch_write_pipe) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{"k", "v"}}};
+    auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
+                                                                 batch_write_id.table, batch_write_id.load_params,
+                                                                 "label", 1, generate_uuid(), 10000);
+    ASSERT_OK(status_or_ctx.status());
+    StreamLoadContext* ctx = status_or_ctx.value();
+
+    auto status_or_batch_write = _batch_write_mgr->get_batch_write(batch_write_id);
+    ASSERT_OK(status_or_batch_write.status());
+    auto batch_write = status_or_batch_write.value();
+    ASSERT_TRUE(batch_write->contain_pipe(ctx));
+
+    StreamLoadContextHandle handle(
+            ctx, [this](StreamLoadContext* context) { _batch_write_mgr->unregister_stream_load_pipe(context); });
+    handle.cancel(Status::Cancelled("cancel only"));
+    ASSERT_TRUE(batch_write->contain_pipe(ctx));
+
+    handle.close(Status::Cancelled("close"));
+    ASSERT_FALSE(batch_write->contain_pipe(ctx));
+
+    handle.close(Status::Cancelled("close again"));
+    ASSERT_FALSE(batch_write->contain_pipe(ctx));
 }
 
 TEST_F(BatchWriteMgrTest, append_data) {

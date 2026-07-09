@@ -1,0 +1,109 @@
+-- name: test_iceberg_column_projection
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+create external table t_col_proj (c1 int, c2 string, c3 bigint, c4 string);
+-- result:
+-- !result
+INSERT INTO t_col_proj VALUES (1, 'a', 100, 'b'), (2, 'c', 200, 'd'), (3, 'e', 300, 'f');
+-- result:
+-- !result
+select c1 from t_col_proj order by c1;
+-- result:
+1
+2
+3
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c1]
+-- !result
+select c1, c3 from t_col_proj order by c1;
+-- result:
+1	100
+2	200
+3	300
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c1, c3]
+-- !result
+select c1, c2, c3, c4 from t_col_proj order by c1;
+-- result:
+1	a	100	b
+2	c	200	d
+3	e	300	f
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c1, c2, c3, c4]
+-- !result
+select c4 from t_col_proj order by c4;
+-- result:
+b
+d
+f
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c4]
+-- !result
+select c2, c4 from t_col_proj order by c2;
+-- result:
+a	b
+c	d
+e	f
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c2, c4]
+-- !result
+select c1 from t_col_proj where c3 > 0 order by c1;
+-- result:
+1
+2
+3
+-- !result
+select distinct regexp_extract(line, '(projectedFieldNames=\\[[^]]+\\])', 1)
+from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v
+where v.line like '%projectedFieldNames=%';
+-- result:
+projectedFieldNames=[c1, c3]
+-- !result
+drop table t_col_proj force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

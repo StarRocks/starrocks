@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "16進数文字列を元のバイナリ文字列に変換します。"
 ---
 
 # unhex

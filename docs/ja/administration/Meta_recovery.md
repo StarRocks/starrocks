@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE ノードが例外に遭遇した場合に StarRocks クラスター内のメタデータをリカバリーする方法。"
 ---
 
 # メタデータのリカバリー

@@ -111,6 +111,7 @@ public class CloudConfigurationConstants {
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_SECRET = "azure.adls2.oauth2_client_secret";
     public static final String AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT = "azure.adls2.oauth2_client_endpoint";
     public static final String AZURE_ADLS2_OAUTH2_TOKEN_FILE = "azure.adls2.oauth2_token_file";
+    public static final String AZURE_PATH_KEY = "azure_path_key";
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)

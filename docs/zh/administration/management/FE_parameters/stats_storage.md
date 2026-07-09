@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for statistics collection and storage settings."
 sidebar_label: "统计报告和存储"
 ---
 
@@ -78,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `enable_external_predicate_columns_collection`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在查询优化过程中记录外部表（非原生表）的谓词列使用情况（WHERE/JOIN/GROUP BY 中用到的列）。StarRocks 利用这些使用信息缩小宽外部表 ANALYZE 时需要收集统计信息的列范围。禁用后不再记录外部表的谓词列，ANALYZE 会回退为收集所有列的统计信息。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- 默认值: 168
+- 类型: Long
+- 单位: 小时
+- 是否可变: Yes
+- 描述: 记录的外部表谓词列使用信息的存活时间（TTL）。`last_used` 时间早于该值的记录会被周期性的 vacuum 任务清除。设置为负值（例如 -1）可禁用 vacuum。默认值为一周，因为外部表 ANALYZE 的执行频率远低于内表，如果 TTL 太短（如内表默认的 24 小时），会导致两次收集之间使用信息被提前清除。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
+- 引入版本: v4.2.0
+
 ## 存储
 
 ### `alter_table_timeout_second`
@@ -87,6 +115,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: schema 变更操作 (ALTER TABLE) 的超时时长。
+- 引入版本: -
+
+### `enable_concurrent_add_partition_during_alter`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
 - 引入版本: -
 
 ### `capacity_used_percent_high_water`
@@ -553,6 +590,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- 默认值: 2147483648 (2 GB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 引入版本: v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - 默认值: 259200000 (72 hours)
@@ -578,6 +624,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否为 Broker Load 启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入（INSERT-from-OLAP-table）启用基于采样的 Tablet 预分裂。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -629,7 +684,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将 `enable_tablet_pre_split_for_insert_from_files = false` 和 `enable_tablet_pre_split_for_broker_load = false` 同时设为 `false`，新导入将立即跳过预分裂。
+1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "VARCHAR(M) 是变长字符串类型，M 的取值范围为 [1, 1048576] 字节。"
 ---
 
 # VARCHAR

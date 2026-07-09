@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回 Map 中所有 Value 组成的数组。"
 ---
 
 # map_values

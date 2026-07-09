@@ -19,9 +19,9 @@
 
 #include "common/statusor.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
-struct TabletBasicInfo;
 class TabletSchema;
 class TabletMetadataPB;
 class Schema;

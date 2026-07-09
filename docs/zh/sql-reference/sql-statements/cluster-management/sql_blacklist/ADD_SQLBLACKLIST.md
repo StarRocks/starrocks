@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADD SQLBLACKLIST adds a regular expression to the SQL blacklist to forbid certain SQL patterns."
 ---
 
 # ADD SQLBLACKLIST

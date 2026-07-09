@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回原始日期加上指定周数后的日期。"
 ---
 
 # weeks_add

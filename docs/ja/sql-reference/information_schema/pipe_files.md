@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "pipe_filesは指定されたパイプを介してロードされるデータファイルのステータスを提供します。"
 ---
 
 # pipe_files

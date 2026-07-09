@@ -45,14 +45,16 @@
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
+#include "column/flat_json/json_flat_path.h"
 #include "column/schema.h"
+#include "common/bloom_filter.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -66,7 +68,6 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT
@@ -238,12 +239,12 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uin
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
 Segment::~Segment() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
@@ -379,7 +380,7 @@ Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
 
         Status st = _load_index(lake_io_opts);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
             update_cache_size();
         } else {
@@ -593,7 +594,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         std::string_view leaf = paths.back();
         may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
     }
-    if (column_reader->is_flat_json() && !may_contains) {
+    // An intermediate node (e.g. "o") whose descendants are stored as flattened sub-columns
+    // (e.g. "o.inner") is present in this segment even though no sub-column is named exactly
+    // "o". Such a node must be reconstructed by the JsonExtractIterator below, not reported as
+    // absent -- otherwise extracting an intermediate JSON object through a json-path-rewrite
+    // extended column (e.g. get_json_string(j, '$.o')) wrongly returns NULL.
+    bool has_flatten_descendant = false;
+    if (sub_readers) {
+        const std::string prefix = std::string(field_name) + ".";
+        for (auto& sub_reader : *sub_readers) {
+            if (std::string_view(sub_reader->name()).starts_with(prefix)) {
+                has_flatten_descendant = true;
+                break;
+            }
+        }
+    }
+    if (column_reader->is_flat_json() && !may_contains && !has_flatten_descendant) {
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());

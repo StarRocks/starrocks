@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load ジョブの実行情報を表示します。"
 ---
 
 # SHOW ROUTINE LOAD

@@ -43,15 +43,15 @@
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "storage/primitive/key_coder.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 

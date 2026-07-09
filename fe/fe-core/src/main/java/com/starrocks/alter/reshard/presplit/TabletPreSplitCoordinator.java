@@ -36,6 +36,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -148,6 +149,7 @@ public final class TabletPreSplitCoordinator {
         boolean configEnabled = switch (loadKind) {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
+            case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
@@ -205,9 +207,8 @@ public final class TabletPreSplitCoordinator {
      * {@link SkipReason#TIMEOUT_PRE_SUBMIT}, {@link SkipReason#SAMPLE_FAILED},
      * {@link SkipReason#NO_USEFUL_CUTS}, {@link SkipReason#SUBMIT_FAILED}.
      *
-     * @param activeComputeNodeCount compute nodes available to the load after
-     *                               warehouse/blocklist filtering (passed to the
-     *                               pipeline's internal tablet-count selector).
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse
+     *                               (passed to the pipeline's internal tablet-count selector).
      */
     public static PreSplitOutcome submitAsynchronously(
             Database database, OlapTable table, long physicalPartitionId, ScanContext scanContext,
@@ -317,7 +318,7 @@ public final class TabletPreSplitCoordinator {
      * Block on {@link PreSplitPipeline#awaitFinished} for the admitted reshard job
      * and record the latency histogram + post-submit hard-cap counter consistently
      * across the two callers ({@link #runPreSplit} for abort-on-timeout semantics,
-     * {@link com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook} for
+     * {@link com.starrocks.alter.reshard.presplit.InsertPreSplitHook} for
      * fail-safe semantics). Translates the generic {@link TimeoutException} the
      * pipeline declares into the package-typed
      * {@link PreSplitPostSubmitTimeoutException}; callers decide whether to abort
@@ -352,9 +353,9 @@ public final class TabletPreSplitCoordinator {
      * the inner helper still updates the latency histogram and bumps the
      * hard-cap counter on timeout.
      *
-     * <p>Used by both load-kind hooks ({@link InsertFromFilesPreSplitHook} and
-     * {@link BrokerLoadPreSplitHook}). Sync-await is deadlock-safe in both
-     * cases — INSERT-from-FILES runs the hook before {@code StatementPlanner.plan()}
+     * <p>Used by both load-kind hooks ({@link InsertPreSplitHook} for INSERT and
+     * {@link BrokerLoadPreSplitHook} for Broker Load). Sync-await is deadlock-safe in both
+     * cases — INSERT runs the hook before {@code StatementPlanner.plan()}
      * begins the load txn; Broker Load defers {@code BrokerLoadJob.beginTxn}
      * until after the hook returns. In neither case can the reshard daemon's
      * cleanup-phase {@code isPreviousTransactionsFinished} wait include the
@@ -474,34 +475,68 @@ public final class TabletPreSplitCoordinator {
     /**
      * Choose how many tablets to pre-split a load into.
      *
-     * <p>Picks the larger of two lower bounds — the cluster's active compute-node
-     * count (so every compute node gets at least one tablet) and the byte-volume
-     * estimate ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)})
-     * — then clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
+     * <p>Takes the byte-volume estimate
+     * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
+     * to a whole multiple of the active compute-node count so tablets spread evenly
+     * across nodes, floors it at the node count (so every node gets at least one
+     * tablet), and clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
      * minimum because a single-tablet result is equivalent to skipping pre-split.
+     * The {@code max_split_count} cap takes precedence, so a clamped result is not
+     * necessarily a multiple of the node count.
+     *
+     * <p>The compute-node count used for the rounding/floor is itself bounded by how
+     * many {@code tablet_reshard_min_split_size} tablets the input can fill
+     * ({@code estimatedTotalBytes / tablet_reshard_min_split_size}). This stops a small
+     * load on a large cluster from being split into one tiny tablet per node — without
+     * it, the node-count floor alone would force {@code activeComputeNodeCount} tablets
+     * regardless of how little data there is.
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
-     * @param activeComputeNodeCount compute nodes available to the load, after
-     *                               warehouse/blocklist filtering. Must be {@code >= 1}.
+     * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
+     *                               Must be {@code >= 1}.
      */
-    static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
         long targetSize = Config.tablet_reshard_target_size;
         int maxSplitCount = Config.tablet_reshard_max_split_count;
+        long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
                 "tablet_reshard_target_size must be > 0, was %s", targetSize);
         Preconditions.checkState(maxSplitCount >= 2,
                 "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+        Preconditions.checkState(minSplitSize > 0,
+                "tablet_reshard_min_split_size must be > 0, was %s", minSplitSize);
 
         // Integer ceil-divide written as (n - 1) / d + 1 with a zero-case guard so it
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
+        // Clamp to maxSplitCount before the node-count rounding. The final result is
+        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
+        // Long.MAX_VALUE estimate (tiny target_size + huge input).
+        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        // Bound the node count we align to by how many min-split-size tablets the input can
+        // fill (totalBytes / tablet_reshard_min_split_size). Without this, the rounding and
+        // node-count floor below would split a small load into one tiny tablet per node on a
+        // large cluster. effectiveMinSize is clamped to targetSize so the bound never forces
+        // tablets larger than the byte-volume target already implies; max(1, ...) keeps the
+        // divisor positive (and yields the minimum 2 after clamping for an empty input).
+        long effectiveMinSize = Math.min(minSplitSize, targetSize);
+        long maxTabletsByMinSize = totalBytes / effectiveMinSize;
+        long alignmentNodeCount = Math.min(activeComputeNodeCount, Math.max(1L, maxTabletsByMinSize));
+        // Round the byte-volume estimate up to a whole multiple of the (size-bounded) node
+        // count so the tablets distribute evenly. A count that is not a multiple of that node
+        // count leaves some nodes owning one more tablet than the rest (e.g. 4 tablets on 3
+        // nodes -> 2/1/1), skewing load-write and scan parallelism toward the heavier nodes.
+        long nodeAlignedCount =
+                ((boundedByteTarget + alignmentNodeCount - 1) / alignmentNodeCount)
+                        * alignmentNodeCount;
+        long proposed = Math.max(alignmentNodeCount, nodeAlignedCount);
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }
@@ -554,7 +589,7 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
-            int activeComputeNodeCount, ConnectContext ctx) {
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
@@ -593,6 +628,13 @@ public final class TabletPreSplitCoordinator {
         try {
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
                     database, table, oldTabletIdToRanges);
+            // Carry the load's acquired compute resource (the one that sized the split) so the job's
+            // shard creation + publish run in the load's warehouse. Use prepared.computeResource() (passed
+            // in), NOT ctx.getCurrentComputeResource(): the latter can be the session warehouse when the
+            // load specifies a different `warehouse` property.
+            if (loadComputeResource != null) {
+                combinedJob.setWarehouseId(loadComputeResource.getWarehouseId());
+            }
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
         } catch (StarRocksException submitFailure) {

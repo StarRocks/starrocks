@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力値がビットマップ列に含まれているかどうかを計算し、ブール値を返します。"
 ---
 
 # bitmap_contains

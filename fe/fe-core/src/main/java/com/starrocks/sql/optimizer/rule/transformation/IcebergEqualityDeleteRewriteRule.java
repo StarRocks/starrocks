@@ -236,7 +236,11 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 throw new StarRocksConnectorException("can not find iceberg identifier column {}",
                         rightColRef.getName());
             }
-            BinaryType binaryType = icebergIdentifierColumnName.equals(DATA_SEQUENCE_NUMBER) ? BinaryType.LT : BinaryType.EQ;
+            // Use EQ_FOR_NULL (null-safe equals) for identity columns to match Iceberg spec:
+            // "A null value in a delete column matches a row if the row's value is null"
+            BinaryType binaryType = icebergIdentifierColumnName.equals(DATA_SEQUENCE_NUMBER)
+                    ? BinaryType.LT
+                    : BinaryType.EQ_FOR_NULL;
             BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(binaryType,
                     List.of(leftColRef, rightColRef));
             onPredicates.add(binaryPredicateOperator);

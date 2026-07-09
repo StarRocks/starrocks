@@ -118,6 +118,11 @@ public class IvmOpUtils {
         return encodeRowIdFuncName;
     }
 
+    public static int getEncodeRowIdVersionChecked(int version) {
+        getEncodeRowIdFunctionNameChecked(version);
+        return version;
+    }
+
     /**
      * Build the row id function expression for IVM.
      * For multi unique keys, use ENCODE_ROW_ID to encode them to a varbinary and use FROM_BINARY to convert it into

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "テーブル列のサイズ情報をストレージ分析用に返します。"
 ---
 
 # column_size & column_compressed_size

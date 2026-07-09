@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocksWriter 插件允许通过 DataX 将 MySQL、Oracle 等数据库的数据导入至 StarRocks。"
 ---
 
 # 使用 DataX 导入

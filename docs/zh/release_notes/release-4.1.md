@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 4.1 版本发布说明：多租户范围分片自动拆分、超大容量 tablet、Fast Schema Evolution V2。"
 ---
 
 # StarRocks version 4.1
@@ -68,6 +69,11 @@ displayed_sidebar: docs
 - 新增 FE 配置项 `deploy_serialization_min_thread_pool_size`。[#72274](https://github.com/StarRocks/starrocks/pull/72274)
 - 新增配置项 `tablet_reshard_enable_tablet_merge`，用于禁用 MergeTabletJob 的创建。[#70906](https://github.com/StarRocks/starrocks/pull/70906)
 - 通过 `SO_REUSEPORT` 消除 HTTP Server accept 的惊群效应。[#72956](https://github.com/StarRocks/starrocks/pull/72956)
+- 支持通过 `CREATE FUNCTION ... AS <sql_body>` 创建 SQL UDF。[#67558](https://github.com/StarRocks/starrocks/pull/67558)
+- 支持从 S3 加载 UDF。[#64541](https://github.com/StarRocks/starrocks/pull/64541)
+- 新增 `uuid_v7` 函数，用于生成时间有序的 UUID v7 值。[#67694](https://github.com/StarRocks/starrocks/pull/67694)
+- 为外部目录可观测性添加了按目录类型划分的查询指标。[#70533](https://github.com/StarRocks/starrocks/pull/70533)
+- 支持窗口函数的显式 Skew hint，通过拆分为 UNION 自动优化具有倾斜分区键的窗口函数。[#68739](https://github.com/StarRocks/starrocks/pull/68739)
 
 ### 安全
 
@@ -121,7 +127,6 @@ displayed_sidebar: docs
 - MySQL 结果集中嵌套类型内 VARBINARY 编码错误的问题。[#71346](https://github.com/StarRocks/starrocks/pull/71346)
 - 小 LIMIT 下禁用聚合溢出时的 HAVING 子句检查问题。[#72705](https://github.com/StarRocks/starrocks/pull/72705)
 - 在日期解析前引号未被去除，以及一个 PostgreSQL 日期/时间问题。[#48517](https://github.com/StarRocks/starrocks/pull/48517) [#71016](https://github.com/StarRocks/starrocks/pull/71016)
-- Tablet 分裂后的数据丢失。[#71135](https://github.com/StarRocks/starrocks/pull/71135)
 - 数据文件共享标记丢失，导致 Vacuum 删除仍被兄弟分裂 Tablet 引用的文件的问题。[#71585](https://github.com/StarRocks/starrocks/pull/71585)
 - split→compaction→merge 序列下的 Tablet Merge 正确性问题。[#72350](https://github.com/StarRocks/starrocks/pull/72350)
 - Tablet 分裂期间 cross-published txn log 的 num_rows/data_size 膨胀问题。[#71144](https://github.com/StarRocks/starrocks/pull/71144)
@@ -152,6 +157,13 @@ displayed_sidebar: docs
 - Profile 的 START_TIME/END_TIME 未根据会话时区显示。[#71429](https://github.com/StarRocks/starrocks/pull/71429)
 - `star_mgr_meta_sync_interval_sec` 不可在运行时动态修改。[#71675](https://github.com/StarRocks/starrocks/pull/71675)
 - `information_schema.tables` 在等值谓词中未转义特殊字符的问题。[#71273](https://github.com/StarRocks/starrocks/pull/71273)
+- 错误路径上并行段/行集加载中的 use-after-free 问题。[#71083](https://github.com/StarRocks/starrocks/pull/71083)
+- 聚合溢出 `set_finishing` 中潜在的哈希表数据丢失问题。[#70851](https://github.com/StarRocks/starrocks/pull/70851)
+- 磁盘重新迁移 (A→B→A) 期间 GC 竞争导致的 PK tablet 行集元数据丢失问题。[#70727](https://github.com/StarRocks/starrocks/pull/70727)
+- SharedDataStorageVolumeMgr 中的 DB 读锁泄漏问题。[#70987](https://github.com/StarRocks/starrocks/pull/70987)
+- IVM 刷新记录不完整的 PCT 分区元数据问题。[#71092](https://github.com/StarRocks/starrocks/pull/71092)
+- 在 Stream Load/Broker Load 中分析生成列时，如果引用列缺失导致的 NPE 问题。[#71116](https://github.com/StarRocks/starrocks/pull/71116)
+- 短路点查找中缺少分区谓词的问题。[#71124](https://github.com/StarRocks/starrocks/pull/71124)
 
 ## 4.1.0
 
@@ -185,7 +197,6 @@ displayed_sidebar: docs
 - 支持 MemTable 刷写和合并的管道执行，提高存算分离集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
 - 支持 `dry_run` 模式修复云原生表，允许用户在执行前预览修复操作。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
 - 在存算一体集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
-- 支持动态修改云原生表的 `datacache.enable` 属性。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### 数据湖分析
 
@@ -213,19 +224,12 @@ displayed_sidebar: docs
 
   新增支持 `rewrite_manifests` 过程，并扩展了 `expire_snapshots` 和 `remove_orphan_files` 过程，增加了额外参数以实现更细粒度的表维护。[#68817](https://github.com/StarRocks/starrocks/pull/68817) [#68898](https://github.com/StarRocks/starrocks/pull/68898)
 
-- **Iceberg `$properties` 元数据表**
-
-  通过 `$properties` 元数据表添加了对查询 Iceberg 表属性的支持。[#68504](https://github.com/StarRocks/starrocks/pull/68504)
-
 - 支持从 Iceberg 表读取文件路径和行位置元数据列。[#67003](https://github.com/StarRocks/starrocks/pull/67003)
 - 支持从 Iceberg v3 表读取 `_row_id`，并支持 Iceberg v3 的全局延迟物化。[#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
 - 支持创建具有自定义属性的 Iceberg 视图，并在 SHOW CREATE VIEW 输出中显示属性。[#65938](https://github.com/StarRocks/starrocks/pull/65938)
 - 支持使用特定分支、标签、版本或时间戳查询 Paimon 表。[#63316](https://github.com/StarRocks/starrocks/pull/63316)
 - 支持 Paimon 表的复杂类型（ARRAY、MAP、STRUCT）。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
-- 支持 Paimon 视图。[#56058](https://github.com/StarRocks/starrocks/pull/56058)
-- 支持 Paimon 表的 TRUNCATE 操作。[#67559](https://github.com/StarRocks/starrocks/pull/67559)
 - 在创建 Iceberg 表时，支持带括号语法的 Partition Transforms。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
-- 支持 Iceberg 表的 ALTER TABLE REPLACE PARTITION COLUMN。[#70508](https://github.com/StarRocks/starrocks/pull/70508)
 - 支持基于 Transform Partition 的 Iceberg 全局 shuffle，以改进数据组织。[#70009](https://github.com/StarRocks/starrocks/pull/70009)
 - 支持为 Iceberg 表 sink 动态启用全局 shuffle。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
 - 为 Iceberg 表 sink 引入了 Commit 队列，以避免并发 Commit 冲突。[#68084](https://github.com/StarRocks/starrocks/pull/68084)
@@ -239,7 +243,6 @@ displayed_sidebar: docs
 - 为 AWS Glue `GetDatabases` API 添加了资源共享类型支持。[#69056](https://github.com/StarRocks/starrocks/pull/69056)
 - 支持 Azure ABFS/WASB 路径映射，并带有端点注入（`azblob`/`adls2`）。[#67847](https://github.com/StarRocks/starrocks/pull/67847)
 - 为 JDBC 目录添加了数据库元数据缓存，以减少远程 RPC 开销和外部系统故障的影响。[#68256](https://github.com/StarRocks/starrocks/pull/68256)
-- 为 JDBC 目录添加了 `schema_resolver` 属性，以支持自定义模式解析。[#68682](https://github.com/StarRocks/starrocks/pull/68682)
 - 支持 `information_schema` 中 PostgreSQL 表的列注释。[#70520](https://github.com/StarRocks/starrocks/pull/70520)
 - 改进了 Oracle 和 PostgreSQL JDBC 类型映射。[#70315](https://github.com/StarRocks/starrocks/pull/70315) [#70566](https://github.com/StarRocks/starrocks/pull/70566)
 
@@ -251,9 +254,7 @@ displayed_sidebar: docs
 
 - 改进了 Skew Join v2 重写，支持基于统计信息的倾斜检测、直方图支持和 NULL 倾斜感知。[#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)
 - 改进了窗口上的 COUNT DISTINCT，并增加了对融合多 DISTINCT 聚合的支持。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
-- 支持窗口函数的显式 Skew hint，通过拆分为 UNION 自动优化具有倾斜分区键的窗口函数。[#68739](https://github.com/StarRocks/starrocks/pull/68739) [#67944](https://github.com/StarRocks/starrocks/pull/67944)
-- 支持 CTE 的物化 Hint。[#70802](https://github.com/StarRocks/starrocks/pull/70802)
-- 默认启用全局延迟物化，通过将列读取推迟到需要时进行，从而提高查询性能。[#70412](https://github.com/StarRocks/starrocks/pull/70412)
+- 支持窗口函数的显式 Skew hint，通过拆分为 UNION 自动优化具有倾斜分区键的窗口函数。[#67944](https://github.com/StarRocks/starrocks/pull/67944)
 - 在 Trino 解析器中支持 INSERT 语句的 EXPLAIN 和 EXPLAIN ANALYZE。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
 - 支持 EXPLAIN 以提高查询队列可见性。[#69933](https://github.com/StarRocks/starrocks/pull/69933)
 
@@ -270,30 +271,19 @@ displayed_sidebar: docs
   - `current_warehouse`: 返回当前仓库的名称。[#66401](https://github.com/StarRocks/starrocks/pull/66401)
   - `sec_to_time`: 将秒数转换为 TIME 值。[#62797](https://github.com/StarRocks/starrocks/pull/62797)
   - `ai_query`: 从 SQL 调用外部 AI 模型以进行推理工作负载。[#61583](https://github.com/StarRocks/starrocks/pull/61583)
-  - `min_n` / `max_n`: 返回前 N 个最小/最大值的聚合函数。[#63807](https://github.com/StarRocks/starrocks/pull/63807)
-  - `regexp_position`: 返回字符串中正则表达式匹配的位置。[#67252](https://github.com/StarRocks/starrocks/pull/67252)
-  - `is_json_scalar`: 返回 JSON 值是否为标量。[#66050](https://github.com/StarRocks/starrocks/pull/66050)
-  - `get_json_scalar`: 从 JSON 字符串中提取标量值。[#68815](https://github.com/StarRocks/starrocks/pull/68815)
   - `raise_error`: 在 SQL 表达式中引发用户定义错误。[#69661](https://github.com/StarRocks/starrocks/pull/69661)
-  - `uuid_v7`: 生成时间有序的 UUID v7 值。[#67694](https://github.com/StarRocks/starrocks/pull/67694)
-  - `STRING_AGG`: GROUP_CONCAT 的语法糖。[#64704](https://github.com/StarRocks/starrocks/pull/64704)
 - 提供以下函数或语法扩展：
   - 在 `array_sort` 中支持 lambda 比较器以实现自定义排序。[#66607](https://github.com/StarRocks/starrocks/pull/66607)
   - 支持 FULL OUTER JOIN 的 USING 子句，具有 SQL 标准语义。[#65122](https://github.com/StarRocks/starrocks/pull/65122)
   - 支持对带有 ORDER BY/PARTITION BY 的框架窗口函数进行 DISTINCT 聚合。[#65815](https://github.com/StarRocks/starrocks/pull/65815) [#65030](https://github.com/StarRocks/starrocks/pull/65030) [#67453](https://github.com/StarRocks/starrocks/pull/67453)
   - 在 `lead`/`lag`/`first_value`/`last_value` 窗口函数中支持 ARRAY 类型。[#63547](https://github.com/StarRocks/starrocks/pull/63547)
   - 支持 VARBINARY 用于类似 count distinct 的聚合函数。[#68442](https://github.com/StarRocks/starrocks/pull/68442)
-  - 支持 `MULTIPLY`/`DIVIDE` 用于区间操作。[#68407](https://github.com/StarRocks/starrocks/pull/68407)
   - 支持 IN 表达式中的日期和字符串类型转换。[#61746](https://github.com/StarRocks/starrocks/pull/61746)
   - 支持 BEGIN/START TRANSACTION 的 WITH LABEL 语法。[#68320](https://github.com/StarRocks/starrocks/pull/68320)
   - 支持 SHOW 语句中的 WHERE/ORDER/LIMIT 子句。[#68834](https://github.com/StarRocks/starrocks/pull/68834)
   - 支持 `ALTER TASK` 语句用于任务管理。[#68675](https://github.com/StarRocks/starrocks/pull/68675)
-  - 支持通过 `CREATE FUNCTION ... AS <sql_body>` 创建 SQL UDF。[#67558](https://github.com/StarRocks/starrocks/pull/67558)
-  - 支持从 S3 加载 UDF。[#64541](https://github.com/StarRocks/starrocks/pull/64541)
-  - 支持 Scala 函数中的命名参数。[#66344](https://github.com/StarRocks/starrocks/pull/66344)
   - 支持 CSV 文件导出多种压缩格式（GZIP/SNAPPY/ZSTD/LZ4/DEFLATE/ZLIB/BZIP2）。[#68054](https://github.com/StarRocks/starrocks/pull/68054)
   - 支持 `STRUCT_CAST_BY_NAME` SQL 模式用于基于名称的结构体字段匹配。[#69845](https://github.com/StarRocks/starrocks/pull/69845)
-  - 支持 `ANALYZE PROFILE` 中的 `last_query_id()`，以便轻松进行查询配置文件分析。[#64557](https://github.com/StarRocks/starrocks/pull/64557)
 
 ### 管理与可观测性
 
@@ -311,12 +301,9 @@ displayed_sidebar: docs
 - 为指标 API 添加了 `enable_table_metrics_collect` 选项。[#68691](https://github.com/StarRocks/starrocks/pull/68691)
 - 为查询详情 HTTP API 添加了模拟用户支持。[#68674](https://github.com/StarRocks/starrocks/pull/68674)
 - 将 `table_query_timeout` 添加为表级属性。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
-- 新增 FE 配置文件日志记录，具有可配置的延迟阈值。[#69396](https://github.com/StarRocks/starrocks/pull/69396)
 - 支持添加 FE 观察者节点。[#67778](https://github.com/StarRocks/starrocks/pull/67778)
 - 在 `information_schema.loads` 中支持 Merge Commit 信息，以提高加载作业的可见性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
 - 支持在云原生表中显示 tablet 状态，以便更好地进行故障排除。[#69616](https://github.com/StarRocks/starrocks/pull/69616)
-- 为外部目录可观测性添加了按目录类型划分的查询指标。[#70533](https://github.com/StarRocks/starrocks/pull/70533)
-- 为 FE 和 BE 添加了 Debian (.deb) 打包支持。[#68821](https://github.com/StarRocks/starrocks/pull/68821)
 
 ### 安全
 
@@ -331,23 +318,16 @@ displayed_sidebar: docs
 - 通过跳过范围分布 Tablet 的数据文件删除，修复了 Tablet 分裂后的数据丢失问题。[#71135](https://github.com/StarRocks/starrocks/pull/71135)
 - 修复了 `DefaultValueColumnIterator` 中复杂类型的内存泄漏问题。[#71142](https://github.com/StarRocks/starrocks/pull/71142)
 - 修复了由 `shared_ptr` 在 `BatchUnit` 和 `FetchTaskContext` 之间循环导致的内存泄漏。[#71126](https://github.com/StarRocks/starrocks/pull/71126)
-- 修复了错误路径上并行段/行集加载中的 use-after-free 问题。[#71083](https://github.com/StarRocks/starrocks/pull/71083)
-- 修复了聚合溢出 `set_finishing` 中潜在的哈希表数据丢失问题。[#70851](https://github.com/StarRocks/starrocks/pull/70851)
 - 修复了 SystemMetrics 中由于并发 getline 访问导致的 double-free 崩溃问题。[#71040](https://github.com/StarRocks/starrocks/pull/71040)
 - 修复了 SpillMemTableSink 在急切合并消耗所有块时发生的崩溃问题。[#69046](https://github.com/StarRocks/starrocks/pull/69046)
-- 修复了当字典支持表被删除时 `visitDictionaryGetExpr` 中的 NPE 问题。[#71109](https://github.com/StarRocks/starrocks/pull/71109)
-- 修复了在 Stream Load/Broker Load 中分析生成列时，如果引用列缺失导致的 NPE 问题。[#71116](https://github.com/StarRocks/starrocks/pull/71116)
 - 修复了当自动创建的分区被 TTL 清理器删除时导致的 NPE 问题。[#68257](https://github.com/StarRocks/starrocks/pull/68257)
 - 修复了当快照过期时 `IcebergCatalog.getPartitionLastUpdatedTime` 中的 NPE 问题。[#68925](https://github.com/StarRocks/starrocks/pull/68925)
 - 修复了外连接中带有常量侧列引用的谓词重写不正确的问题。[#67072](https://github.com/StarRocks/starrocks/pull/67072)
-- 修复了磁盘重新迁移 (A→B→A) 期间 GC 竞争导致的 PK tablet 行集元数据丢失问题。[#70727](https://github.com/StarRocks/starrocks/pull/70727)
-- 修复了 SharedDataStorageVolumeMgr 中的 DB 读锁泄漏问题。[#70987](https://github.com/StarRocks/starrocks/pull/70987)
 - 修复了在存算分离中修改 CHAR 列长度后查询结果错误的问题。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
 - 修复了多表情况下 MV 刷新错误。[#61763](https://github.com/StarRocks/starrocks/pull/61763)
 - 修复了强制刷新后 MV 回收时间不正确的问题。[#68673](https://github.com/StarRocks/starrocks/pull/68673)
 - 修复了同步 MV 中全空值处理错误。[#69136](https://github.com/StarRocks/starrocks/pull/69136)
 - 修复了快速模式更改 ADD COLUMN 后查询 MV 时重复列 ID 错误。[#71072](https://github.com/StarRocks/starrocks/pull/71072)
-- 修复了 IVM 刷新记录不完整的 PCT 分区元数据问题。[#71092](https://github.com/StarRocks/starrocks/pull/71092)
 - 修复了由共享 DecodeInfo 导致的低基数重写 NPE 问题。[#68799](https://github.com/StarRocks/starrocks/pull/68799)
 - 修复了低基数连接谓词类型不匹配问题。[#68568](https://github.com/StarRocks/starrocks/pull/68568)
 - 修复了 Parquet Page Index Filter 在 `null_counts` 为空时的段错误。[#68463](https://github.com/StarRocks/starrocks/pull/68463)
@@ -359,10 +339,8 @@ displayed_sidebar: docs
 - 修复了 HMS 连接池满时发生的死锁。[#68033](https://github.com/StarRocks/starrocks/pull/68033)
 - 修复了 Paimon Catalog 中 VARCHAR 字段类型长度不正确的问题。[#68383](https://github.com/StarRocks/starrocks/pull/68383)
 - 修复了 Paimon 目录刷新时在 ObjectTable 上发生 ClassCastException 导致的崩溃。[#70224](https://github.com/StarRocks/starrocks/pull/70224)
-- 修复了 PaimonView 将表引用解析为 default_catalog 而非 Paimon 目录的问题。[#70217](https://github.com/StarRocks/starrocks/pull/70217)
 - 修复了带有常量子查询的 FULL OUTER JOIN USING。[#69028](https://github.com/StarRocks/starrocks/pull/69028)
 - 修复了带有 CTE 范围的 join on 子句错误。[#68809](https://github.com/StarRocks/starrocks/pull/68809)
-- 修复了短路点查找中缺少分区谓词的问题。[#71124](https://github.com/StarRocks/starrocks/pull/71124)
 - 通过使用 bindScope() 模式修复了 ConnectContext 内存泄漏。[#68215](https://github.com/StarRocks/starrocks/pull/68215)
 - 修复了存算一体集群中 `CatalogRecycleBin.asyncDeleteForTables` 的内存泄漏。[#68275](https://github.com/StarRocks/starrocks/pull/68275)
 - 修复了 Thrift 接受线程在遇到任何异常时退出。[#68644](https://github.com/StarRocks/starrocks/pull/68644)
@@ -373,7 +351,6 @@ displayed_sidebar: docs
 - 修复了查询队列分配时间和挂起超时问题。[#65802](https://github.com/StarRocks/starrocks/pull/65802)
 - 修复了处理空字面量数组时 `array_map` 崩溃的问题。[#70629](https://github.com/StarRocks/starrocks/pull/70629)
 - 修复了 `to_base64` 的堆栈溢出问题。[#70623](https://github.com/StarRocks/starrocks/pull/70623)
-- 修复了优化器超时问题。[#70605](https://github.com/StarRocks/starrocks/pull/70605)
 - 修复了 LDAP 认证中不区分大小写的用户名规范化问题。[#67966](https://github.com/StarRocks/starrocks/pull/67966)
 - 降低了 API `proc_file` 的 SSRF 风险。[#68997](https://github.com/StarRocks/starrocks/pull/68997)
 - 在审计和 SQL 编校中屏蔽了用户认证字符串。[#70360](https://github.com/StarRocks/starrocks/pull/70360)
@@ -383,6 +360,5 @@ displayed_sidebar: docs
 - ETL 执行模式优化现在默认启用。这使得 INSERT INTO SELECT、CREATE TABLE AS SELECT 和类似批处理工作负载无需显式配置更改即可受益。[#66841](https://github.com/StarRocks/starrocks/pull/66841)
 - `lag`/`lead` 窗口函数的第三个参数现在除了常量值外，还支持列引用。[#60209](https://github.com/StarRocks/starrocks/pull/60209)
 - FULL OUTER JOIN USING 现在遵循 SQL 标准语义：USING 列在输出中只出现一次，而不是两次。[#65122](https://github.com/StarRocks/starrocks/pull/65122)
-- 全局惰性物化现在默认启用。[#70412](https://github.com/StarRocks/starrocks/pull/70412)
 - `query_queue_v2` 现在默认启用。[#67462](https://github.com/StarRocks/starrocks/pull/67462)
 - SQL 事务默认由会话变量 `enable_sql_transaction` 控制。[#63535](https://github.com/StarRocks/starrocks/pull/63535)

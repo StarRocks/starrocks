@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Template documentation for FE/BE parameters and variables in StarRocks."
 unlisted: true
 ---
 

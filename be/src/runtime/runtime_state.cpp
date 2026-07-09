@@ -145,8 +145,17 @@ void RuntimeState::init_fragment_mem_pool() {
     }
 }
 
-void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
+void RuntimeState::set_query_ctx(pipeline::QueryContext* query_ctx, pipeline::QueryRuntimeState* query_runtime_state,
+                                 ObjectPool* query_obj_pool) {
+    _query_ctx = query_ctx;
+    _query_runtime_state = query_runtime_state;
+    _query_obj_pool = query_obj_pool;
+}
+
+void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx,
+                                    pipeline::FragmentRuntimeState* fragment_runtime_state) {
     _fragment_ctx = fragment_ctx;
+    _fragment_runtime_state = fragment_runtime_state;
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

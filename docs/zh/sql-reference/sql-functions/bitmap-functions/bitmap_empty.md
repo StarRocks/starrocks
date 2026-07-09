@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回一个空 Bitmap。"
 ---
 
 # bitmap_empty

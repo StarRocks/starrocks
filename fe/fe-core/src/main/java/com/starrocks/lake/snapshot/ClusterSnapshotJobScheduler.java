@@ -110,6 +110,17 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
             // set last start time when job has been created and begin to submit
             lastAutomatedJobStartTimeMs = runningJob.getCreatedTimeMs();
             runningJob.run(this);
+
+            if (runningJob.isError()) {
+                // Automated snapshots run infrequently (default every 10 min), so a WARN per failed
+                // attempt is a low-rate recurring signal rather than spam. The cluster_snapshot_-
+                // consecutive_failures metric carries the precise count for alerting.
+                int failures = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+                LOG.warn("Automated cluster snapshot has failed {} times in a row (last error: {}). " +
+                        "The recycle bin is NOT blocked, but no new restore point is being produced. " +
+                        "Check snapshot storage volume permissions/connectivity.",
+                        failures, runningJob.getErrMsg());
+            }
         } finally {
             runningJob = null;
             CheckpointController.exclusiveUnlock();

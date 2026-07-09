@@ -1240,7 +1240,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     public synchronized List<List<String>> getCatalogRecycleBinInfo() {
-        Map<Long, Long> dbToDataSize = Maps.newHashMap();
         List<List<String>> tableInfos = Lists.newArrayList();
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
@@ -1334,6 +1333,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     @VisibleForTesting
     synchronized RecyclePartitionInfo getRecyclePartitionInfo(long id) {
         return idToPartition.get(id);
+    }
+
+    public synchronized int getRecycleDatabaseNum() {
+        return idToDatabase.size();
+    }
+
+    public synchronized int getRecycleTableNum() {
+        return idToTableInfo.size();
+    }
+
+    public synchronized int getRecyclePartitionNum() {
+        return idToPartition.size();
     }
 
     @VisibleForTesting

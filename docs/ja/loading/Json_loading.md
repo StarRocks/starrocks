@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load または Routine Load を使用して JSON データを StarRocks にロードする方法（JSON パス式とネストされたオブジェクト処理を含む）。"
 ---
 
 # はじめに
@@ -34,10 +35,10 @@ curl -v --location-trusted -u <username>:<password> \
 
 関連パラメータ:
 
-* jsonpaths: 各列の JSON パスを選択
-* json\_root: JSON の解析を開始する列を選択
-* strip\_outer\_array: 最外部の配列フィールドを切り取る
-* strict\_mode: インポート中の列型変換を厳密にフィルタリング
+* `jsonpaths`: 各列の JSON パスを選択
+* `json_root`: JSON の解析を開始する列を選択
+* `strip_outer_array`: 最外部の配列フィールドを切り取る
+* `strict_mode`: インポート中の列型変換を厳密にフィルタリング
 
 JSON データスキーマと StarRocks データスキーマが完全に一致しない場合、`Jsonpath` を修正します。
 

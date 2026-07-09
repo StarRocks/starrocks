@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Legacy range partitioning with dynamic partition strategy to automatically create and drop time-based partitions for managing historical data."
 sidebar_position: 30
 ---
 

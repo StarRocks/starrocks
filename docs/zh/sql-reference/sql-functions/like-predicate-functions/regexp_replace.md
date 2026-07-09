@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将匹配正则表达式的子字符串替换为指定字符串。"
 ---
 
 # regexp_replace

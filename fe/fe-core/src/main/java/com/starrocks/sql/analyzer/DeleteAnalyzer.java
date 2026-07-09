@@ -156,6 +156,31 @@ public class DeleteAnalyzer {
         }
     }
 
+    private static String buildNonPrimaryKeyDeleteInfo(OlapTable table) {
+        String keysTypeName;
+        switch (table.getKeysType()) {
+            case DUP_KEYS:
+                keysTypeName = "Duplicate Key";
+                break;
+            case AGG_KEYS:
+                keysTypeName = "Aggregate Key";
+                break;
+            case UNIQUE_KEYS:
+                keysTypeName = "Unique Key";
+                break;
+            default:
+                keysTypeName = table.getKeysType().name();
+                break;
+        }
+        return "DELETE on " + keysTypeName + " table '" + table.getName() + "' writes delete predicates; "
+                + "rows remain physically present and every read pays a merge-on-read cost until base "
+                + "compaction runs. For bulk removal of whole partitions, prefer "
+                + "ALTER TABLE ... TRUNCATE PARTITION, which drops data immediately. "
+                + "If your workload issues DELETE frequently, consider switching to a Primary Key table, "
+                + "which supports row-level deletes without merge-on-read. "
+                + "(Disable this notice with FE config enable_non_primary_key_delete_warning=false.)";
+    }
+
     private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
         PartitionRef partitionNames = deleteStatement.getPartitionNames();
         if (partitionNames != null) {
@@ -286,6 +311,9 @@ public class DeleteAnalyzer {
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
+            if (table instanceof OlapTable && Config.enable_non_primary_key_delete_warning) {
+                deleteStatement.setOkInfoMessage(buildNonPrimaryKeyDeleteInfo((OlapTable) table));
+            }
             analyzeNonPrimaryKey(deleteStatement);
             return;
         }

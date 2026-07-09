@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "本番環境での StarRocks クラスタのノード数、CPU、メモリ、ストレージのリソース計画方法。"
 ---
 
 # StarRocks クラスターの計画

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "一時パーティションを使用して StarRocks でデータをアトミックに上書きし、パーティション戦略を調整できます。"
 sidebar_position: 40
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.3 以降の MaxCompute catalog で、Alibaba Cloud MaxCompute からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 4
 ---
 

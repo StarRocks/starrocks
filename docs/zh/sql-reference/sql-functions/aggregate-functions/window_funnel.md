@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在滑动时间窗口内搜索事件链并计算最大连续事件数的漏斗函数。"
 ---
 
 # window_funnel

@@ -197,4 +197,44 @@ public class IndexAnalyzerTest {
             IndexAnalyzer.checkInvertedIndexNgram(properties8);
         }, "INVERTED index dict gram num  should be greater than zero.");
     }
+
+    @Test
+    public void testCheckInvertedIndexLowerCase() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("imp_lib", "builtin");
+        properties.put("parser", "english");
+
+        // case1: builtin english + not set -> ok
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+
+        // case2: builtin english + valid value -> ok
+        properties.put("lower_case", "true");
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        properties.put("lower_case", "false");
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+
+        // case3: builtin english + invalid value -> throw
+        properties.put("lower_case", "invalid");
+        SemanticException e1 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals("INVERTED index lower_case should be true or false.", e1.getDetailMsg());
+
+        // case4: non-builtin + lowercase -> throw
+        properties.put("imp_lib", "clucene");
+        properties.put("lower_case", "false");
+        SemanticException e2 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals(
+                "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.",
+                e2.getDetailMsg());
+
+        // case5: non-english parser + lowercase -> throw
+        properties.put("imp_lib", "builtin");
+        properties.put("parser", "chinese");
+        SemanticException e3 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals(
+                "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.",
+                e3.getDetailMsg());
+    }
 }

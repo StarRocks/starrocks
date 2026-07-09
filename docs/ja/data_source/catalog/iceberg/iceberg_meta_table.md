@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.4.1 以降で Iceberg テーブルのメタデータ情報をメタデータテーブルで確認。"
 ---
 
 # Iceberg メタデータテーブル

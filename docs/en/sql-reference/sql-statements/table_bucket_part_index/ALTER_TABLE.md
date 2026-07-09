@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['alter table']
-description: "ALTER TABLE Modifies an existing table, including:"
+description: "Modifies an existing StarRocks table: renaming, partitioning, bucketing, columns, rollup indexes, and table properties."
 ---
 
 # ALTER TABLE
@@ -586,9 +586,10 @@ Note:
 
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
-3. Only the type of column can be modified. The other properties of the column remain as they are currently. (i.e. other properties need to be explicitly written in the statement according to the original property, see example 8 in the [column](#column) part).
-4. The partition column cannot be modified.
-5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
+3. While modifying the type, default value, nullability, and position, you must specify the full definition of the column in the statement.
+4. Modifying only the column comment — whether via `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` or via a full column definition where only the comment differs — changes only the metadata and does not initiate a Schema Change task. This applies to Primary Key columns, key columns, and regular columns. If the full definition also changes any other attribute of the column, the statement initiates a Schema Change task as usual.
+5. The partition column cannot be modified.
+6. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
    - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
@@ -599,8 +600,8 @@ Note:
    - Convert FLOAT to DOUBLE
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
-6. Conversion from NULL to NOT NULL is not supported.
-7. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
+7. Conversion from NULL to NOT NULL is not supported.
+8. You can modify several properties in a single MODIFY COLUMN clause. However, some combination of properties are not supported.
 
 #### Reorder the columns of specified index
 
@@ -736,17 +737,31 @@ Syntax:
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: Support setting timeout time and the default timeout time is one day.
 
+`ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
+
+- The table must be a Duplicate Key or Aggregate table. Primary Key tables are not supported.
+- The table must not be a colocate table and must not contain an AUTO_INCREMENT column.
+- The rollup can be added only when the table has no other rollup or synchronous materialized view.
+
 Example:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+Example: create a rollup with an independent sort key on a range-distribution table in a shared-data cluster.
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### Create rollups in batches

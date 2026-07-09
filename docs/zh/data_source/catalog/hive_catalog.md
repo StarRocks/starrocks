@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
 toc_max_heading_level: 5
 ---
 
@@ -31,7 +32,16 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
   - Textfile 文件从 v3.1.5 起支持 LZO 压缩格式。
 
-- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
+- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 STRUCT 数据类型；自 v4.2 起支持 MAP 数据类型。
+
+- 自 v4.2 起，StarRocks 查询 Textfile 格式的 Hive 表时，解析行为与 Hive 保持一致：
+
+  - 对于使用 OpenCSVSerde 的表，遵循 `quoteChar` 和 `escapeChar` 属性（含默认值 `"` 和 `\`），解析规则与 Hive 0.14 至 4.0 内置的 opencsv 2.3 库一致。
+  - 对于使用 LazySimpleSerDe 的表，遵循 `ESCAPED BY` 定义的转义字符。
+  - 按物理行边界切分行，并在去转义之前识别 `\N` NULL 标记，两者均与 Hive 一致。
+  - 按 Hive 文本格式解析 MAP 列，即多个键值对之间使用集合分隔符分隔，键和值之间使用 Map Key 分隔符分隔。
+
+  以上规则仅影响对 Hive 表的查询，Broker Load、Stream Load 和 FILES() 函数不受影响。在更早的 StarRocks 版本中，引号和转义字符会被忽略，行列切分结果可能与 Hive 不同。
 
 - StarRocks 写入数据到 Hive 时，支持 Parquet（3.2 版本及以上）、以及 ORC 或 Textfile（3.3 版本及以上）文件格式，其中：
 
@@ -193,6 +203,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
+| aws.glue.resource_share_type  | 否       | 通过设置发送给 AWS Glue `GetDatabases` API 的 `ResourceShareType`，控制 `SHOW DATABASES` 列出哪些数据库。不区分大小写。取值范围：`FOREIGN`（其他账户通过 AWS Resource Access Manager 与你的账户共享的数据库）、`FEDERATED`（引用外部数据源的数据库，如 JDBC 连接）、`ALL`（本地数据库加上前两者）。不指定时仅列出本地数据库。该参数仅影响列表结果：StarRocks 查询数据库时仍然使用 `hive.metastore.glue.catalogid` 配置的单一账户，因此列出的 `FOREIGN` 数据库仍无法查询，除非将 `hive.metastore.glue.catalogid` 也设置为其所有者账户，或在自己的 Data Catalog 中为其创建 [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html)；而 `FEDERATED` 数据库并非 Hive 兼容的数据库，无法通过该 Catalog 查询。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 

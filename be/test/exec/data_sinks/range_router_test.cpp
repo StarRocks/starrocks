@@ -28,7 +28,7 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/type_utils.h"
+#include "storage_primitive/type_utils.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 
@@ -57,6 +57,15 @@ protected:
     TVariant make_varchar_variant(const std::string& v) {
         TVariant tv;
         tv.__set_type(TYPE_VARCHAR_DESC.to_thrift());
+        tv.__set_value(v);
+        return tv;
+    }
+
+    // A CHAR-typed boundary, as the FE emits it for a CHAR sort key (the routing key is VARCHAR
+    // because SlotRef normalizes CHAR to VARCHAR, so init() must accept this CHAR/VARCHAR pairing).
+    TVariant make_char_variant(const std::string& v) {
+        TVariant tv;
+        tv.__set_type(TYPE_CHAR_DESC.to_thrift());
         tv.__set_value(v);
         return tv;
     }
@@ -111,6 +120,15 @@ protected:
         fields.emplace_back(std::make_shared<Field>(0, name, get_type_info(TYPE_VARCHAR), false));
         auto schema = std::make_shared<Schema>(fields);
         return Chunk(std::move(cols), std::move(schema));
+    }
+
+    // ---- Routing-key type helpers ----
+
+    static std::vector<TypeDescriptor> int_types(size_t n) {
+        return std::vector<TypeDescriptor>(n, TypeDescriptor::from_logical_type(TYPE_INT));
+    }
+    static std::vector<TypeDescriptor> varchar_types(size_t n) {
+        return std::vector<TypeDescriptor>(n, TypeDescriptor::from_logical_type(TYPE_VARCHAR));
     }
 
     // ---- Single-column TTabletRange helpers ----
@@ -179,7 +197,7 @@ TEST_F(RangeRouterTest, SingleInfiniteRangeSelectAll) {
     std::vector<int64_t> tablet_ids{42};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
 
     std::vector<int32_t> values{-100, -1, 0, 5, 10, 100};
     Chunk chunk = make_int_chunk("c1", values);
@@ -215,7 +233,7 @@ TEST_F(RangeRouterTest, IntThreeRangesFullCoverage) {
     std::vector<int64_t> tablet_ids{100, 200, 300};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
 
     std::vector<int32_t> values{-5, 0, 5, 10, 11, 19, 20, 21, 100};
     Chunk chunk = make_int_chunk("c1", values);
@@ -267,7 +285,7 @@ TEST_F(RangeRouterTest, ManyRangesBinarySearchFullCoverage) {
     tablet_ids.emplace_back(108);
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
 
     // For each range, pick two sample points.
     std::vector<int32_t> values = {
@@ -350,7 +368,7 @@ TEST_F(RangeRouterTest, MultiColumnTwoRangesFullCoverage) {
     std::vector<int64_t> tablet_ids{100, 200};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 2).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(2)).ok());
 
     // (c1, c2) tuples:
     // 0: (1,10)   -> R0
@@ -426,7 +444,9 @@ TEST_F(RangeRouterTest, MultiColumnNullBoundaries) {
     std::vector<int64_t> tablet_ids{100, 200};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 2).ok());
+    std::vector<TypeDescriptor> key_types{TypeDescriptor::from_logical_type(TYPE_INT),
+                                          TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    ASSERT_TRUE(router.init(ranges, key_types).ok());
 
     // Test data: (c1, c2, expected_tablet_id)
     std::vector<std::tuple<int32_t, std::string, int64_t>> test_data = {
@@ -495,7 +515,7 @@ TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     std::vector<int64_t> tablet_ids{10, 20, 30};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, varchar_types(1)).ok());
 
     std::vector<std::string> values = {"apple", "banana", "cherry", "date", "fig"};
     Chunk chunk = make_varchar_chunk("s1", values);
@@ -520,6 +540,49 @@ TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
         ASSERT_EQ(expected[i], routed_ids[i]) << "row " << i << " value " << values[i] << " mismatch";
     }
+}
+
+// A CHAR sort-key emits CHAR-typed tablet-range boundaries, but its routing key is VARCHAR (SlotRef
+// normalizes CHAR -> VARCHAR). init() must accept that CHAR/VARCHAR pairing (before the fix it
+// failed with "routing key type mismatch"), and routing must place rows the same as VARCHAR.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, CharBoundaryVarcharKeyRoutingMatches) {
+    std::vector<TTabletRange> ranges;
+    {
+        TTabletRange r0; // (-inf, "m")
+        TTuple upper;
+        upper.__set_values(std::vector<TVariant>{make_char_variant("m")});
+        r0.__set_upper_bound(upper);
+        r0.__set_upper_bound_included(false);
+        ranges.emplace_back(r0);
+    }
+    {
+        TTabletRange r1; // ["m", +inf)
+        TTuple lower;
+        lower.__set_values(std::vector<TVariant>{make_char_variant("m")});
+        r1.__set_lower_bound(lower);
+        r1.__set_lower_bound_included(true);
+        ranges.emplace_back(r1);
+    }
+
+    std::vector<int64_t> tablet_ids{10, 20};
+
+    RangeRouter router;
+    // CHAR boundary vs VARCHAR routing key must be accepted.
+    ASSERT_TRUE(router.init(ranges, varchar_types(1)).ok());
+
+    std::vector<std::string> values = {"apple", "m", "zebra"};
+    Chunk chunk = make_varchar_chunk("s1", values);
+    SlotDescriptor slot_desc(0, "s1", TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    std::vector<SlotDescriptor*> slot_descs{&slot_desc};
+    chunk.set_slot_id_to_index(slot_desc.id(), 0);
+    std::vector<uint16_t> row_indices{0, 1, 2};
+    std::vector<int64_t> routed_ids;
+    ASSERT_TRUE(router.route_chunk_rows(&chunk, slot_descs, row_indices, tablet_ids, &routed_ids).ok());
+
+    // "apple" -> R0 (10); "m" (== inclusive lower bound) and "zebra" -> R1 (20).
+    std::vector<int64_t> expected = {10, 20, 20};
+    ASSERT_EQ(expected, routed_ids);
 }
 
 // NULL_TYPE boundary values should be treated as NULL and route with NULL as minimum.
@@ -567,7 +630,7 @@ TEST_F(RangeRouterTest, NullTypeBoundaryRouting) {
     std::vector<int64_t> tablet_ids{10, 20, 30};
 
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
 
     auto data = FixedLengthColumn<int32_t>::create();
     auto nulls = NullColumn::create();
@@ -628,7 +691,7 @@ TEST_F(RangeRouterTest, InitRejectsInvalidBoundVariantType) {
 
     std::vector<TTabletRange> ranges{r0, r1};
     RangeRouter router;
-    auto status = router.init(ranges, 1);
+    auto status = router.init(ranges, int_types(1));
     ASSERT_FALSE(status.ok());
     ASSERT_TRUE(status.is_invalid_argument());
     ASSERT_NE(std::string::npos, status.message().find("MINIMUM/MAXIMUM variant is not supported in range bound"));
@@ -657,7 +720,7 @@ TEST_F(RangeRouterTest, ValidateRangeRejectsInvalidVariantValue) {
 
     std::vector<TTabletRange> ranges{r0, r1};
     RangeRouter router;
-    auto status = router.init(ranges, 1);
+    auto status = router.init(ranges, int_types(1));
     ASSERT_FALSE(status.ok());
     ASSERT_TRUE(status.is_internal_error());
     ASSERT_EQ("Invalid variant for range validation", status.message());
@@ -674,7 +737,7 @@ TEST_F(RangeRouterTest, ValidateRangeRejectsOverlappingInclusiveBounds) {
     ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false));
 
     RangeRouter router;
-    Status st = router.init(ranges, 1);
+    Status st = router.init(ranges, int_types(1));
     ASSERT_FALSE(st.ok());
     assert_status_message_contains(
             st, "adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
@@ -712,7 +775,7 @@ TEST_F(RangeRouterTest, ValidateRangeRejectsTypeMismatchOnBoundary) {
     }
 
     RangeRouter router;
-    Status st = router.init(ranges, 1);
+    Status st = router.init(ranges, int_types(1));
     ASSERT_FALSE(st.ok());
     assert_status_message_contains(st, "Type mismatch at column 0 between range[0] and range[1]");
 }
@@ -747,7 +810,7 @@ TEST_F(RangeRouterTest, ValidateRangeRejectsUpperLowerValueMismatch) {
     }
 
     RangeRouter router;
-    Status st = router.init(ranges, 1);
+    Status st = router.init(ranges, int_types(1));
     ASSERT_FALSE(st.ok());
     assert_status_message_contains(st, "Range[0] != range[1] at column 0");
 }
@@ -770,7 +833,7 @@ TEST_F(RangeRouterTest, RangeRouterSingleIntRangesRouting) {
     // The RangeRouter should be able to initialize and route correctly.
     std::vector<int64_t> tablet_ids{100, 200, 300, 400};
     RangeRouter router;
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
 
     std::vector<int32_t> values{5, 10, 15, 20, 25, 30, 35};
     Chunk chunk = make_int_chunk("c1", values);
@@ -808,7 +871,7 @@ TEST_F(RangeRouterTest, ValidateRangeMissingInfiniteBounds) {
         ranges.emplace_back(make_single_long_range(10, false, 20, true)); // (10,20]
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(st, "lower_inf_count and upper_inf_count must be 1");
     }
@@ -820,7 +883,7 @@ TEST_F(RangeRouterTest, ValidateRangeMissingInfiniteBounds) {
         ranges.emplace_back(make_single_long_range(std::nullopt, false, 20, true)); // another -inf range
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(st, "lower_inf_count and upper_inf_count must be 1");
     }
@@ -852,7 +915,7 @@ TEST_F(RangeRouterTest, ValidateRangeInfiniteNotAtEdges) {
         ranges.push_back(r2);
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(st, "-inf/inf range must be set for the first and last tablet range");
     }
@@ -876,7 +939,7 @@ TEST_F(RangeRouterTest, ValidateRangeInfiniteNotAtEdges) {
         ranges.push_back(r2);
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(st, "-inf/inf range must be set for the first and last tablet range");
     }
@@ -893,7 +956,7 @@ TEST_F(RangeRouterTest, ValidateRangeAdjacentInclusiveExclusiveOverlap) {
         ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false)); // [10,+inf)
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(
                 st, "adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
@@ -906,7 +969,7 @@ TEST_F(RangeRouterTest, ValidateRangeAdjacentInclusiveExclusiveOverlap) {
         ranges.emplace_back(make_single_long_range(10, false, std::nullopt, false)); // (10,+inf)
 
         RangeRouter router;
-        auto st = router.init(ranges, 1);
+        auto st = router.init(ranges, int_types(1));
         ASSERT_FALSE(st.ok());
         assert_status_message_contains(
                 st, "adjacent ranges are overlapping / not complementary for the inclusive/exclusive bound");
@@ -942,7 +1005,7 @@ TEST_F(RangeRouterTest, ValidateRangeTypeMismatchAtBoundary) {
     ranges.push_back(r1);
 
     RangeRouter router;
-    auto st = router.init(ranges, 1);
+    auto st = router.init(ranges, int_types(1));
     ASSERT_FALSE(st.ok());
     assert_status_message_contains(st, "Type mismatch at column 0 between range[0] and range[1]");
 }
@@ -962,7 +1025,7 @@ TEST_F(RangeRouterTest, ValidateRangeEndpointsNotEqual) {
     ranges.push_back(r1);
 
     RangeRouter router;
-    auto st = router.init(ranges, 1);
+    auto st = router.init(ranges, int_types(1));
     ASSERT_FALSE(st.ok());
     assert_status_message_contains(st, "Range[0] != range[1] at column 0");
 }
@@ -1002,7 +1065,8 @@ TEST_F(RangeRouterTest, HllVariantInitNotSupported) {
     }
 
     RangeRouter router;
-    Status st = router.init(ranges, 1);
+    std::vector<TypeDescriptor> key_types{TypeDescriptor::create_hll_type()};
+    Status st = router.init(ranges, key_types);
     // The exact error code is implementation-defined, but we at least
     // expect a NotSupported error rather than a crash.
     ASSERT_TRUE(st.is_not_supported()) << st.to_string();
@@ -1046,9 +1110,124 @@ TEST_F(RangeRouterTest, DateTimeIsoWithNanosInitOk) {
     ranges.push_back(r1);
 
     RangeRouter router;
+    std::vector<TypeDescriptor> key_types{TypeDescriptor::from_logical_type(TYPE_DATETIME)};
     // If the FE-style ISO-8601 datetime with nanos cannot be parsed, init()
     // would return an error here. We only care that initialization succeeds.
-    ASSERT_TRUE(router.init(ranges, 1).ok());
+    ASSERT_TRUE(router.init(ranges, key_types).ok());
+}
+
+// ----------------------------------------------------------------------
+// init() routing-key type validation (key_types vs declared boundary type)
+// ----------------------------------------------------------------------
+
+// init() must reject a routing-key type that is incompatible with the type
+// declared by the tablet-range boundary (here: VARCHAR key vs INT boundary).
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, InitRejectsKeyTypeIncompatibleWithBoundary) {
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false)); // (-inf, 10) on INT
+    ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false));  // [10, +inf) on INT
+
+    RangeRouter router;
+    Status st = router.init(ranges, varchar_types(1)); // key type VARCHAR != boundary INT
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+    assert_status_message_contains(st, "routing key type mismatch at column 0");
+}
+
+// init() succeeds when key types match the boundary types and the arity matches.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, InitAcceptsMatchingKeyTypesAndArity) {
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false));
+    ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false));
+
+    RangeRouter router;
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
+}
+
+// init() must reject a key_types arity that does not match the boundary arity.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, InitRejectsArityMismatch) {
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false)); // single-column boundary
+    ranges.emplace_back(make_single_long_range(10, true, std::nullopt, false));
+
+    RangeRouter router;
+    Status st = router.init(ranges, int_types(2)); // arity 2 vs boundary arity 1
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+    assert_status_message_contains(st, "value size is not equal to column size");
+}
+
+// ----------------------------------------------------------------------
+// Pre-evaluated key-columns overload
+// ----------------------------------------------------------------------
+
+// route_chunk_rows(key_columns, ...) routes rows to the correct tablets based
+// solely on the supplied key columns (no Chunk / slot lookup).
+// Ranges (INT, left-closed/right-open):
+//   R0: (-inf, 10)  -> 100
+//   R1: [10, 20)    -> 200
+//   R2: [20, +inf)  -> 300
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, RouteByPreEvaluatedColumns) {
+    std::vector<TTabletRange> ranges;
+    ranges.emplace_back(make_single_long_range(std::nullopt, false, 10, false));
+    ranges.emplace_back(make_single_long_range(10, true, 20, false));
+    ranges.emplace_back(make_single_long_range(20, true, std::nullopt, false));
+
+    std::vector<int64_t> tablet_ids{100, 200, 300};
+
+    RangeRouter router;
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
+
+    std::vector<int32_t> values{-5, 0, 5, 10, 11, 19, 20, 21, 100};
+    auto col = FixedLengthColumn<int32_t>::create();
+    for (int32_t v : values) {
+        col->append(v);
+    }
+    std::vector<ColumnPtr> key_columns{col};
+
+    std::vector<uint16_t> row_indices;
+    for (size_t i = 0; i < values.size(); ++i) {
+        row_indices.emplace_back(static_cast<uint16_t>(i));
+    }
+    std::vector<int64_t> routed_ids;
+
+    ASSERT_TRUE(router.route_chunk_rows(key_columns, row_indices, tablet_ids, &routed_ids).ok());
+
+    std::vector<int64_t> expected = {100, 100, 100, 200, 200, 200, 300, 300, 300};
+    ASSERT_EQ(expected.size(), routed_ids.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        ASSERT_EQ(expected[i], routed_ids[i]) << "row " << i << " value " << values[i] << " mismatch";
+    }
+}
+
+// The pre-evaluated overload also honors the single (-inf, +inf) fast path:
+// every row should be routed to the single candidate destination.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, RouteByPreEvaluatedColumnsSingleRange) {
+    std::vector<TTabletRange> ranges(1); // (-inf, +inf)
+    std::vector<int64_t> tablet_ids{42};
+
+    RangeRouter router;
+    ASSERT_TRUE(router.init(ranges, int_types(1)).ok());
+
+    auto col = FixedLengthColumn<int32_t>::create();
+    for (int32_t v : {-100, -1, 0, 5, 10, 100}) {
+        col->append(v);
+    }
+    std::vector<ColumnPtr> key_columns{col};
+
+    std::vector<uint16_t> row_indices{0, 1, 2, 3, 4, 5};
+    std::vector<int64_t> routed_ids;
+
+    ASSERT_TRUE(router.route_chunk_rows(key_columns, row_indices, tablet_ids, &routed_ids).ok());
+    ASSERT_EQ(row_indices.size(), routed_ids.size());
+    for (int64_t id : routed_ids) {
+        ASSERT_EQ(42, id);
+    }
 }
 
 } // namespace starrocks

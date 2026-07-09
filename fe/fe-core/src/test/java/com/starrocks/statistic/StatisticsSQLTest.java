@@ -385,17 +385,35 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testQueryTableStatisticsFiltersZeroRowCount() {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList());
+        assertContains(sql, "WHERE table_id = 2 AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, Lists.newArrayList(10L, 20L));
+        assertContains(sql, "WHERE table_id = 2 and partition_id in (10, 20) AND row_count > 0");
+
+        sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(2L, 10L);
+        assertContains(sql, "WHERE table_id = 2 and partition_id = 10 AND row_count > 0");
+    }
+
+    @Test
     public void testCacheExternalQueryColumnStatics() {
+        // table_uuid is stored hashed (StatisticUtils.hashTableUuidForPkStorage) to stay within
+        // BE's primary_key_limit_size; queries match both the hashed and raw value so historical
+        // rows written before hashing was introduced remain visible.
+        String hashedTableUUID = StatisticUtils.hashTableUuidForPkStorage("a");
+        String tableUUIDPredicate = "table_uuid in (\"" + hashedTableUUID + "\", \"a\")";
+
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.INT));
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
         Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT));
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col3\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col3\")");
         Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",

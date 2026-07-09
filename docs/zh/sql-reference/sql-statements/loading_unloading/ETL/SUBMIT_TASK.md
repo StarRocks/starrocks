@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "为 ETL 语句创建异步任务，支持长时间运行和定期执行。"
 ---
 
 import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'

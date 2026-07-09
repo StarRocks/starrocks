@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v3.2.8以降、BE ノードにラベルを付与してテーブル/非同期マテリアライズドビューのレプリカ配置を制御できます。"
 sidebar_position: 80
 ---
 

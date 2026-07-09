@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/isomorphic_batch_write.h"
+#include "exec/batch_write/isomorphic_batch_write.h"
 
 #include <gtest/gtest.h>
 
@@ -22,11 +22,11 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/http_load_params.h"
 #include "gen_cpp/FrontendService.h"
-#include "http/http_common.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -65,7 +65,7 @@ public:
 
     StreamLoadContext* build_pipe_context(const std::string& label, int64_t txn_id, const BatchWriteId& batch_write_id,
                                           std::shared_ptr<TimeBoundedStreamLoadPipe> pipe) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
@@ -79,7 +79,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;

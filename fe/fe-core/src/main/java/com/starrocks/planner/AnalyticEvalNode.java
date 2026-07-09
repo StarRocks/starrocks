@@ -325,9 +325,16 @@ public class AnalyticEvalNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
-                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+        // Window/analytic evaluation is a deterministic pipeline breaker: a TopN runtime filter pushed
+        // through it cannot reach a scan below in time, so mark the path so the scan skips back-pressure.
+        context.enterNonAggPipelineBreaker();
+        try {
+            return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                    candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                    partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+        } finally {
+            context.exitNonAggPipelineBreaker();
+        }
     }
 
     @Override

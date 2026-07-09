@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "ALTER MATERIALIZED VIEW can:"
+description: "Alters the name, refresh strategy, status, or properties of an asynchronous materialized view, or atomically swaps two views."
 ---
 
 # ALTER MATERIALIZED VIEW
@@ -11,6 +11,7 @@ ALTER MATERIALIZED VIEW can:
 - Alter the refresh strategy of an asynchronous materialized view.
 - Alter the status of an asynchronous materialized view to active or inactive.
 - Perform an atomic swap between two asynchronous materialized views.
+- Change the sort key of a range-distributed asynchronous materialized view online, without recreating it (from v4.2 onwards).
 - Alter the properties of an asynchronous materialized view.
 
   You can use this SQL statement to alter the following properties:
@@ -44,6 +45,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     | REFRESH <new_refresh_scheme_desc> 
     | ACTIVE | INACTIVE 
     | SWAP WITH [db_name.]<mv2_name>
+    | ORDER BY (<column_name> [, <column_name> ...])
     | SET ( "<key>" = "<value>"[,...]) }
 ```
 
@@ -57,6 +59,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | no           |Set the status of the materialized view to active. StarRocks automatically sets a materialized view to inactive if any of its base tables is changed, for example, dropped and re-created, to prevent the situation that original metadata mismatches the changed base table. Inactive materialized views cannot be used for query acceleration or query rewrite. You can use this SQL to activate the materialized view after changing the base tables. |
 | INACTIVE                | no           | Set the status of the materialized view to inactive. An inactive asynchronous materialized view cannot be refreshed. But you can still query it as a table. |
 | SWAP WITH               | no           | Perform an atomic exchange with another asynchronous materialized view after necessary consistency checks. |
+| ORDER BY                | no           | Change the sort key of the materialized view to the listed columns online, without recreating the materialized view. Supported only for range-distributed asynchronous materialized views in shared-data clusters (from v4.2 onwards). The listed columns must be output columns of the materialized view. For Duplicate Key materialized views the sort key can be any subset of the columns; for Aggregate and Unique Key materialized views the sort key must consist of exactly the key columns. The materialized view's refresh is paused for the duration of the rewrite and resumed automatically when it completes; the materialized view remains queryable throughout and the new sort order takes effect atomically. |
 | key                     | no           | The name of the property to alter, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters) for details.<br />**NOTE**<br />If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.insert_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`. |
 | value                   | no           | The value of the property to alter.                         |
 
@@ -123,4 +126,10 @@ Example 10: Alter the materialized view's bloom filter indexes.
 
 ```SQL
 ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
+```
+
+Example 11: Change the sort key of a range-distributed materialized view to `(k2, k1)` online (from v4.2 onwards).
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
 ```

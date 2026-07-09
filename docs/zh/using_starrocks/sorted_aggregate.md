@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中使用有序流式聚合优化预排序数据的 GROUP BY 查询，降低内存开销。"
 sidebar_position: 90
 ---
 

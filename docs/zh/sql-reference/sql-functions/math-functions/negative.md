@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回参数x的负数。"
 ---
 
 # negative

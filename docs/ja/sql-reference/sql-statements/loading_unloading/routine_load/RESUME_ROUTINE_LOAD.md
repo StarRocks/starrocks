@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "一時停止した Routine Load ジョブを再開します。"
 ---
 
 # RESUME ROUTINE LOAD

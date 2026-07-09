@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/partition_chunk_writer_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"
 
@@ -32,12 +32,18 @@ ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_column
           _state(state),
           _support_null_partition(support_null_partition) {}
 
-Status ConnectorChunkSink::init() {
+Status ConnectorChunkSink::init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                                SinkMemoryManager* sink_mem_mgr) {
+    _io_poller = poller;
+    _profile = profile;
+    DCHECK(sink_mem_mgr != nullptr);
+    auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
     init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
-    RETURN_IF_ERROR(
-            _op_mem_mgr->init(&_writers, _io_poller, [this](const CommitResult& r) { this->callback_on_commit(r); }));
+    RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
+    _partition_writer_mem_mgr = op_mem_mgr.get();
+    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
     return Status::OK();
 }
 
@@ -158,15 +164,6 @@ bool ConnectorChunkSink::is_finished() {
         }
     }
     return true;
-}
-
-void ConnectorChunkSink::set_profile(RuntimeProfile* profile) {
-    if (_profile != nullptr) {
-        LOG(WARNING) << "ConnectorChunkSink profile is set duplicated, query_id: " << print_id(_state->query_id())
-                     << ", fragment_instance_id: " << print_id(_state->fragment_instance_id());
-        return;
-    }
-    _profile = profile;
 }
 
 } // namespace starrocks::connector

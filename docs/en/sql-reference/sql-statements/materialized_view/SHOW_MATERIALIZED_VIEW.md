@@ -46,7 +46,7 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | id                         | The ID of the materialized view.                             |
 | database_name              | The name of the database in which the materialized view resides. |
 | name                       | The name of the materialized view.                           |
-| refresh_type               | The refresh type of the materialized view, including ROLLUP, MANUAL, ASYNC, and INCREMENTAL. |
+| refresh_type               | The refresh type of the materialized view. Valid values: `SYNC` (synchronous materialized view) and `ASYNC` (asynchronous materialized view, regardless of how the refresh is triggered). |
 | is_active                  | Whether the materialized view state is active. Valid Value: `true` and `false`. |
 | inactive_reason            | The reason why the materialized view is inactive.            |
 | partition_type             | The partition type of the materialized view, including RANGE and UNPARTITIONED.                |
@@ -71,6 +71,14 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | last_refresh_process_time  | The process start time of the latest refresh task.           |
 | last_refresh_job_id        | Job ID of the latest refresh task.                           |
 | last_refresh_time          | Time up to which base table updates are reflected in the materialized view. |
+| warehouse                  | Name of the warehouse that the asynchronous materialized view uses for its refresh tasks. Empty in shared-nothing mode, or for synchronous (rollup) materialized views. |
+| refresh_mode               | Configured refresh mode of the asynchronous materialized view. Valid values: `PCT` (partition change tracking, where only changed partitions are refreshed), `INCREMENTAL` (incremental view maintenance), and `AUTO`. Empty for synchronous materialized views. |
+| refresh_trigger            | How a refresh is triggered. Valid values: `NONE` (synchronous materialized view), `MANUAL` (only via REFRESH MATERIALIZED VIEW), `SCHEDULED` (periodic, via an EVERY interval), and `ON_BASE_TABLE_CHANGE` (automatically when a base table loads or changes). |
+| refresh_policy             | Human-readable refresh policy. Valid values: `NONE`, `MANUAL`, `ON_BASE_TABLE_CHANGE`, or a schedule such as `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` (the `START` clause is present only if a start time was defined). |
+| resource_group             | Resource group used for the materialized view's refresh tasks (from the materialized view's `resource_group` property). Defaults to `default_mv_wg` when not set. |
+| query_rewrite_status_reason | The reason behind `query_rewrite_status`. Valid values: `OK`, `MV_INACTIVE`, `QUERY_REWRITE_DISABLED`, `UNSUPPORTED_DEFINITION`, and `UNKNOWN`. |
+| last_freshness_confirmed_at | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `last_refresh_time` (the base-table data version), this is wall-clock time. Empty until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
+| base_table_refresh_version_times | Per-base-table data version time, as a JSON object mapping each base table's `catalog.database.table` name to the latest data version time observed for it. This is the per-table detail behind `last_refresh_time` (their single maximum): external/data lake base tables report the partition source modified time, and OLAP (internal) base tables report the visible-version commit time. `{}` when no base table has a recorded time. |
 
 ## Examples
 
@@ -121,7 +129,7 @@ mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -141,6 +149,11 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.11 sec)
 ```
 
@@ -152,7 +165,7 @@ mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -172,5 +185,10 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.12 sec)
 ```

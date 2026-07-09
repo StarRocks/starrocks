@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列の左側から指定された文字数を返します。"
 ---
 
 # left

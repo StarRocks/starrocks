@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "StarRocks supports backing up and restoring the following objects:"
+description: "Restores databases, tables, materialized views, logical views, and UDFs in StarRocks from a snapshot created by BACKUP."
 ---
 
 # RESTORE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "引数のアークコサインを計算します。"
 ---
 
 # acos

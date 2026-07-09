@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ノードのデコミッションを取り消します。"
 ---
 
 # CANCEL DECOMMISSION

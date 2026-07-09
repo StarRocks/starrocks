@@ -16,6 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -25,10 +26,12 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -318,5 +321,34 @@ public class PaimonColumnConverterTest {
         Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> ColumnTypeConverter.toPaimonDataType(AnyElementType.ANY_ELEMENT));
 
+    }
+
+    @Test
+    public void testConvertTimestampNtz() {
+        // Paimon TIMESTAMP is timezone-naive (NTZ): fromPaimonType flags it so the BE reader keeps
+        // the wall clock unshifted, while the flag stays invisible to type identity.
+        org.apache.paimon.types.TimestampType paimonType = new org.apache.paimon.types.TimestampType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assertions.assertTrue(result instanceof ScalarType);
+        ScalarType scalarType = (ScalarType) result;
+        Assertions.assertTrue(scalarType.isDatetimeNtz());
+        // The flag must NOT change type identity: it still equals a plain DATETIME.
+        Assertions.assertEquals(DateType.DATETIME, result);
+        // The flag must survive clone().
+        Assertions.assertTrue(((ScalarType) scalarType.clone()).isDatetimeNtz());
+        // It must serialize onto TScalarType.datetime_is_ntz for the BE reader.
+        TTypeDesc tTypeDesc = TypeSerializer.toThrift(result);
+        Assertions.assertTrue(tTypeDesc.getTypes().get(0).getScalar_type().isDatetime_is_ntz());
+    }
+
+    @Test
+    public void testConvertTimestampLtz() {
+        // Paimon TIMESTAMP_LTZ is a UTC instant: default behavior, not flagged NTZ.
+        org.apache.paimon.types.LocalZonedTimestampType paimonType =
+                new org.apache.paimon.types.LocalZonedTimestampType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assertions.assertTrue(result instanceof ScalarType);
+        Assertions.assertFalse(((ScalarType) result).isDatetimeNtz());
+        Assertions.assertEquals(DateType.DATETIME, result);
     }
 }

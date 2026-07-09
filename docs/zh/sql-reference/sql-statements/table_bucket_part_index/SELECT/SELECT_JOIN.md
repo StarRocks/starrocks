@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Join operations combine data from two or more tables and return result columns."
 sidebar_label: "JOIN"
 ---
 

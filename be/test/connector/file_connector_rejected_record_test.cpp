@@ -22,11 +22,11 @@
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/file_connector.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
@@ -126,7 +126,7 @@ protected:
 // ============================================================================
 // Covering file_connector.cpp lines 88-93:
 //   if (enable_log_rejected_record() && format not in {CSV,JSON,PARQUET,ORC})
-//       return InternalError("only support csv/json/parquet/orc format ...")
+//       return InternalError("only support csv/json/parquet/orc/arrow format ...")
 // ============================================================================
 
 TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithRejectedRecordLoggingReturnsError) {
@@ -137,7 +137,7 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithRejectedRecordLoggi
 
     Status st = ds->open(state.get());
     EXPECT_FALSE(st.ok()) << "Expected failure for unsupported format with rejected-record logging";
-    EXPECT_NE(std::string::npos, st.message().find("only support csv/json/parquet/orc format"))
+    EXPECT_NE(std::string::npos, st.message().find("only support csv/json/parquet/orc/arrow format"))
             << "Unexpected error message: " << st.message();
 }
 
@@ -176,7 +176,7 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWhenLoggingDisabledDoes
 
     // Whatever happens, it must NOT be the whitelist InternalError.
     if (!st.ok()) {
-        EXPECT_EQ(std::string::npos, st.message().find("only support csv/json/parquet/orc format"))
+        EXPECT_EQ(std::string::npos, st.message().find("only support csv/json/parquet/orc/arrow format"))
                 << "Should not hit whitelist check when logging is disabled. Got: " << st.message();
     }
 }

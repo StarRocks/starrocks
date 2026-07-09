@@ -27,8 +27,8 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -287,7 +287,8 @@ Status LakePersistentIndexParallelCompactMgr::init() {
     builder.set_max_queue_size(config::pk_index_parallel_compaction_threadpool_size);
     auto st = builder.build(&_thread_pool);
     if (st.ok()) {
-        StorageMetrics::instance()->register_thread_pool_metrics("cloud_native_pk_index_compact", _thread_pool.get());
+        REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), cloud_native_pk_index_compact,
+                                             _thread_pool.get());
     }
     return st;
 }

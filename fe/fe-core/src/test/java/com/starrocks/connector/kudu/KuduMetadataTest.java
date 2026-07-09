@@ -17,6 +17,7 @@ package com.starrocks.connector.kudu;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -177,7 +178,8 @@ public class KuduMetadataTest {
         Statistics statistics = metadata.getTableStatistics(
                 null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1,
                 TvrTableSnapshot.empty());
-        Assertions.assertEquals(1D, statistics.getOutputRowCount(), 0.01);
+        Assertions.assertEquals((double) Config.default_statistics_output_row_count,
+                statistics.getOutputRowCount(), 0.01);
     }
 
     private RpcRemoteException createRpcRemoteException(String message) throws Exception {

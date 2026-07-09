@@ -196,10 +196,7 @@ inline void stl_vector_resize_uninitialized(Container* vec, size_t reserve_size,
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
-    using DstType __attribute__((may_alias)) = RawString;
-    reinterpret_cast<DstType*>(str)->resize(new_size);
-    // Compiler memory barrier to prevent instruction reordering across the resize operation
-    asm volatile("" : : : "memory");
+    str->resize_and_overwrite(new_size, [=](char* buff, size_t _) { return new_size; });
 }
 
 } // namespace starrocks::raw

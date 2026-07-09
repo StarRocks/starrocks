@@ -21,6 +21,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -89,18 +90,18 @@ class BrokerLoadRowGroupStatisticsProviderTest {
     }
 
     @Test
-    void declaredOrcFormatFallsBackToDataTier() throws Exception {
-        // ORC is in Load.getFormatType's explicit branch, so it overrides
-        // the file-extension fallback. Sampling Parquet footers against ORC
-        // data is nonsensical, so route through data tier.
-        Path parquetPath = writeBigintParquet(/*rowCount=*/ 4, /*valueOffset=*/ 0L);
+    void declaredOrcFormatProducesStatistics() throws Exception {
+        // ORC is in Load.getFormatType's explicit branch. Meta tier now reads ORC
+        // stripe statistics directly, so a declared-ORC group with ORC data is
+        // sampled on the FE rather than routed through data tier.
+        Path orcPath = writeBigintOrc(/*rowCount=*/ 16, /*valueOffset=*/ 0L);
         BrokerFileGroup orcGroup = Mockito.mock(BrokerFileGroup.class);
         Mockito.when(orcGroup.getFileFormat()).thenReturn("orc");
 
         SampleRequest request = bigintSampleRequest(
-                List.of(orcGroup), List.of(List.of(brokerFileStatus(parquetPath))));
+                List.of(orcGroup), List.of(List.of(brokerFileStatus(orcPath))));
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertEquals(16L, totalRowCount(provider.fetch(request)));
     }
 
     @Test
@@ -138,7 +139,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(
                         Mockito.mock(com.starrocks.catalog.TableFunctionTable.class),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -162,7 +163,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         brokerBackedDesc,
                         List.of(parquetFileGroup()),
                         List.of(List.of(brokerFileStatus(parquetPath))),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -177,7 +178,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         /*brokerDesc=*/ null,
                         List.of(parquetFileGroup()),
                         List.of(List.<TBrokerFileStatus>of()),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -193,6 +194,15 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 (group, rowIndex) -> group.append("sort_key", valueOffset + rowIndex));
     }
 
+    private Path writeBigintOrc(int rowCount, long valueOffset) throws IOException {
+        return PresplitTestSupport.writeOrcFixture(
+                tempDirectory,
+                "struct<sort_key:bigint>",
+                rowCount,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = valueOffset + rowIndex);
+    }
+
     private static BrokerFileGroup parquetFileGroup() {
         BrokerFileGroup fileGroup = Mockito.mock(BrokerFileGroup.class);
         Mockito.when(fileGroup.getFileFormat()).thenReturn("parquet");
@@ -206,7 +216,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
         return new SampleRequest(
                 new BrokerLoadScanContext(
-                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class)),
+                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);

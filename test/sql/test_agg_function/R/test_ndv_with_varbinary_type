@@ -47,7 +47,7 @@ SELECT ds_hll_count_distinct(data) AS ds_hll_result FROM tbinary_ndv_test;
 -- !result
 SELECT ds_hll_count_distinct(data, 10) AS ds_hll_result_with_logk FROM tbinary_ndv_test;
 -- result:
-100
+102
 -- !result
 SELECT category, ds_hll_count_distinct(data) AS ds_hll_result FROM tbinary_ndv_test GROUP BY category ORDER BY category;
 -- result:

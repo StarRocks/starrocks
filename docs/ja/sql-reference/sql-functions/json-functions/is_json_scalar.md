@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSON値がスカラ（オブジェクトでも配列でもない）であるかどうかを返します。"
 ---
 
 # `is_json_scalar`

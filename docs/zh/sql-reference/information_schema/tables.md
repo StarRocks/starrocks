@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "tables 提供表的信息。"
 ---
 
 # tables

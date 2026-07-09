@@ -70,6 +70,7 @@ starrocks_set_default_packages() {
         flatbuffers
         jemalloc
         brotli
+        xsimd
         arrow
         librdkafka
         pulsar
@@ -105,7 +106,6 @@ starrocks_set_default_packages() {
         simdutf
         poco
         icu
-        xsimd
         libxml2
         azure
         libdivide

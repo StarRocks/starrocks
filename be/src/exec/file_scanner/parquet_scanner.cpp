@@ -18,18 +18,16 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/load_path/rejected_record_writer.h"
+#include "exec/exec_env.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "fs/fs_broker.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/exec_env.h"
-#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -53,7 +51,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
         const std::string& col_name = ctx->current_column_name;
         std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
                                                     col_name.empty() ? "null" : col_name, raw_data);
-        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+        LoadPathStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
         // Emit a rejected-records anchor. The `raw_record` column stays as
         // a single-column diagnostic fragment so users can quickly eyeball
@@ -74,7 +72,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
         // file, which is the price we pay for not building the full ORC-
         // style broker-load validation pipeline on the Parquet side. See
         // the rejected-records plan file for the TVF follow-up.
-        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        auto* writer = LoadPathStateHelper::rejected_record_writer(state);
         if (writer != nullptr) {
             const std::string key = col_name.empty() ? std::string("_raw") : col_name;
 
@@ -175,7 +173,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array_ptr == nullptr) {
-            (void)column->append_nulls(_batch->num_rows());
+            (void)column->append_nulls(num_elements);
         } else {
             auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
                                                     _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);

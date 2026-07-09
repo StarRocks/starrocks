@@ -35,13 +35,13 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/java/java_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
@@ -179,6 +179,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
 
+    if (_tnode.analytic_node.analytic_functions.empty()) {
+        return Status::InternalError(
+                strings::Substitute("analytic_functions is empty in analytic node (plan_node_id=$0)", _tnode.node_id));
+    }
     _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
     if (_is_merge_funcs) {
         for (size_t i = 1; i < _tnode.analytic_node.analytic_functions.size(); i++) {
@@ -519,7 +523,7 @@ Status Analytor::open(RuntimeState* state) {
     RETURN_IF_ERROR(create_fn_states());
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, create_fn_states);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, create_fn_states);
         RETURN_IF_ERROR(promise_st->get_future().get());
     } else {
         RETURN_IF_ERROR(create_fn_states());
@@ -575,7 +579,7 @@ void Analytor::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
@@ -586,8 +590,13 @@ void Analytor::close(RuntimeState* state) {
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
     _remove_unused_rows(state);
 
+    // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
+    // computation are checked against the BE memory limit, including the column data copied while upgrading
+    // BinaryColumn to LargeBinaryColumn in upgrade_if_overflow.
+    TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     return _check_has_error();
 }
@@ -933,8 +942,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                TRY_CATCH_BAD_ALLOC(
-                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
+                _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column);
 
                 // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
                 Column* agg_column = _agg_intput_columns[i][j]->as_mutable_raw_ptr();
@@ -948,7 +956,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            _append_column(chunk_size, _partition_columns[i].get(), column);
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
             ASSIGN_OR_RETURN(auto upgrade_col, _partition_columns[i]->upgrade_if_overflow());
@@ -960,7 +968,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            _append_column(chunk_size, _order_columns[i].get(), column);
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
             ASSIGN_OR_RETURN(auto order_upgrade_col, _order_columns[i]->upgrade_if_overflow());
@@ -975,7 +983,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 return Status::OK();
             }
             ASSIGN_OR_RETURN(ColumnPtr column, boundary->expr_ctx->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, boundary->column.get(), column));
+            _append_column(chunk_size, boundary->column.get(), column);
             ASSIGN_OR_RETURN(auto upgrade_col, boundary->column->upgrade_if_overflow());
             if (upgrade_col != nullptr) {
                 boundary->column = std::move(upgrade_col);

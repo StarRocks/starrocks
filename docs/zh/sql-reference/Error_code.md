@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 查询请求常见错误码参考。"
 ---
 
 # 错误码

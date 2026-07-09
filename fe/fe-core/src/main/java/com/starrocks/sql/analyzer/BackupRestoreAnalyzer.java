@@ -30,7 +30,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -348,7 +347,6 @@ public class BackupRestoreAnalyzer {
             Map<String, String> copiedProperties = Maps.newHashMap(properties);
             long timeoutMs = Config.backup_job_default_timeout_ms;
             boolean allowLoad = false;
-            int replicationNum = RunMode.defaultReplicationNum();
             String backupTimestamp = null;
             int metaVersion = -1;
             int starrocksMetaVersion = -1;

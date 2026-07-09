@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回两个数相除后的浮点余数。"
 ---
 
 # fmod

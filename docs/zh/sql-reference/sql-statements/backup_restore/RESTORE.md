@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 支持备份及恢复内部数据库、表、分区、External Catalog 元数据、视图和 UDF。"
 keywords: ['beifen']
 ---
 

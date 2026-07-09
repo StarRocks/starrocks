@@ -22,25 +22,34 @@
 
 #include <cstring>
 #include <string>
+#include <utility>
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
+#include "exec/stream_load/transaction_mgr.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/download_action.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
 #include "platform/platform_env.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/runtime_env.h"
 
 class mg_connection;
 
@@ -52,6 +61,37 @@ namespace {
 static std::string k_response_str;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
     k_response_str = content;
+}
+
+static Status init_platform_env_for_stream_load_test(MetricRegistry* metrics, bool* owns_platform_env) {
+    auto* platform_env = PlatformEnv::GetInstance();
+    if (platform_env->brpc_stub_cache() != nullptr) {
+        return Status::OK();
+    }
+
+    PlatformEnvOptions options;
+    options.metrics = metrics;
+    options.store_paths.emplace_back(config::storage_root_path);
+    Status status = platform_env->init(std::move(options));
+    if (!status.ok()) {
+        platform_env->destroy();
+        platform_env->reset_store_paths_for_test();
+        return status;
+    }
+    *owns_platform_env = true;
+    return Status::OK();
+}
+
+static ComputeEnvOptions make_stream_load_compute_env_options(MetricRegistry* metrics) {
+    ComputeEnvOptions options;
+    options.runtime_env = RuntimeEnv::GetInstance();
+    options.metrics = metrics;
+    options.store_paths = PlatformEnv::GetInstance()->store_path_registry()->store_path_roots();
+    options.as_cn = true;
+    options.query_cache_capacity = 4 * 1024 * 1024;
+    options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    return options;
 }
 } // namespace
 
@@ -74,16 +114,14 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
-        auto* platform_env = PlatformEnv::GetInstance();
-        if (platform_env->brpc_stub_cache() == nullptr) {
-            ASSERT_OK(platform_env->init(&_metrics));
-            _owns_platform_env = true;
-        }
-        _env._refresh_service_contexts();
-        _env._load_stream_mgr = new LoadStreamMgr();
+        ASSERT_OK(init_platform_env_for_stream_load_test(&_metrics, &_owns_platform_env));
+        ASSERT_OK(_compute_env.init(make_stream_load_compute_env_options(&_metrics)));
+        _env.set_compute_env(&_compute_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
-        _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
+        _env._refresh_service_contexts();
+        ASSERT_NE(nullptr, _env.load_stream_mgr());
+        ASSERT_NE(nullptr, _env.stream_context_mgr());
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
         _evhttp_req->remote_host = nullptr;
@@ -91,14 +129,13 @@ public:
     void TearDown() override {
         delete _env._transaction_mgr;
         _env._transaction_mgr = nullptr;
-        delete _env._stream_context_mgr;
-        _env._stream_context_mgr = nullptr;
-        delete _env._load_stream_mgr;
-        _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        _env.set_compute_env(nullptr);
+        _compute_env.destroy();
         if (_owns_platform_env) {
             PlatformEnv::GetInstance()->destroy();
+            PlatformEnv::GetInstance()->reset_store_paths_for_test();
             _owns_platform_env = false;
         }
 
@@ -109,6 +146,8 @@ public:
 
 protected:
     ExecEnv _env;
+    ComputeEnv _compute_env;
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
     evhttp_request* _evhttp_req = nullptr;
     MetricRegistry _metrics{"transaction_stream_load_action_test"};
     bool _owns_platform_env = false;
@@ -336,7 +375,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
     }
 
     {
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -367,7 +406,9 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
 }
 
 // Setup transaction stream load flow for prepare testing
-void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env, evhttp_request* ev_request) {
+void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env,
+                            orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+                            evhttp_request* ev_request) {
     // Begin transaction
     HttpRequest b(ev_request);
     b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -381,7 +422,7 @@ void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env, 
     ASSERT_STREQ("OK", doc["Status"].GetString());
 
     // Perform load
-    TransactionStreamLoadAction action(env);
+    TransactionStreamLoadAction action(env, stream_load_orchestrator);
     HttpRequest request(ev_request);
     request.set_handler(&action);
 
@@ -397,7 +438,7 @@ void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env, 
 
 TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_without_timeout) {
     TransactionManagerAction txn_action(&_env);
-    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+    setup_prepare_txn_test(txn_action, &_env, &_stream_load_orchestrator, _evhttp_req);
 
     // Enable sync point to capture the prepared_timeout_second value
     SyncPoint::GetInstance()->EnableProcessing();
@@ -425,7 +466,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_without_timeout) {
 
 TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_with_timeout) {
     TransactionManagerAction txn_action(&_env);
-    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+    setup_prepare_txn_test(txn_action, &_env, &_stream_load_orchestrator, _evhttp_req);
 
     // Enable sync point to capture the prepared_timeout_second value
     SyncPoint::GetInstance()->EnableProcessing();
@@ -455,7 +496,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepared_success_with_timeout) {
 
 TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_invalid_timeout) {
     TransactionManagerAction txn_action(&_env);
-    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+    setup_prepare_txn_test(txn_action, &_env, &_stream_load_orchestrator, _evhttp_req);
 
     // Test invalid timeout format
     HttpRequest b(_evhttp_req);
@@ -474,7 +515,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_invalid_timeout) {
 
 TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_negative_timeout) {
     TransactionManagerAction txn_action(&_env);
-    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+    setup_prepare_txn_test(txn_action, &_env, &_stream_load_orchestrator, _evhttp_req);
 
     // Test negative timeout value
     HttpRequest b(_evhttp_req);
@@ -493,7 +534,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_negative_timeout) {
 
 TEST_F(TransactionStreamLoadActionTest, txn_prepared_with_zero_timeout) {
     TransactionManagerAction txn_action(&_env);
-    setup_prepare_txn_test(txn_action, &_env, _evhttp_req);
+    setup_prepare_txn_test(txn_action, &_env, &_stream_load_orchestrator, _evhttp_req);
 
     // Test zero timeout value
     HttpRequest b(_evhttp_req);
@@ -527,7 +568,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_put_fail) {
     }
 
     {
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -575,7 +616,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_fe_fail) {
     }
 
     {
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -624,7 +665,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepare_fe_fail) {
     }
 
     {
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -695,7 +736,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
         SyncPoint::GetInstance()->EnableProcessing();
         SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
                                               [](void* arg) { *(Status*)arg = Status::InternalError("TestFail"); });
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -765,7 +806,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {
     sleep(4);
 
     {
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
 
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -799,7 +840,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         ASSERT_STREQ("OK", doc["Status"].GetString());
     }
 
-    TransactionStreamLoadAction action(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
     {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
@@ -861,8 +902,8 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
     } while (0)
 
 TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
-    TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->db = "db";
     ctx->table = "tbl";
     ctx->label = "huge_malloc";
@@ -936,8 +977,8 @@ TEST_F(TransactionStreamLoadActionTest, huge_malloc) {
 }
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
-    TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -998,8 +1039,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
 }
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) {
-    TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1055,8 +1096,8 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
 }
 
 TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
-    TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1093,8 +1134,8 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
 }
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
-    TransactionStreamLoadAction action(&_env);
-    auto ctx = new StreamLoadContext(&_env);
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->db = "db";
     ctx->table = "tbl";
@@ -1178,7 +1219,7 @@ TEST_F(TransactionStreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
                                                   captured_timeout = request->thrift_rpc_timeout_ms;
                                               });
 
-        TransactionStreamLoadAction action(&_env);
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");

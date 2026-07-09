@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SET ROLE activates roles with their associated privileges for the current session."
 ---
 
 # SET ROLE

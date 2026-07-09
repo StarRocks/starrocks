@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの数値式のビットごとのXORを返します。"
 ---
 
 # bitxor

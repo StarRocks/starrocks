@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.4 以降は IVFPQ、HNSW ベクターインデックスで高次元ベクターデータの近似最近傍探索をサポートします。"
 sidebar_position: 60
 ---
 
@@ -132,6 +133,12 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **デフォルト**: false
 - **必須**: いいえ
 - **説明**: ベクトルが正規化されているかどうか。 有効な値は `true` と `false` です。`metric_type` が `cosine_similarity` の場合にのみ有効です。ベクトルが正規化されている場合、計算された距離の値は [-1, 1] の範囲内になります。ベクトルは平方和が `1` である必要があります。そうでない場合、エラーが返されます。
+
+##### index_build_threshold
+
+- **デフォルト**: 10000（BE 設定項目 `config_vector_index_default_build_threshold` により決定）
+- **必須**: いいえ
+- **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
 
 ##### M
 

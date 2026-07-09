@@ -25,9 +25,12 @@
 #include "column/runtime_type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/runtime_range_pruner.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
-#include "exprs/dictmapping_expr.h"
+#include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -36,16 +39,12 @@
 #include "exprs/is_null_predicate.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_placeholder_predicate.h"
-#include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
-#include "storage/runtime_range_pruner.hpp"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -209,7 +208,7 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
 }
 
 static Expr* get_root_expr(Expr* root) {
-    if (dynamic_cast<DictMappingExpr*>(root)) {
+    if (dynamic_cast<DictMappingExprInterface*>(root)) {
         return root->get_child(1);
     }
     return root;

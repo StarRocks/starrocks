@@ -1,11 +1,21 @@
-# Build toolchains on ubuntu22.04, dev-env image can be built based on this image for ubuntu22
+# Build toolchains on ubuntu24.04, dev-env image can be built based on this image for ubuntu24
 #  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-ubuntu.Dockerfile -t toolchains-ubuntu:latest docker/dockerfiles/toolchains/
+#
+# Key toolchain versions:
+#   gcc           14.3.0   built from source, pinned via GCC_DOWNLOAD_URL
+#   jdk           21       apt openjdk-21-jdk (currently 21.0.11)
+#   cmake         3.31.9   pinned, downloaded from cmake.org
+#   maven         3.8.7    apt maven
+#   lld           18.1.3   apt lld (STARROCKS_LINKER=lld)
+#   clang-format  18.1.3   apt clang-format (rocky9 ships 21; ubuntu24.04 has no clang-format-21)
+#   binutils      2.42     apt binutils (as/ld)
+#   glibc         2.39     apt libc6
 
 ARG GCC_INSTALL_HOME=/opt/gcc-toolset-14
 ARG GCC_WORK_DIR=/workspace/gcc-14
 ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
 
-FROM ubuntu:22.04 AS build-gcc
+FROM ubuntu:24.04 AS build-gcc
 
 ARG GCC_INSTALL_HOME
 ARG GCC_DOWNLOAD_URL
@@ -24,7 +34,7 @@ RUN mkdir -p $GCC_WORK_DIR && \
     make -j$(nproc) && \
     make install-strip
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG GCC_INSTALL_HOME
 ARG CMAKE_INSTALL_HOME=/opt/cmake
@@ -36,15 +46,20 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 # Install common libraries and tools that are needed for dev environment
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
-    automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make openjdk-17-jdk git patch lld bzip2 \
-    wget unzip curl vim tree net-tools openssh-client xz-utils gh locales && \
+    automake bison byacc ccache flex binutils libtool maven zip python3 python-is-python3 make openjdk-21-jdk git patch lld clang-format bzip2 pigz \
+    wget unzip curl vim tree net-tools openssh-client xz-utils gh locales less && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build-gcc $GCC_INSTALL_HOME $GCC_INSTALL_HOME
 
-RUN for bin in cpp gcc g++ gcc-ar gcc-nm gcc-ranlib gcov gcov-dump gcov-tool lto-dump; do \
+# Make the freshly built gcc-14 the default toolchain via update-alternatives.
+# On ubuntu 24.04 the distro pre-registers a `cpp` alternative whose /etc/alternatives/cpp points
+# back to /usr/bin/cpp; reusing the `cpp` name with a /usr/bin/cpp link would create a
+# self-referential symlink loop ("Too many levels of symbolic links"), so drop it first.
+RUN update-alternatives --remove-all cpp 2>/dev/null || true; \
+    for bin in cpp gcc g++ gcc-ar gcc-nm gcc-ranlib gcov gcov-dump gcov-tool lto-dump; do \
         update-alternatives --install /usr/bin/$bin $bin ${GCC_INSTALL_HOME}/bin/$bin 200; \
     done && \
     update-alternatives --set gcc ${GCC_INSTALL_HOME}/bin/gcc && \
@@ -56,11 +71,11 @@ RUN ARCH=`uname -m` && mkdir -p $CMAKE_INSTALL_HOME && cd $CMAKE_INSTALL_HOME &&
     curl -s -k https://cmake.org/files/v3.31/cmake-3.31.9-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
     ln -s $CMAKE_INSTALL_HOME/bin/cmake /usr/bin/cmake
 
-# Set the soft link to jvm
+# Set the soft link to jvm; the build uses JAVA_HOME (set below) which points at JDK 21.
 RUN ARCH=`uname -m` && \
     cd /lib/jvm && \
-    if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
+    if [ "$ARCH" = "aarch64" ] ; then ln -s java-21-openjdk-arm64 java-21-openjdk ; else ln -s java-21-openjdk-amd64 java-21-openjdk  ; fi ;
 
-ENV JAVA_HOME=/lib/jvm/java-17-openjdk
+ENV JAVA_HOME=/lib/jvm/java-21-openjdk
 ENV STARROCKS_LINKER=lld
 ENV LANG=en_US.utf8

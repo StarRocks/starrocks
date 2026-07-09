@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "application/x-www-form-urlencoded形式から文字列をデコードします。"
 ---
 
 # url_decode

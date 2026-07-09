@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET REPLICA STATUS sets the status of specified replicas to bad or ok."
 ---
 
 # ADMIN SET REPLICA STATUS

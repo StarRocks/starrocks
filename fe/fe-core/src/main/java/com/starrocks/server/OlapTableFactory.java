@@ -39,6 +39,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -79,7 +80,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -382,25 +382,18 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
             if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                TPersistentIndexType persistentIndexType;
-                try {
-                    persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
+                // Shared-data primary key tables only support the cloud-native persistent index.
+                // The local-disk persistent index and the in-memory index are deprecated: reject an
+                // explicit LOCAL (or any non-CLOUD_NATIVE) request, and force CLOUD_NATIVE regardless
+                // of enable_cloud_native_persistent_index_by_default. Consume the property from the map
+                // so it is not later flagged as an unknown property.
+                String specifiedType = properties == null ? null :
+                        properties.remove(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE);
+                if (specifiedType != null && !TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(specifiedType)) {
+                    throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                            "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " + specifiedType);
                 }
-                // Judge there are whether compute nodes without storagePath or not.
-                // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
-                Set<Long> cnUnSetStoragePath =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds().
-                                stream()
-                                .filter(id -> !GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(id).
-                                        isSetStoragePath()).collect(Collectors.toSet());
-                if (cnUnSetStoragePath.size() != 0 && persistentIndexType == TPersistentIndexType.LOCAL) {
-                    // Check CN storage path when using local persistent index
-                    throw new DdlException("Cannot create cloud native table with local persistent index" +
-                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
-                }
-                table.setPersistentIndexType(persistentIndexType);
+                table.setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
             }
 
             if (table.isCloudNativeTable()) {
@@ -499,11 +492,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
-            if (PropertyAnalyzer.analyzeBooleanProp(properties,
-                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
-                table.setEnableStatisticCollectOnFirstLoad(true);
-            } else {
-                table.setEnableStatisticCollectOnFirstLoad(false);
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                table.setEnableStatisticCollectOnFirstLoad(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
             try {
@@ -577,9 +569,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
-            TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
             try {
-                tabletType = PropertyAnalyzer.analyzeTabletType(properties);
+                PropertyAnalyzer.analyzeTabletType(properties);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

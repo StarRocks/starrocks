@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列内のすべての文字を別の文字列で置き換えます。"
 ---
 
 # replace

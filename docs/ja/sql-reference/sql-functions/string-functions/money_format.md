@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値を通貨形式の文字列にフォーマットします。小数第2位で丸め、千の位にカンマを入れます。"
 ---
 
 # money_format

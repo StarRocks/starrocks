@@ -88,6 +88,8 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
                 return "deflate";
             case FORMAT_CSV_ZSTD:
                 return "zstd";
+            case FORMAT_ARROW:
+                return "arrow";
             default:
                 return null;
         }

@@ -20,6 +20,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline/set/union_const_source_operator.h"
 #include "exec/pipeline/set/union_passthrough_operator.h"
@@ -367,10 +368,10 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
     for (; i < _first_materialized_child_idx; i++) {
         ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         if (!_local_partition_by_exprs.empty()) {
-            child_ops = context->maybe_interpolate_local_bucket_shuffle_exchange(
-                    context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
+            child_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
+                    context, context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
         } else {
-            child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+            child_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(context, _id, child_ops);
         }
         operators_list.emplace_back(child_ops);
 
@@ -399,7 +400,7 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
     for (; i < _children.size(); i++) {
         ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         std::vector<ExprContext*> partition_by_exprs;
-        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        child_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(context, _id, child_ops);
         operators_list.emplace_back(child_ops);
 
         const auto& dst_tuple_desc =
@@ -455,8 +456,8 @@ StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::Pipel
         }
     }
 
-    auto final_operators =
-            context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
+    auto final_operators = ::starrocks::pipeline::builder::maybe_gather_pipelines_to_one(
+            context, runtime_state(), id(), operators_list, _pass_through_type);
 
     if (limit() != -1) {
         final_operators.emplace_back(

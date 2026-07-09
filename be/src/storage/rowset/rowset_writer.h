@@ -37,20 +37,20 @@
 #include <mutex>
 #include <vector>
 
+#include "column/global_dict/types.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/compaction_utils.h"
-#include "storage/primitive/column_mapping.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage_primitive/column_mapping.h"
 
 namespace butil {
 class IOBuf;

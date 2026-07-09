@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x の符号を返します。"
 ---
 
 # sign

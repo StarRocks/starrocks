@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字符串中所有字符转换为小写。"
 ---
 
 # lower

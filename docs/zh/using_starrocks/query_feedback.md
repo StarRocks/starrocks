@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中使用查询反馈框架自动分析慢查询计划、通过查询计划顾问生成优化建议并改进查询性能。"
 sidebar_position: 11
 ---
 

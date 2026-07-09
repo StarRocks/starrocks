@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Overview of StarRocks catalogs: Internal Catalog for native data and External Catalog for connecting to data lake sources."
 sidebar_position: 40
 ---
 

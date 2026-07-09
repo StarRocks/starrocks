@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Advanced Encryption Standard (AES) アルゴリズムで文字列を暗号化します。"
 ---
 
 # aes_encrypt

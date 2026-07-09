@@ -216,7 +216,7 @@ public class FrontendServiceImplCreatePartitionTest {
         request.setTxn_id(1L);
         request.setPartition_values(partitionValues);
 
-        TCreatePartitionResult result = impl.createPartition(request);
+        impl.createPartition(request);
 
         // When partition is cached, the fast path should be taken and lockCreatePartition should NOT be called
         Assertions.assertEquals(0, lockCallCount.get(),

@@ -70,3 +70,32 @@ CREATE TABLE `test3` (
 select * from test1;
 select * from test2;
 select * from test3;
+
+-- name: test_multi_stream_load_loads_view_state
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `test1` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+CREATE TABLE `test2` (
+  `id` int
+)
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test1" -H "source_type:12" -H "format:json" -d '{"id":"1"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:test2" -H "source_type:12" -H "format:json" -d '{"id":"2"}' -X PUT  ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:llal_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+
+select * from test1;
+select * from test2;
+
+select TABLE_NAME, STATE in ('FINISHED', 'COMMITED') from information_schema.loads where DB_NAME = 'db_${uuid0}' and LABEL = 'llal_${uuid0}' order by TABLE_NAME;

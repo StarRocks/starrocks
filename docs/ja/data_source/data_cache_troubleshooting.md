@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Data Cache のキャッシュミスとパフォーマンス問題に関する FAQ とトラブルシューティング。"
 ---
 
 # Data Cache FAQ

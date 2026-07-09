@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
@@ -61,7 +61,7 @@ public:
         return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
     }
 
-    Status flush_del_file(const Column& deletes) override {
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_del_file not support");
     }
 
@@ -123,7 +123,7 @@ public:
         return Status::NotSupported("VerticalGeneralTabletWriter write_columns not support");
     }
 
-    Status flush_del_file(const Column& deletes) override {
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override {
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
     }
 

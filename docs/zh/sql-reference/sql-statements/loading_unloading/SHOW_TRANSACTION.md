@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查看指定事务 ID 的事务详情和执行状态。"
 ---
 
 # SHOW TRANSACTION

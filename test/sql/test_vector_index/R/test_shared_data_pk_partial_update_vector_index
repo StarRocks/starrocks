@@ -1,0 +1,108 @@
+-- name: test_sd_pk_partial_update_vector_index_sync @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+-- result:
+-- !result
+create database db_sd_pk_pu_vidx_sync_${uuid0};
+-- result:
+-- !result
+use db_sd_pk_pu_vidx_sync_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (
+    id BIGINT NOT NULL,
+    val INT NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40")
+) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1, 10, [1,0,0,0]), (2, 20, [0,1,0,0]), (3, 30, [0,0,1,0]), (4, 40, [0,0,0,1]);
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select id from t order by approx_l2_distance([1,0,0,0], v) limit 1', 'VECTORINDEX: ON')
+-- result:
+None
+-- !result
+select id, val from t order by approx_l2_distance([1,0,0,0], v) limit 1;
+-- result:
+1	10
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
+set partial_update_mode = "row";
+-- result:
+-- !result
+insert into t (id, val) values (1, 111), (2, 222);
+-- result:
+-- !result
+select id, val from t order by id;
+-- result:
+1	111
+2	222
+3	30
+4	40
+-- !result
+function: assert_explain_verbose_contains('select id from t order by approx_l2_distance([1,0,0,0], v) limit 1', 'VECTORINDEX: ON')
+-- result:
+None
+-- !result
+select id, val from t order by approx_l2_distance([1,0,0,0], v) limit 1;
+-- result:
+1	111
+-- !result
+select id, val from t order by approx_l2_distance([0,1,0,0], v) limit 1;
+-- result:
+2	222
+-- !result
+drop database db_sd_pk_pu_vidx_sync_${uuid0} force;
+-- result:
+-- !result
+-- name: test_sd_pk_partial_update_vector_index_async @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+-- result:
+-- !result
+create database db_sd_pk_pu_vidx_async_${uuid0};
+-- result:
+-- !result
+use db_sd_pk_pu_vidx_async_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (
+    id BIGINT NOT NULL,
+    val INT NOT NULL,
+    v ARRAY<FLOAT> NOT NULL,
+    INDEX idx_v (v) USING VECTOR ("index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40", "index_build_mode" = "async")
+) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1, 10, [1,0,0,0]), (2, 20, [0,1,0,0]), (3, 30, [0,0,1,0]), (4, 40, [0,0,0,1]);
+-- result:
+-- !result
+set enable_insert_partial_update = true;
+-- result:
+-- !result
+set partial_update_mode = "row";
+-- result:
+-- !result
+insert into t (id, val) values (1, 111), (2, 222);
+-- result:
+-- !result
+select id, val from t order by id;
+-- result:
+1	111
+2	222
+3	30
+4	40
+-- !result
+select id, val from t order by approx_l2_distance([1,0,0,0], v) limit 1;
+-- result:
+1	111
+-- !result
+select id, val from t order by approx_l2_distance([0,1,0,0], v) limit 1;
+-- result:
+2	222
+-- !result
+drop database db_sd_pk_pu_vidx_async_${uuid0} force;
+-- result:
+-- !result

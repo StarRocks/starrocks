@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 INSERT 语句向 StarRocks 导入数据：INSERT VALUES、INSERT INTO SELECT 和动态覆盖。"
 ---
 
 # 通过 INSERT 语句导入数据

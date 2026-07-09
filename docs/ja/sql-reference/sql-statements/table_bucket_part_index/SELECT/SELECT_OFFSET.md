@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "OFFSET clause skips the first few rows and returns subsequent results."
 sidebar_label: "OFFSET"
 ---
 

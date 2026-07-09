@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "char_lengthのエイリアスで、文字列の文字数を返します。"
 ---
 
 # character_length

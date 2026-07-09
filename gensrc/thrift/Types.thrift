@@ -124,6 +124,13 @@ struct TScalarType {
     // Only set for DECIMAL
     3: optional i32 precision
     4: optional i32 scale
+
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    // as metadata and does NOT affect type identity. Default (false) means the value is a
+    // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
+    // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
+    5: optional bool datetime_is_ntz
 }
 
 // Represents a field in a STRUCT type.
@@ -440,7 +447,8 @@ enum TTableType {
     ICEBERG_FILES_TABLE,
     ICEBERG_PARTITIONS_TABLE,
     BENCHMARK_TABLE,
-    ICEBERG_PROPERTIES_TABLE
+    ICEBERG_PROPERTIES_TABLE,
+    LANCE_TABLE
 }
 
 enum TKeysType {

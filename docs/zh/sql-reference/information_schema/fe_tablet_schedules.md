@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "fe_tablet_schedules 提供 FE 节点上 tablet 调度任务的信息。"
 ---
 
 # fe_tablet_schedules

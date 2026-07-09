@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.2：Hive/Iceberg/Hudi/Delta Lake の統合 Catalog、Hive マネージドテーブル作成、Primary Key インデックスディスク永続化。"
 ---
 
 # StarRocks version 3.2

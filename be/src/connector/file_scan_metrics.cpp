@@ -14,7 +14,7 @@
 
 #include "connector/file_scan_metrics.h"
 
-#include "exec/file_scanner/file_scanner.h"
+#include "compute_env/scanner_counter.h"
 
 namespace starrocks {
 

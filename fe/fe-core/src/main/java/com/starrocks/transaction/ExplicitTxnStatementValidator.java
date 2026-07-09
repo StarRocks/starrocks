@@ -60,19 +60,6 @@ public final class ExplicitTxnStatementValidator {
             ErrorReport.reportSemanticException(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT);
         }
 
-        // We validate two categories:
-        // 1. Pure QueryStatement (SELECT ...).
-        // 2. INSERT ... SELECT, where the source query should not read tables modified earlier.
-        QueryStatement queryForValidation = null;
-        if (statement instanceof QueryStatement) {
-            queryForValidation = (QueryStatement) statement;
-        } else if (statement instanceof InsertStmt insertStmt && insertStmt.getQueryStatement() != null) {
-            // Normal INSERT (non-overwrite already checked) that has a source query.
-            queryForValidation = insertStmt.getQueryStatement();
-        } else {
-            return; // Other statements are not validated here.
-        }
-
         ExplicitTxnState explicitTxnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr()
                 .getExplicitTxnState(context.getTxnId());
@@ -83,6 +70,35 @@ public final class ExplicitTxnStatementValidator {
         Set<Long> modifiedTableIds = explicitTxnState.getModifiedTableIds();
         if (modifiedTableIds.isEmpty()) {
             return;
+        }
+
+        // A partial-update INSERT writes only a subset of columns and implicitly reads the target
+        // table at publish time to fill the columns it does not write. When that table was already
+        // modified earlier in the same transaction, all statements are batch-applied together as
+        // multiple op_writes on one tablet; the publish path cannot correctly merge a partial update
+        // against those uncommitted same-transaction writes (the multi-op_write batch apply would
+        // mis-key rewritten segments / desync the primary index from the pending rowset and silently
+        // corrupt earlier rows). Reject it up front, consistent with the SELECT rule below. (UPDATE
+        // and DELETE on an already-touched table are already blocked by ERR_..._STMT_ORDER.)
+        if (statement instanceof InsertStmt insertStmt && insertStmt.usePartialUpdate()) {
+            Table target = insertStmt.getTargetTable();
+            if (target != null && modifiedTableIds.contains(target.getId())) {
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE, target.getName());
+            }
+        }
+
+        // Validate read sources against tables modified earlier in the same transaction:
+        // 1. Pure QueryStatement (SELECT ...).
+        // 2. INSERT ... SELECT, where the source query should not read tables modified earlier.
+        QueryStatement queryForValidation = null;
+        if (statement instanceof QueryStatement) {
+            queryForValidation = (QueryStatement) statement;
+        } else if (statement instanceof InsertStmt insertStmt && insertStmt.getQueryStatement() != null) {
+            // Normal INSERT (non-overwrite already checked) that has a source query.
+            queryForValidation = insertStmt.getQueryStatement();
+        } else {
+            return; // Other statements are not validated here.
         }
 
         Map<TableName, Table> referencedTables = AnalyzerUtils.collectAllTable(queryForValidation);

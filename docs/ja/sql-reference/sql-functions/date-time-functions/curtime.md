@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のタイムゾーンを取得し、VARCHAR 値を返します。"
 ---
 
 # curtime,current_time

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW CATALOGS queries all catalogs in the current StarRocks cluster, including internal and external catalogs."
 ---
 
 # SHOW CATALOGS

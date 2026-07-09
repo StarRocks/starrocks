@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された分を日付に加え、分単位で正確に計算します。"
 ---
 
 # minutes_add

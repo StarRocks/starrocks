@@ -15,6 +15,7 @@
 #include "connector/file_connector.h"
 
 #include "connector/file_scan_metrics.h"
+#include "exec/file_scanner/arrow_scanner.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/avro_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
@@ -33,8 +34,17 @@ DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
 }
 
-std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
-    return std::make_unique<FileChunkSinkProvider>();
+StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> FileConnector::create_sink_provider(
+        ConnectorSinkProviderType type, std::shared_ptr<ConnectorChunkSinkContext> context) const {
+    if (type != ConnectorSinkProviderType::DATA) {
+        return Status::NotSupported("File connector only supports data sink provider");
+    }
+    auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+    if (ctx == nullptr) {
+        return Status::InternalError("File connector requires FileChunkSinkContext");
+    }
+    std::unique_ptr<ConnectorChunkSinkProvider> provider = std::make_unique<FileChunkSinkProvider>(std::move(ctx));
+    return provider;
 }
 
 // ================================
@@ -88,8 +98,9 @@ Status FileDataSource::_create_scanner() {
         _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
         _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON &&
         _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_PARQUET &&
-        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ORC) {
-        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ORC &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ARROW) {
+        return Status::InternalError("only support csv/json/parquet/orc/arrow format to log rejected record");
     }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
@@ -107,6 +118,8 @@ Status FileDataSource::_create_scanner() {
             // avro routine load
             _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
         }
+    } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ARROW) {
+        _scanner = std::make_unique<ArrowScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }

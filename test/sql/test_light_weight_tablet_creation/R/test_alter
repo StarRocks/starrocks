@@ -1,0 +1,165 @@
+-- name: test_light_weight_tablet_creation_alter @cloud @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_alter_basic (
+    c0 INT,
+    c1 STRING
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "false");
+-- result:
+-- !result
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "true");
+-- result:
+-- !result
+SHOW CREATE TABLE t_alter_basic;
+-- result:
+t_alter_basic	CREATE TABLE `t_alter_basic` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "true",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+INSERT INTO t_alter_basic VALUES (1, 'a'), (2, 'b');
+-- result:
+-- !result
+SELECT * FROM t_alter_basic ORDER BY c0;
+-- result:
+1	a
+2	b
+-- !result
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "invalid");
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property light_weight_tablet_creation must be bool type(false/true).')
+-- !result
+ALTER TABLE t_alter_basic SET("light_weight_tablet_creation" = "false");
+-- result:
+-- !result
+SHOW CREATE TABLE t_alter_basic;
+-- result:
+t_alter_basic	CREATE TABLE `t_alter_basic` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+INSERT INTO t_alter_basic VALUES (3, 'c');
+-- result:
+-- !result
+SELECT * FROM t_alter_basic ORDER BY c0;
+-- result:
+1	a
+2	b
+3	c
+-- !result
+DROP TABLE t_alter_basic;
+-- result:
+-- !result
+CREATE TABLE t_schema_change (
+    c0 INT,
+    c1 VARCHAR(10)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+-- result:
+-- !result
+INSERT INTO t_schema_change VALUES (1, 'a'), (2, 'b');
+-- result:
+-- !result
+ALTER TABLE t_schema_change MODIFY COLUMN c1 INT;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC t_schema_change;
+-- result:
+c0	int	YES	true	None	
+c1	int	YES	false	None	
+-- !result
+SELECT * FROM t_schema_change ORDER BY c0;
+-- result:
+1	0
+2	0
+-- !result
+INSERT INTO t_schema_change VALUES (3, 30), (4, 40);
+-- result:
+-- !result
+SELECT * FROM t_schema_change ORDER BY c0;
+-- result:
+1	0
+2	0
+3	30
+4	40
+-- !result
+DROP TABLE t_schema_change;
+-- result:
+-- !result
+CREATE TABLE t_rollup (
+    c0 INT,
+    c1 STRING,
+    c2 BIGINT
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 4
+PROPERTIES("light_weight_tablet_creation" = "true");
+-- result:
+-- !result
+INSERT INTO t_rollup VALUES (1, 'a', 100), (2, 'b', 200);
+-- result:
+-- !result
+ALTER TABLE t_rollup ADD ROLLUP rollup_c0_c1 (c0, c1);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+SELECT c0, c1 FROM t_rollup ORDER BY c0;
+-- result:
+1	a
+2	b
+-- !result
+INSERT INTO t_rollup VALUES (3, 'c', 300);
+-- result:
+-- !result
+SELECT * FROM t_rollup ORDER BY c0;
+-- result:
+1	a	100
+2	b	200
+3	c	300
+-- !result
+DROP TABLE t_rollup;
+-- result:
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

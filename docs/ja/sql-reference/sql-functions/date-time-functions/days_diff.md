@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの日付式の日数差を返します。"
 ---
 
 # days_diff

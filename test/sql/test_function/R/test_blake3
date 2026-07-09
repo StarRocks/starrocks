@@ -1,0 +1,70 @@
+-- name: test_blake3_const
+-- Verify the BLAKE3 cryptographic hash function on constant inputs.
+-- Expected digests are the standard 256-bit BLAKE3 vectors rendered as continuous lowercase hex.
+select blake3('abc');
+-- result:
+6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85
+-- !result
+select blake3('l');
+-- result:
+b9f63c83975dadee9b4dc3faeeb669ddef34bbe12e3a0626183166982681d81c
+-- !result
+select blake3('StarRocks');
+-- result:
+dd0f3ecdc46c028ccde67e92e1c9ca8784d791d51057eab4e9d8f1a79ee72088
+-- !result
+select blake3('');
+-- result:
+af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+-- !result
+select blake3(cast(null as varchar));
+-- result:
+None
+-- !result
+select BLAKE3('hello');
+-- result:
+ea8f163db38682925e4491c5e58d4bb3506ef8c14eb78a86e908c5624a67200f
+-- !result
+select length(blake3('abc'));
+-- result:
+64
+-- !result
+select blake3('abc') = blake3('abc');
+-- result:
+1
+-- !result
+
+-- name: test_blake3_on_table
+-- Verify BLAKE3 over a table column (vectorized path) including empty and NULL rows.
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t1 (id int, v varchar(64)) properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 'abc'), (2, 'l'), (3, ''), (4, NULL), (5, 'StarRocks'), (6, 'hello');
+-- result:
+-- !result
+select id, blake3(v) from t1 order by id;
+-- result:
+1	6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85
+2	b9f63c83975dadee9b4dc3faeeb669ddef34bbe12e3a0626183166982681d81c
+3	af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+4	None
+5	dd0f3ecdc46c028ccde67e92e1c9ca8784d791d51057eab4e9d8f1a79ee72088
+6	ea8f163db38682925e4491c5e58d4bb3506ef8c14eb78a86e908c5624a67200f
+-- !result
+select id, length(blake3(v)) from t1 where v is not null order by id;
+-- result:
+1	64
+2	64
+3	64
+5	64
+6	64
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result

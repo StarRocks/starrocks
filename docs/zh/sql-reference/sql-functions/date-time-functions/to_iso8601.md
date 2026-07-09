@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将日期转换为ISO 8601标准格式的字符串。"
 ---
 
 # to_iso8601

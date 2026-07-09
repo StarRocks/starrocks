@@ -32,6 +32,7 @@ public class IcebergCatalogProperties {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
+    public static final String ICEBERG_JDBC_PASSWORD = "jdbc.password";
     public static final String ENABLE_ICEBERG_METADATA_CACHE = "enable_iceberg_metadata_cache";
     public static final String ENABLE_ICEBERG_TABLE_CACHE = "enable_iceberg_table_cache";
     public static final String ICEBERG_META_CACHE_TTL = "iceberg_meta_cache_ttl_sec"; // implicit for user

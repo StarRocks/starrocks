@@ -17,17 +17,17 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_rowset_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "runtime/exec_env.h"
-#include "serde/column_array_serde.h"
+#include "platform/key_cache.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -65,7 +65,7 @@ Status HorizontalPkTabletWriter::write(const Chunk& data, SegmentPB* segment, bo
     return Status::OK();
 }
 
-Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
+Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t op_offset) {
     auto name = gen_del_filename(_txn_id);
     WritableFileOptions wopts;
     std::string encryption_meta;
@@ -74,6 +74,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
         wopts.encryption_info = pair.info;
         encryption_meta.swap(pair.encryption_meta);
     }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(of, _fs->new_writable_file(_location_provider->del_location(_tablet_id, name)));
@@ -89,6 +90,8 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
         // Use _dels_mutex to protect _dels concurrenctly append by multiple threads.
         std::lock_guard lg(_dels_mutex);
         _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+        // Keep _del_op_offsets positionally aligned with _dels.
+        _del_op_offsets.emplace_back(op_offset);
     }
     return Status::OK();
 }

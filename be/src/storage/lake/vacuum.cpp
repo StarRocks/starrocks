@@ -17,6 +17,7 @@
 #include <butil/fast_rand.h>
 #include <butil/time.h>
 #include <bvar/bvar.h>
+#include <fmt/format.h>
 
 #include <optional>
 #include <set>
@@ -28,12 +29,12 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
+#include "common/storage_path_constants.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/util.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_proto_normalizer.h"
@@ -45,6 +46,8 @@
 #include "storage/lake/tablet_retain_info.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/storage_cleanup_executor.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks::lake {
 
@@ -72,10 +75,21 @@ struct VacuumTabletMetaVerionRange {
     }
 };
 
+static StorageCleanupExecutor* storage_cleanup_executor() {
+    return StorageEngine::instance()->storage_cleanup_executor();
+}
+
+#ifndef BE_TEST
+static StorageCleanupExecutor* storage_cleanup_executor_for_metrics() {
+    auto* engine = StorageEngine::instance();
+    return engine == nullptr ? nullptr : engine->storage_cleanup_executor();
+}
+#endif
+
 static int get_num_delete_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    return tp ? tp->num_queued_tasks() : 0;
+    auto* executor = storage_cleanup_executor_for_metrics();
+    return executor == nullptr ? 0 : executor->num_queued_tasks();
 #else
     return 0;
 #endif
@@ -83,8 +97,8 @@ static int get_num_delete_file_queued_tasks(void*) {
 
 static int get_num_active_file_queued_tasks(void*) {
 #ifndef BE_TEST
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    return tp ? tp->active_threads() : 0;
+    auto* executor = storage_cleanup_executor_for_metrics();
+    return executor == nullptr ? 0 : executor->active_threads();
 #else
     return 0;
 #endif
@@ -143,13 +157,31 @@ int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retr
 
 namespace {
 
+static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
+    if (index >= rowset.segment_metas_size()) {
+        return false;
+    }
+    const auto& segment_meta = rowset.segment_metas(index);
+    return segment_meta.has_bundle_file_offset() || segment_meta.shared();
+}
+
 // Delete .vi files for segments in a rowset using segment_metas metadata.
-static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir,
-                                     const RowsetMetadataPB& rowset) {
-    for (const auto& segment_meta : rowset.segment_metas()) {
+// A .vi is a per-segment sidecar whose lifetime follows its owning segment. When the
+// segment is shared across split siblings, its .vi must be routed through the
+// refcounting shared-file deleter so it is not deleted while a sibling still references
+// the segment (mirrors the segment routing in collect_garbage_files).
+static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
+                                     const std::string& base_dir, int64_t tablet_id, const RowsetMetadataPB& rowset) {
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const auto& segment_meta = rowset.segment_metas(i);
+        const bool shared_file = is_shared_segment(rowset, i);
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
-            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, vi_name)));
+            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
+            if (shared_file && shared_file_deleter != nullptr) {
+                RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
+            } else {
+                RETURN_IF_ERROR(deleter->delete_file(vi_path));
+            }
         }
     }
     return Status::OK();
@@ -174,6 +206,23 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     }
     auto message = st.message();
     return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
+}
+
+// Returns Status::TimedOut once |deadline_ms| (milliseconds since the Epoch) has passed.
+// deadline_ms <= 0 means no deadline. The deadline is anchored at the time the BE received
+// the vacuum request, so it also expires for tasks that waited too long in the thread pool
+// queue: by then the FE caller has given up waiting and would re-dispatch the partition,
+// continuing would only keep a vacuum worker occupied for a response nobody reads.
+Status check_vacuum_deadline(int64_t deadline_ms) {
+    if (deadline_ms <= 0) {
+        return Status::OK();
+    }
+    int64_t now_ms = butil::gettimeofday_ms();
+    TEST_SYNC_POINT_CALLBACK("vacuum:check_deadline", &now_ms);
+    if (now_ms >= deadline_ms) {
+        return Status::TimedOut(fmt::format("vacuum task deadline exceeded, now={}, deadline={}", now_ms, deadline_ms));
+    }
+    return Status::OK();
 }
 
 Status delete_files_with_retry(FileSystem* fs, std::span<const std::string> paths) {
@@ -253,8 +302,7 @@ void delete_files_async(std::vector<std::string> files_to_delete) {
         return;
     }
     auto task = [files_to_delete = std::move(files_to_delete)]() { (void)delete_files(files_to_delete); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    auto st = tp->submit_func(std::move(task));
+    auto st = storage_cleanup_executor()->submit(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
@@ -262,28 +310,13 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
     if (UNLIKELY(files_to_delete.empty())) {
         return completed_future(Status::OK());
     }
-    auto task = std::make_shared<std::packaged_task<Status()>>(
+    return storage_cleanup_executor()->submit_callable(
             [files_to_delete = std::move(files_to_delete)]() { return delete_files(files_to_delete); });
-    auto packaged_func = [task]() { (*task)(); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    if (auto st = tp->submit_func(std::move(packaged_func)); !st.ok()) {
-        return completed_future(std::move(st));
-    }
-    return task->get_future();
 }
 
 void run_clear_task_async(std::function<void()> task) {
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    auto st = tp->submit_func(std::move(task));
+    auto st = storage_cleanup_executor()->submit(std::move(task));
     LOG_IF(ERROR, !st.ok()) << st;
-}
-
-static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
-    if (index >= rowset.segment_metas_size()) {
-        return false;
-    }
-    const auto& segment_meta = rowset.segment_metas(index);
-    return segment_meta.has_bundle_file_offset() || segment_meta.shared();
 }
 
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
@@ -303,8 +336,9 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
             }
         }
-        // Delete associated .vi files using per-segment vector index metadata
-        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, base_dir, rowset));
+        // Delete associated .vi files using per-segment vector index metadata. A shared
+        // segment's .vi follows the segment, so route it through the shared-file deleter.
+        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, shared_file_deleter, base_dir, metadata.id(), rowset));
 
         for (const auto& del_file : rowset.del_files()) {
             if (del_file.shared() && shared_file_deleter != nullptr) {
@@ -348,7 +382,15 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
             for (const auto& rowset : metadata->rowsets()) {
                 for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                     if (is_shared_segment(rowset, i)) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, rowset.segment_metas(i).filename())));
+                        const auto& segment_meta = rowset.segment_metas(i);
+                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, segment_meta.filename())));
+                        // The segment's per-segment .vi sidecars follow the segment; they are named by
+                        // its recorded owner, so delay-delete them under that owner-based name (covers
+                        // both split-shared and bundled segments, matching is_shared_segment above).
+                        for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                            RETURN_IF_ERROR(deleter->delay_delete(
+                                    join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                        }
                     }
                 }
                 for (const auto& del_file : rowset.del_files()) {
@@ -417,7 +459,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       AsyncSharedFileDeleter* shared_file_deleter, int64_t* total_datafile_size,
                                       int64_t* vacuumed_version, int64_t* extra_datafile_size,
-                                      const TabletRetainInfo& retain_info) {
+                                      const TabletRetainInfo& retain_info, int64_t deadline_ms) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -427,11 +469,19 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto min_version = std::max<int64_t>(1, tablet_info.min_version());
     // grace_timestamp <= 0 means no grace timestamp
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
+    // Whether the walk read at least one tablet metadata at or below |min_retain_version|. It stays
+    // false when the loop never runs (|min_version| has already advanced past |min_retain_version|)
+    // or when the very first read returns NotFound, i.e. the metadata at and below the retain
+    // boundary has already been vacuumed away by a previous run.
+    bool read_any_metadata = false;
     size_t extra_file_size = 0;
     int64_t prepare_vacuum_file_size = 0;
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version >= min_version) {
+        if (auto st = check_vacuum_deadline(deadline_ms); !st.ok()) {
+            return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
+        }
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
         auto res = tablet_mgr->get_tablet_metadata(
                 tablet_id, version, false /* Not need to fill meta cache */,
@@ -443,6 +493,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             return res.status();
         } else {
             auto metadata = std::move(res).value();
+            read_any_metadata = true;
             extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
@@ -497,6 +548,18 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
     if (!skip_check_grace_timestamp) {
+        if (!read_any_metadata) {
+            // No tablet metadata exists at or below |final_retain_version| (== min_retain_version): the
+            // metadata down there has already been vacuumed away by a previous run. Reporting
+            // `final_retain_version - 1` here understates the real progress. When min_retain_version is
+            // pinned to a PhysicalPartition.metadataSwitchVersion whose metadata is already gone, that
+            // understatement permanently strands the switch version on the FE, because the FE only clears
+            // it once vacuumed_version >= switch_version. Report the true cleaned watermark instead: every
+            // version below |min_version| is gone, so cleanup has reached at least `min_version - 1`, and
+            // never below `final_retain_version` (which itself no longer exists).
+            *vacuumed_version = std::max<int64_t>(final_retain_version, min_version - 1);
+            return Status::OK();
+        }
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
         // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can
@@ -539,7 +602,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                                      int64_t grace_timestamp, bool enable_file_bundling,
                                      bool enable_shared_file_cleanup, int64_t* vacuumed_files,
                                      int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size,
-                                     const std::unordered_set<int64_t>& retain_versions) {
+                                     const std::unordered_set<int64_t>& retain_versions, int64_t deadline_ms) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -568,7 +631,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
                                                 vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
                                                 &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info));
+                                                extra_file_size, tablet_retain_info, deadline_ms));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_file_bundling) {
@@ -777,7 +840,8 @@ Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_
     return ret;
 }
 
-Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
+Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response,
+                   int64_t deadline_ms) {
     if (UNLIKELY(tablet_mgr == nullptr)) {
         return Status::InvalidArgument("tablet_mgr is null");
     }
@@ -790,6 +854,21 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     if (UNLIKELY(request.grace_timestamp() <= 0)) {
         return Status::InvalidArgument("value of grace_timestamp is zero or nagative");
     }
+    // The task may have stayed in the thread pool queue long enough that the FE caller already
+    // timed out and gave up, or so long that only a sliver of the deadline window remains. Walking
+    // the whole version chain only to abort mid-way would waste a worker and FS list QPS without
+    // advancing any metadata, so refuse to start unless a minimum useful window is still left. The
+    // window is min(5min, 1/10 of the FE timeout): 5min is roughly enough to make progress on a
+    // round, while the 1/10 cap keeps it below the timeout so a freshly dispatched (full-window)
+    // task is never rejected even when the timeout is configured very small. Bringing the effective
+    // deadline that much earlier expresses exactly this, and a task whose deadline already passed
+    // while queued is caught by the same check.
+    static constexpr int64_t kMaxStartWindowMs = 5 * 60 * 1000;
+    int64_t start_deadline_ms = deadline_ms;
+    if (deadline_ms > 0 && request.has_timeout_ms() && request.timeout_ms() > 0) {
+        start_deadline_ms -= std::min<int64_t>(kMaxStartWindowMs, request.timeout_ms() / 10);
+    }
+    RETURN_IF_ERROR(check_vacuum_deadline(start_deadline_ms));
 
     auto tablet_infos = std::vector<TabletInfoPB>();
     if (request.tablet_infos_size() > 0) {
@@ -834,7 +913,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
             request.has_enable_shared_file_cleanup() ? request.enable_shared_file_cleanup() : enable_file_bundling;
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
                                            enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                           &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions));
+                                           &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions,
+                                           deadline_ms));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
@@ -853,9 +933,9 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     return Status::OK();
 }
 
-void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
-    auto st = vacuum_impl(tablet_mgr, request, response);
-    LOG_IF(ERROR, !st.ok()) << st;
+void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response, int64_t deadline_ms) {
+    auto st = vacuum_impl(tablet_mgr, request, response, deadline_ms);
+    LOG_IF(ERROR, !st.ok()) << "Fail to vacuum partition " << request.partition_id() << ": " << st;
     st.to_protobuf(response->mutable_status());
 }
 
@@ -1117,8 +1197,15 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 for (const auto& rowset : latest_metadata->rowsets()) {
                     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
-                            RETURN_IF_ERROR(
-                                    deleter.delete_file(join_path(data_dir, rowset.segment_metas(i).filename())));
+                            const auto& segment_meta = rowset.segment_metas(i);
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment_meta.filename())));
+                            // Delete the segment's per-segment .vi sidecars under the same shared guard
+                            // (skipped while a sibling may still reference a shared segment), named by
+                            // the segment's recorded owner so the right file is removed after a split.
+                            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(
+                                        data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                            }
                         }
                     }
                     for (const auto& del_file : rowset.del_files()) {
@@ -1126,8 +1213,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
                         }
                     }
-                    // Delete associated .vi files using per-segment vector index metadata
-                    RETURN_IF_ERROR(delete_rowset_vi_files(&deleter, data_dir, rowset));
                 }
                 if (latest_metadata->has_delvec_meta()) {
                     for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
@@ -1292,7 +1377,9 @@ static std::string proto_to_json(const google::protobuf::Message& message) {
 
 static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_location, bool fill_cache) {
     auto metadata = std::make_shared<TabletMetadataPB>();
-    ProtobufFile file(metadata_location);
+    // Auto-detect the checksummed header format and fall back to legacy headerless protobuf.
+    ProtobufFileWithHeader file(metadata_location, LAKE_META_HEADER_MAGIC_NUMBER,
+                                /*allow_plain_protobuf_fallback=*/true);
     RETURN_IF_ERROR_WITH_WARN(file.load(metadata.get(), fill_cache), "Failed to load " + metadata_location);
     // Back-fill segment_metas from the deprecated legacy arrays for pre-feature metadata, so the
     // reference-file check below (which reads segment_metas) protects every live segment from GC.
@@ -1390,10 +1477,11 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
-            // Protect associated .vi files using per-segment vector index metadata
+            // Protect associated .vi files, named by the segment's recorded owner (not
+            // check_meta->id(): split-shared segments must be protected under the writer's name).
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
+                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }

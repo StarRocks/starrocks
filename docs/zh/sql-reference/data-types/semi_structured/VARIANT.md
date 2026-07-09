@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "VARIANT 是半结构化数据类型，仅支持 Iceberg Catalog 表，用于查询 Parquet 格式数据。"
 ---
 
 # VARIANT

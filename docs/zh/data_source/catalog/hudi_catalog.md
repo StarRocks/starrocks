@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hudi catalog 是外部 catalog，支持无导入直接查询 Apache Hudi 数据及数据转换导入。"
 toc_max_heading_level: 5
 ---
 

@@ -27,7 +27,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -992,7 +991,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 3. Execute modifyBackendHost operation (master side)
         ModifyBackendClause modifyBackendClause = new ModifyBackendClause(originalHost, newHost);
-        ShowResultSet result = masterSystemInfoService.modifyBackendHost(modifyBackendClause);
+        masterSystemInfoService.modifyBackendHost(modifyBackendClause);
 
         // 4. Verify master state after modification
         List<Backend> updatedBackends = masterSystemInfoService.getBackends();
@@ -1085,7 +1084,7 @@ public class SystemInfoServiceEditLogTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("labels.location", "zone:zone1");
         ModifyBackendClause modifyBackendClause = new ModifyBackendClause(backendHostPort, properties);
-        ShowResultSet result = masterSystemInfoService.modifyBackendProperty(modifyBackendClause);
+        masterSystemInfoService.modifyBackendProperty(modifyBackendClause);
 
         // 4. Verify master state after modification
         List<Backend> updatedBackends = masterSystemInfoService.getBackends();
@@ -1486,7 +1485,7 @@ public class SystemInfoServiceEditLogTest {
         dropComputeNodeClause.getHostPortPairs().add(new HostPort("192.168.1.500", 9050));
 
         // 3. Expect DdlException to be thrown
-        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+        Assertions.assertThrows(DdlException.class, () -> {
             masterSystemInfoService.dropComputeNodes(dropComputeNodeClause);
         });
 
@@ -2047,7 +2046,7 @@ public class SystemInfoServiceEditLogTest {
 
         // 7. Test follower replay functionality
         // First add the same backend to follower
-        Backend replayBackendInfo = (Backend) UtFrameUtils
+        UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ADD_BACKEND_V2);
         followerSystemInfoService.replayAddBackend(originalBackend);
         Assertions.assertEquals(1, followerSystemInfoService.getBackends().size());

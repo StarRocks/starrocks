@@ -411,6 +411,25 @@ public class AlterJobMgr {
         return true;
     }
 
+    /**
+     * Whether every unfinished alter job on the given table tolerates concurrent partition
+     * creation (see {@link AlterJobV2#allowConcurrentPartitionCreation()}). Returns false when
+     * there is no unfinished job (an anomaly when the table is in a non-NORMAL state, e.g. stale
+     * state after a crash), so callers fall back to the legacy exclusive behavior. The check is
+     * lock-free; the checked job set can only shrink (a new unsafe job cannot start while the
+     * table state is non-NORMAL), and the deeper serialization is the table WRITE lock plus
+     * {@code checkIfMetaChange} inside {@code addPartitions}.
+     */
+    public static boolean unfinishedAlterJobsAllowConcurrentPartitionCreation(long tableId) {
+        List<AlterJobV2> jobs = Lists.newArrayList();
+        jobs.addAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getUnfinishedAlterJobV2ByTableId(tableId));
+        jobs.addAll(GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getUnfinishedAlterJobV2ByTableId(tableId));
+        return !jobs.isEmpty()
+                && jobs.stream().allMatch(AlterJobV2::allowConcurrentPartitionCreation);
+    }
+
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
         long dbId = log.getDbId();
         long mvId = log.getMvId();
@@ -529,6 +548,7 @@ public class AlterJobMgr {
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+            newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
@@ -672,6 +692,11 @@ public class AlterJobMgr {
                 view.setOriginalViewDef(originalViewDef);
                 view.setNewFullSchema(alterViewInfo.getNewFullSchema());
                 view.setComment(alterViewInfo.getComment());
+                // CREATE OR REPLACE VIEW persists the redefined SQL SECURITY characteristic atomically with the
+                // definition.
+                if (alterViewInfo.isUpdateSecurity()) {
+                    view.setSecurity(alterViewInfo.getSecurity());
+                }
             });
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()));
@@ -693,6 +718,9 @@ public class AlterJobMgr {
             view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
             view.setNewFullSchema(alterViewInfo.getNewFullSchema());
             view.setComment(alterViewInfo.getComment());
+            if (alterViewInfo.isUpdateSecurity()) {
+                view.setSecurity(alterViewInfo.getSecurity());
+            }
             LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);

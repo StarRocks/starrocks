@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "複数ワークロード（短いクエリ、アドホッククエリ、ETL等）を単一クラスターで並行実行し、リソース分離・干渉低減を実現します。"
 sidebar_position: 10
 ---
 

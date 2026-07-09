@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Iceberg catalog 支持 DDL 操作，包括创建和管理数据库、表及视图。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'ddl', '创建表', '修改表', '创建数据库', '删除表', '创建视图', '修改视图']
 ---

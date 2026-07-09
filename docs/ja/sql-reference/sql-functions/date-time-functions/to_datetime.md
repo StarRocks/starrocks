@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UnixタイムスタンプをDATETIME型の値に変換します（現在のタイムゾーン設定に基づく）。"
 ---
 
 # to_datetime

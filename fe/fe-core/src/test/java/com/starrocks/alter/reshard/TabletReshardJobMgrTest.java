@@ -14,22 +14,48 @@
 
 package com.starrocks.alter.reshard;
 
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class TabletReshardJobMgrTest {
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
+        private long tableId = 0;
+
         public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
             super(jobId, jobType);
+        }
+
+        public void setTableId(long tableId) {
+            this.tableId = tableId;
+        }
+
+        public void markFinished(long finishedTimeMs) {
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = finishedTimeMs;
+        }
+
+        @Override
+        public long getTableId() {
+            return tableId;
         }
 
         @Override
@@ -151,12 +177,43 @@ public class TabletReshardJobMgrTest {
 
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
+    private static Database reshardDb;
+    private static OlapTable reshardTable;
+    private static LakeTablet oversizedTablet;
+
+    @BeforeEach
+    public void clearSharedMgr() {
+        // Tests that use the singleton TabletReshardJobMgr share its state. Clear it before each
+        // test so a job created in one test does not block table-reservation checks in the next.
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().tabletReshardJobs.clear();
+        // Reset the table state: a split job created by a previous test transitions the table to
+        // TABLET_RESHARD via init(), and triggerTabletReshard short-circuits on non-NORMAL.
+        if (reshardTable != null) {
+            reshardTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+        Config.enable_range_distribution = true;
+
+        starRocksAssert.withDatabase("reshard_test_db").useDatabase("reshard_test_db");
+        reshardDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("reshard_test_db");
+
+        String sql = "create table reshard_trigger_table (key1 int, key2 varchar(10))\n" +
+                "order by(key1)\n" +
+                "properties('replication_num' = '1');";
+        starRocksAssert.withTable(sql);
+        reshardTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(reshardDb.getFullName(), "reshard_trigger_table");
+
+        // Grab the single tablet from the default partition.
+        Tablet t = reshardTable.getPartitions().iterator().next()
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+        oversizedTablet = (LakeTablet) t;
     }
 
     @Test
@@ -222,5 +279,220 @@ public class TabletReshardJobMgrTest {
         jobMgr.addTabletReshardJob(job2);
 
         Assertions.assertEquals(2, jobMgr.getAllJobsInfo().getItems().size());
+    }
+
+    @Test
+    public void testIsTableSafeToDeleteTabletWithReshardJob() {
+        long tableId = 918273L;
+
+        // Use a local mgr injected via GlobalStateMgr so the shared singleton's background daemon
+        // does not reap the job under test.
+        TabletReshardJobMgr localMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
+        job.setTableId(tableId);
+        job.jobState = TabletReshardJob.JobState.FINISHED;
+        job.finishedTimeMs = 1000L;
+        localMgr.tabletReshardJobs.put(job.getJobId(), job);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return localMgr;
+            }
+        };
+
+        final boolean[] automatedOn = {false};
+        final long[] boundary = {0L};
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public boolean isAutomatedSnapshotOn() {
+                return automatedOn[0];
+            }
+
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return boundary[0];
+            }
+        };
+
+        ClusterSnapshotMgr csMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+
+        // Automated snapshot off: no behavior change, always safe.
+        automatedOn[0] = false;
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // Automated on, reshard finished at/after the safe-deletion boundary (a snapshot covers the
+        // pre-reshard state): the table's tablets must not be reclaimed.
+        automatedOn[0] = true;
+        boundary[0] = 1000L;
+        Assertions.assertFalse(csMgr.isTableSafeToDeleteTablet(tableId));
+        // A different table with no reshard job is unaffected.
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId + 1));
+
+        // Automated on, reshard finished before the boundary (every covering snapshot expired): safe.
+        boundary[0] = 2000L;
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // A still-running reshard job keeps the table unsafe while automated snapshot is on.
+        job.jobState = TabletReshardJob.JobState.RUNNING;
+        Assertions.assertFalse(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // An ABORTED reshard removed no tablets, so it must NOT pin the table even when it finished
+        // at/after the safe-deletion boundary (its partial orphan shards stay reclaimable).
+        job.jobState = TabletReshardJob.JobState.ABORTED;
+        boundary[0] = 1000L; // == job.finishedTimeMs, so only the aborted-state guard prevents pinning
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+    }
+
+    @Test
+    public void testExpiredReshardJobRetainedUntilSnapshotSafe() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+
+        TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
+        job.setTableId(100L);
+        job.jobState = TabletReshardJob.JobState.FINISHED;
+        job.finishedTimeMs = 1000L; // deep in the past -> isExpired() is true
+        jobMgr.tabletReshardJobs.put(job.getJobId(), job);
+        Assertions.assertTrue(job.isExpired());
+
+        final long[] boundary = {0L};
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return boundary[0];
+            }
+        };
+
+        // A covering snapshot (safe-deletion boundary <= finishedTimeMs): the expired job is retained
+        // so isTableSafeToDeleteTablet() keeps the pre-reshard tablets alive.
+        boundary[0] = 500L;
+        jobMgr.runAfterCatalogReady();
+        Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
+
+        // No covering snapshot (boundary > finishedTimeMs): the expired job is reaped (no leak).
+        boundary[0] = 2000L;
+        jobMgr.runAfterCatalogReady();
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    private void mockLeaderAdmissionOpen() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return true;
+            }
+        };
+    }
+
+    private void mockLeaderAdmissionClosed() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+        };
+    }
+
+    @Test
+    public void testAddAndDrainReshardCandidate() throws Exception {
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
+
+        mockLeaderAdmissionOpen();
+
+        Assertions.assertTrue(reshardTable.isRangeDistribution(),
+                "test table must be range-distributed; update DDL or Config if this fires");
+
+        int before = mgr.getTabletReshardJobs().size();
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(before + 1, mgr.getTabletReshardJobs().size());
+    }
+
+    @Test
+    public void testTickSkippedWhenAdmissionClosed() throws Exception {
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
+
+        // Phase 1: admission open — pre-seed one candidate so the set is non-empty.
+        mockLeaderAdmissionOpen();
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
+        Assertions.assertEquals(1, mgr.getReshardCandidateCount(),
+                "pre-seeded candidate should be present while admission is open");
+
+        // Phase 2: flip admission closed — runAfterCatalogReady must clear the candidate set
+        // without creating any new reshard job.
+        mockLeaderAdmissionClosed();
+        int before = mgr.getTabletReshardJobs().size();
+        mgr.runAfterCatalogReadyForTest();                                    // gated: drain + jobs skipped, candidates cleared
+        Assertions.assertEquals(before, mgr.getTabletReshardJobs().size(),
+                "no new reshard job should be created when admission is closed");
+        Assertions.assertEquals(0, mgr.getReshardCandidateCount(),
+                "candidate set must be cleared when admission is closed");
+    }
+
+    @Test
+    public void testAddReshardCandidateDropsNonActionableSignal() throws Exception {
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        mockLeaderAdmissionOpen();
+        // A tablet below the split threshold with no merge signal is not actionable: even with
+        // admission open, addReshardCandidate must drop it rather than queue a no-op candidate.
+        long belowSplit = TabletReshardUtils.splitThreshold(Config.tablet_reshard_target_size) - 1;
+        int before = mgr.getReshardCandidateCount();
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), belowSplit, Long.MAX_VALUE);
+        Assertions.assertEquals(before, mgr.getReshardCandidateCount(),
+                "non-actionable signal (below split threshold, no merge) must not be queued");
+    }
+
+    @Test
+    public void testAddReshardCandidateCoalescesPerTable() throws Exception {
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        mockLeaderAdmissionOpen();
+        long target = Config.tablet_reshard_target_size;
+        // First actionable mark seeds the table's candidate.
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 2, Long.MAX_VALUE);
+        int afterFirst = mgr.getReshardCandidateCount();
+        // A second mark for the same table must coalesce (exercise the merge remap), not add a new entry.
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), target * 4, Long.MAX_VALUE);
+        Assertions.assertEquals(afterFirst, mgr.getReshardCandidateCount(),
+                "repeated marks for one table coalesce into a single candidate");
+    }
+
+    @Test
+    public void testAddAndDrainMergeCandidate() throws Exception {
+        // The unified candidate queue carries the merge signal too: a sub-threshold adjacent-pair sum
+        // (no split signal) marked via addReshardCandidate must be routed to a merge job by the drain.
+        boolean[] mergeCalled = {false};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause) {
+                mergeCalled[0] = true;
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        Assertions.assertTrue(reshardTable.isRangeDistribution(),
+                "test table must be range-distributed; update DDL or Config if this fires");
+
+        // pair sum strictly below mergePairThreshold = ceil(0.8 * target) -> needMerge, needSplit(0) false
+        long mergePairBelowThreshold =
+                TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, mergePairBelowThreshold);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertTrue(mergeCalled[0],
+                "drain must route a sub-threshold merge candidate to a merge job");
     }
 }

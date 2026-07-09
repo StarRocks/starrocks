@@ -25,10 +25,12 @@
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/expr_factory.h"
 #include "exprs/is_null_predicate.h"
 #include "formats/orc/memory_stream/MemoryInputStream.hh"
 #include "formats/orc/memory_stream/MemoryOutputStream.hh"
+#include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
@@ -847,7 +849,8 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 
 Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
                                                           const std::string& reader_tz, const std::string& write_tz,
-                                                          const Buffer<int64_t>& values, const bool isInstant) {
+                                                          const Buffer<int64_t>& values, const bool isInstant,
+                                                          const Buffer<int64_t>& nanos = {}) {
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
@@ -869,7 +872,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
 
     for (int i = 0; i < values.size(); i++) {
         c0->data[i] = values[i];
-        c0->nanoseconds[i] = 0;
+        c0->nanoseconds[i] = nanos.empty() ? 0 : nanos[i];
     }
 
     root->numElements = values.size();
@@ -970,6 +973,217 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
             std::string o = res[i].to_string();
             EXPECT_EQ(o, exp_values[i]);
         }
+    }
+}
+
+// A pre-1970 ORC TIMESTAMP carries a sub-second component: liborc hands the reader a floored
+// seconds plus nanoseconds in [0, 1e9). The before-epoch conversion used to drop it (passed 0
+// microseconds); verify it is now preserved on both the plain and the instant (timestamp with
+// local time zone) read paths, while whole-second negatives and post-1970 values are unchanged.
+TEST_F(OrcChunkReaderTest, TestTimestampPreEpochSubSecond) {
+    // clang-format off
+    const Buffer<int64_t> orc_values = {
+            -152539200,  // 1965-03-02 12:00:00 UTC (pre-1970), half-second
+            -152539200,  // 1965-03-02 12:00:00 UTC (pre-1970), microsecond precision
+            -8444232248, // 1702-05-31 19:55:52 UTC (pre-1970), whole second
+            1621905520,  // 2021-05-25 01:18:40 UTC (post-1970, after-epoch path)
+    };
+    const Buffer<int64_t> orc_nanos = {500000000, 123456000, 0, 123456000};
+    // clang-format on
+    {
+        // Plain TIMESTAMP; reader == writer == UTC for a deterministic wall clock.
+        const Buffer<std::string> exp_values = {
+                "1965-03-02 12:00:00.500000",
+                "1965-03-02 12:00:00.123456",
+                "1702-05-31 19:55:52",
+                "2021-05-25 01:18:40.123456",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "UTC", "UTC", orc_values, false,
+                                                      orc_nanos);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            EXPECT_EQ(res[i].to_string(), exp_values[i]) << "index " << i;
+        }
+    }
+    {
+        // INSTANT (timestamp with local time zone): the reader-tz shift must compose with the
+        // preserved sub-second. Reuses the wall clock from TestTimestamp's instant case.
+        const Buffer<int64_t> instant_values = {-8444232248};
+        const Buffer<int64_t> instant_nanos = {500000000};
+        const Buffer<std::string> exp_values = {"1702-06-01 04:01:35.500000"};
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC",
+                                                      instant_values, true, instant_nanos);
+        EXPECT_EQ(res.size(), instant_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            EXPECT_EQ(res[i].to_string(), exp_values[i]) << "index " << i;
+        }
+    }
+}
+
+// Decode an ORC timestamp column statistic through OrcMinMaxDecoder and return the rendered
+// (min, max) bounds. Shared by the OrcMinMaxDecoder* tests below.
+static std::pair<std::string, std::string> decode_ts_min_max(RuntimeState* state, ObjectPool* pool, orc::TypeKind kind,
+                                                             const orc::proto::ColumnStatistics& stats,
+                                                             int64_t tz_offset_in_seconds) {
+    ORC_UNIQUE_PTR<orc::Type> orc_type = orc::createPrimitiveType(kind);
+    TypeDescriptor type(TYPE_DATETIME);
+    TDescriptorTableBuilder builder;
+    TTupleDescriptorBuilder tuple;
+    TSlotDescriptorBuilder slot_builder;
+    slot_builder.column_name("c0").type(type).id(0).nullable(false);
+    tuple.add_slot(slot_builder.build());
+    tuple.build(&builder);
+    DescriptorTbl* tbl = nullptr;
+    CHECK(DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
+    SlotDescriptor* slot = tbl->get_slot_descriptor(0);
+
+    auto min_col = ColumnHelper::create_column(type, false);
+    auto max_col = ColumnHelper::create_column(type, false);
+    CHECK(OrcMinMaxDecoder::decode(slot, orc_type.get(), stats, min_col.get(), max_col.get(), tz_offset_in_seconds)
+                  .ok());
+    return {down_cast<TimestampColumn*>(min_col.get())->get_data()[0].to_string(),
+            down_cast<TimestampColumn*>(max_col.get())->get_data()[0].to_string()};
+}
+
+// A pre-1970 (negative-epoch) ORC stripe min/max TIMESTAMP statistic must decode with its
+// sub-second preserved so the pruning bounds [min, max] still contain the true value range.
+// Exercises the floor split of negative milliseconds, the ORC nanos +1 undo, min floor and
+// max ceil to microsecond. minimumnanos/maximumnanos are stored with the writer's +1 offset.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderPreEpochTimestampSubSecond) {
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    // min: 1965-03-02 12:00:00 + 123 ms + 456789 ns sub-millisecond -> floors to .123456
+    ts->set_minimumutc(-152539199877); // -152539200000 + 123 ms
+    ts->set_minimumnanos(456790);      // 456789 ns + 1
+    // max: 1965-03-02 12:00:00 + 800 ms + 654321 ns sub-millisecond -> ceils to .800655
+    ts->set_maximumutc(-152539199200); // -152539200000 + 800 ms
+    ts->set_maximumnanos(654322);      // 654321 ns + 1
+
+    auto [min, max] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP, stats, 0);
+    EXPECT_EQ(min, "1965-03-02 12:00:00.123456");
+    EXPECT_EQ(max, "1965-03-02 12:00:00.800655");
+}
+
+// The ORC nanos field is serialized with a +1 offset and OMITTED when equal to its default
+// (0 for min, 999999 for max). Verify the +1 is undone for a present field and the conservative
+// default is used for an absent field (absent max must NOT understate to .000000).
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderTimestampNanosOffsetAndDefaults) {
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    ts->set_minimumutc(1621905520000); // 2021-05-25 01:18:40
+    ts->set_maximumutc(1621905520000);
+    ts->set_minimumnanos(250001); // present: 250000 ns + 1 -> .000250
+    // maximumnanos absent -> default 999999 ns -> ceils to .001000 (not .000000)
+
+    auto [min, max] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP, stats, 0);
+    EXPECT_EQ(min, "2021-05-25 01:18:40.000250");
+    EXPECT_EQ(max, "2021-05-25 01:18:40.001000");
+}
+
+// A pre-1970 TIMESTAMP_INSTANT bound must apply the reader timezone offset on the before-epoch
+// branch (it used to be dropped). The offset is folded into the seconds and decoded as plain UTC.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderInstantTimestampOffset) {
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    ts->set_minimumutc(-152539200000); // 1965-03-02 12:00:00 UTC
+    ts->set_maximumutc(-152539200000);
+    ts->set_minimumnanos(500001); // 500000 ns + 1
+    ts->set_maximumnanos(500001);
+
+    auto [min8, max8] =
+            decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP_INSTANT, stats, 8 * 3600);
+    EXPECT_EQ(min8, "1965-03-02 20:00:00.000500"); // shifted +8h
+    EXPECT_EQ(max8, "1965-03-02 20:00:00.000500");
+
+    auto [min0, max0] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP_INSTANT, stats, 0);
+    EXPECT_EQ(min0, "1965-03-02 12:00:00.000500"); // control: no offset
+    EXPECT_EQ(max0, "1965-03-02 12:00:00.000500");
+}
+
+// A post-1970 (after-epoch) TIMESTAMP_INSTANT with a sub-second: the offset fold lands on the
+// after-epoch path while the min still floors and the max still ceils to microsecond.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderPostEpochInstantSubSecond) {
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    ts->set_minimumutc(1621905520000); // 2021-05-25 01:18:40 UTC
+    ts->set_maximumutc(1621905520000);
+    ts->set_minimumnanos(250001); // 250000 ns + 1 -> floors to .000250
+    ts->set_maximumnanos(654322); // 654321 ns + 1 -> ceils to .000655
+
+    auto [min, max] =
+            decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP_INSTANT, stats, 8 * 3600);
+    EXPECT_EQ(min, "2021-05-25 09:18:40.000250"); // shifted +8h, min floored
+    EXPECT_EQ(max, "2021-05-25 09:18:40.000655"); // shifted +8h, max ceiled
+}
+
+// The instant offset is folded BEFORE the epoch-sign test, so the folded seconds (not the raw
+// seconds) select the before/after-epoch branch. A bound at/after the epoch can fold to the
+// before-epoch path and vice versa.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderInstantOffsetCrossesEpoch) {
+    {
+        // minimumutc = 0 (epoch) with a -8h offset folds negative -> before-epoch UTC path.
+        orc::proto::ColumnStatistics stats;
+        auto* ts = stats.mutable_timestampstatistics();
+        ts->set_minimumutc(0);
+        ts->set_maximumutc(0);
+        auto [min, max] =
+                decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP_INSTANT, stats, -8 * 3600);
+        EXPECT_EQ(min, "1969-12-31 16:00:00");
+    }
+    {
+        // maximumutc = -1 ms (just before epoch) with a +8h offset: the default-max ceil carries
+        // a whole second up to the epoch, then the fold routes it to the after-epoch path.
+        orc::proto::ColumnStatistics stats;
+        auto* ts = stats.mutable_timestampstatistics();
+        ts->set_minimumutc(-1);
+        ts->set_maximumutc(-1);
+        auto [min, max] =
+                decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP_INSTANT, stats, 8 * 3600);
+        EXPECT_EQ(max, "1970-01-01 08:00:00");
+    }
+}
+
+// ORC is untrusted external input: a present nanos field is legitimately in [1, 1000000]. A
+// malformed value outside that range must fall back to the conservative default rather than
+// produce a negative/overflowing nanos.
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderTimestampMalformedNanos) {
+    orc::proto::ColumnStatistics stats;
+    auto* ts = stats.mutable_timestampstatistics();
+    ts->set_minimumutc(1621905520000); // 2021-05-25 01:18:40
+    ts->set_maximumutc(1621905520000);
+    ts->set_minimumnanos(0);       // malformed (< 1) -> default 0
+    ts->set_maximumnanos(2000000); // malformed (> 1000000) -> default 999999 -> ceil .001000
+
+    auto [min, max] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP, stats, 0);
+    EXPECT_EQ(min, "2021-05-25 01:18:40");
+    EXPECT_EQ(max, "2021-05-25 01:18:40.001000");
+}
+
+// Regression guard: the common millisecond-precision path and whole-second negatives are
+// unchanged. For millisecond data the writer omits minimumnanos (sub-ms == 0) and stores
+// maximumnanos == 1 (0 + 1).
+TEST_F(OrcChunkReaderTest, OrcMinMaxDecoderTimestampNoRegression) {
+    {
+        orc::proto::ColumnStatistics stats;
+        auto* ts = stats.mutable_timestampstatistics();
+        ts->set_minimumutc(1621905520500); // 2021-05-25 01:18:40.500
+        ts->set_maximumutc(1621905520500);
+        ts->set_maximumnanos(1); // 0 + 1
+        auto [min, max] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP, stats, 0);
+        EXPECT_EQ(min, "2021-05-25 01:18:40.500000");
+        EXPECT_EQ(max, "2021-05-25 01:18:40.500000");
+    }
+    {
+        orc::proto::ColumnStatistics stats;
+        auto* ts = stats.mutable_timestampstatistics();
+        ts->set_minimumutc(-8444232248000); // 1702-05-31 19:55:52 UTC, whole second
+        ts->set_maximumutc(-8444232248000);
+        ts->set_maximumnanos(1); // 0 + 1
+        auto [min, max] = decode_ts_min_max(_runtime_state.get(), &_pool, orc::TypeKind::TIMESTAMP, stats, 0);
+        EXPECT_EQ(min, "1702-05-31 19:55:52");
+        EXPECT_EQ(max, "1702-05-31 19:55:52");
     }
 }
 

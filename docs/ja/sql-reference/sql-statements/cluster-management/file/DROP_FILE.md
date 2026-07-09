@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP FILE ステートメントでファイルを削除します。"
 ---
 
 # DROP FILE

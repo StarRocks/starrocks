@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "プライマリキーテーブルから値をクエリプランニング時にルックアップします。"
 ---
 
 # lookup_string

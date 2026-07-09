@@ -130,6 +130,19 @@ public class ColumnDefAnalyzer {
 
         Type type = typeDef.getType();
 
+        // VARIANT is only an internal representation for reading external catalogs (e.g. Iceberg);
+        // it has no native storage write path, so an OLAP column containing VARIANT -- at the top
+        // level or nested inside ARRAY/MAP/STRUCT -- is accepted by DDL but aborts the BE on the
+        // first insert. ChunkFactory::column_from_field recurses into sub-fields and
+        // field_type_dispatch_column still hits its default LOG(FATAL) for TYPE_VARIANT, so a nested
+        // VARIANT crashes the node just like a top-level one. Reject any contained VARIANT at DDL for
+        // native tables; external engines keep using it for reads (their schema does not go through
+        // this OLAP column validation).
+        if (isOlap && type.containsVariant()) {
+            throw new AnalysisException(
+                    String.format("VARIANT is not supported as a column type for OLAP tables: column '%s'", name));
+        }
+
         if (isKey && isOlap && !type.canDistributedBy()) {
             if (type.isFloatingPointType()) {
                 throw new AnalysisException(

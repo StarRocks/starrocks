@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FAQ addressing common StarRocks privilege and authorization questions, including user role activation and permission-related issues."
 sidebar_position: 50
 ---
 

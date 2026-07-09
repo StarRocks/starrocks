@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将分组中的多个非NULL值连接成一个字符串，为group_concat的PostgreSQL兼容语法。"
 ---
 
 # string_agg

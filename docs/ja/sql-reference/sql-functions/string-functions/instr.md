@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列内の部分文字列の最初の出現位置を1から始まる位置で返します。"
 ---
 
 # instr

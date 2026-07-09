@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将嵌套数组展平一层。"
 ---
 
 # array_flatten

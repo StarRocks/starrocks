@@ -21,6 +21,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -152,5 +153,23 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         return TypeFactory.createType(primitiveType);
     }
 
+    @Override
+    public long getTableRowCount(Connection connection, String dbName, String tableName) throws SQLException {
+        // system.tables.total_rows is maintained by ClickHouse for most table engines (MergeTree, etc.)
+        // and is NULL for engines that do not track it (e.g. Distributed over remote shards).
+        String sql = "SELECT total_rows FROM system.tables WHERE database = ? AND name = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, dbName);
+            ps.setString(2, tableName);
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    long rows = rs.getLong(1);
+                    return rs.wasNull() ? -1L : rows;
+                }
+            }
+        }
+        return -1L;
+    }
 
 }

@@ -38,6 +38,7 @@
 
 #include <memory>
 
+#include "base/logging.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
@@ -46,7 +47,6 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
 using starrocks::DataDecoder;

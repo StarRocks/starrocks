@@ -24,9 +24,9 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "simdjson.h"
-#include "storage/type_info_allocator_adapter.h"
-#include "storage/types.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
@@ -179,6 +179,9 @@ private:
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+        // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
+        // analysis, so by the time we get here it is always positive. Assert the invariant.
+        DCHECK_GT(bucket_num, 0);
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // Build bucket
@@ -242,6 +245,9 @@ private:
         auto sample_ratio = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
         auto ndv_estimator_name = ColumnHelper::get_const_value<TYPE_VARCHAR>(ctx->get_constant_column(3)).to_string();
         [[maybe_unused]] double sample_factor = 1 / sample_ratio;
+        // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
+        // analysis, so by the time we get here it is always positive. Assert the invariant.
+        DCHECK_GT(bucket_num, 0);
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // prepare ndv estimation

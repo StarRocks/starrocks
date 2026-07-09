@@ -21,6 +21,7 @@
 #include <numeric>
 #include <optional>
 #include <random>
+#include <roaring/roaring.hh>
 
 #include "storage/datum_variant.h"
 #include "storage/types.h"
@@ -846,6 +847,128 @@ TEST_F(TabletReshardHelperTest, HasValidUid_rejects_absent_and_zero) {
     EXPECT_FALSE(has_valid_uid(rs)); // present but zero
     rs.mutable_uid()->set_lo(1);
     EXPECT_TRUE(has_valid_uid(rs));
+}
+
+namespace {
+DcgRowWindow make_window(size_t owner, rowid_t begin, rowid_t end, bool is_gap = false) {
+    return DcgRowWindow{owner, Range<rowid_t>(begin, end), is_gap};
+}
+void expect_window(const DcgRowWindow& w, rowid_t begin, rowid_t end, bool is_gap) {
+    EXPECT_EQ(w.range.begin(), begin);
+    EXPECT_EQ(w.range.end(), end);
+    EXPECT_EQ(w.is_gap, is_gap);
+}
+} // namespace
+
+TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_ContiguousOK) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 10, 30)};
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 2u);
+    expect_window(out[0], 0, 10, false);
+    expect_window(out[1], 10, 30, false);
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_NullGapBits_HoleFails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_GapMasked_FillsGapWindow) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(10, 20);
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 3u);
+    expect_window(out[0], 0, 10, false);
+    expect_window(out[1], 10, 20, true);
+    expect_window(out[2], 20, 30, false);
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_GapPartiallyMasked_Fails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 10), make_window(1, 20, 30)}; // hole [10, 20)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(10, 18); // misses [18, 20)
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_Overlap_Fails) {
+    std::vector<DcgRowWindow> in{make_window(0, 0, 20), make_window(1, 10, 30)}; // distinct owners overlap [10, 20)
+    roaring::Roaring gap_bits;
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_ZeroRows_Fails) {
+    std::vector<DcgRowWindow> in;
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, /*gap_bits=*/nullptr, /*num_rows=*/0, &out);
+    EXPECT_TRUE(st.is_not_supported()) << st;
+}
+
+TEST_F(TabletReshardHelperTest, Reconcile_LeadingAndTrailingGap) {
+    std::vector<DcgRowWindow> in{make_window(0, 10, 20)}; // gaps [0, 10) and [20, 30)
+    roaring::Roaring gap_bits;
+    gap_bits.addRange(0, 10);
+    gap_bits.addRange(20, 30);
+    std::vector<DcgRowWindow> out;
+    auto st = reconcile_windows_with_gap(in, &gap_bits, /*num_rows=*/30, &out);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(out.size(), 3u);
+    expect_window(out[0], 0, 10, true);
+    expect_window(out[1], 10, 20, false);
+    expect_window(out[2], 20, 30, true);
+}
+
+TEST_F(TabletReshardHelperTest, set_idg_shared_toggles_all_entries) {
+    IndexDeltaGroupVerPB idg;
+    auto* e0 = idg.add_entries();
+    e0->set_index_file("a.idx");
+    e0->set_shared_file(false);
+    auto* e1 = idg.add_entries();
+    e1->set_index_file("b.idx");
+    e1->set_shared_file(false);
+
+    set_idg_shared(&idg, true);
+    for (const auto& e : idg.entries()) EXPECT_TRUE(e.shared_file());
+
+    set_idg_shared(&idg, false);
+    for (const auto& e : idg.entries()) EXPECT_FALSE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_non_segment_files_shared_marks_idg) {
+    TabletMetadataPB meta;
+    auto& idgs = *meta.mutable_idg_meta()->mutable_idgs();
+    IndexDeltaGroupVerPB idg;
+    idg.add_entries()->set_index_file("c.idx"); // shared_file defaults false
+    idgs[7] = idg;
+
+    set_non_segment_files_shared(&meta);
+    ASSERT_TRUE(meta.idg_meta().idgs().contains(7));
+    for (const auto& e : meta.idg_meta().idgs().at(7).entries()) EXPECT_TRUE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
+    // A cross-published OpAddIndex on a split must have its .idx marked shared so a sibling
+    // cannot later reclaim a file the other child still references.
+    TxnLogPB txn_log;
+    auto* se = txn_log.mutable_op_add_index()->add_segment_entries();
+    se->set_segment_id(3);
+    auto* entry = se->mutable_entry();
+    entry->set_index_file("x.idx");
+    entry->set_shared_file(false);
+
+    set_all_data_files_shared(&txn_log);
+    ASSERT_EQ(1, txn_log.op_add_index().segment_entries_size());
+    EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
 }
 
 } // namespace starrocks::lake

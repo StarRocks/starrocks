@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "生成指定范围和步长的数值数组。"
 ---
 
 # array_generate

@@ -17,12 +17,12 @@
 #include <memory>
 #include <utility>
 
-#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
-#include "exec/pipeline/scan/fixed_morsel_queue_builder.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
-#include "exec/pipeline/scan/olap_fixed_morsel_queue_builder.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
-#include "exec/pipeline/scan/split_morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/fixed_morsel_queue_builder.h"
+#include "storage/query/olap_dynamic_morsel_queue_builder.h"
+#include "storage/query/olap_fixed_morsel_queue_builder.h"
+#include "storage/query/olap_morsel_queue.h"
+#include "storage/query/split_morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
 

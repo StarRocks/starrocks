@@ -25,6 +25,9 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.PlacementPolicy;
+import com.staros.proto.PlacementPreference;
+import com.staros.proto.PlacementRelationship;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
@@ -35,6 +38,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateShardGroupInfo;
+import com.staros.proto.UpdateShardInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
@@ -50,6 +54,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -63,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -393,6 +399,67 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testCreateShardsForSplitSpreadDropsWithShardPin() throws Exception {
+        // Capture the CreateShardInfo payload the agent builds for client.createShard so we can
+        // assert the per-shard placement preferences for both spreadNewShards modes.
+        List<CreateShardInfo> captured = new ArrayList<>();
+        new Expectations(client) {
+            {
+                client.createShard("1", (List<CreateShardInfo>) any);
+                result = new Delegate<List<ShardInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<ShardInfo> createShard(String sid, List<CreateShardInfo> infos) {
+                        captured.clear();
+                        captured.addAll(infos);
+                        List<ShardInfo> out = new ArrayList<>(infos.size());
+                        for (CreateShardInfo info : infos) {
+                            out.add(ShardInfo.newBuilder().setShardId(info.getShardId()).build());
+                        }
+                        return out;
+                    }
+                };
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        long spreadGroupId = 700L;
+        long oldShardId = 11L;
+        // Two new shards split out of the same old shard (the degenerate pre-split case).
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, oldShardId);
+        newToOldShardId.put(102L, oldShardId);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(spreadGroupId));
+        newShardIdToGroupIds.put(102L, Lists.newArrayList(spreadGroupId));
+
+        // spreadNewShards = true (pre-split): no WITH_SHARD pin, so StarOS spreads the new shards;
+        // the (SPREAD) group ids are still carried.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, true);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertTrue(info.getPlacementPreferencesList().isEmpty(),
+                    "pre-split shard must not pin placement to the old shard");
+            Assertions.assertEquals(Lists.newArrayList(spreadGroupId), info.getGroupIdsList());
+        }
+
+        // spreadNewShards = false (online split): the WITH_SHARD pin to the old shard is kept so the
+        // split reuses the source worker's warm cache.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertEquals(1, info.getPlacementPreferencesList().size());
+            PlacementPreference pref = info.getPlacementPreferences(0);
+            Assertions.assertEquals(PlacementPolicy.PACK, pref.getPlacementPolicy());
+            Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
+            Assertions.assertEquals(oldShardId, pref.getRelationshipTargetId());
+        }
+    }
+
+    @Test
     void testListShardGroupExcepted() throws StarClientException {
         new Expectations(client) {
             {
@@ -453,6 +520,79 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
+    }
+
+    @Test
+    public void testReassignShardGroups() throws StarClientException {
+        UpdateShardInfo expected = UpdateShardInfo.newBuilder()
+                .setShardId(100L)
+                .addAllAddGroupIds(Lists.newArrayList(2L))
+                .addAllRemoveGroupIds(Lists.newArrayList(1L))
+                .build();
+        new Expectations(client) {
+            {
+                client.updateShard("1", Lists.newArrayList(expected));
+                result = null;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
+    }
+
+    @Test
+    public void testReassignShardGroupsNoOpWhenDeltaEmpty() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                times = 0;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(), Lists.newArrayList()));
+    }
+
+    @Test
+    public void testReassignShardGroupsWrapsClientException() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked failure");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(DdlException.class, () ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
+    }
+
+    @Test
+    public void testQueryShardGroupStable() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L, 20L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = Lists.newArrayList(true, false);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        List<Boolean> stable =
+                starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(Lists.newArrayList(true, false), stable);
+    }
+
+    @Test
+    public void testQueryShardGroupStableThrows() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "non-PACK group");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(StarClientException.class,
+                () -> starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test

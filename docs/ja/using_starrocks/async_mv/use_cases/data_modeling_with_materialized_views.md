@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use asynchronous materialized views in StarRocks to simplify ETL pipelines, build reusable data models, and improve query performance through layered modeling."
 sidebar_position: 10
 ---
 

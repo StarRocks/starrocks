@@ -35,7 +35,7 @@ public:
 
 TEST_F(ParquetPageReaderTest, Normal) {
     std::string buffer;
-    HdfsScanStats stats;
+    FormatScannerStats stats;
 
     // page 0
     {
@@ -101,7 +101,7 @@ TEST_F(ParquetPageReaderTest, Normal) {
 
 TEST_F(ParquetPageReaderTest, ExtraBytes) {
     std::string buffer;
-    HdfsScanStats stats;
+    FormatScannerStats stats;
 
     // page 0
     {

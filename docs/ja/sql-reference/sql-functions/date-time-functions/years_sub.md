@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された年数を日時値または日付値から減算します。"
 ---
 
 # years_sub

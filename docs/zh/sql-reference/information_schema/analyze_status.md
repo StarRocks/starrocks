@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "analyze_status 提供统计信息收集任务的状态信息。"
 ---
 
 # analyze_status

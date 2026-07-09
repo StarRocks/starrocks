@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeIntoStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -536,7 +537,11 @@ rollupDesc
     ;
 
 rollupItem
-    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    : rollupName=identifier identifierList (dupKeys)? (rollupOrderByDesc)? (fromRollup)? properties?
+    ;
+
+rollupOrderByDesc
+    : ORDER BY identifierList
     ;
 
 dupKeys
@@ -557,6 +562,7 @@ ifNotExists:
 createTableAsSelectStatement
     : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        engineDesc?
         keyDesc?
         comment?
         partitionDesc?
@@ -751,7 +757,8 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause |
         addMVColumnClause |
-        dropMVColumnClause )
+        dropMVColumnClause |
+        reorderColumnsClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
@@ -1354,6 +1361,28 @@ updateStatement
 
 deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    ;
+
+mergeIntoStatement
+    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+      USING relation (AS? sourceAlias=identifier)?
+      ON mergeCondition=expression
+      mergeWhenClause+
+    ;
+
+mergeWhenClause
+    : WHEN MATCHED (AND matchedCondition=expression)? THEN mergeMatchedAction       #mergeWhenMatched
+    | WHEN NOT MATCHED (AND notMatchedCondition=expression)? THEN mergeNotMatchedAction   #mergeWhenNotMatched
+    ;
+
+mergeMatchedAction
+    : UPDATE SET assignmentList      #mergeMatchedUpdate
+    | DELETE                         #mergeMatchedDelete
+    ;
+
+mergeNotMatchedAction
+    : INSERT ASTERISK_SYMBOL                                                                    #mergeNotMatchedInsertStar
+    | INSERT ('(' cols+=identifier (',' cols+=identifier)* ')')? VALUES '(' expressionList ')'   #mergeNotMatchedInsertValues
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -2784,7 +2813,6 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-    | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
     ;
@@ -3163,10 +3191,6 @@ unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
-unitBoundary
-    : FLOOR | CEIL
-    ;
-
 filesSchema
     : filesSchemaColumn (',' filesSchemaColumn)* EOF
     ;
@@ -3326,7 +3350,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

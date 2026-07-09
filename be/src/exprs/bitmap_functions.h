@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 
 namespace starrocks {
@@ -153,6 +154,10 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(base64_to_bitmap);
+    static StatusOr<ColumnPtr> base64_to_bitmap_const(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> base64_to_bitmap_general(FunctionContext* context, const Columns& columns);
+    static Status base64_to_bitmap_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status base64_to_bitmap_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param:

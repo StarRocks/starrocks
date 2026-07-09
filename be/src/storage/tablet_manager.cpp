@@ -46,7 +46,6 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -64,9 +63,11 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 

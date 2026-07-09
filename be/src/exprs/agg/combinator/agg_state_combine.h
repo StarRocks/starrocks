@@ -21,7 +21,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/combinator/agg_state_combinator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
 namespace starrocks {
 struct AggStateCombineState {};

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 StarRocks Tableau JDBC Connector 连接 StarRocks 与 Tableau Desktop 和 Tableau Server。"
 ---
 
 # Tableau

@@ -50,6 +50,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -493,8 +494,10 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
-        // BUCKETS
-        partitionMetaInfo.setBuckets(distributionInfo.getBucketNum());
+        // BUCKETS: each physical partition can carry its own bucket count (e.g. ADD PHYSICAL PARTITION),
+        // so prefer the per-physical value and fall back to the table-level distribution default.
+        partitionMetaInfo.setBuckets(physicalPartition.getBucketNum() > 0 ?
+                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
@@ -536,6 +539,16 @@ public class InformationSchemaDataSource {
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
+            // Vector-index built-version span across this partition's base-index tablets, for
+            // observability (null = no vector index). Async: actual [min, max] — MIN < VISIBLE_VERSION
+            // means still catching up, MIN < MAX means uneven across tablets. Sync: always current,
+            // reported as the visible version.
+            long[] viBuiltSpan = VectorIndexBuildScheduler.getPartitionBuiltVersionSpan(table, physicalPartition);
+            if (viBuiltSpan != null) {
+                partitionMetaInfo.setMin_vi_built_version(viBuiltSpan[0]);
+                partitionMetaInfo.setMax_vi_built_version(viBuiltSpan[1]);
+            }
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());

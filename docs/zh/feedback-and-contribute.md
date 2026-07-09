@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "了解 StarRocks 文档贡献流程、反馈方式及编写规范，帮助改进文档质量。"
 ---
 
 # How to feedback and contribute

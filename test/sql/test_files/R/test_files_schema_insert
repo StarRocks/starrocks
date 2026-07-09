@@ -43,7 +43,7 @@ as select * from files(
 desc ctas_target;
 -- result:
 k2	bigint	YES	true	None	
-k7	varchar(1048576)	YES	true	None	
+k7	varchar(64)	YES	true	None	
 -- !result
 select count(*) from ctas_target;
 -- result:

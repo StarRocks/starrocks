@@ -16,8 +16,8 @@
 
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/primitive/roaring2range.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/roaring2range.h"
 
 namespace starrocks {
 

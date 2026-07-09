@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
 ---
 
@@ -89,6 +90,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在发送计划片段之前应用于 BRPC TalkTimeoutController 的超时（毫秒）。`BackendServiceClient.sendPlanFragmentAsync` 在调用后端 `execPlanFragmentAsync` 之前设置此值。它控制 BRPC 在从连接池借用空闲连接以及执行发送时将等待多长时间；如果超过，RPC 将失败并可能触发该方法的重试逻辑。在争用情况下，将此值设置得更低以快速失败，或提高它以容忍瞬时池耗尽或慢速网络。请谨慎：非常大的值可能会延迟故障检测并阻塞请求线程。
 - 引入版本: v3.3.11, v3.4.1, v3.5.0
+
+### `connector_row_size_estimate_bytes`
+
+- 默认值: 256
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 优化器在存储格式未知或列 Schema 不可用时，用于估算外部文件表（FILES() 和 ENGINE=file 表）行数的平均行大小（字节）。行数估算公式为 `总文件字节数 / connector_row_size_estimate_bytes`。值越小，估算行数越大，可能影响 Join 顺序决策。
+- 引入版本: v3.4
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
@@ -352,6 +362,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用谓词列收集。如果禁用，谓词列在查询优化期间将不会被记录。
 - 引入版本: -
 
+### `push_down_non_grouped_aggregate_below_union`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在物理计划中将不带 GROUP BY 的聚合下推到 Union 下方。
+- 引入版本: -
+
 ### `enable_query_queue_v2`
 
 - 默认值: true
@@ -421,6 +440,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 控制 UPDATE 语句是否可以触发自动统计信息收集。启用后，修改表数据的 UPDATE 操作可能会通过与 `enable_statistic_collect_on_first_load` 控制的基于摄取统计信息框架调度统计信息收集。禁用此配置会跳过 UPDATE 语句的统计信息收集，同时保持加载触发的统计信息收集行为不变。
 - 引入版本: v3.5.11, v4.0.4
+
+### `enable_sync_statistics_load`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否可变：Yes
+- 描述：控制查询在执行前是否等待所有统计信息加载完成。启用后，如果查询引用的表/列的统计信息尚未完全加载，查询将等待统计信息加载完成后再继续执行。这确保查询优化器能够访问最新的统计信息以生成更优的执行计划，但如果统计信息加载耗时较长，可能会增加查询延迟。禁用后，查询将不等待统计信息加载而直接执行，若统计信息缺失或过期，可能导致次优执行计划。
+- 引入版本：-
+
+### `sync_statistics_load_timeout_ms`
+
+- 默认值：5000
+- 类型：Int
+- 单位：毫秒
+- 是否可变：Yes
+- 描述：同步等待统计信息的超时时间（当 `enable_sync_statistics_load` 启用时）。若在此时间内统计信息不可用，查询将在没有统计信息的情况下继续执行，这可能导致次优执行计划。请根据集群性能和工作负载特性将此值设置为合理的时间。
+- 引入版本：-
 
 ### `enable_udf`
 
@@ -528,6 +565,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: DELETE 语句中 IN 谓词允许的最大元素数量。
+- 引入版本: -
+
+### `enable_non_primary_key_delete_warning`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，对非主键 OLAP 表（明细表、聚合表、更新表）执行成功的 `DELETE` 后，StarRocks 会在 MySQL OK 包的 `info` 字段中返回一条提示，提醒用户 `DELETE` 会写入删除谓词、在 base compaction 完成前每次查询都需要 merge-on-read，并建议批量按分区删除时改用 `ALTER TABLE ... TRUNCATE PARTITION`。设置为 `false` 可关闭此提示。该提示不会改变 DELETE 的语义或执行流程，只是额外向客户端返回一段 info 字符串。详见 [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)。
 - 引入版本: -
 
 ### `max_create_table_timeout_second`
@@ -802,6 +848,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 统计信息缓存的更新间隔。
+- 引入版本: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制 Follower（以及重启恢复）在回放统计信息日志时如何刷新 Connector（外部表）统计信息缓存。设为 `true` 时，按日志中持久化的表 UUID 失效缓存，并在下次查询时惰性重新加载，从而避免在回放期间解析外部表元数据（`MetadataMgr.getTable`）——该解析可能因 Hive Metastore 或对象存储变慢而阻塞日志回放线程。设为 `false`（默认）时使用原有的主动刷新方式，保持现有行为。在该 UUID 被持久化之前写入的统计信息日志，无论该配置如何都会回退到主动刷新。
+
+### `statistics_large_string_column_merge_threshold`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 默认关闭（`0`）。设为正值后，在统计信息收集的过程中，会单独生成一条 SQL 来收集声明长度超过该阈值的字符串列（`VARCHAR` / `CHAR`）的统计信息，不与其他列合并起来收集。抽样统计和全量统计都遵循该策略。这样做是为了限制单条统计 SQL 在 Exchange 阶段的内存峰值，避免长字符串列与其他列合并后进一步放大聚合算子的状态。保持为 `0` 时，所有列走原先的合并批量收集路径。注意，`STRING` 在内部会表示为最大长度的 `VARCHAR`，因此启用该配置并设置正值阈值后，`STRING` 列也可能被单独拆分出来收集。
 - 引入版本: -
 
 ### `task_check_interval_second`

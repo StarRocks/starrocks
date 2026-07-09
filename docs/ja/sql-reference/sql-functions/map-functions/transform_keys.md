@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Lambda式を使用してマップ内のキーを変換し、各エントリの新しいキーを生成します。"
 ---
 
 # transform_keys

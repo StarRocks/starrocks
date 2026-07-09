@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BINARY/VARBINARY はバイナリデータを格納するデータ型。"
 ---
 
 # BINARY/VARBINARY

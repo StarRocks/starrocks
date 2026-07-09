@@ -19,9 +19,18 @@
 
 namespace starrocks {
 
+class RemoteSnapshotClient;
+
 class ReplicationTxnManager {
 public:
-    explicit ReplicationTxnManager() = default;
+    explicit ReplicationTxnManager(RemoteSnapshotClient* snapshot_client = nullptr)
+            : _snapshot_client(snapshot_client) {}
+
+    RemoteSnapshotClient* TEST_set_remote_snapshot_client(RemoteSnapshotClient* snapshot_client) {
+        auto* previous = _snapshot_client;
+        _snapshot_client = snapshot_client;
+        return previous;
+    }
 
     Status init(const std::vector<starrocks::DataDir*>& data_dirs);
 
@@ -89,6 +98,7 @@ private:
     StatusOr<TabletSharedPtr> get_tablet(TTabletId tablet_id) const;
 
 private:
+    RemoteSnapshotClient* _snapshot_client = nullptr;
     mutable std::shared_mutex _mutex;
     std::unordered_map<TTransactionId, std::unordered_map<TPartitionId, std::unordered_set<TTabletId>>>
             _transaction_map;

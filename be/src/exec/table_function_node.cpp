@@ -17,9 +17,9 @@
 #include "column/chunk.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/table_function_operator.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -60,7 +60,9 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (table_function_name == "unnest" && arg_types.size() > 1) {
         _table_function = get_table_function(table_function_name, {}, {}, table_fn.binary_type);
     } else {
-        _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+        bool is_arrow_input = table_fn.__isset.input_type && table_fn.input_type == "arrow";
+        _table_function =
+                get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type, is_arrow_input);
     }
 
     if (_table_function == nullptr) {

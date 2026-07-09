@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された整数値に対応するASCIIテーブルの文字値を返します。"
 ---
 
 # char

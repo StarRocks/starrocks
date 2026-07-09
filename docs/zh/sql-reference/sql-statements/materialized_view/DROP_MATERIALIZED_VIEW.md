@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "删除物化视图，可强制删除正在创建中的同步物化视图。"
 ---
 
 # DROP MATERIALIZED VIEW

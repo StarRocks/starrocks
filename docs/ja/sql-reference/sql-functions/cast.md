@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力を指定された型に変換します。"
 sidebar_position: 0.9
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ビットマップをテーブルの複数行に変換するテーブル関数です。"
 ---
 
 # unnest_bitmap

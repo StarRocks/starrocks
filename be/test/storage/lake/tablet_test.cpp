@@ -21,13 +21,13 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/tablet_basic_info.h"
 #include "test_util.h"
 
 namespace starrocks::lake {

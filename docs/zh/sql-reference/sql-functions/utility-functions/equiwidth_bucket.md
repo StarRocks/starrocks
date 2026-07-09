@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算等宽直方图的桶。"
 ---
 
 # equiwidth_bucket

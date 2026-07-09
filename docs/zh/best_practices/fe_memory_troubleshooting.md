@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Troubleshoot and resolve FE/Coordinator node memory saturation issues in StarRocks through prevention, recovery, and root cause analysis."
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 

@@ -198,7 +198,6 @@ public class AggregateCompactionTaskTest {
         aggregateRequest.computeNodes = Lists.newArrayList();
         aggregateRequest.requests.add(request);
         aggregateRequest.computeNodes.add(nodePB);
-        CompactResponse mockResponse = new CompactResponse();
 
         CompactionTask task = new AggregateCompactionTask(10043, lakeService, aggregateRequest);
         task.sendRequest();

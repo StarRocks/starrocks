@@ -104,6 +104,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
+import static com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -406,6 +407,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
 
+    // The default SQL SECURITY characteristic (NONE | INVOKER) applied when CREATE VIEW omits the SECURITY clause.
+    public static final String DEFAULT_VIEW_SQL_SECURITY = "default_view_sql_security";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -562,6 +566,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKEW_JOIN_MAX_OTHER_SIDE_OVERLAP_ROW_COUNT = "skew_join_max_other_side_overlap_row_count";
     public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
     public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
+    public static final String ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS = "enable_skew_detect_with_inaccurate_stats";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -1014,6 +1019,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
 
+    public static final String HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM = "hdfs_backend_selector_cache_replica_num";
+
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
@@ -1040,6 +1047,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
+
+    public static final String ALLOW_LAKE_WITHOUT_PARTITION_FILTER = "allow_lake_without_partition_filter";
 
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
 
@@ -1082,6 +1091,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
 
     public static final String K_FACTOR = "k_factor";
+
+    public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
 
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
@@ -1138,8 +1149,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
+    // TopN runtime-filter back-pressure tuning knobs for the lake/connector self-enabled path.
+    public static final String TOPN_FILTER_BACK_PRESSURE_IO_TASKS = "topn_filter_back_pressure_io_tasks";
+    public static final String ENABLE_TOPN_FILTER_BACK_PRESSURE =
+            "enable_topn_filter_back_pressure";
+    public static final String TOPN_BACK_PRESSURE_MAX_ROUNDS = "topn_back_pressure_max_rounds";
+    public static final String TOPN_BACK_PRESSURE_NUM_ROWS = "topn_back_pressure_num_rows";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_MS = "topn_back_pressure_throttle_time_ms";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS =
+            "topn_back_pressure_throttle_time_upper_bound_ms";
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
+    public static final String NGRAM_SEARCH_SUPPORT_UTF8 = "ngram_search_support_utf8";
 
     public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
     public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
@@ -1289,6 +1310,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
     private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+
+    @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
+    private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -2205,6 +2229,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorForceRebalance = false;
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM)
+    private int hdfsBackendSelectorCacheReplicaNum = 1;
+
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
 
@@ -2258,6 +2285,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
 
+    // Read-ahead IO-task cap while a TopN runtime filter is still pending; <=0 disables the clamp.
+    @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_IO_TASKS)
+    private int topnFilterBackPressureIoTasks = 1;
+    // Whether scans (both shared-nothing olap and shared-data lake/connector) self-enable TopN
+    // back-pressure even when the FE topn_filter_back_pressure_mode flag is 0.
+    @VarAttr(name = ENABLE_TOPN_FILTER_BACK_PRESSURE)
+    private boolean enableTopnFilterBackPressure = true;
+    // Throttle window parameters for the lake/connector self-enabled back-pressure path (tuned defaults).
+    @VarAttr(name = TOPN_BACK_PRESSURE_MAX_ROUNDS)
+    private int topnBackPressureMaxRounds = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_NUM_ROWS)
+    private long topnBackPressureNumRows = 1024;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_MS)
+    private long topnBackPressureThrottleTimeMs = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS)
+    private long topnBackPressureThrottleTimeUpperBoundMs = 100;
+
     // Determines whether the upper/lower function supports utf8,
     // introduced by https://github.com/StarRocks/starrocks/pull/56192
     // Before this, the upper/lower function only supports ascii characters, and SR has made special optimizations in performance.
@@ -2268,6 +2312,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    // Enable UTF-8 support for ngram_search and ngram_search_case_insensitive functions.
+    // When enabled, n-grams are computed based on UTF-8 characters instead of bytes.
+    // This allows proper similarity computation for non-ASCII text (e.g., Cyrillic, Chinese).
+    // Default is false for backward compatibility.
+    @VarAttr(name = NGRAM_SEARCH_SUPPORT_UTF8)
+    private boolean ngramSearchSupportUTF8 = false;
 
     // this sv controls whether to create distinct agg below semi join
     // -1 means disable this optimization
@@ -3094,8 +3145,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
 
-    @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
-    private boolean allowHiveWithoutPartitionFilter = true;
+    @VarAttr(name = ALLOW_LAKE_WITHOUT_PARTITION_FILTER, alias = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
+    private boolean allowLakeWithoutPartitionFilter = true;
 
     // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
@@ -3165,6 +3216,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = K_FACTOR)
     private double kFactor = 1;
+
+    // When on, a quantized vector index (IVFPQ, or HNSW with a non-flat quantizer) refines its ANN
+    // result by recomputing the exact distance on the full-precision vectors. Off = trust the (lossy)
+    // index distance. No effect on a non-quantized index, whose distance is already exact.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
+    private boolean enableVectorIndexRefine = false;
+
+    public boolean isEnableVectorIndexRefine() {
+        return enableVectorIndexRefine;
+    }
+
+    public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
+        this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
 
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
@@ -3260,6 +3325,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
     @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
     private long skewJoinMcvMinInputRows = 10000000;
+
+    // When enabled, skew detection proceeds even when table row count is marked as potentially inaccurate (isTableRowCountMayInaccurate).
+    // This allows rules consuming skew info (joins, aggregations, window functions) to fire based on
+    // histogram/MCV data regardless of row count reliability.
+    @VarAttr(name = ENABLE_SKEW_DETECT_WITH_INACCURATE_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean enableSkewDetectWithInaccurateStats = false;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -3785,6 +3856,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 .or(BlacklistBackupRoutingPolicy.getDefault());
     }
 
+    public void setDefaultViewSqlSecurity(String defaultViewSqlSecurity) {
+        DefaultViewSqlSecurity result =
+                Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(DefaultViewSqlSecurity.values());
+            throw new IllegalArgumentException("Legal values of " + DEFAULT_VIEW_SQL_SECURITY + " are " + legalValues);
+        }
+        this.defaultViewSqlSecurity = StringUtils.upperCase(defaultViewSqlSecurity);
+    }
+
+    public DefaultViewSqlSecurity getDefaultViewSqlSecurity() {
+        return Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity))
+                .or(DefaultViewSqlSecurity.getDefault());
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
@@ -4073,6 +4161,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
+    public int getHdfsBackendSelectorCacheReplicaNum() {
+        return Math.max(1, hdfsBackendSelectorCacheReplicaNum);
+    }
+
+    public void setHdfsBackendSelectorCacheReplicaNum(int hdfsBackendSelectorCacheReplicaNum) {
+        this.hdfsBackendSelectorCacheReplicaNum = hdfsBackendSelectorCacheReplicaNum;
     }
 
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
@@ -4921,6 +5017,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
     }
 
+    // Disable both skew-join rewrites at once. setEnableOptimizerSkewJoinOptimizeV1/V2 each turn the
+    // other on, so callers that need both off (e.g. MERGE INTO, whose per-driver duplicate check must
+    // not have its join key salted by V1 or broadcast by V2) must use this.
+    public void disableSkewJoinOptimize() {
+        this.enableOptimizerSkewJoinByBroadCastSkewValues = false;
+        this.enableOptimizerSkewJoinByQueryRewrite = false;
+    }
+
     public boolean isEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
     }
@@ -5680,12 +5784,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
-    public boolean isAllowHiveWithoutPartitionFilter() {
-        return allowHiveWithoutPartitionFilter;
+    public boolean isAllowLakeWithoutPartitionFilter() {
+        return allowLakeWithoutPartitionFilter;
     }
 
-    public void setAllowHiveWithoutPartitionFilter(boolean allowHiveWithoutPartitionFilter) {
-        this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
+    public void setAllowLakeWithoutPartitionFilter(boolean allowLakeWithoutPartitionFilter) {
+        this.allowLakeWithoutPartitionFilter = allowLakeWithoutPartitionFilter;
     }
 
     public int getScanOlapPartitionNumLimit() {
@@ -5833,6 +5937,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStatsToOptimizeSkewJoin(boolean enableStatsToOptimizeSkewJoin) {
         this.enableStatsToOptimizeSkewJoin = enableStatsToOptimizeSkewJoin;
+    }
+
+    public boolean isEnableSkewDetectWithInaccurateStats() {
+        return enableSkewDetectWithInaccurateStats;
+    }
+
+    public void setEnableSkewDetectWithInaccurateStats(boolean enableSkewDetectWithInaccurateStats) {
+        this.enableSkewDetectWithInaccurateStats = enableSkewDetectWithInaccurateStats;
     }
 
     public int getSkewJoinOptimizeUseMCVCount() {
@@ -6097,6 +6209,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBackPressureThrottleTimeUpperBound(long value) {
         this.backPressureThrottleTimeUpperBound = value;
+    }
+
+    public int getTopnFilterBackPressureIoTasks() {
+        return this.topnFilterBackPressureIoTasks;
+    }
+
+    public boolean isEnableTopnFilterBackPressure() {
+        return this.enableTopnFilterBackPressure;
+    }
+
+    public int getTopnBackPressureMaxRounds() {
+        return this.topnBackPressureMaxRounds;
+    }
+
+    public long getTopnBackPressureNumRows() {
+        return this.topnBackPressureNumRows;
+    }
+
+    public long getTopnBackPressureThrottleTimeMs() {
+        return this.topnBackPressureThrottleTimeMs;
+    }
+
+    public long getTopnBackPressureThrottleTimeUpperBoundMs() {
+        return this.topnBackPressureThrottleTimeUpperBoundMs;
     }
 
     public boolean isEnableDataCacheSharing() {
@@ -6439,6 +6575,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_join_runtime_filter_pushdown(enableJoinRuntimeFilterPushDown);
         tResult.setEnable_join_runtime_bitset_filter(enableJoinRuntimeBitsetFilter);
         tResult.setLower_upper_support_utf8(lowerUpperSupportUTF8);
+        tResult.setNgram_search_support_utf8(ngramSearchSupportUTF8);
         tResult.setEnable_global_late_materialization(enableGlobalLateMaterialization);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
@@ -6474,6 +6611,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setTopn_filter_back_pressure_io_tasks(topnFilterBackPressureIoTasks);
+        tResult.setEnable_topn_filter_back_pressure(enableTopnFilterBackPressure);
+        tResult.setTopn_back_pressure_max_rounds(topnBackPressureMaxRounds);
+        tResult.setTopn_back_pressure_num_rows(topnBackPressureNumRows);
+        tResult.setTopn_back_pressure_throttle_time_ms(topnBackPressureThrottleTimeMs);
+        tResult.setTopn_back_pressure_throttle_time_upper_bound_ms(topnBackPressureThrottleTimeUpperBoundMs);
         tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
         tResult.setUse_page_cache(usePageCache);
 
@@ -6558,7 +6701,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                     continue;
                 }
 
-                if (!root.has(attr.name())) {
+                String key = attr.name();
+                if (!root.has(key) && !attr.alias().isEmpty() && root.has(attr.alias())) {
+                    key = attr.alias();
+                }
+                if (!root.has(key)) {
                     continue;
                 }
                 // Do not restore the session_only variable
@@ -6568,22 +6715,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
                 switch (field.getType().getSimpleName()) {
                     case "boolean":
-                        field.set(this, root.getBoolean(attr.name()));
+                        field.set(this, root.getBoolean(key));
                         break;
                     case "int":
-                        field.set(this, root.getInt(attr.name()));
+                        field.set(this, root.getInt(key));
                         break;
                     case "long":
-                        field.set(this, root.getLong(attr.name()));
+                        field.set(this, root.getLong(key));
                         break;
                     case "float":
-                        field.set(this, root.getFloat(attr.name()));
+                        field.set(this, root.getFloat(key));
                         break;
                     case "double":
-                        field.set(this, root.getDouble(attr.name()));
+                        field.set(this, root.getDouble(key));
                         break;
                     case "String":
-                        field.set(this, root.getString(attr.name()));
+                        field.set(this, root.getString(key));
                         break;
                     default:
                         // Unsupported type variable.

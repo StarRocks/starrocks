@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のインデックス種類概要: 組み込みインデックス (Prefix、Ordinal、ZoneMap) と user-created インデックス (Bitmap、Bloom Filter)。"
 sidebar_position: 5
 ---
 

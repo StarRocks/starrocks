@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BITMAP 类型用于加速 count distinct 去重计数，相比 HLL 更精确但消耗更多资源。"
 ---
 
 # BITMAP

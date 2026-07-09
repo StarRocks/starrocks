@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "table_privilegesはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # table_privileges

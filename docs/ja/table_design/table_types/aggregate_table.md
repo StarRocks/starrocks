@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks の集計テーブルは集計キーと集計関数で事前集計し、集計クエリを加速させます。"
 sidebar_position: 40
 ---
 

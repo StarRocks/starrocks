@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查询当前会话所在的 Catalog。"
 ---
 
 # catalog

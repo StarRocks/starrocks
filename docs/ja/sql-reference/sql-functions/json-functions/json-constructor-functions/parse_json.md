@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "文字列をJSON値に変換します。"
 ---
 
 # parse_json

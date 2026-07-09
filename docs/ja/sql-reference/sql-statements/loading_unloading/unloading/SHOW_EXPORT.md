@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定した条件を満たすエクスポートジョブの実行情報をクエリします。"
 ---
 
 # SHOW EXPORT

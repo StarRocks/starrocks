@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -118,14 +119,14 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         // cannot include T_load. Regression guard: source-level structural
         // assertion that the two await helpers exist and are called.
         String source = readSource(
-                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/BrokerLoadPreSplitHook.java");
+                "fe-core/src/main/java/com/starrocks/alter/reshard/presplit/PreSplitFlow.java");
         String codeOnly = stripLineComments(source);
         Assertions.assertTrue(containsCall(codeOnly, "awaitFinishedAllowingFallback"),
-                "BrokerLoadPreSplitHook MUST call awaitFinishedAllowingFallback on the single-partition path");
+                "PreSplitFlow MUST call awaitFinishedAllowingFallback on the single-partition path");
         Assertions.assertTrue(containsCall(codeOnly, "awaitCombinedJobAllowingFallback"),
-                "BrokerLoadPreSplitHook MUST call awaitCombinedJobAllowingFallback on the multi-partition path");
+                "PreSplitFlow MUST call awaitCombinedJobAllowingFallback on the multi-partition path");
         Assertions.assertTrue(source.contains("submitForPartitionsCombined"),
-                "BrokerLoadPreSplitHook multi-partition flow MUST call submitForPartitionsCombined");
+                "PreSplitFlow multi-partition flow MUST call submitForPartitionsCombined");
     }
 
     @Test
@@ -149,13 +150,13 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
         SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(sampledRows))) {
-
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
             // Non-empty grouped list -> submitForPartitionsCombined is invoked.
             grouper.when(() -> PartitionSampleGrouper.group(
@@ -163,7 +164,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                             anyLong(), anyLong()))
                     .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
             coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                            any(), any(), anyList(), anyInt(), any()))
+                            any(), any(), anyList(), anyInt(), any(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -175,8 +176,53 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
             // Routing proof: partitioned tables MUST take the multi-partition path...
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), times(1));
+                    any(), any(), anyList(), anyInt(), any(), any()), times(1));
             // ...and MUST NOT fall through to the single-partition entry.
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+        }
+    }
+
+    @Test
+    public void manuallyPartitionedBrokerLoadSkipsPreSplit() {
+        // A partitioned Broker Load target whose supportedAutomaticPartition() is false (a
+        // manual list/range partition table) must not reach the multi-partition flow: the
+        // automatic-partition gate in PreSplitFlow.dispatch reaches through the Broker Load
+        // entry too. Mirror partitionedBrokerLoadTakesMultiPartitionBranch's scaffolding so
+        // the flow would reach submitForPartitionsCombined if the gate were removed — that is
+        // the bite signal. Override only this instance's supportedAutomaticPartition() to
+        // false; the shared mockPartitionedRangeTable() default (true) stays untouched.
+        OlapTable table = mockPartitionedRangeTable();
+        when(table.supportedAutomaticPartition()).thenReturn(false);
+        List<Column> sortKey = List.of(bigintColumn("sort_col"));
+        List<Column> partitionColumns = List.of(bigintColumn("p_col"));
+        when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(partitionColumns);
+
+        SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(sampledRows))) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong()))
+                    .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
+
+            BrokerLoadPreSplitHook.maybeRunPreSplit(
+                    mockConnectContextWithSessionPreSplit(true),
+                    mock(Database.class), table, mock(BrokerDesc.class),
+                    List.of(mock(BrokerFileGroup.class)),
+                    List.of(List.<TBrokerFileStatus>of()),
+                    mock(ComputeResource.class), () -> false);
+
+            // The automatic-partition gate must skip before either submit path.
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
@@ -200,8 +246,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
             AtomicReference<SampleRequest> capturedRequest = new AtomicReference<>();
 
-            try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
+            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                    MockedStatic<TabletPreSplitCoordinator> coordinator =
+                            Mockito.mockStatic(TabletPreSplitCoordinator.class);
                     MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                     MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                     MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -209,14 +256,13 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                                 capturedRequest.set(invocation.getArgument(0));
                                 return sampledRows;
                             }))) {
-
                 metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(sortKey);
                 grouper.when(() -> PartitionSampleGrouper.group(
                                 any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
                                 anyLong(), anyLong()))
                         .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
                 coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                                any(), any(), anyList(), anyInt(), any()))
+                                any(), any(), anyList(), anyInt(), any(), any()))
                         .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -245,8 +291,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(bigintColumn("p_col")));
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -265,7 +312,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             grouper.verify(() -> PartitionSampleGrouper.group(
                     any(), any(), any(), anyLong(), anyLong()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
         }
     }
 
@@ -278,8 +325,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(bigintColumn("p_col")));
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -297,7 +345,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             grouper.verify(() -> PartitionSampleGrouper.group(
                     any(), any(), any(), anyLong(), anyLong()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
         }
     }
 
@@ -311,8 +359,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
         SampleSet sampledRows = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        try (MockedStatic<TabletPreSplitCoordinator> coordinator =
-                     Mockito.mockStatic(TabletPreSplitCoordinator.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
                 MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
@@ -334,7 +383,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             grouper.verify(() -> PartitionSampleGrouper.group(
                     any(), any(), any(), anyLong(), anyLong()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
         }
     }
 
@@ -384,14 +433,14 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(ComputeResource.class), () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
     }
 
     // The await-helper polling semantics (finished, aborted, disappeared, timeout)
-    // are covered by InsertFromFilesPreSplitHookPartitionedTest's
+    // are covered by InsertPreSplitHookFilesPartitionedTest's
     // awaitCombinedJobAllowingFallback* tests now that the helper lives on
     // TabletPreSplitCoordinator. Broker-side coverage is the source-level
     // structural assertion above ("MUST call awaitCombinedJobAllowingFallback").
@@ -499,6 +548,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
         when(table.getName()).thenReturn("partitioned_t");
+        when(table.supportedAutomaticPartition()).thenReturn(true);
         PartitionInfo partitionInfo = mock(PartitionInfo.class);
         when(partitionInfo.isPartitioned()).thenReturn(true);
         when(table.getPartitionInfo()).thenReturn(partitionInfo);

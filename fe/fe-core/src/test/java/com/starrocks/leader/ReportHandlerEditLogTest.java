@@ -15,8 +15,11 @@
 package com.starrocks.leader;
 
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Table;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -168,8 +171,8 @@ public class ReportHandlerEditLogTest {
         Assertions.assertNotNull(tablet.getReplicaByBackendId(BACKEND_ID_2));
 
         // 2. Construct tabletDeleteFromMeta - tablet should be deleted from meta
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
-        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
         
         // 3. Call deleteFromMeta directly
         // Since disks are empty, diskInfo will be null, so version check won't execute
@@ -240,6 +243,51 @@ public class ReportHandlerEditLogTest {
     }
 
     @Test
+    public void testDeleteFromMetaPeriodicRelock() throws Exception {
+        // Forcing maxDbWLockHoldingTimeMs negative makes the periodic release/re-acquire of the
+        // table write lock trigger on the first iteration, exercising the relock path. The delete
+        // must still succeed after the lock is yielded and re-taken.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = createOlapTable(TABLE_ID, "test_table");
+        db.registerTableUnlocked(table);
+
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PHYSICAL_PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(TABLET_ID, tabletMeta);
+
+        Partition partition = table.getPartition(PARTITION_ID);
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        MaterializedIndex index = physicalPartition.getIndex(INDEX_ID);
+        LocalTablet tablet = (LocalTablet) index.getTablet(TABLET_ID);
+
+        Replica replica1 = new Replica(REPLICA_ID, BACKEND_ID, 0, Replica.ReplicaState.NORMAL);
+        replica1.updateVersionInfo(2, 2, 2);
+        replica1.setDeferReplicaDeleteToNextReport(false); // Allow immediate deletion
+        tablet.addReplica(replica1);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID, replica1);
+
+        Replica replica2 = new Replica(REPLICA_ID_2, BACKEND_ID_2, 0, Replica.ReplicaState.NORMAL);
+        replica2.updateVersionInfo(2, 2, 2);
+        tablet.addReplica(replica2);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(TABLET_ID, replica2);
+
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
+
+        long savedThreshold = ReportHandler.maxDbWLockHoldingTimeMs;
+        ReportHandler.maxDbWLockHoldingTimeMs = -1L;
+        try {
+            ReportHandler.deleteFromMeta(tabletDeleteFromMeta, BACKEND_ID, 1L);
+        } finally {
+            ReportHandler.maxDbWLockHoldingTimeMs = savedThreshold;
+        }
+
+        // The relock must not disrupt the delete: the replica on BACKEND_ID is removed.
+        Assertions.assertEquals(1, tablet.getImmutableReplicas().size());
+        Assertions.assertNull(tablet.getReplicaByBackendId(BACKEND_ID));
+        Assertions.assertNotNull(tablet.getReplicaByBackendId(BACKEND_ID_2));
+    }
+
+    @Test
     public void testDeleteFromMetaSingleReplicaSetBad() throws Exception {
         // Test deleteFromMeta with single replica - should setBad instead of delete
         // 1. Create table with tablet and single replica
@@ -266,8 +314,8 @@ public class ReportHandlerEditLogTest {
         Assertions.assertFalse(tablet.getReplicaByBackendId(BACKEND_ID).isBad());
 
         // 2. Construct tabletDeleteFromMeta - tablet should be deleted from meta
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
-        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
         
         // 3. Call deleteFromMeta directly
         // Since disks are empty, diskInfo will be null, so version check won't execute
@@ -483,8 +531,8 @@ public class ReportHandlerEditLogTest {
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         // 3. Construct tabletDeleteFromMeta - tablet should be deleted from meta
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
-        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
         
         // 4. Call deleteFromMeta and expect exception
         long backendReportVersion = 1L;
@@ -543,8 +591,8 @@ public class ReportHandlerEditLogTest {
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         // 3. Construct tabletDeleteFromMeta - tablet should be deleted from meta
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
-        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
         
         // 4. Call deleteFromMeta and expect exception
         long backendReportVersion = 1L;
@@ -704,8 +752,8 @@ public class ReportHandlerEditLogTest {
                         .getBackend(BACKEND_ID).getDisks().get("/data1").getPathHash(),
                 "test setup: ONLINE disk pathHash must match the replica");
 
-        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
-        tabletDeleteFromMeta.put(DB_ID, TABLET_ID);
+        Table<Long, Long, List<Long>> tabletDeleteFromMeta = HashBasedTable.create();
+        tabletDeleteFromMeta.put(DB_ID, TABLE_ID, Lists.newArrayList(TABLET_ID));
 
         long staleReportVersion = 50L;
         ReportHandler.deleteFromMeta(tabletDeleteFromMeta, BACKEND_ID, staleReportVersion);

@@ -19,9 +19,9 @@
 
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "storage/column_predicate.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

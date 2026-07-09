@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字符串转换为JSON值。"
 ---
 
 # parse_json

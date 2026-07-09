@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks データロード実行前のシステム制限と設定：メモリ制限、タスク並行数、タイムアウト設定、パフォーマンスチューニング。"
 toc_max_heading_level: 4
 ---
 

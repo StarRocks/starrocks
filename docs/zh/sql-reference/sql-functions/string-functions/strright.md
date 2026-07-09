@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从字符串右侧返回指定长度的字符，是right函数的别名。"
 ---
 
 # strright

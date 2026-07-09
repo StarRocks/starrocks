@@ -662,10 +662,25 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     if (split_count < 2) {
         return Status::InvalidArgument("Invalid split count, it is less than 2");
     }
-    if (colocate_column_count < 0 || colocate_column_count > tablet_metadata->schema().sort_key_idxes_size()) {
-        return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}, sort key arity is {}",
-                                                   colocate_column_count,
-                                                   tablet_metadata->schema().sort_key_idxes_size()));
+    if (colocate_column_count < 0) {
+        return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}", colocate_column_count));
+    }
+    // Only a colocate-aware split needs the sort-key arity. Resolve it from the materialized
+    // TabletSchema (which applies the "empty sort_key_idxes => sort key is the key columns"
+    // convention that the FE mirrors in MetaUtils.getRangeDistributionColumns) rather than the raw
+    // TabletSchemaPB: a range-distributed table created without an explicit ORDER BY (e.g. a
+    // PRIMARY KEY table) leaves sort_key_idxes empty in the PB, so reading the raw arity (0) would
+    // reject every colocate split and silently fall back to an identical tablet. A non-colocate
+    // split (colocate_column_count == 0) must not pay this materialization, and must not require a
+    // schema id (GlobalTabletSchemaMap::emplace DCHECKs a valid id, which synthetic test metadata
+    // and any non-registered schema may lack).
+    if (colocate_column_count > 0) {
+        auto tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_metadata->schema()).first;
+        const int32_t sort_key_arity = static_cast<int32_t>(tablet_schema->sort_key_idxes().size());
+        if (colocate_column_count > sort_key_arity) {
+            return Status::InvalidArgument(fmt::format("Invalid colocate_column_count {}, sort key arity is {}",
+                                                       colocate_column_count, sort_key_arity));
+        }
     }
 
     std::vector<SegmentSplitInfo> segments;
@@ -1107,13 +1122,13 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
 //
 // Propagates per-segment split ownership of |rowset| (computed in |ownership| for
 // the new tablet at |new_tablet_index|) onto |new_tablet_metadata|'s non-segment
-// files (delvec pages, dcg entries), so they follow the per-segment shared decision
-// instead of all staying shared:
-//   - a segment pruned away from this new tablet (keep == false): erase its dcg
-//     entry (sstable projection never consults dcg), and erase its delvec page
-//     unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
-//   - an exclusive kept segment (shared == false): mark its dcg files private, so
-//     vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
+// files (delvec pages, dcg entries, idg entries), so they follow the per-segment
+// shared decision instead of all staying shared:
+//   - a segment pruned away from this new tablet (keep == false): erase its dcg and
+//     idg entries (sstable projection never consults dcg/idg), and erase its delvec
+//     page unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
+//   - an exclusive kept segment (shared == false): mark its dcg and idg files private,
+//     so vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
 //     shared: one file holds pages for many segments, so it is not reclaimed per-rssid.)
 //
 // Must run BEFORE apply_segment_ownership_to_new_tablet_rowset, which compacts the
@@ -1129,12 +1144,16 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
                             : nullptr;
     auto* dcgs =
             new_tablet_metadata->has_dcg_meta() ? new_tablet_metadata->mutable_dcg_meta()->mutable_dcgs() : nullptr;
+    auto* idgs =
+            new_tablet_metadata->has_idg_meta() ? new_tablet_metadata->mutable_idg_meta()->mutable_idgs() : nullptr;
     bool has_pruned_protected_rssid = false;
     for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
         const uint32_t rssid = get_rssid(rowset, segment_index);
         const auto& segment_ownership = ownership.segments[segment_index];
         if (!segment_ownership.keep[new_tablet_index]) {
             if (dcgs != nullptr) dcgs->erase(rssid);
+            // IDG mirrors DCG: sstable projection never consults idg, so no protected_rssids gate.
+            if (idgs != nullptr) idgs->erase(rssid);
             if (protected_rssids.contains(rssid)) {
                 // Leave the delvec page as-is (all-shared) rather than erasing it: MERGE's
                 // modern sstable projection re-reads this rssid's delvec, so erasing risks
@@ -1154,6 +1173,12 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
                 auto dcg_it = dcgs->find(rssid);
                 if (dcg_it != dcgs->end()) {
                     tablet_reshard_helper::set_dcg_shared(&dcg_it->second, /*shared=*/false);
+                }
+            }
+            if (idgs != nullptr) {
+                auto idg_it = idgs->find(rssid);
+                if (idg_it != idgs->end()) {
+                    tablet_reshard_helper::set_idg_shared(&idg_it->second, /*shared=*/false);
                 }
             }
         }

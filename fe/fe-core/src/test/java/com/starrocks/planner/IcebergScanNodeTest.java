@@ -10,6 +10,7 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -1747,5 +1748,66 @@ public class IcebergScanNodeTest {
         AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
         Assertions.assertEquals("AKIA_SINK_WRAPPED", credential.getAccessKey());
         Assertions.assertEquals("secret_sink_wrapped", credential.getSecretKey());
+    }
+
+    @Test
+    public void testSetupScanRangeLocationsPassesColumnNames(@Mocked GlobalStateMgr globalStateMgr,
+                                                               @Mocked MetadataMgr metadataMgr,
+                                                               @Mocked IcebergTable table,
+                                                               @Mocked Table nativeTable) throws Exception {
+        final GetRemoteFilesParams[] capturedParams = new GetRemoteFilesParams[1];
+        Schema nativeSchema = new Schema(
+                Types.NestedField.optional(1, "event_ts", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "src_ip4", Types.IntegerType.get()));
+
+        new Expectations() {{
+            table.getCatalogName(); result = "iceberg_catalog"; minTimes = 0;
+            table.getCatalogDBName(); result = "test_db"; minTimes = 0;
+            table.getCatalogTableName(); result = "test_tbl"; minTimes = 0;
+            table.getNativeTable(); result = nativeTable; minTimes = 0;
+            nativeTable.schema(); result = nativeSchema; minTimes = 0;
+            globalStateMgr.getMetadataMgr(); result = metadataMgr; minTimes = 0;
+            metadataMgr.getRemoteFiles((com.starrocks.catalog.Table) any, (GetRemoteFilesParams) any);
+            result = new mockit.Delegate() {
+                List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table tbl,
+                                                     GetRemoteFilesParams params) {
+                    capturedParams[0] = params;
+                    return Collections.emptyList();
+                }
+            };
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "event_ts", IntegerType.INT, true);
+        slot1.setColumn(new Column("event_ts", IntegerType.INT));
+        slot1.setIsMaterialized(true);
+        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "src_ip4", IntegerType.INT, true);
+        slot2.setColumn(new Column("src_ip4", IntegerType.INT));
+        slot2.setIsMaterialized(true);
+        SlotDescriptor hiddenSlot = new SlotDescriptor(new SlotId(3), IcebergTable.FILE_PATH, IntegerType.INT, true);
+        hiddenSlot.setColumn(new Column(IcebergTable.FILE_PATH, IntegerType.INT));
+        hiddenSlot.setIsMaterialized(true);
+        desc.addSlot(slot1);
+        desc.addSlot(slot2);
+        desc.addSlot(hiddenSlot);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+
+        scanNode.setupScanRangeLocations(false);
+
+        Assertions.assertNotNull(capturedParams[0], "params should have been captured");
+        List<String> fieldNames = capturedParams[0].getFieldNames();
+        Assertions.assertNotNull(fieldNames, "fieldNames should not be null");
+        Assertions.assertEquals(2, fieldNames.size());
+        Assertions.assertEquals("event_ts", fieldNames.get(0));
+        Assertions.assertEquals("src_ip4", fieldNames.get(1));
     }
 }

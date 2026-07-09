@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXPLAIN displays the logical or physical execution plans for a query statement."
 ---
 
 # EXPLAIN
@@ -53,6 +54,7 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 | preaggregation | 预聚合的状态。                          |
 | predicates     | 查询中使用的谓词。                        |
 | column statistics | 列统计信息，依次为MIN,MAX, NULL个数，平均大小，基数 |
+
 ## 示例
 
 ### EXPLAIN

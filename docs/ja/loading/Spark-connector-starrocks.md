@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Apache Spark（DataFrames または SQL）から Stream Load 経由で StarRocks テーブルにデータをロードする StarRocks Spark コネクタの使用方法。"
 ---
 
 # Spark コネクタを使用してデータをロードする（推奨）

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DataGrip 支持使用原生 StarRocks JDBC 驱动或 MySQL 驱动查询 StarRocks 中的数据。"
 ---
 
 # DataGrip

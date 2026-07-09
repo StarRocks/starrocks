@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "load_tracking_logs 提供导入作业的错误日志。"
 ---
 
 # load_tracking_logs

@@ -49,21 +49,17 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven
 
-      - name: Install Apache Thrift 0.13
+      - name: Install Apache Thrift
         run: |
-          mkdir -p ./.setup-thrift/oras
-          mkdir -p ./.setup-thrift/thrift
-          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
-          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
-          ln -sf $(pwd)/oras /usr/local/bin/oras
-          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
-          tar zxf ./thrift.v0.13.0.tar.gz -C .
-          ln -sf $(pwd)/thrift /usr/local/bin/thrift
+          curl -fsSL --retry 3 --retry-delay 2 https://cdn-thirdparty.starrocks.com/thrift-binaries/latest/thrift.xz -o ./thrift.xz
+          xz -d ./thrift.xz
+          chmod +x ./thrift
+          mv -f ./thrift /usr/local/bin/thrift
 
       - name: Analyze FE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           thrift --version
           whereis thrift
@@ -75,5 +71,5 @@ jobs:
           export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
           export MAVEN_OPTS="-Xms3072m -Xmx12288m"
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
-            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
-            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.organization=starrocks \
+            -Dsonar.branch.name=${{ github.ref_name }}

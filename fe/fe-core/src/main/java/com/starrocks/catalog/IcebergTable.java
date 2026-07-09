@@ -86,6 +86,8 @@ import org.apache.thrift.TSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -405,6 +407,23 @@ public class IcebergTable extends Table {
         //other type such as decimal/date/timestamp are merely used as bucket partition column,
         // and the storage is very different from StarRocks, it's cumbersome to calc hash value
         return columnType.isInt() || columnType.isBigint() || columnType.isBinaryType() || columnType.isVarchar();
+    }
+
+    @Override
+    public Map<String, String> getStatsCollectMetadata() {
+        org.apache.iceberg.Snapshot snapshot = getNativeTable().currentSnapshot();
+        if (snapshot == null) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> summary = snapshot.summary();
+        if (summary == null) {
+            summary = Collections.emptyMap();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("snapshot_id", String.valueOf(snapshot.snapshotId()));
+        result.put("total_files", summary.getOrDefault("total-data-files", "0"));
+        result.put("total_rows", summary.getOrDefault("total-records", "0"));
+        return result;
     }
 
     public org.apache.iceberg.Table getNativeTable() {

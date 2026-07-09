@@ -17,15 +17,37 @@
 #include <memory>
 
 #include "base/failpoint/fail_point.h"
+#include "common/logging.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/udf/java/java_function_fwd.h"
+#include "types/agg_state_desc.h"
 #include "types/logical_type.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 
 DEFINE_FAIL_POINT(not_exist_agg_function);
+
+namespace {
+
+AggregateFunctionPtr resolve_non_builtin_aggregate_function(TFunctionBinaryType::type binary_type,
+                                                            bool is_window_function, bool is_input_nullable,
+                                                            bool is_arrow_input) {
+    if (binary_type != TFunctionBinaryType::SRJAR) {
+        return nullptr;
+    }
+    if (is_window_function) {
+        return getJavaWindowFunction();
+    }
+    if (is_arrow_input) {
+        // Vectorized ("input"="arrow") Java UDAF.
+        return getArrowJavaUDAFFunction();
+    }
+    return getJavaUDAFFunction(is_input_nullable);
+}
+
+} // namespace
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
@@ -122,7 +144,7 @@ AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
 
 static AggregateFunctionPtr get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                          bool is_window_function, bool is_null, TFunctionBinaryType::type binary_type,
-                                         int func_version) {
+                                         int func_version, bool is_arrow_input = false) {
     std::string func_name = name;
     if (func_version > 1) {
         if (name == "multi_distinct_sum") {
@@ -164,10 +186,8 @@ static AggregateFunctionPtr get_function(const std::string& name, LogicalType ar
             return func;
         }
         return AggregateFuncResolver::instance()->get_general_info(func_name, is_window_function, is_null);
-    } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaUDAFFunction(is_null);
     }
-    return nullptr;
+    return resolve_non_builtin_aggregate_function(binary_type, is_window_function, is_null, is_arrow_input);
 }
 
 AggregateFunctionPtr get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
@@ -178,17 +198,13 @@ AggregateFunctionPtr get_aggregate_function(const std::string& name, LogicalType
 
 AggregateFunctionPtr get_window_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                          bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
-    if (binary_type == TFunctionBinaryType::BUILTIN) {
-        return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);
-    } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaWindowFunction();
-    }
-    return nullptr;
+    return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);
 }
 
 AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
                                             const std::vector<TypeDescriptor>& arg_types, bool is_result_nullable,
-                                            TFunctionBinaryType::type binary_type, int func_version) {
+                                            TFunctionBinaryType::type binary_type, int func_version,
+                                            bool is_arrow_input) {
     // get function
     if (agg_func_name == "count") {
         return get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_result_nullable);
@@ -235,9 +251,24 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
             arg_type = arg_type.children[0];
         }
 
+        if (is_arrow_input) {
+            // Vectorized ("input"="arrow") Java UDAF: route to the arrow function impl.
+            return get_function(agg_func_name, arg_type.type, ret_type.type, false, is_result_nullable, binary_type,
+                                func_version, /*is_arrow_input=*/true);
+        }
         return get_aggregate_function(agg_func_name, arg_type.type, ret_type.type, is_result_nullable, binary_type,
                                       func_version);
     }
+}
+
+const AggregateFunction* get_aggregate_function(const AggStateDesc& agg_state_desc) {
+    auto* agg_function = get_aggregate_function(agg_state_desc.get_func_name(), agg_state_desc.get_return_type(),
+                                                agg_state_desc.get_arg_types(), agg_state_desc.is_result_nullable(),
+                                                TFunctionBinaryType::BUILTIN, agg_state_desc.get_func_version());
+    if (agg_function == nullptr) {
+        LOG(WARNING) << "Failed to get aggregate function for " << agg_state_desc.debug_string();
+    }
+    return agg_function;
 }
 
 } // namespace starrocks

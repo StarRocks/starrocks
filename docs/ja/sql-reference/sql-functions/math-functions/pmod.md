@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "dividend を divisor で割った正の余りを返します。"
 ---
 
 # pmod

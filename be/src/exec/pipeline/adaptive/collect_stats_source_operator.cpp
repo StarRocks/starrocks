@@ -17,7 +17,7 @@
 #include "event.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/utils.h"
-#include "exec/pipeline/pipeline.h"
+#include "exec/runtime/pipeline.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

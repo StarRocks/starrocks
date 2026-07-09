@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "主キーテーブルは StarRocks でリアルタイムアップサートと強い一貫性をサポートし、アドホッククエリに効率的です。"
 sidebar_position: 20
 ---
 
@@ -157,6 +158,12 @@ PROPERTIES (
 ディスクが SSD の場合、`true` に設定することをお勧めします。ディスクが HDD でロード頻度が高くない場合も、`true` に設定できます。
 
 v3.1.4 以降、StarRocks 共有データクラスタで作成された主キーテーブルは、ローカルディスクへのインデックス永続化をサポートしています。そして、v3.3.2 以降、StarRocks 共有データクラスタは、オブジェクトストレージへのインデックス永続化もサポートしています。この機能を有効にするには、テーブルプロパティ `persistent_index_type` を `CLOUD_NATIVE` に設定します。
+
+:::note
+
+共有データクラスタでは、主キーテーブルはクラウドネイティブ永続性インデックス（`persistent_index_type = CLOUD_NATIVE`）のみをサポートするようになりました。テーブルの作成または変更時に `persistent_index_type` を `LOCAL` に設定することはサポートされなくなりました。既に `LOCAL` 永続性インデックスを使用しているテーブルには影響しません。
+
+:::
 
 </TabItem>
 

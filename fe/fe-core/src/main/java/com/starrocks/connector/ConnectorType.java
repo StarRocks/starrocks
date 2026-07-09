@@ -45,7 +45,8 @@ public enum ConnectorType {
     ODPS("odps", OdpsConnector.class, null),
     KUDU("kudu", KuduConnector.class, null),
     UNIFIED("unified", UnifiedConnector.class, null),
-    BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class);
+    BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class),
+    LANCE("lance", com.starrocks.connector.lance.LanceConnector.class, null);
 
     public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
             ES,
@@ -58,7 +59,8 @@ public enum ConnectorType {
             ODPS,
             KUDU,
             UNIFIED,
-            BENCHMARK
+            BENCHMARK,
+            LANCE
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {

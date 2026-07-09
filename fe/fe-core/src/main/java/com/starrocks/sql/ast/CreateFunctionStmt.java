@@ -32,6 +32,8 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
     public static final String ISOLATION_KEY = "isolation";
+    public static final String ISOLATION_SHARED = "shared";
+    public static final String ISOLATION_ISOLATED = "isolated";
     public static final String INTERMEDIATE_KEY = "intermediate";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String TYPE_STARROCKS_PYTHON = "Python";
@@ -49,6 +51,9 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
     public static final String INPUT_TYPE = "input";
+    // Values for the INPUT_TYPE property.
+    public static final String INPUT_TYPE_SCALAR = "scalar";
+    public static final String INPUT_TYPE_ARROW = "arrow";
 
     private final FunctionRef functionRef;
     private final boolean isAggregate;

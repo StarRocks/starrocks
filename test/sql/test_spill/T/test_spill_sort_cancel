@@ -1,0 +1,38 @@
+-- name: test_spill_sort_cancel @sequential
+
+set enable_spill=true;
+set spill_mode="NONE";
+
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+
+-- Force the order-by/window sort to spill, then inject a spill-submit error so the
+-- fragment is cancelled while the spillable sorter has already spilled (and may still
+-- have a pending spill task on its channel). On cancel, SpillablePartitionSortSinkOperator
+-- drives SpillableChunksSorter::cancel() on that spilled sorter.
+--
+-- Regression: the cancel path used to enqueue an extra cancel task onto the spill
+-- channel when a task was pending; combined with the now-removed SpillerWriter::cancel(),
+-- this could dereference query-scoped spill state after teardown (ASAN heap-use-after-free).
+-- The query is expected to fail gracefully with the injected error and the BE must NOT crash.
+admin enable failpoint 'chunk_sorter_spill_on_set_finishing';
+admin enable failpoint 'spill_submit_error';
+
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+select sum(k1),sum(crc32(k2)),sum(rn) from (select k1,k2, row_number() over (PARTITION BY k1 order by k2) as rn from t1)t;
+
+admin disable failpoint 'spill_submit_error';
+admin disable failpoint 'chunk_sorter_spill_on_set_finishing';
+
+-- After disabling the failpoints the same queries must succeed again, proving the
+-- cancel path left no corrupted state behind.
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+
+CLEANUP {
+    admin disable failpoint 'spill_submit_error';
+    admin disable failpoint 'chunk_sorter_spill_on_set_finishing';
+} END CLEANUP

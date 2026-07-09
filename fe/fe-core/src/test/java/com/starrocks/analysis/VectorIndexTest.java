@@ -339,6 +339,138 @@ public class VectorIndexTest extends PlanTestBase {
     }
 
     @Test
+    public void testIvfpqBuildThresholdCrossFieldValidation() {
+        Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
+
+        // test 1: threshold below an explicit nlist is rejected at DDL time
+        SemanticException e1 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e1.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (128) for IVFPQ index"));
+
+        // test 2: mixed-case property key hits the same rejection (keys are not normalized yet)
+        SemanticException e2 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put("Index_Build_Threshold", "10");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e2.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (128) for IVFPQ index"));
+
+        // test 3: nlist omitted, threshold is compared against the registered default (16)
+        SemanticException e3 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e3.getMessage().contains(
+                "`index_build_threshold` (10) must be >= `nlist` (16) for IVFPQ index"));
+
+        // test 4: threshold >= nlist passes
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "200");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 5: threshold == nlist is the exact boundary of the '<' rule and passes
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "128");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 6: threshold omitted skips the cross-field check
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // test 7: HNSW has no nlist, a small threshold stays legal
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "10");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                }}, KeysType.DUP_KEYS));
+
+        // test 8: non-integer threshold is rejected by the per-key check()
+        SemanticException e8 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "abc");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e8.getMessage().contains("Value of `INDEX_BUILD_THRESHOLD` must be a integer"));
+
+        // test 9: non-positive threshold is rejected by the per-key check()
+        SemanticException e9 = Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "8");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name(), "-5");
+                    put(IndexParamsKey.NLIST.name(), "128");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e9.getMessage().contains("Value of `INDEX_BUILD_THRESHOLD` must be >= 1"));
+    }
+
+    @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "vector_index";

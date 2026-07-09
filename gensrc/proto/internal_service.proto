@@ -300,6 +300,9 @@ message PTabletWriterAddBatchResult {
     repeated int64 immutable_partition_ids = 8;
     optional bytes load_channel_profile = 9;
     optional LakeTabletData lake_tablet_data = 10;
+    // Time the server-side add_chunk handler spent blocked in count_down_latch.wait(),
+    // i.e. waiting for the async delta-writer write()/finish() callbacks to complete.
+    optional int64 wait_writer_time_us = 11;
 };
 
 message PTabletWriterAddSegmentRequest {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "完全修飾ドメイン名（FQDN）を使用して StarRocks クラスターへのアクセスを有効化する方法。"
 ---
 
 # FQDN アクセスを有効にする

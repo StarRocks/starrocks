@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Subquery"
-description: "Subqueries are categorized into two types in terms of relevance:"
+description: "How to write correlated and non-correlated subqueries in StarRocks, including [NOT] IN, EXISTS, scalar, and lateral join forms."
 ---
 
 # Subquery

@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 10
-description: "StarRocks adopts two privilege models:"
+description: "Overview of StarRocks privilege system, covering role-based access control (RBAC) and identity-based access control (IBAC) models."
 ---
 
 # Overview of privileges

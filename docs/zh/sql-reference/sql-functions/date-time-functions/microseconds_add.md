@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向日期时间添加指定的微秒数。"
 ---
 
 # microseconds_add

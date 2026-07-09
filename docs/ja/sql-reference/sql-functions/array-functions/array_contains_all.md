@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_CONTAINS_ALL関数はarr1がarr2のすべての要素を含むかどうか確認します。"
 ---
 
 # array_contains_all

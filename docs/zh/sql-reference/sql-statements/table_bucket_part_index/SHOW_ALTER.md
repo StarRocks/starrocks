@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "显示正在进行的ALTER TABLE操作的执行状态，包括列修改、schema优化和rollup索引变更。"
 ---
 
 # SHOW ALTER TABLE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用 Lambda 表达式对 Map 中的 Key 进行转换。"
 ---
 
 # transform_keys

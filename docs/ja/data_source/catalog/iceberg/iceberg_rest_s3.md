@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AWS Glue Iceberg REST エンドポイント経由で S3 テーブルにアクセスする Iceberg REST Catalog の作成。"
 ---
 
 # AWS S3 テーブル用の Iceberg REST Catalog の作成

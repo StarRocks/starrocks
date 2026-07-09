@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE VIEW creates a logical view derived from queries on existing tables."
 ---
 
 # CREATE VIEW

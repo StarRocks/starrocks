@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MIN_N 和 MAX_N 返回表达式中最小或最大的 n 个值，以数组形式返回。"
 ---
 
 # MIN_N, MAX_N

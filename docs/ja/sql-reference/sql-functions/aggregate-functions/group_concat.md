@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "グループ内の非NULL値を sep 引数で区切られた1つの文字列に連結します。"
 ---
 
 # group_concat

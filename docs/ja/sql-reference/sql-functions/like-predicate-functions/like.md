@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "与えられた式が指定されたパターンに対してあいまいに一致するかどうかをチェックします。"
 ---
 
 # like

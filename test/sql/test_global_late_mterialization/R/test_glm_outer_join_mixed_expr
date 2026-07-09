@@ -1,0 +1,62 @@
+-- name: test_glm_outer_join_mixed_expr
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+CREATE TABLE t (txid VARCHAR(20), s1 VARCHAR(20), s2 VARCHAR(20), s3 VARCHAR(20), amt DOUBLE, mref VARCHAR(20))
+  ENGINE=OLAP DUPLICATE KEY(txid) DISTRIBUTED BY HASH(txid) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE mk (mid VARCHAR(20), rate DOUBLE)
+  ENGINE=OLAP DUPLICATE KEY(mid) DISTRIBUTED BY HASH(mid) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+insert into t values ('TX1','a','x','p',1000,'M1'),('TX2','b','y','q',2000,'M2'),('TX3','c','z','r',3000,'M9');
+-- result:
+-- !result
+insert into mk values ('M1',10),('M2',20),('M3',30);
+-- result:
+-- !result
+alter table t set ('unique_constraints'='txid');
+-- result:
+-- !result
+alter table mk set ('unique_constraints'='mid');
+-- result:
+-- !result
+select txid, tas from (
+  select t.txid AS txid, CAST(t.amt * (1.0 - mk.rate/100.0) AS DECIMAL(38,10)) AS tas
+  FROM mk right outer join [bucket] t ON t.mref = mk.mid) w1 order by txid;
+-- result:
+TX1	900.0000000000
+TX2	1600.0000000000
+TX3	None
+-- !result
+select t.txid, t.amt + mk.rate as x from mk right outer join [bucket] t on t.mref = mk.mid order by t.txid;
+-- result:
+TX1	1010.0
+TX2	2020.0
+TX3	None
+-- !result
+select mk.mid, t.amt + mk.rate as x from mk left outer join [bucket] t on t.mref = mk.mid order by mk.mid;
+-- result:
+M1	1010.0
+M2	2020.0
+M3	None
+-- !result
+select mk.mid, t.txid, t.amt + mk.rate as x from mk full outer join t on t.mref = mk.mid order by mk.mid, t.txid;
+-- result:
+None	TX3	None
+M1	TX1	1010.0
+M2	TX2	2020.0
+M3	None	None
+-- !result
+select t.txid, t.amt + mk.rate as x from mk inner join [bucket] t on t.mref = mk.mid order by t.txid;
+-- result:
+TX1	1010.0
+TX2	2020.0
+-- !result

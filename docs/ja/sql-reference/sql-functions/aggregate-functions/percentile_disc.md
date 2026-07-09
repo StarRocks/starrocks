@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PERCENTILE_DISC関数は入力列の離散分布に基づいてパーセンタイル値を返します。"
 ---
 
 # percentile_disc

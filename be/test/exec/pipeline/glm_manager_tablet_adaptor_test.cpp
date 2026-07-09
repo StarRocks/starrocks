@@ -19,11 +19,11 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/rowset.h"
 #include "storage/rowset/rowset.h"

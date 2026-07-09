@@ -25,9 +25,11 @@ set(COMMON_FILES
   configbase.cpp
   config_update_registry.cpp
   config.cpp
+  glog_init.cpp
   greplog.cpp
   memory/column_allocator.cpp
   metrics/process_metrics_registry.cpp
+  metrics/thread_pool_metric_group.cpp
   runtime_profile.cpp
   stack_util.cpp
   system/backend_options.cpp
@@ -41,6 +43,7 @@ set(COMMON_FILES
   thread/thread.cpp
   thread/threadpool.cpp
   s3_uri.cpp
+  storage_define.cpp
   process_exit.cpp
   util/bthreads/executor.cpp
   util/debug_util.cpp

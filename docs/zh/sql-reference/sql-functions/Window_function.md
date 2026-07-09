@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "窗口函数在特定窗口内对数据进行处理，为每一行计算单独的值，常用于分析趋势和异常值检测。"
 keywords: ['窗口函数', '窗口']
 sidebar_position: 0.9
 ---

@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -24,7 +25,13 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.orc.OrcFile;
+import org.apache.orc.TypeDescription;
+import org.apache.orc.Writer;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroupFactory;
 import org.apache.parquet.hadoop.ParquetFileWriter;
@@ -111,6 +118,18 @@ final class PresplitTestSupport {
         return context;
     }
 
+    /**
+     * Stub {@link TabletReshardUtils#computeNodeCount} to return a fixed count while delegating every
+     * other static method to its real implementation. The returned MockedStatic MUST be closed by the
+     * caller — declare it in a try-with-resources.
+     */
+    static MockedStatic<TabletReshardUtils> stubComputeNodeCount(int count) {
+        MockedStatic<TabletReshardUtils> reshardUtils =
+                Mockito.mockStatic(TabletReshardUtils.class, Mockito.CALLS_REAL_METHODS);
+        reshardUtils.when(() -> TabletReshardUtils.computeNodeCount(any())).thenReturn(count);
+        return reshardUtils;
+    }
+
     static TBrokerFileStatus brokerFileStatus(String path, long size) {
         return new TBrokerFileStatus(path, /*isDir=*/ false, size, /*isSplitable=*/ true);
     }
@@ -162,9 +181,22 @@ final class PresplitTestSupport {
             String schemaText,
             int rowCount,
             BiConsumer<Group, Integer> rowFiller) throws IOException {
+        return writeParquetFixture(tempDirectory, MessageTypeParser.parseMessageType(schemaText), rowCount, rowFiller);
+    }
+
+    /**
+     * Variant of {@link #writeParquetFixture(java.nio.file.Path, String, int, BiConsumer)} that
+     * takes a prebuilt {@link MessageType}. Tests that need a precise logical-type flag the schema
+     * text cannot express (e.g. TIMESTAMP {@code isAdjustedToUTC}) build the schema with the
+     * {@code org.apache.parquet.schema.Types} API and call this overload.
+     */
+    static Path writeParquetFixture(
+            java.nio.file.Path tempDirectory,
+            MessageType schema,
+            int rowCount,
+            BiConsumer<Group, Integer> rowFiller) throws IOException {
         java.nio.file.Path file = Files.createTempFile(tempDirectory, "presplit-fixture-", ".parquet");
         Path outputPath = new Path(file.toUri());
-        MessageType schema = MessageTypeParser.parseMessageType(schemaText);
         SimpleGroupFactory groupFactory = new SimpleGroupFactory(schema);
         Configuration configuration = new Configuration();
         configuration.setLong("parquet.block.size", 256);
@@ -179,6 +211,61 @@ final class PresplitTestSupport {
                 Group group = groupFactory.newGroup();
                 rowFiller.accept(group, rowIndex);
                 writer.write(group);
+            }
+        }
+        return outputPath;
+    }
+
+    /**
+     * Resolve a local-filesystem {@link FileStatus} for a fixture {@link Path}. The footer readers
+     * take a {@code FileStatus} (the load snapshots one), so reader tests pass their written fixture
+     * through here.
+     */
+    static FileStatus statusOf(Path path) throws IOException {
+        LocalFileSystem fileSystem = new LocalFileSystem();
+        fileSystem.initialize(path.toUri(), new Configuration());
+        return fileSystem.getFileStatus(path);
+    }
+
+    /** Fills column values for one row into an ORC {@link VectorizedRowBatch}. */
+    @FunctionalInterface
+    interface OrcRowFiller {
+        void fill(VectorizedRowBatch batch, int batchRow, int globalRow);
+    }
+
+    /**
+     * Write a small ORC fixture into {@code tempDirectory} for tests that exercise
+     * the meta-tier ORC reader / provider. A tiny stripe size plus per-row memory
+     * checks coax the writer into emitting multiple stripes at small row counts,
+     * mirroring {@link #writeParquetFixture}'s multi-row-group trick.
+     */
+    static Path writeOrcFixture(
+            java.nio.file.Path tempDirectory,
+            String schemaText,
+            int rowCount,
+            OrcRowFiller rowFiller) throws IOException {
+        java.nio.file.Path file = Files.createTempFile(tempDirectory, "presplit-fixture-", ".orc");
+        // ORC's writer creates the file itself and refuses to overwrite; drop the
+        // empty placeholder createTempFile just made.
+        Files.delete(file);
+        Path outputPath = new Path(file.toUri());
+        TypeDescription schema = TypeDescription.fromString(schemaText);
+        Configuration configuration = new Configuration();
+        configuration.set("orc.stripe.size", "1");
+        configuration.set("orc.rows.between.memory.checks", "1");
+        try (Writer writer = OrcFile.createWriter(
+                outputPath, OrcFile.writerOptions(configuration).setSchema(schema))) {
+            VectorizedRowBatch batch = schema.createRowBatch();
+            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+                int batchRow = batch.size++;
+                rowFiller.fill(batch, batchRow, rowIndex);
+                if (batch.size == batch.getMaxSize()) {
+                    writer.addRowBatch(batch);
+                    batch.reset();
+                }
+            }
+            if (batch.size != 0) {
+                writer.addRowBatch(batch);
             }
         }
         return outputPath;

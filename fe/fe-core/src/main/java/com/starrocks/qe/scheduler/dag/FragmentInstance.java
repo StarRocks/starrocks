@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -53,6 +54,40 @@ import java.util.stream.Collectors;
 public class FragmentInstance {
     private static final int ABSENT_PIPELINE_DOP = -1;
     public static final int ABSENT_DRIVER_SEQUENCE = -1;
+
+    public static final class DeployedScanRangeLayout {
+        private enum Mode {
+            NORMAL,
+            PER_DRIVER_SEQ
+        }
+
+        private final Mode mode;
+        private final int driverSeqCount;
+
+        private DeployedScanRangeLayout(Mode mode, int driverSeqCount) {
+            this.mode = mode;
+            this.driverSeqCount = driverSeqCount;
+        }
+
+        public static DeployedScanRangeLayout normal() {
+            return new DeployedScanRangeLayout(Mode.NORMAL, 0);
+        }
+
+        public static DeployedScanRangeLayout perDriverSeq(int driverSeqCount) {
+            if (driverSeqCount <= 0) {
+                throw new IllegalArgumentException("driverSeqCount must be positive");
+            }
+            return new DeployedScanRangeLayout(Mode.PER_DRIVER_SEQ, driverSeqCount);
+        }
+
+        public boolean isPerDriverSeq() {
+            return mode == Mode.PER_DRIVER_SEQ;
+        }
+
+        public int getDriverSeqCount() {
+            return driverSeqCount;
+        }
+    }
 
     /**
      * The index in the job.
@@ -79,6 +114,7 @@ public class FragmentInstance {
     private final ComputeNode worker;
 
     private final Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
+    private final Map<Integer, DeployedScanRangeLayout> node2DeployedScanRangeLayout = Maps.newHashMap();
     private final Map<Integer, List<TScanRangeParams>> node2ScanRanges = Maps.newHashMap();
     private final Map<Integer, Map<Integer, List<TScanRangeParams>>> node2DriverSeqToScanRanges = Maps.newHashMap();
 
@@ -283,6 +319,18 @@ public class FragmentInstance {
         return node2DriverSeqToScanRanges;
     }
 
+    public void recordDeployedScanRangesWithoutDriverSeq(Integer scanId) {
+        node2DeployedScanRangeLayout.put(scanId, DeployedScanRangeLayout.normal());
+    }
+
+    public void recordDeployedScanRangesPerDriverSeq(Integer scanId, int driverSeqCount) {
+        node2DeployedScanRangeLayout.put(scanId, DeployedScanRangeLayout.perDriverSeq(driverSeqCount));
+    }
+
+    public Optional<DeployedScanRangeLayout> getDeployedScanRangeLayout(Integer scanId) {
+        return Optional.ofNullable(node2DeployedScanRangeLayout.get(scanId));
+    }
+
     public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
         bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
     }
@@ -342,7 +390,11 @@ public class FragmentInstance {
 
     public void paddingScanRanges() {
         node2DriverSeqToScanRanges.forEach((scanId, driverSeqToScanRanges) -> {
-            for (int driverSeq = 0; driverSeq < groupExecutionScanDop; driverSeq++) {
+            int scanDop = getDeployedScanRangeLayout(scanId)
+                    .filter(DeployedScanRangeLayout::isPerDriverSeq)
+                    .map(DeployedScanRangeLayout::getDriverSeqCount)
+                    .orElse(groupExecutionScanDop);
+            for (int driverSeq = 0; driverSeq < scanDop; driverSeq++) {
                 driverSeqToScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
             }
         });

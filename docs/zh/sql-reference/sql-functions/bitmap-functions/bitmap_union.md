@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算一组 Bitmap 值的并集。"
 ---
 
 # bitmap_union

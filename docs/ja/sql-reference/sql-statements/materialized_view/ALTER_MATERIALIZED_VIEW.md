@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "非同期マテリアライズドビューの名前変更、リフレッシュ戦略、ステータス、プロパティを変更します。"
 ---
 
 # ALTER MATERIALIZED VIEW
@@ -12,6 +13,7 @@ displayed_sidebar: docs
 - 非同期マテリアライズドビューのリフレッシュ戦略を変更します。
 - 非同期マテリアライズドビューのステータスをアクティブまたは非アクティブに変更します。
 - 2つの非同期マテリアライズドビュー間でのアトミックスワップを実行します。
+- Range 分散の非同期マテリアライズドビューのソートキーを、再作成せずにオンラインで変更します（v4.2 以降でサポート）。
 - 非同期マテリアライズドビューのプロパティを変更します。
 
   このSQLステートメントを使用して、以下のプロパティを変更できます:
@@ -45,6 +47,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     | REFRESH <new_refresh_scheme_desc> 
     | ACTIVE | INACTIVE 
     | SWAP WITH [db_name.]<mv2_name>
+    | ORDER BY (<column_name> [, <column_name> ...])
     | SET ( "<key>" = "<value>"[,...]) }
 ```
 
@@ -58,6 +61,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | no           | マテリアライズドビューのステータスをアクティブに設定します。StarRocksは、ベーステーブルが変更された場合（例: 削除され再作成された場合）、元のメタデータが変更されたベーステーブルと一致しない状況を防ぐために、マテリアライズドビューを自動的に非アクティブに設定します。非アクティブなマテリアライズドビューはクエリアクセラレーションやクエリの書き換えには使用できません。ベーステーブルを変更した後、このSQLを使用してマテリアライズドビューをアクティブにできます。 |
 | INACTIVE                | no           | マテリアライズドビューのステータスを非アクティブに設定します。非アクティブな非同期マテリアライズドビューはリフレッシュできませんが、テーブルとしてクエリすることはできます。 |
 | SWAP WITH               | no           | 必要な整合性チェックの後、他の非同期マテリアライズドビューとアトミック交換を実行します。 |
+| ORDER BY                | no           | マテリアライズドビューのソートキーを、指定した列にオンラインで変更します（再作成不要）。共有データクラスターの Range 分散の非同期マテリアライズドビューでのみサポートされます（v4.2 以降）。指定する列はマテリアライズドビューの出力列である必要があります。重複キー（Duplicate Key）マテリアライズドビューではソートキーは任意の列のサブセットにできます。集計（Aggregate）およびユニークキー（Unique Key）マテリアライズドビューではソートキーはすべてのキー列で構成される必要があります。変更中はマテリアライズドビューのリフレッシュが一時停止され、完了時に自動的に再開されます。変更中もマテリアライズドビューはクエリ可能で、新しいソート順序は切り替え時にアトミックに反映されます。 |
 | key                     | no           | 変更するプロパティの名前。詳細は[SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters)を参照してください。<br />**注意**<br />マテリアライズドビューのセッション変数関連のプロパティを変更する場合は、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.insert_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。 |
 | value                   | no           | 変更するプロパティの値。                                      |
 
@@ -124,4 +128,10 @@ ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
 
 ```SQL
 ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
+```
+
+例11: Range 分散マテリアライズドビューのソートキーを `(k2, k1)` にオンラインで変更します（v4.2 以降）。
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
 ```

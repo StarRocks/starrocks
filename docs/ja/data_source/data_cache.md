@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Data Cache はメモリ内とディスクキャッシュで内部・外部テーブルをキャッシュしクエリを高速化。"
 ---
 
 # Data Cache

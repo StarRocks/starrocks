@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のユーザーに対してアクティブ化されているロールをクエリします。"
 ---
 
 # current_role

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回ARRAY中所有元素的最小值。"
 ---
 
 # array_min

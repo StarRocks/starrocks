@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Insert Into は一度に1行ずつデータを挿入するのではなく、バッチ挿入を推奨し、タイムアウト設定の調整方法を説明します。"
 ---
 
 # Insert Into

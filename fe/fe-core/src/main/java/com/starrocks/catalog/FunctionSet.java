@@ -186,6 +186,7 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String BLAKE3 = "blake3";
     public static final String FROM_BINARY = "from_binary";
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
@@ -459,6 +460,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH32 = "xx_hash32";
+    public static final String XX_HASH64 = "xx_hash64";
     public static final String XX_HASH3_64 = "xx_hash3_64";
     public static final String XX_HASH3_128 = "xx_hash3_128";
 

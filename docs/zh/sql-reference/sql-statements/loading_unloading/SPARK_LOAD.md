@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Spark Load 通过外部 Spark 资源预处理数据，提高大数据量导入性能。"
 ---
 
 # SPARK LOAD

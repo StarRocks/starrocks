@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "base/uid_util.h"
 #include "runtime/runtime_state.h"
@@ -86,6 +87,35 @@ TEST_F(OperatorMemoryResourceManagerTest, test_compute_available_memory_bytes_ma
                              _dummy_state.spill_operator_max_bytes());
 
     EXPECT_EQ(expected, OperatorMemoryResourceManager::compute_available_memory_bytes(_dummy_state));
+}
+
+// Regression for a heap-use-after-free during fragment teardown.
+//
+// OperatorMemoryResourceManager stores a RAW pointer to the QueryContext-owned
+// QuerySpillManager. When an operator is closed while its query is still alive
+// (the normal teardown ordering), close() must drop that raw pointer so the
+// manager's destructor -- which runs reset() again -- does not dereference the
+// spill manager after the QueryContext has been reclaimed. On branches where
+// close() does NOT drop the pointer, the destructor's reset() dereferences freed
+// memory (ASAN: heap-use-after-free in ResGuard::reset()).
+TEST_F(OperatorMemoryResourceManagerTest, test_close_drops_query_spill_manager_pointer) {
+    auto query_spill_manager = std::make_unique<QuerySpillManager>(dummy_query_id, &_global_mgr, &_dir_mgr);
+
+    OperatorMemoryResourceManager op_mem_res_mgr;
+    op_mem_res_mgr.prepare(query_spill_manager.get(), true, true, 128);
+    EXPECT_EQ(query_spill_manager.get(), op_mem_res_mgr.query_spill_manager());
+
+    // Operator closes while the query (and its spill manager) is still alive.
+    op_mem_res_mgr.close();
+    EXPECT_EQ(nullptr, op_mem_res_mgr.query_spill_manager());
+    EXPECT_EQ(_global_mgr.spillable_operators(), 0);
+    EXPECT_EQ(_global_mgr.spill_expected_reserved_bytes(), 0);
+
+    // Query teardown frees the spill manager that the operator pointed into.
+    query_spill_manager.reset();
+
+    // op_mem_res_mgr's destructor runs close()->reset() again at scope exit;
+    // because the raw pointer was dropped above, this is a no-op rather than a UAF.
 }
 
 } // namespace starrocks::spill

@@ -109,6 +109,8 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return TFileFormatType.FORMAT_CSV_DEFLATE;
         } else if (formatKey.equalsIgnoreCase("zstd")) {
             return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else if (formatKey.equalsIgnoreCase("arrow")) {
+            return TFileFormatType.FORMAT_ARROW;
         }
         return TFileFormatType.FORMAT_UNKNOWN;
     }

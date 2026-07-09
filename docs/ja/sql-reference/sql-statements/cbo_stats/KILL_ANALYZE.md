@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "実行中のコレクションタスクをキャンセルします（手動およびカスタム自動タスクを含みます）。"
 ---
 
 # KILL ANALYZE

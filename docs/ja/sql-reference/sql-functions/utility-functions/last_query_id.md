@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のセッションで最も最近実行されたクエリのIDを取得します。"
 ---
 
 # last_query_id

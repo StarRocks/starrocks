@@ -65,3 +65,23 @@ PROPERTIES (
 
 insert into t_non_replicated_storage_multi_replica_pk (k,v2) select "abc", 10;
 select * from t_non_replicated_storage_multi_replica_pk;
+
+-- name: test_insert_partial_update_with_inverted_index @native
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+CREATE TABLE t_gin (
+    pk BIGINT NOT NULL,
+    v1 INT NOT NULL DEFAULT '0',
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    INDEX gin_title (title) USING GIN ("parser" = "english")
+)
+PRIMARY KEY(pk)
+DISTRIBUTED BY HASH(pk) BUCKETS 1
+PROPERTIES ("replicated_storage" = "true", "replication_num" = "1");
+
+insert into t_gin values (1, 100, 'hello world'), (2, 200, 'starrocks rocks');
+-- partial INSERT omitting the GIN-indexed column must succeed (regression: used to hang/fail)
+insert into t_gin (pk, v1) values (1, 111), (3, 300);
+select pk, v1, title from t_gin order by pk;
+-- GIN MATCH queries must still work after the partial update
+select pk from t_gin where title match 'hello' order by pk;
+select pk from t_gin where title match 'starrocks' order by pk;

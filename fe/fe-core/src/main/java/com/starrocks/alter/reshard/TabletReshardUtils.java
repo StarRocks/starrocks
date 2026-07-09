@@ -16,8 +16,13 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class TabletReshardUtils {
+    private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
 
     // Reshard size invariants — DO NOT change individually.
     //
@@ -116,5 +121,55 @@ public class TabletReshardUtils {
         long n = (remainder >= halfTargetCeil) ? quotient + 1 : quotient;
         n = Math.max(2L, n);
         return (int) Math.min((long) Config.tablet_reshard_max_split_count, n);
+    }
+
+    /**
+     * Total number of compute nodes provisioned in the given warehouse resource (>= 1). Uses
+     * getAllComputeNodeIds (NOT the alive/blocklist-filtered set) so a transient node restart or
+     * blocklist entry does not change reshard layout decisions. Shared by pre-split (which sizes a
+     * new partition to at least this many tablets) and auto-merge (whose floor is derived from it),
+     * keeping the two consistent. Throws ErrorReportException (unchecked) if the warehouse resource
+     * no longer exists.
+     */
+    public static int computeNodeCount(ComputeResource computeResource) {
+        return Math.max(1, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getAllComputeNodeIds(computeResource).size());
+    }
+
+    /**
+     * Minimum number of tablets an index must keep so steady-state auto-merge does not collapse the
+     * tablet count below the parallelism level pre-split established. Pure clamp logic, split out for
+     * testability. When maxSplitCount < 2 there is no multi-tablet pre-split layout to preserve
+     * (TabletPreSplitCoordinator#selectTabletCount requires maxSplitCount >= 2), so no floor applies.
+     */
+    @VisibleForTesting
+    static int parallelismFloor(int computeNodeCount, int maxSplitCount) {
+        if (maxSplitCount < 2) {
+            return 1;
+        }
+        return Math.max(2, Math.min(computeNodeCount, maxSplitCount));
+    }
+
+    /**
+     * Parallelism floor for a table's auto-merge. getBackgroundComputeResource(tableId) resolves the
+     * table's import warehouse in the enterprise build and the default warehouse in the open-source
+     * build. Returns a value in [1, tablet_reshard_max_split_count].
+     */
+    public static int computeParallelismFloor(long tableId) {
+        ComputeResource computeResource =
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
+        return parallelismFloor(computeNodeCount(computeResource), Config.tablet_reshard_max_split_count);
+    }
+
+    // Parallelism floor for merge eligibility; returns 0 (ungated) when warehouse state is unavailable.
+    // computeParallelismFloor resolves warehouse compute-node count via StarMgr, so call it off hot,
+    // lock-held paths (e.g. the periodic scan), not per-publish.
+    public static int safeComputeParallelismFloor(long tableId) {
+        try {
+            return computeParallelismFloor(tableId);
+        } catch (RuntimeException e) {
+            LOG.warn("Parallelism floor unavailable for table {}; auto-merge will not be floor-gated.", tableId, e);
+            return 0;
+        }
     }
 }

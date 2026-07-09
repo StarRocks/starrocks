@@ -1706,12 +1706,14 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_null_aware_anti_join_with_other
             // when left table col value not hits in hash table needs match all null value rows in right table
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
             auto& null_array = nullable_column->immutable_null_column_data();
-            // TODO: optimize me
-            for (size_t j = _probe_state->cur_nullaware_build_index; j < _table_items->row_count + 1; j++) {
-                if (null_array[j] == 1) {
-                    MATCH_RIGHT_TABLE_ROWS()
-                    RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
-                }
+            // Use SIMD to find NULL positions efficiently instead of checking each byte
+            size_t j = _probe_state->cur_nullaware_build_index;
+            while (j < _table_items->row_count + 1) {
+                j = SIMD::find_nonzero(null_array, j);
+                if (j >= _table_items->row_count + 1) break;
+                MATCH_RIGHT_TABLE_ROWS()
+                RETURN_IF_CHUNK_FULL_FOR_NULLAWARE_OTHER_CONJUCTS()
+                ++j;
             }
         }
         _probe_state->cur_nullaware_build_index = _table_items->row_count + 1;

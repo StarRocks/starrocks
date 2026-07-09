@@ -20,6 +20,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -38,12 +39,15 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -196,6 +200,19 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertTrue(defaultValueDef.expr.isConstant());
         IntLiteral intLiteral = (IntLiteral) defaultValueDef.expr;
         Assertions.assertEquals(10, intLiteral.getValue());
+    }
+
+    @Test
+    public void testAlterMvOrderByParses() throws Exception {
+        String alterMvSql = "alter materialized view mv1 order by (k2, k1)";
+        // Parse-only (no analysis): this asserts the grammar/AST wiring produces a ReorderColumnsClause.
+        // The analyze path (which requires a shared-data range-distributed MV) is covered end-to-end by
+        // AlterMvOrderByAnalyzerTest; analyzing mv1 here would be correctly rejected by that gate.
+        AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt)
+                SqlParser.parse(alterMvSql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableClause clause = stmt.getAlterTableClause();
+        Assertions.assertTrue(clause instanceof ReorderColumnsClause);
+        Assertions.assertEquals(List.of("k2", "k1"), ((ReorderColumnsClause) clause).getColumnsByPos());
     }
 
     // TODO: consider to support alterjob for mv
@@ -613,6 +630,98 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         String sql = "alter table base_t1 partition by date_trunc(\"month\", k2);";
         starRocksAssert.ddl(sql);
         mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv1");
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.getInactiveReason().contains("base-table optimized:"));
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizeBucketOnly() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t_bucket (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY RANGE(k2) (\n" +
+                "    PARTITION p1 VALUES [('2020-06-01'), ('2020-07-01')),\n" +
+                "    PARTITION p2 VALUES [('2020-07-01'), ('2020-08-01'))\n" +
+                "  )\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "  PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv_bucket \n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t_bucket group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket");
+        Assertions.assertTrue(mv.isActive());
+
+        starRocksAssert.ddl("alter table base_t_bucket PARTITION(p1) DISTRIBUTED BY HASH(k1) BUCKETS 1;");
+
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket");
+        Assertions.assertTrue(mv.isActive());
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizeBucketOnlyUsesTargetPartitionBuckets() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t_bucket_target_partition (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY RANGE(k2) (\n" +
+                "    PARTITION p1 VALUES [('2020-06-01'), ('2020-07-01')),\n" +
+                "    PARTITION p2 VALUES [('2020-07-01'), ('2020-08-01'))\n" +
+                "  )\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "  PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv_bucket_target_partition \n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t_bucket_target_partition group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(
+                connectContext.getDatabase(), "test_mv_bucket_target_partition");
+        Assertions.assertTrue(mv.isActive());
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable(
+                connectContext.getDatabase(), "base_t_bucket_target_partition");
+        Column k1 = table.getColumn("k1");
+        table.getPartition("p1").setDistributionInfo(new HashDistributionInfo(1, Lists.newArrayList(k1)));
+        Assertions.assertEquals(3, table.getDefaultDistributionInfo().getBucketNum());
+        Assertions.assertEquals(1, table.getPartition("p1").getDistributionInfo().getBucketNum());
+
+        starRocksAssert.ddl("alter table base_t_bucket_target_partition PARTITION(p1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3;");
+
+        mv = (MaterializedView) starRocksAssert.getTable(
+                connectContext.getDatabase(), "test_mv_bucket_target_partition");
+        Assertions.assertTrue(mv.isActive());
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizeBucketAndSortKey() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t_bucket_sort (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY RANGE(k2) (\n" +
+                "    PARTITION p1 VALUES [('2020-06-01'), ('2020-07-01')),\n" +
+                "    PARTITION p2 VALUES [('2020-07-01'), ('2020-08-01'))\n" +
+                "  )\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "  PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv_bucket_sort \n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t_bucket_sort group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(
+                connectContext.getDatabase(), "test_mv_bucket_sort");
+        Assertions.assertTrue(mv.isActive());
+
+        // Changing sort key along with bucket count is NOT a bucket-only optimize, MV should be inactivated.
+        starRocksAssert.ddl("alter table base_t_bucket_sort ORDER BY (k2, k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1;");
+
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket_sort");
         Assertions.assertFalse(mv.isActive());
         Assertions.assertTrue(mv.getInactiveReason().contains("base-table optimized:"));
     }

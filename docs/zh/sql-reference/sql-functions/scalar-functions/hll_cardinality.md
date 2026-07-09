@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算单个 HLL 类型值的基数。"
 ---
 
 # hll_cardinality

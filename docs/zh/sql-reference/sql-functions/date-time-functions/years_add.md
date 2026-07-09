@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向日期时间或日期值添加指定年数。"
 ---
 
 # years_add

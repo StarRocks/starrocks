@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查询字典对象中key映射的value。"
 ---
 
 # dictionary_get

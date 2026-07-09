@@ -33,8 +33,8 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/stl_util.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -59,6 +59,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace {
 
@@ -844,17 +845,20 @@ const TabletSchemaPB* resolve_rowset_schema_pb(const TabletMetadataPB& new_metad
     return nullptr;
 }
 
-struct DcgRowWindow {
-    size_t old_tablet_index;
-    Range<rowid_t> range;
-};
+using tablet_reshard_helper::DcgRowWindow;
 
 // Step C — compute row windows in the target segment for every source old tablet
-// rowset that references it. Coverage over [0, num_rows_of_target) is validated.
+// rowset that references it. Holes left by a compacted-away old tablet are
+// accepted as is_gap windows when they fall within |gap_bits| (the same
+// synthesized bitmap merge_delvecs masks); a nullptr |gap_bits| keeps the strict
+// contiguous-coverage requirement. The opened base segment and its row count are
+// returned so the caller can fill gap rows from it.
 Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int64_t new_tablet_id,
                                               const RowsetMetadataPB& target_rowset, int target_segment_position,
                                               const TabletSchemaCSPtr& full_tablet_schema,
                                               const std::vector<DcgSourceRowsetReference>& source_references,
+                                              const roaring::Roaring* gap_bits,
+                                              std::shared_ptr<Segment>* out_base_segment,
                                               std::vector<DcgRowWindow>* out_windows) {
     // Open base segment for index lookups.
     FileInfo base_segment_file_info;
@@ -877,6 +881,7 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
                                    /*lake_io_opts=*/LakeIOOptions{}, tablet_manager));
 
     const rowid_t num_rows_in_target = static_cast<rowid_t>(base_segment->num_rows());
+    *out_base_segment = base_segment;
 
     out_windows->clear();
     out_windows->reserve(source_references.size());
@@ -904,11 +909,6 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
         out_windows->push_back({source_reference.old_tablet_index, window});
     }
 
-    if (out_windows->empty()) {
-        return Status::NotSupported(fmt::format(
-                "DCG rebuild: no valid row windows computed for target rssid (num_rows={})", num_rows_in_target));
-    }
-
     // Dedup windows that belong to the SAME old tablet AND have the same range
     // (e.g., an old tablet's shared rowset surfaced twice through different scans).
     // Do NOT dedup windows from different old tablets even if the range matches:
@@ -931,33 +931,16 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
     }
     *out_windows = std::move(deduped_windows);
 
-    // Coverage validation: windows must be contiguous and cover [0, num_rows_in_target).
-    //
-    // Known limitation: the synthesized gap delvec from
-    // compute_synthesized_gap_specs masks rowids that no contributing old tablet
-    // claims, but DCG rebuild does not yet consult that bitmap. A
-    // (compacted-old-tablet gap) × (DCG conflict on canonical R0) combination
-    // therefore returns NotSupported here. FE scheduling currently avoids
-    // the combo by requiring all old tablets compacted before merge for any
-    // tablet with active partial-update DCGs.
-    if ((*out_windows)[0].range.begin() != 0) {
-        return Status::NotSupported(
-                fmt::format("DCG rebuild: row window coverage gap at the start (first.begin={}, expect 0)",
-                            (*out_windows)[0].range.begin()));
-    }
-    for (size_t index = 0; index + 1 < out_windows->size(); ++index) {
-        if ((*out_windows)[index].range.end() != (*out_windows)[index + 1].range.begin()) {
-            return Status::NotSupported(fmt::format("DCG rebuild: row window coverage gap or overlap ({}->{} vs {})",
-                                                    (*out_windows)[index].range.begin(),
-                                                    (*out_windows)[index].range.end(),
-                                                    (*out_windows)[index + 1].range.begin()));
-        }
-    }
-    if (out_windows->back().range.end() != num_rows_in_target) {
-        return Status::NotSupported(
-                fmt::format("DCG rebuild: row window coverage gap at the end (last.end={}, expect {})",
-                            out_windows->back().range.end(), num_rows_in_target));
-    }
+    // Reconcile the contributor windows with the synthesized gap bitmap: a hole
+    // left by a compacted-away old tablet becomes an is_gap window when it falls
+    // entirely within |gap_bits| (those rowids are masked by merge_delvecs and
+    // never returned). Unmasked holes, distinct-owner overlaps, and zero rows
+    // surface as errors. With |gap_bits|==nullptr any hole fails, which is the
+    // original strict contiguous-coverage behavior.
+    std::vector<DcgRowWindow> reconciled_windows;
+    RETURN_IF_ERROR(tablet_reshard_helper::reconcile_windows_with_gap(*out_windows, gap_bits, num_rows_in_target,
+                                                                      &reconciled_windows));
+    *out_windows = std::move(reconciled_windows);
     return Status::OK();
 }
 
@@ -1030,7 +1013,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
         TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts, int64_t new_tablet_id,
         int64_t new_version, int64_t txn_id, const TabletMetadataPB& new_metadata, uint32_t target_rssid,
         const std::vector<uint32_t>& rebuild_columns, const std::vector<const DcgSurvivingEntry*>& conflicting_entries,
-        const std::vector<DcgSourceRowsetReference>& source_references) {
+        const std::vector<DcgSourceRowsetReference>& source_references, const roaring::Roaring* gap_bits) {
     TEST_SYNC_POINT_CALLBACK("merge_dcg_meta:before_rebuild", &target_rssid);
 
     // Step A — locate merged rowset + segment position for target rssid.
@@ -1064,10 +1047,11 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
 
     // Step C — compute row windows.
     std::vector<DcgRowWindow> windows;
+    std::shared_ptr<Segment> base_segment;
     RETURN_IF_ERROR(compute_row_windows_for_source_rowsets(tablet_manager, new_tablet_id, target_rowset,
                                                            target_segment_position, full_tablet_schema,
-                                                           source_references, &windows));
-    const rowid_t num_rows_in_target = windows.back().range.end();
+                                                           source_references, gap_bits, &base_segment, &windows));
+    const rowid_t num_rows_in_target = static_cast<rowid_t>(base_segment->num_rows());
 
     // For each rebuild column, pick:
     // - default donor: any conflicting entry that claims the UID (first found).
@@ -1140,11 +1124,22 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
         }
         const auto& source_info = source_info_iter->second;
 
-        auto field = ChunkHelper::convert_field(column_index, tablet_column);
+        auto field = StorageSchemaHelper::convert_field(column_index, tablet_column);
         MutableColumnPtr output_column = ChunkFactory::column_from_field(field);
         output_column->reserve(num_rows_in_target);
 
         for (const auto& window : windows) {
+            if (window.is_gap) {
+                // No source DCG entry claims these rows (their old tablet was
+                // compacted away). They are masked by the merge gap delvec and
+                // never returned, so fill from the canonical base segment: real,
+                // already-indexed values keep the rebuilt .cols encodings and
+                // secondary indexes valid.
+                RETURN_IF_ERROR(read_column_range_from_segment(base_segment, full_tablet_schema, unique_id,
+                                                               window.range.begin(), window.range.end(),
+                                                               output_column.get()));
+                continue;
+            }
             const DcgSurvivingEntry* selected_source = nullptr;
             auto override_iter = source_info.override_by_old_tablet_index.find(window.old_tablet_index);
             selected_source = (override_iter != source_info.override_by_old_tablet_index.end())
@@ -1209,10 +1204,35 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
     return rebuilt;
 }
 
+// Phase 0 output: per-target rowid bitmaps representing keys in the
+// shared physical segment that no contributing old tablet claims. Read-path
+// consumers:
+//   - canonical R0's segment iterator already filters by canonical.range, so
+//     gap rowids outside the convex hull are no-ops for scans.
+//   - PersistentIndexSstable::multi_get filters by the projected delvec on
+//     the sstable PB regardless of LSM block-sort order, which keeps the
+//     first-old-tablet-compacts case safe.
+//   - DCG rebuild (merge_dcg_meta) consults the same bitmap to accept gap holes
+//     in row-window coverage and fill those rows from the base segment.
+struct CanonicalGapSpec {
+    uint32_t target_rssid;
+    Roaring gap_bits;
+};
+
 Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts,
-                      int64_t new_tablet_id, int64_t new_version, int64_t txn_id, TabletMetadataPB* new_metadata) {
+                      int64_t new_tablet_id, int64_t new_version, int64_t txn_id,
+                      const std::vector<CanonicalGapSpec>& gap_specs, TabletMetadataPB* new_metadata) {
     std::map<uint32_t, DcgTargetWorkItem> work_by_target;
     RETURN_IF_ERROR(dcg_pass1_collect_entries_and_sources(merge_contexts, &work_by_target));
+
+    // Index synthesized gap bitmaps by target rssid so a rebuild can short-circuit
+    // its coverage check for rowids that merge_delvecs masks. Empty for non-PK
+    // tables (no gap synthesis) => every lookup misses => strict coverage.
+    std::unordered_map<uint32_t, const Roaring*> gap_bits_by_target;
+    gap_bits_by_target.reserve(gap_specs.size());
+    for (const auto& spec : gap_specs) {
+        gap_bits_by_target.emplace(spec.target_rssid, &spec.gap_bits);
+    }
 
     auto* merged_dcgs = new_metadata->mutable_dcg_meta()->mutable_dcgs();
 
@@ -1271,9 +1291,13 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
                 }
             }
 
+            const Roaring* target_gap_bits = nullptr;
+            if (auto gap_iter = gap_bits_by_target.find(target_rssid); gap_iter != gap_bits_by_target.end()) {
+                target_gap_bits = gap_iter->second;
+            }
             StatusOr<DeltaColumnGroupVerPB> rebuilt_or_status = rebuild_dcg_for_target_segment(
                     tablet_manager, merge_contexts, new_tablet_id, new_version, txn_id, *new_metadata, target_rssid,
-                    rebuild_columns, conflicting_entries, target_work.source_refs);
+                    rebuild_columns, conflicting_entries, target_work.source_refs, target_gap_bits);
             if (!rebuilt_or_status.ok()) {
                 if (rebuilt_or_status.status().is_not_supported()) {
                     g_tablet_merge_dcg_rebuild_fallback_not_supported_total << 1;
@@ -1305,18 +1329,155 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
     return Status::OK();
 }
 
-// Phase 0 output: per-target rowid bitmaps representing keys in the
-// shared physical segment that no contributing old tablet claims. Read-path
-// consumers:
-//   - canonical R0's segment iterator already filters by canonical.range, so
-//     gap rowids outside the convex hull are no-ops for scans.
-//   - PersistentIndexSstable::multi_get filters by the projected delvec on
-//     the sstable PB regardless of LSM block-sort order, which keeps the
-//     first-old-tablet-compacts case safe.
-struct CanonicalGapSpec {
-    uint32_t target_rssid;
-    Roaring gap_bits;
-};
+// Pack (col_uid, index_type) into a 64-bit key, mirroring index_delta_group_loader.cpp,
+// so tombstone-set membership can be tested cheaply.
+inline uint64_t idg_pack_key(int32_t col_uid, IndexType type) {
+    return (static_cast<uint64_t>(static_cast<uint32_t>(col_uid)) << 32) | static_cast<uint32_t>(type);
+}
+
+// Union |from|'s dropped_keys tombstones into |into| (dedup by packed key). Used when the
+// same physical .idx appears under one target from multiple split-family siblings whose
+// DROP INDEX history diverged: a key dropped in ANY sibling must stay dropped (DROP INDEX
+// is table-wide and monotonic), so first-wins cannot be allowed to resurrect it.
+void union_idg_dropped_keys(IndexDeltaGroupEntryPB* into, const IndexDeltaGroupEntryPB& from) {
+    std::unordered_set<uint64_t> present;
+    for (const auto& dk : into->dropped_keys()) present.insert(idg_pack_key(dk.col_unique_id(), dk.index_type()));
+    for (const auto& dk : from.dropped_keys()) {
+        if (present.insert(idg_pack_key(dk.col_unique_id(), dk.index_type())).second) {
+            *into->add_dropped_keys() = dk;
+        }
+    }
+}
+
+// True iff |e| still has at least one active (non-tombstoned) key. Mirrors the read-path
+// loader's active-key computation (index_delta_group_loader.cpp). A fully-tombstoned entry
+// is logically dead: the loader skips it, AND vacuum relies on the invariant that idg_meta
+// never holds a fully-tombstoned entry (vacuum.cpp: normally apply_drop_index moves such
+// .idx to orphan_files). Merge must not install one or the .idx would look live forever.
+bool idg_entry_has_active_key(const IndexDeltaGroupEntryPB& e) {
+    std::unordered_set<uint64_t> dropped;
+    for (const auto& dk : e.dropped_keys()) dropped.insert(idg_pack_key(dk.col_unique_id(), dk.index_type()));
+    for (const auto& k : e.keys()) {
+        if (dropped.find(idg_pack_key(k.col_unique_id(), k.index_type())) == dropped.end()) return true;
+    }
+    return false;
+}
+
+// merge_idg_meta: remap each source tablet's IDG (.idx) entries into the merged tablet's
+// rssid space, dedup by .idx filename per target segment, and keep them newest-version
+// first. Unlike merge_dcg_meta there is no rebuild-on-conflict path: an .idx indexes
+// unchanging shared segment data, so every source's entry for a given target rssid is built
+// over the same physical segment and is interchangeable; the read-path loader picks the
+// newest visible version per key and honors tombstones.
+//
+// An entry is kept only if BOTH its segment_id is a live segment in its OWN source tablet
+// (source-live) AND its remapped target is a live segment in the merged tablet (target-live).
+// map_rssid falls back to rssid+offset for anything not in shared_rssid_map (it only errors
+// on overflow), so it is not a "segment survived" test: a stale idg entry (segment pruned or
+// compacted out of that source but the entry not cleaned) could otherwise remap -- e.g. the
+// canonical child's stale rssid R maps via R+0 onto a target R that is live only because a
+// sibling supplies that segment -- and mis-apply / dangle a .idx that source no longer owns.
+// Stale entries are dropped; their .idx becomes an orphan reclaimed by the shared-file
+// cleanup once the source tablets are dropped. Writes no new files, so there is no
+// partial-write cleanup to do.
+Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
+    // Every segment present after merge_rowsets, mapped to its shared flag. An IDG entry is
+    // kept only if its remapped target is here (target-live), and its .idx shared_file is
+    // DERIVED from the target segment's shared flag (see the emit loop) rather than preserved
+    // from the source: an .idx is shared iff the segment it indexes is shared, so the two must
+    // agree. Preserving a source flag would carry a stale value (e.g. a tablet split before
+    // this fix has segment.shared=true but idg.shared_file=false, because the old split marked
+    // segments shared but not idg) and later mis-route the .idx at vacuum time.
+    std::unordered_map<uint32_t, bool> target_rssid_shared;
+    for (const auto& rowset : new_metadata->rowsets()) {
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            target_rssid_shared[get_rssid(rowset, i)] = rowset.segment_metas(i).shared();
+        }
+    }
+
+    std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
+    // target rssid -> (.idx filename -> index into work_by_target[target]).
+    std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
+
+    for (const auto& context : merge_contexts) {
+        if (!context.metadata()->has_idg_meta()) continue;
+        // Live source segments in THIS context.
+        std::unordered_set<uint32_t> source_live_rssids;
+        for (const auto& rowset : context.metadata()->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                source_live_rssids.insert(get_rssid(rowset, i));
+            }
+        }
+        for (const auto& [segment_id, idg_ver] : context.metadata()->idg_meta().idgs()) {
+            if (source_live_rssids.find(segment_id) == source_live_rssids.end()) {
+                continue; // stale idg entry: segment no longer in this source's rowsets
+            }
+            ASSIGN_OR_RETURN(uint32_t target_rssid, context.map_rssid(segment_id));
+            if (target_rssid_shared.find(target_rssid) == target_rssid_shared.end()) {
+                continue; // defensive: target not a live merged segment
+            }
+            auto& entries = work_by_target[target_rssid];
+            auto& seen = seen_files_by_target[target_rssid];
+            for (const auto& entry : idg_ver.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                auto seen_it = seen.find(entry.index_file());
+                if (seen_it != seen.end()) {
+                    union_idg_dropped_keys(&entries[seen_it->second], entry); // same physical .idx
+                    continue;
+                }
+                // shared_file is derived from the target segment's ownership in the emit loop.
+                seen[entry.index_file()] = entries.size();
+                entries.push_back(entry);
+            }
+        }
+    }
+
+    if (work_by_target.empty()) return Status::OK();
+
+    auto* merged_idgs = new_metadata->mutable_idg_meta()->mutable_idgs();
+    // Fully-tombstoned entries' .idx files are orphan candidates. Collect them first and only
+    // orphan a file that NO surviving entry (under ANY target) still references: vacuum deletes
+    // orphan_files without consulting live idg_meta, so orphaning a still-referenced file would
+    // delete an active index. (.idx names are uuid-unique so a name maps to one target in
+    // practice, but resolving against the full surviving set keeps the orphan set provably safe.)
+    std::unordered_set<std::string> surviving_files;
+    std::map<std::string, FileMetaPB> orphan_candidates;
+    for (auto& [target_rssid, entries] : work_by_target) {
+        // Derive the .idx shared flag from the merged segment's ownership: an .idx is shared
+        // iff the segment it indexes is shared. This corrects a stale source flag (e.g. from a
+        // tablet split before this fix) instead of preserving it, and matches how vacuum treats
+        // the segment/.cols for the same rssid.
+        auto shared_it = target_rssid_shared.find(target_rssid);
+        const bool tgt_shared = shared_it != target_rssid_shared.end() && shared_it->second;
+        std::sort(entries.begin(), entries.end(), [](const IndexDeltaGroupEntryPB& a, const IndexDeltaGroupEntryPB& b) {
+            return a.version() > b.version();
+        });
+        // Drop fully-tombstoned entries (all keys dropped after union): keeping one would
+        // violate vacuum's no-fully-tombstoned-entry invariant.
+        IndexDeltaGroupVerPB ver;
+        for (auto& e : entries) {
+            if (idg_entry_has_active_key(e)) {
+                e.set_shared_file(tgt_shared);
+                surviving_files.insert(e.index_file());
+                *ver.add_entries() = std::move(e);
+            } else if (e.has_index_file() && !e.index_file().empty()) {
+                auto& fm = orphan_candidates[e.index_file()];
+                fm.set_name(e.index_file());
+                if (e.has_file_size()) fm.set_size(e.file_size());
+                if (tgt_shared) fm.set_shared(true);
+            }
+        }
+        if (ver.entries_size() == 0) continue;
+        (*merged_idgs)[target_rssid] = std::move(ver);
+    }
+    // Orphan each dead .idx so vacuum reclaims it, mirroring MetaFileBuilder::apply_drop_index.
+    for (auto& [file, fm] : orphan_candidates) {
+        if (surviving_files.find(file) == surviving_files.end()) {
+            *new_metadata->add_orphan_files() = std::move(fm);
+        }
+    }
+    return Status::OK();
+}
 
 // Phase 0: for every PK canonical rowset that owns at least one shared
 // segment, mask the rowids whose key falls outside ⋃ contributors but inside
@@ -1451,14 +1612,10 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
 }
 
 Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMergeContext>& merge_contexts,
-                     const CanonicalContribMap& canonical_contribs, int64_t new_version, int64_t txn_id,
+                     const std::vector<CanonicalGapSpec>& synthesized_gap_specs, int64_t new_version, int64_t txn_id,
                      TabletMetadataPB* new_metadata) {
-    // Phase 0: synthesize gap delvec bits from canonical_contribs.
-    ASSIGN_OR_RETURN(auto synthesized_gap_specs,
-                     compute_synthesized_gap_specs(tablet_manager, *new_metadata, canonical_contribs));
-    if (!synthesized_gap_specs.empty()) {
-        g_tablet_merge_gap_delvec_total << 1;
-    }
+    // Phase 0 gap bitmaps are synthesized once by the caller (merge_tablet) and
+    // shared with merge_dcg_meta so the two paths cannot diverge.
 
     // Phase 1: Collect unique delvec files across all old tablets
     std::vector<DelvecFileInfo> unique_delvec_files;
@@ -2755,6 +2912,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_delvec_meta();
     new_tablet_metadata->clear_sstable_meta();
     new_tablet_metadata->clear_dcg_meta();
+    new_tablet_metadata->clear_idg_meta();
     new_tablet_metadata->clear_rowset_to_schema();
     new_tablet_metadata->clear_compaction_inputs();
     new_tablet_metadata->clear_orphan_files();
@@ -2788,17 +2946,35 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     CanonicalContribMap canonical_contribs;
     RETURN_IF_ERROR(merge_rowsets(merge_contexts, new_tablet_metadata.get(), &canonical_contribs));
 
-    // Phase 2.5: Merge schemas (must run before merge_dcg_meta, which needs
-    // historical_schemas to locate rebuild schemas for shared-segment rebuild).
+    // Phase 2.5: Merge schemas (must run before gap synthesis + merge_dcg_meta,
+    // which need historical_schemas to locate rebuild schemas for shared-segment
+    // rebuild).
     merge_schemas(merge_contexts, new_tablet_metadata.get());
+
+    // Synthesize the per-target gap bitmaps once (PK only). The same specs drive
+    // both DCG coverage-acceptance (merge_dcg_meta) and delvec masking
+    // (merge_delvecs), so the two paths cannot diverge. For non-PK tables the
+    // specs stay empty, which keeps DCG coverage strict.
+    std::vector<CanonicalGapSpec> gap_specs;
+    if (is_primary_key(*new_tablet_metadata)) {
+        ASSIGN_OR_RETURN(gap_specs,
+                         compute_synthesized_gap_specs(tablet_manager, *new_tablet_metadata, canonical_contribs));
+        if (!gap_specs.empty()) {
+            g_tablet_merge_gap_delvec_total << 1;
+        }
+    }
 
     // Phase 3: Projections (map_rssid uses shared_rssid_map + rssid_offset)
     RETURN_IF_ERROR(merge_dcg_meta(tablet_manager, merge_contexts, merging_tablet.new_tablet_id(), new_version,
-                                   txn_info.txn_id(), new_tablet_metadata.get()));
+                                   txn_info.txn_id(), gap_specs, new_tablet_metadata.get()));
+
+    // Remap the lake ADD INDEX fast-path IDG (.idx) entries into the merged rssid space,
+    // mirroring merge_dcg_meta. Metadata-only (no segment rebuild); see merge_idg_meta.
+    RETURN_IF_ERROR(merge_idg_meta(merge_contexts, new_tablet_metadata.get()));
 
     if (is_primary_key(*new_tablet_metadata)) {
-        RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, canonical_contribs, new_version,
-                                      txn_info.txn_id(), new_tablet_metadata.get()));
+        RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, gap_specs, new_version, txn_info.txn_id(),
+                                      new_tablet_metadata.get()));
     }
 
     RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, new_tablet_metadata.get()));

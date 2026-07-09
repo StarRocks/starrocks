@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付または日時に時間を加算します。"
 ---
 
 # hours_add

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE FUNCTION creates a user-defined function (UDF), including scalar, aggregate, window, and table functions."
 ---
 
 # CREATE FUNCTION

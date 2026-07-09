@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
@@ -79,6 +80,7 @@ import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -118,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.journal.CheckpointException;
@@ -144,6 +147,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.JsonMetricVisitor;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.SlotDescriptor;
@@ -236,6 +240,7 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
+import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishCheckpointRequest;
@@ -308,6 +313,7 @@ import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListConnectionRequest;
 import com.starrocks.thrift.TListConnectionResponse;
+import com.starrocks.thrift.TListMaterializedViewRefreshJobsResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -412,7 +418,6 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
@@ -605,13 +610,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(TGetTasksParams params) throws TException {
+        ConnectContext context = new ConnectContext();
+        return MaterializedViewRefreshJobsSystemTable.query(params, context);
+    }
+
+    @Override
     public TListPipesResult listPipes(TListPipesParams params) throws TException {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
-
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -648,10 +657,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
         for (PipeFileRecord record : files) {
@@ -703,6 +710,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
+    }
+
+    // information_schema.fe_metrics: return this FE's metrics as the JSON payload that the
+    // HTTP `/metrics?type=json` endpoint produces. Serving it over this Thrift RPC (instead of
+    // the BE scanner scraping the HTTP endpoint) keeps fe_metrics working regardless of
+    // `enable_http_auth` — the internal RPC needs no HTTP Basic credentials. FE process metrics
+    // have no per-object RBAC, so the RPC takes no arguments and there is nothing to authorize
+    // here.
+    @Override
+    public TFeMetricsResult getFeMetrics() throws TException {
+        TFeMetricsResult result = new TFeMetricsResult();
+        try {
+            JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
+            String json = MetricRepo.getMetric(visitor,
+                    new MetricsAction.RequestParams(false, false, false, false, false));
+            result.setJson_metrics(json);
+            result.setStatus(new TStatus(TStatusCode.OK));
+        } catch (Exception e) {
+            LOG.warn("get fe metrics failed", e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+        }
+        return result;
     }
 
     @Override
@@ -2107,16 +2138,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
 
-        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-        if (request.isSetBackend_id()) {
-            warehouseId = Utils.getWarehouseIdByNodeId(systemInfo, request.getBackend_id())
-                    .orElse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        }
-        // TODO(ComputeResource): support more better compute resource acquiring.
+        // The whole load transaction runs on a single compute resource (worker group). The new
+        // sub-partition shards, the tablet locations, and the nodes_info built below must all be
+        // derived from this same resource; otherwise a tablet location may reference a compute node
+        // that is absent from nodes_info and the BE reports "Unknown node_id". This mirrors the
+        // self-consistent handling on the create-partition path (buildCreatePartitionResponse).
+        final ComputeResource computeResource = txnState.getComputeResource();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
-        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        // Validate the resource before mutating any metadata below, so an unavailable worker group
+        // fails fast instead of leaving partitions marked immutable with no replacement created.
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "No available worker group for warehouse " + computeResource));
+            result.setStatus(errorStatus);
+            return result;
+        }
 
         // immute partitions and create new sub partitions
         for (Long id : request.partition_ids) {
@@ -2183,9 +2219,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setPartitions(partitions);
         result.setTablets(tablets);
 
-        // build nodes
-        // TODO(ComputeResource): support more better compute resource acquiring.
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
+        // build nodes from the same compute resource used for the tablet locations above, so every
+        // location node id is guaranteed to be present in nodes_info.
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(computeResource,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
@@ -2690,9 +2726,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     " already create partition failed");
         }
 
+        boolean newInnerCtx = ConnectContext.get() == null;
         ConnectContext ctx = Util.getOrCreateInnerContext();
         if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
             ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            if (newInnerCtx) {
+                // setCurrentWarehouseId replaces sessionVariable with a clone of the global
+                // default, discarding ConnectContext.buildInner's MV-rewrite override. Only
+                // re-apply when the context is freshly created so we don't mutate a reused
+                // user session.
+                ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
+            }
         }
 
         // Run analyzer first so that system partitions enclosed by existing partitions
@@ -2748,8 +2792,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                LOG.info("cancel schema change for automatic create partition txn_id={}", txnId);
-                cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.COLUMN, errMsg);
+                if (Config.enable_concurrent_add_partition_during_alter
+                        && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())) {
+                    LOG.info("skip cancelling alter job for automatic partition creation, jobs tolerate "
+                            + "concurrent partition creation. txn_id={} table={}", txnId, olapTable.getName());
+                } else {
+                    LOG.info("cancel schema change for automatic create partition txn_id={}", txnId);
+                    cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.COLUMN, errMsg);
+                }
             }
         } catch (Exception e) {
             LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -3359,12 +3409,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TGetDictQueryParamResponse response = new TGetDictQueryParamResponse();
-        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
+        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor, null));
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
                     db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
-                    dictTable.getAutomaticBucketSize(), allPartitions, null);
+                    dictTable.getAutomaticBucketSize(), allPartitions, null, null);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, partitionParam, dictTable.enableReplicatedStorage(), null));

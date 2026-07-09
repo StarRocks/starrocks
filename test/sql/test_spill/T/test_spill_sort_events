@@ -1,0 +1,54 @@
+-- name: test_spill_sort_events @sequential @slow
+-- Force-spill the local-merge sort now on the spill-sort event scheduler, and assert the result is identical
+-- with enable_spill_sort_events ON and OFF (mutable BE config; "true" routes the spilled partition-sort sink
+-- and the merge source onto the event scheduler, "false" keeps the legacy poller). The contract this test can
+-- check is just that: the query does not hang under force-spill and the ordered result does not change with the
+-- flip. The event internals (subscribe_source_to_spillers fan-out, park/notify, block_reason WAIT_RESTORE
+-- lockstep) are checked in the BE unit tests (spillable_sort_source_lockstep_test,
+-- spillable_sort_observer_wakeup_test).
+--
+-- Section 1 drives the single LocalMergeSortSourceOperator (one source driver merges all partitions);
+-- Section 2 sets enable_parallel_merge so the LocalParallelMergeSortSourceOperator (gathered, M source drivers)
+-- runs instead -- both source operators were evented and both must hold under force-spill.
+--
+-- The verified result is an order-sensitive slice of the global sort (limit after a large offset), so a wrong
+-- merge order or a dropped restored run shows up as a changed row, not just a hang. Which spillable sorter
+-- (full-sort vs top-n) backs it is a BE-runtime choice, not in the FE EXPLAIN, so the EXPLAIN guard only checks
+-- the sort survived planning (it is not folded away). Data: ~500K rows, high sort-key cardinality so force-spill
+-- fans out across partitions and replays restore.
+set enable_spill=true;
+set spill_mode="force";
+set query_mem_limit=2147483648;
+
+create table t_sort (
+    c0 INT,
+    c1 INT,
+    c2 INT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+insert into t_sort
+SELECT generate_series, generate_series % 100000, generate_series % 5000
+FROM TABLE(generate_series(1, 500000));
+
+-- Section 1: single-merge (LocalMergeSortSourceOperator). pipeline_dop=4 so the one merge source fans out
+-- across 4 partition spillers (the N-subscription shape), enable_parallel_merge=false picks the single merge.
+set pipeline_dop=4;
+set enable_parallel_merge=false;
+function: assert_explain_contains('select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000', 'order by')
+function: update_be_config("enable_spill_sort_events", "true")
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+function: update_be_config("enable_spill_sort_events", "false")
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+
+-- Section 2: parallel-merge (LocalParallelMergeSortSourceOperator), gathered, pipeline_dop=4.
+set pipeline_dop=4;
+set enable_parallel_merge=true;
+function: assert_explain_contains('select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000', 'order by')
+function: update_be_config("enable_spill_sort_events", "true")
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+function: update_be_config("enable_spill_sort_events", "false")
+select c1, c0 from t_sort order by c1, c0 limit 10 offset 250000;
+
+-- Restore the default (false) so the config does not leak across tests.
+CLEANUP {
+  function: update_be_config("enable_spill_sort_events", "false")
+} END CLEANUP

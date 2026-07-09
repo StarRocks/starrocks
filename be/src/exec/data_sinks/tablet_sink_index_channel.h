@@ -33,10 +33,10 @@
 #include "common/thread/threadpool.h"
 #include "common/tracer_fwd.h"
 #include "exec/data_sinks/async_data_sink.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 
@@ -62,12 +62,15 @@ struct AddBatchCounter {
     int64_t client_prc_time_us = 0;
     // total time of wait memtable flush
     int64_t add_batch_wait_memtable_flush_time_us = 0;
+    // total time the server spent waiting for the async delta-writer write()/finish() callbacks
+    int64_t add_batch_wait_writer_time_us = 0;
 
     AddBatchCounter& operator+=(const AddBatchCounter& rhs) {
         add_batch_execution_time_us += rhs.add_batch_execution_time_us;
         add_batch_wait_lock_time_us += rhs.add_batch_wait_lock_time_us;
         add_batch_num += rhs.add_batch_num;
         add_batch_wait_memtable_flush_time_us += rhs.add_batch_wait_memtable_flush_time_us;
+        add_batch_wait_writer_time_us += rhs.add_batch_wait_writer_time_us;
         return *this;
     }
     friend AddBatchCounter operator+(const AddBatchCounter& lhs, const AddBatchCounter& rhs) {

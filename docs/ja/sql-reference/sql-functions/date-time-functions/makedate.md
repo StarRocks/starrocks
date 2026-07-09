@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された年と年の日数に基づいて日付を作成し、返します。"
 ---
 
 # makedate

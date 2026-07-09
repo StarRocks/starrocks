@@ -160,6 +160,22 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_REWRITE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             "total SPM rewrite attempts by result"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_QUERY_REWRITE =
+            new MetricWithLabelGroup<>("state",
+                    () -> new LongCounterMetric("mv_global_query_rewrite_queries_total", MetricUnit.REQUESTS,
+                            "queries by materialized view rewrite outcome (HIT/NO_HIT/DISABLED)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_jobs_total", MetricUnit.REQUESTS,
+                            "total materialized view refresh jobs across all materialized views by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_SUCCESS_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_success_jobs_total", MetricUnit.REQUESTS,
+                            "total successful materialized view refresh jobs by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_FAILED_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_failed_jobs_total", MetricUnit.REQUESTS,
+                            "total failed materialized view refresh jobs by warehouse"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -584,6 +600,53 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
+
+        GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
+                "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
+                "epoch millis of the last finished automated cluster snapshot, 0 if none") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getLastSuccessTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotLastSuccessTime);
+
+        GaugeMetric<Long> snapshotConsecutiveFailures = new GaugeMetric<Long>(
+                "cluster_snapshot_consecutive_failures", MetricUnit.NOUNIT,
+                "consecutive failed automated cluster snapshot jobs since the last success") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
+
+        GaugeMetric<Long> recycleBinPartitionNum = new GaugeMetric<Long>(
+                "recycle_bin_partition_num", MetricUnit.NOUNIT, "number of partitions in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinPartitionNum);
+
+        GaugeMetric<Long> recycleBinTableNum = new GaugeMetric<Long>(
+                "recycle_bin_table_num", MetricUnit.NOUNIT, "number of tables in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinTableNum);
+
+        GaugeMetric<Long> recycleBinDatabaseNum = new GaugeMetric<Long>(
+                "recycle_bin_database_num", MetricUnit.NOUNIT, "number of databases in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleDatabaseNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinDatabaseNum);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
@@ -1381,6 +1444,13 @@ public final class MetricRepo {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
 
+        // global MV count: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalMvCount(visitor);
+        // global MV refresh gauges: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalGauges(visitor);
+        // global MV refresh duration histogram: low-cardinality, always emitted (not gated like per-MV histograms)
+        MaterializedViewMetricsRegistry.collectGlobalDurationHistograms(visitor);
+
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
         for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
@@ -1617,6 +1687,18 @@ public final class MetricRepo {
             };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(txnNum);
+
+            LeaderAwareGaugeMetric<Long> maxCommittedPendingPublish = new LeaderAwareGaugeMetricLong(
+                    "txn_max_committed_pending_publish_ms", MetricUnit.MILLISECONDS,
+                    "max time in milliseconds that a transaction has been sitting in committed status "
+                            + "pending publish to visible") {
+                @Override
+                public Long getValueLeader() {
+                    return mgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis());
+                }
+            };
+            maxCommittedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
+            visitor.visit(maxCommittedPendingPublish);
         }
     }
 

@@ -14,6 +14,7 @@
 package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -52,7 +53,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -63,7 +63,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MVPCTRefreshPlanBuilder {
@@ -78,18 +77,20 @@ public class MVPCTRefreshPlanBuilder {
     // record mv's plan builder message to trace push-downed partition names and predicates
     private final Map<String, String> mvPlanBuildMessage = Maps.newLinkedHashMap();
 
-    private void tracePartitionNames(Table table, PCellSortedSet partitionNames) {
-        if (table == null || PCellUtils.isEmpty(partitionNames)) {
+    private void tracePartitionNames(TableRelation tableRelation, PCellSortedSet partitionNames) {
+        if (tableRelation == null || PCellUtils.isEmpty(partitionNames)) {
             return;
         }
-        mvPlanBuildMessage.put(table.getName(), partitionNames.toString());
+        // Key by the qualified relation name so two same-named base tables across databases keep separate
+        // trace entries instead of overwriting each other.
+        mvPlanBuildMessage.put(tableRelation.getName().toString(), partitionNames.toString());
     }
 
-    private void tracePartitionPredicate(Table table, Expr partitionPredicate) {
-        if (table == null || partitionPredicate == null) {
+    private void tracePartitionPredicate(TableRelation tableRelation, Expr partitionPredicate) {
+        if (tableRelation == null || partitionPredicate == null) {
             return;
         }
-        mvPlanBuildMessage.put(table.getName(), ExprToSql.toSql(partitionPredicate));
+        mvPlanBuildMessage.put(tableRelation.getName().toString(), ExprToSql.toSql(partitionPredicate));
     }
 
     private void tracePartitionPredicates(Expr partitionPredicate) {
@@ -116,7 +117,7 @@ public class MVPCTRefreshPlanBuilder {
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
                                                 PCellSortedSet mvToRefreshedPartitions,
-                                                PCellSetMapping refTableRefreshPartitions,
+                                                Map<Table, PCellSortedSet> refTableRefreshPartitions,
                                                 ConnectContext ctx) throws AnalysisException {
         Analyzer.analyze(insertStmt, ctx);
         return buildInsertPlan(insertStmt, mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
@@ -124,7 +125,7 @@ public class MVPCTRefreshPlanBuilder {
 
     private InsertStmt buildInsertPlan(InsertStmt insertStmt,
                                        PCellSortedSet mvToRefreshedPartitions,
-                                       PCellSetMapping refTableRefreshPartitions,
+                                       Map<Table, PCellSortedSet> refTableRefreshPartitions,
                                        ConnectContext ctx) throws AnalysisException {
         // Collect table relations once — used by pinned-TVR injection (all pinned batches) and by
         // partition-predicate push-down (partitioned MVs only).
@@ -141,8 +142,8 @@ public class MVPCTRefreshPlanBuilder {
         for (Map.Entry<String, TableRelation> entry : tableRelations.entries()) {
             TableRelation relation = entry.getValue();
             Table table = relation.getTable();
-            // An unresolved/dropped base table is handled as a controlled AnalysisException later
-            // in the ref-base-table path; skip here to preserve that error surface (and avoid NPE).
+            // Skip null here to avoid NPE on getTableIdentifier(); the relation-grouping loop below
+            // throws a controlled AnalysisException for any base table that resolved to null.
             if (table == null) {
                 continue;
             }
@@ -174,30 +175,35 @@ public class MVPCTRefreshPlanBuilder {
                     mvDb.getFullName(), mv.getName()));
         }
 
-        Set<String> uniqueTableNames = tableRelations.keySet().stream().collect(Collectors.toSet());
-        int numOfPushDownIntoTables = 0;
-        boolean hasGenerateNonPushDownPredicates = false;
-        SessionVariable sessionVariable = mvContext.getCtx().getSessionVariable();
-        boolean isEnableMVRefreshQueryRewrite = sessionVariable.isEnableMaterializedViewRewriteForInsert();
-        for (String tblName : uniqueTableNames) {
-            // skip to generate partition predicate for non-ref base tables
-            if (!refTableRefreshPartitions.containsKey(tblName)) {
-                logger.warn("Skip to generate partition predicate to refresh because it's not ref " +
-                                "base table, table: {}, mv:{}, refTableRefreshPartitions:{}", tblName, mv.getName(),
-                        refTableRefreshPartitions);
-                continue;
-            }
-            // set partition names for ref base table
-            PCellSortedSet tablePartitionNames = refTableRefreshPartitions.get(tblName);
-            Collection<TableRelation> relations = tableRelations.get(tblName);
-            TableRelation tableRelation = relations.iterator().next();
-            Table table = tableRelation.getTable();
+        // Group relations by the base-table object: two same-named tables from different databases have
+        // distinct identities (pushed down independently), while a self-join shares one identity.
+        Multimap<Table, TableRelation> relationsByTable = ArrayListMultimap.create();
+        for (TableRelation relation : tableRelations.values()) {
+            Table table = relation.getTable();
             if (table == null) {
                 throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
                         "table relation '%s' resolved to null when building refresh plan. " +
                         "The base table may have been dropped or is inaccessible.",
-                        mvDb.getFullName(), mv.getName(), tableRelation.getName()));
+                        mvDb.getFullName(), mv.getName(), relation.getName()));
             }
+            relationsByTable.put(table, relation);
+        }
+        int numOfPushDownIntoTables = 0;
+        boolean hasGenerateNonPushDownPredicates = false;
+        SessionVariable sessionVariable = mvContext.getCtx().getSessionVariable();
+        boolean isEnableMVRefreshQueryRewrite = sessionVariable.isEnableMaterializedViewRewriteForInsert();
+        for (Table table : relationsByTable.keySet()) {
+            // skip to generate partition predicate for non-ref base tables
+            if (!refTableRefreshPartitions.containsKey(table)) {
+                logger.warn("Skip to generate partition predicate to refresh because it's not ref " +
+                                "base table, table: {}, mv:{}, refTableRefreshPartitions:{}", table.getName(), mv.getName(),
+                        refTableRefreshPartitions);
+                continue;
+            }
+            // set partition names for ref base table
+            PCellSortedSet tablePartitionNames = refTableRefreshPartitions.get(table);
+            Collection<TableRelation> relations = relationsByTable.get(table);
+            TableRelation tableRelation = relations.iterator().next();
             // skip it table is not ref base table.
             if (!refBaseTablePartitionSlots.containsKey(table)) {
                 logger.warn("Skip to generate partition predicate because it's mv direct ref base table:{}, mv:{}, " +
@@ -263,7 +269,7 @@ public class MVPCTRefreshPlanBuilder {
             logger.info("Generate partition extra predicates empty, mv:{}, numOfPushDownIntoTables:{}",
                     mv.getName(), numOfPushDownIntoTables);
             return insertStmt;
-        } else if (numOfPushDownIntoTables != uniqueTableNames.size() || extraPartitionPredicates.isEmpty()) {
+        } else if (numOfPushDownIntoTables != relationsByTable.keySet().size() || extraPartitionPredicates.isEmpty()) {
             // Only generate partition predicates by mv's target partitions when ref base tables'
             // predicates cannot be pushed down
             return generateMVPartitionPredicate(mvToRefreshedPartitions, queryStatement, insertStmt);
@@ -373,7 +379,7 @@ public class MVPCTRefreshPlanBuilder {
                 mv.getName(), tableRelation.getName(), tablePartitionNames);
         tableRelation.setPartitionNames(
                 new PartitionRef(new ArrayList<>(tablePartitionNames.getPartitionNames()), false, NodePosition.ZERO));
-        tracePartitionNames(table, tablePartitionNames);
+        tracePartitionNames(tableRelation, tablePartitionNames);
         return true;
     }
 
@@ -417,7 +423,7 @@ public class MVPCTRefreshPlanBuilder {
                         "relation {},  partition predicate:{} ",
                 mv.getName(), tableRelation.getName(), ExprToSql.toSql(partitionPredicate));
         tableRelation.setPartitionPredicate(partitionPredicate);
-        tracePartitionPredicate(table, partitionPredicate);
+        tracePartitionPredicate(tableRelation, partitionPredicate);
         return true;
     }
 

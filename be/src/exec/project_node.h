@@ -17,9 +17,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "exprs/expr_context.h"
-#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 class ProjectNode final : public ExecNode {

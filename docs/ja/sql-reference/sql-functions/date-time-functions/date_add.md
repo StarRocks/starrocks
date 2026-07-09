@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付または日時式の日付部分を抽出します。"
 ---
 
 # date_add, adddate

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STDDEV_SAMP関数は標本標準偏差を返し、v2.5.10以降はウィンドウ関数としても使用できます。"
 ---
 
 # stddev_samp

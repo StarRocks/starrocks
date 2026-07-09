@@ -41,10 +41,10 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/config_rowset_fwd.h"
+#include "common/storage_define.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_define.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
@@ -375,18 +375,18 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 ZoneMapIndexReader::ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      mem_usage() - sizeof(ZoneMapIndexReader))
         } else {
             _reset();

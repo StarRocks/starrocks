@@ -210,6 +210,9 @@ public class TableFunction extends Function {
         if (symbolName != null && !symbolName.isEmpty()) {
             props.put(CreateFunctionStmt.SYMBOL_KEY, symbolName);
         }
+        if (getInputType() != null && !getInputType().isEmpty()) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
+        }
         return props;
     }
 

@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/pipeline/dict_decode_operator.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
@@ -28,7 +29,6 @@
 #include "exprs/expr_factory.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

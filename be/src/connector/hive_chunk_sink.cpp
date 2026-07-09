@@ -17,6 +17,8 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/logging.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -37,27 +39,28 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, false) {}
 
+HiveChunkSinkProvider::HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
+
 void HiveChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(result.rollback_action);
-    if (result.io_status.ok()) {
-        _state->update_num_rows_load_sink(result.file_statistics.record_count);
+    _rollback_actions.push_back(result.file_result.rollback_action);
+    if (result.file_result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
         THiveFileInfo hive_file_info;
-        hive_file_info.__set_file_name(PathUtils::get_filename(result.location));
-        hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.location));
-        hive_file_info.__set_record_count(result.file_statistics.record_count);
-        hive_file_info.__set_file_size_in_bytes(result.file_statistics.file_size);
+        hive_file_info.__set_file_name(PathUtils::get_filename(result.file_result.location));
+        hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.file_result.location));
+        hive_file_info.__set_record_count(result.file_result.file_statistics.record_count);
+        hive_file_info.__set_file_size_in_bytes(result.file_result.file_statistics.file_size);
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
         _state->add_sink_commit_info(commit_info);
         COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
-        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
-        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_result.file_statistics.file_size);
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
@@ -109,9 +112,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
     }
 
     auto partition_column_evaluators = ColumnEvaluator::clone(ctx->partition_column_evaluators);
-    return std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
-                                                      std::move(partition_column_evaluators),
-                                                      std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
+                                                           std::move(partition_column_evaluators),
+                                                           std::move(partition_chunk_writer_factory), runtime_state);
+    return sink;
 }
 
 } // namespace starrocks::connector

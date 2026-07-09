@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE ROLE creates a new role for assigning permissions and controlling user access."
 ---
 
 # CREATE ROLE

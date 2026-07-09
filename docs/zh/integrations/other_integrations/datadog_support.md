@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将 StarRocks 集群与监控和安全平台 Datadog 集成，实现集群性能监控和告警。"
 sidebar_label: Datadog
 ---
 

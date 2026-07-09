@@ -135,7 +135,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("ICEBERG_VIEW")
         ICEBERG_VIEW,
         @SerializedName("PAIMON_VIEW")
-        PAIMON_VIEW;
+        PAIMON_VIEW,
+        @SerializedName("LANCE")
+        LANCE;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -297,6 +299,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return name;
     }
 
+    // Display-friendly qualified name: catalog.db.table for external tables,
+    // short name for internal tables.
+    public String getQualifiedTableName() {
+        try {
+            return getCatalogName() + "." + getCatalogDBName() + "." + getCatalogTableName();
+        } catch (NotImplementedException e) {
+            return getName();
+        }
+    }
+
     // Table name is the name written in native table.
     // but catalog table name is name defined in catalog.
     // If we use resource mapping, they are probably different.
@@ -401,6 +413,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG;
     }
 
+    // Returns structured metadata about this table for stats-collection observability
+    // (e.g. snapshot_id/total_files/total_rows). Subclasses can override to include
+    // connector-specific metadata. Empty by default.
+    public Map<String, String> getStatsCollectMetadata() {
+        return Collections.emptyMap();
+    }
+
     public boolean isDeltalakeTable() {
         return type == TableType.DELTALAKE;
     }
@@ -431,6 +450,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isBenchmarkTable() {
         return type == TableType.BENCHMARK;
+    }
+
+    public boolean isLanceTable() {
+        return type == TableType.LANCE;
     }
 
     public boolean isHMSTable() {

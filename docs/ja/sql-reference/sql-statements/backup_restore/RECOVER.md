@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP コマンドで削除されたデータベース、テーブル、またはパーティションを復元します。"
 ---
 
 # RECOVER

@@ -1045,21 +1045,21 @@ public class CTEPlanTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(false);
         String plan = getFragmentPlan(sql);
-        assertNotContains(plan, "  1:EXCHANGE\n" +
-                "     limit: 1");
         assertNotContains(plan, "  12:EXCHANGE\n" +
                 "     limit: 1");
-        assertNotContains(plan, "  21:EXCHANGE\n" +
+        assertNotContains(plan, "  6:EXCHANGE\n" +
+                "     limit: 1");
+        assertNotContains(plan, "  1:EXCHANGE\n" +
                 "     limit: 1");
 
         // consumers that don't have a predicate can push down the limit to the exchange node.
         connectContext.getSessionVariable().setEnableMultiCastLimitPushDown(true);
         plan = getFragmentPlan(sql);
-        assertNotContains(plan, "  1:EXCHANGE\n" +
-                "     limit: 1");
         assertNotContains(plan, "  12:EXCHANGE\n" +
                 "     limit: 1");
-        assertContains(plan, "  21:EXCHANGE\n" +
+        assertNotContains(plan, "  6:EXCHANGE\n" +
+                "     limit: 1");
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     limit: 1");
     }
 
@@ -1118,7 +1118,7 @@ public class CTEPlanTest extends PlanTestBase {
                 + "cte1 as(select * from cte0),\n"
                 + "cte2 as(select * from cte0)\n"
                 + "select * from cte1 union all select * from cte2;";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertNotContains("MultiCast");
     }
 
@@ -1164,7 +1164,7 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with\n"
                 + "cte0 as(select * from t0 limit 10)\n"
                 + "select * from cte0;";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertContains("MultiCast");
     }
 

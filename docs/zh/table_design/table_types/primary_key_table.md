@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and use Primary Key tables in StarRocks for real-time upsert and delete with consistency, supporting efficient ad-hoc queries."
 keywords: ['zhujian']
 sidebar_position: 20
 ---
@@ -155,6 +156,12 @@ PROPERTIES (
 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
 
 自 3.1.4 版本起，StarRocks 存算分离集群支持基于本地磁盘上的持久化索引。自 3.3.2 版本起，存算分离集群进一步支持基于对象存储上的持久化索引。您可以通过将主键表 Property `persistent_index_type` 设置为 `CLOUD_NATIVE` 启用该功能。
+
+:::note
+
+在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。已使用 `LOCAL` 持久化索引的存量表不受影响。
+
+:::
 
 </TabItem>
 <TabItem value="example2" label="全内存主键索引">

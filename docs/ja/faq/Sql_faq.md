@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query Cache を使用した SQL クエリパフォーマンス最適化とキャッシング機能。"
 ---
 
 # SQL クエリ

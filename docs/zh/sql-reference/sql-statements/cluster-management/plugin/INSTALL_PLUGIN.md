@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INSTALL PLUGIN installs a plugin into StarRocks."
 ---
 
 # INSTALL PLUGIN

@@ -25,6 +25,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -797,5 +798,60 @@ public class DynamicPartitionSchedulerTest extends StarRocksTestBase {
         Set<String> expectedPartitionNames = Sets.newHashSet("p6", "p7", "p8", "p9", "p10", "p11");
         System.out.println(visiblePartitionNames);
         Assertions.assertEquals(expectedPartitionNames, visiblePartitionNames);
+    }
+
+    @Test
+    public void testTolerateConcurrentAlterForDynamicAddPartition() throws Exception {
+        // G3: the dynamic-partition scheduler no longer skips the ADD half for a metadata-only alter
+        // (UPDATING_META) or a running safe alter job; but it still skips for a non-tolerated state.
+        Config.enable_concurrent_add_partition_during_alter = true;
+        String ddl = "CREATE TABLE %s (\n" +
+                "  k DATE NOT NULL,\n" +
+                "  v BIGINT NOT NULL\n" +
+                ") DUPLICATE KEY(k)\n" +
+                "PARTITION BY RANGE(k) ()\n" +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"dynamic_partition.enable\" = \"true\",\n" +
+                "  \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "  \"dynamic_partition.start\" = \"-1\",\n" +
+                "  \"dynamic_partition.end\" = \"3\",\n" +
+                "  \"dynamic_partition.prefix\" = \"p\",\n" +
+                "  \"dynamic_partition.buckets\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withDatabase("cap_g3_db").useDatabase("cap_g3_db")
+                .withTable(String.format(ddl, "dyn_um"))
+                .withTable(String.format(ddl, "dyn_sc"));
+        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("cap_g3_db");
+        OlapTable um = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "dyn_um");
+        OlapTable sc = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "dyn_sc");
+
+        // UPDATING_META is tolerated -> NOT skipped (no "state is not NORMAL" failure recorded).
+        um.setState(OlapTable.OlapTableState.UPDATING_META);
+        try {
+            scheduler.executeDynamicPartitionForTable(db.getId(), um.getId());
+        } finally {
+            um.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        String umMsg = String.valueOf(
+                scheduler.getRuntimeInfo("dyn_um", DynamicPartitionScheduler.CREATE_PARTITION_MSG));
+        Assertions.assertFalse(umMsg.contains("is not NORMAL"),
+                "dynamic ADD PARTITION should be tolerated during UPDATING_META, msg=" + umMsg);
+
+        // SCHEMA_CHANGE with no unfinished job is NOT tolerated -> skipped with the legacy message.
+        sc.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            scheduler.executeDynamicPartitionForTable(db.getId(), sc.getId());
+        } finally {
+            sc.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        String scMsg = String.valueOf(
+                scheduler.getRuntimeInfo("dyn_sc", DynamicPartitionScheduler.CREATE_PARTITION_MSG));
+        Assertions.assertTrue(scMsg.contains("is not NORMAL"),
+                "dynamic ADD PARTITION should be skipped during SCHEMA_CHANGE with no safe job, msg=" + scMsg);
     }
 }

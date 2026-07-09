@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期中的天信息，范围 1 到 31。"
 ---
 
 # day
