@@ -22,6 +22,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.columns.ExternalPredicateColumnsStorage;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
@@ -203,6 +204,7 @@ public class TableKeeper {
             keeperList.add(LoadsHistorySyncer.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
+            keeperList.add(ExternalPredicateColumnsStorage.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }
