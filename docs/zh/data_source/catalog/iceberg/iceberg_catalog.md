@@ -147,6 +147,8 @@ Iceberg catalog 的描述。此参数是可选的。
 - `native`（默认）：使用 StarRocks 内置的数据访问控制系统。
 - `allowall`：所有数据访问检查均委托给 Catalog 本身处理。
 - `ranger`：数据访问检查委托给 Apache Ranger 处理。
+- `extension`：数据访问检查委托给由
+  [FE 静态扩展](../../../administration/management/extensions.md)注册的 `AccessControllerFactory`。
 
 #### MetastoreParams
 

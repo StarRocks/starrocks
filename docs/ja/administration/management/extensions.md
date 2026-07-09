@@ -71,6 +71,24 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 
 ```
 
+### 外部カタログのアクセス制御
+
+外部カタログにカスタムアクセス制御を提供するには、`AccessControllerFactory` ケイパビリティを登録します。
+
+```java
+@SRModule(name = "custom_access_control")
+public class CustomAccessControlExtension implements StarRocksExtension {
+    @Override
+    public void onLoad(ExtensionContext ctx) {
+        ctx.register(AccessControllerFactory.class,
+                connectorContext -> new CustomAccessController(connectorContext));
+    }
+}
+```
+
+外部カタログの作成時に `catalog.access.control` を `extension` に設定します。ファクトリーは null ではない
+`AccessController` を返す必要があります。返さない場合、カタログの初期化は失敗します。
+
 ### ログ
 
 拡張機能をビルドした後、`${your_extension_name}-ext.jar` ファイルを `Config.ext_dir` ディレクトリ（デフォルトは `FE/lib`）に配置し、FE を再起動します。

@@ -148,6 +148,8 @@ The data access control policy. Valid values:
 - `native` (Default): The StarRocks built-in data access control system is used.
 - `allowall`: All data access checks are delegated to the Catalog itself.
 - `ranger`: Data access checks are delegated to Apache Ranger.
+- `extension`: Data access checks are delegated to the `AccessControllerFactory` registered by a
+  [static FE extension](../../../administration/management/extensions.md).
 
 #### MetastoreParams
 

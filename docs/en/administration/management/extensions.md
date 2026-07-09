@@ -71,6 +71,24 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 
 ```
 
+### External catalog access control
+
+To provide custom access control for an external catalog, register an `AccessControllerFactory` capability:
+
+```java
+@SRModule(name = "custom_access_control")
+public class CustomAccessControlExtension implements StarRocksExtension {
+    @Override
+    public void onLoad(ExtensionContext ctx) {
+        ctx.register(AccessControllerFactory.class,
+                connectorContext -> new CustomAccessController(connectorContext));
+    }
+}
+```
+
+Set `catalog.access.control` to `extension` when creating the external catalog. The factory must return a non-null
+`AccessController`; otherwise, catalog initialization fails.
+
 ### Logs
 
 After building the extension, place the `${your_extension_name}-ext.jar` file into the `Config.ext_dir` directory (default is `FE/lib`), and then restart the FE.

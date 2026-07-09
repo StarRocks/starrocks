@@ -14,17 +14,21 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.AccessControllerFactory;
 import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class LazyConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(LazyConnector.class);
@@ -56,6 +60,13 @@ public class LazyConnector implements Connector {
                         } else if (accessControl.equals("allowall")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
+                        } else if (accessControl.equals("extension")) {
+                            AccessControllerFactory factory =
+                                    ExtensionManager.getComponent(AccessControllerFactory.class);
+                            AccessController controller = Objects.requireNonNull(
+                                    factory.createAccessController(context),
+                                    "AccessControllerFactory returned null");
+                            Authorizer.getInstance().setAccessControl(context.getCatalogName(), controller);
                         } else {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new NativeAccessController());
