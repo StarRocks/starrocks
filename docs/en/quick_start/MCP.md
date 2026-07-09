@@ -347,7 +347,7 @@ DESC STORAGE VOLUME s3_volume\G            -- verify: enabled=true, IsDefault=tr
 
 ## More information
 
-- StarRocks shared-data quick start — [https://docs.starrocks.io/docs/quick_start/shared-data/](https://docs.starrocks.io/docs/quick_start/shared-data/)
+- StarRocks shared-data quick start — [shared-data](shared-data.md)
 - StarRocks MCP server — [https://github.com/StarRocks/mcp-server-starrocks](https://github.com/StarRocks/mcp-server-starrocks)
 - AIStor MCP server — [https://github.com/minio/mcp-server-aistor](https://github.com/minio/mcp-server-aistor)
 - Olist dataset — [https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
