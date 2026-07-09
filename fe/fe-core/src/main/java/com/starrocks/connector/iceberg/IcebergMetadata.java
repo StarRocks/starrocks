@@ -1972,7 +1972,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                 continue;
             }
             String name = table.getPartitionSourceName(nativeTable.schema(), field);
-            if (!stringPartitionColumns.contains(name.toLowerCase(Locale.ROOT))) {
+            // findColumnName returns null when the field's source id is not in the current schema
+            // (e.g. partition evolution / dropped source column). Skip it -> manifest conservatively kept.
+            if (name == null) {
+                continue;
+            }
+            String nameLower = name.toLowerCase(Locale.ROOT);
+            if (!stringPartitionColumns.contains(nameLower)) {
                 continue;
             }
             ManifestFile.PartitionFieldSummary summary = summaries.get(i);
@@ -1983,11 +1989,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 org.apache.iceberg.types.Type type = partitionTypeFields.get(i).type();
                 String lower = Conversions.fromByteBuffer(type, summary.lowerBound()).toString();
                 String upper = Conversions.fromByteBuffer(type, summary.upperBound()).toString();
-                ranges.put(name.toLowerCase(Locale.ROOT), new LocalDateTime[] {
+                ranges.put(nameLower, new LocalDateTime[] {
                         DateUtils.parseStrictDateTime(lower), DateUtils.parseStrictDateTime(upper)});
             } catch (Exception e) {
                 // Undecodable / non-temporal bounds -> leave the column out so the manifest is conservatively kept.
-                LOG.debug("skip manifest partition range for column {}: {}", name, e.toString());
+                LOG.debug("skip manifest partition range for column {}", name, e);
             }
         }
         return ranges;
