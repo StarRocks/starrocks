@@ -128,6 +128,8 @@ subprojects {
             implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
             implementation("com.squareup.okio:okio:3.4.0")
+            // okhttp 4.10.0 drags in okio-jvm 3.0.0 (CVE-2023-3635); keep it aligned with okio
+            implementation("com.squareup.okio:okio-jvm:3.4.0")
             implementation("com.starrocks:fe-testing:${project.version}")
             implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
@@ -173,7 +175,8 @@ subprojects {
             implementation("org.apache.arrow:flight-sql-jdbc-driver:${project.ext["arrow.version"]}")
             implementation("org.apache.avro:avro:${project.ext["avro.version"]}")
             implementation("org.apache.commons:commons-dbcp2:2.9.0")
-            implementation("org.apache.commons:commons-lang3:3.9")
+            // 3.18.0 fixes CVE-2025-48924
+            implementation("org.apache.commons:commons-lang3:3.18.0")
             implementation("org.apache.commons:commons-pool2:2.3")
             implementation("org.apache.groovy:groovy-groovysh:4.0.9")
             implementation("org.apache.hadoop:hadoop-aliyun:${project.ext["hadoop.version"]}")
@@ -256,6 +259,20 @@ subprojects {
             implementation("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
             // dependency sync end
         }
+    }
+
+    // Mirror the Maven-side CVE exclusions/enforcer bans (see fe/pom.xml):
+    // these artifacts must never appear on any FE classpath.
+    configurations.all {
+        // superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs
+        exclude(group = "org.bouncycastle", module = "bcprov-jdk15on")
+        // EOL okhttp 2.x line (okhttp3 lives under com.squareup.okhttp3)
+        exclude(group = "com.squareup.okhttp")
+        // JSP engine, unused by FE; tomcat 9.0.93 carries CVE-2025-55754/CVE-2025-52434
+        exclude(group = "org.apache.tomcat")
+        exclude(group = "org.apache.tomcat.embed")
+        // COS SSE-KMS SDK, drags in EOL okhttp 2.7.5
+        exclude(group = "com.tencentcloudapi")
     }
 
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
