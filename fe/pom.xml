@@ -594,6 +594,14 @@ under the License.
                 <version>3.4.0</version>
             </dependency>
 
+            <!-- pin okio-jvm to the same version as okio; okhttp 4.10.0 drags in
+                 okio-jvm 3.0.0 which is affected by CVE-2023-3635 -->
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio-jvm</artifactId>
+                <version>3.4.0</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
             <dependency>
                 <groupId>javax.validation</groupId>
@@ -1047,6 +1055,14 @@ under the License.
                 <groupId>com.qcloud.cos</groupId>
                 <artifactId>hadoop-cos</artifactId>
                 <version>3.3.0-8.3.2</version>
+                <exclusions>
+                    <!-- tencentcloud KMS SDK drags in EOL okhttp 2.7.5 (com.squareup.okhttp);
+                         only used for COS SSE-KMS which StarRocks does not support -->
+                    <exclusion>
+                        <groupId>com.tencentcloudapi</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
@@ -1138,6 +1154,11 @@ under the License.
                     <exclusion>
                         <groupId>org.apache.hbase.thirdparty</groupId>
                         <artifactId>hbase-shaded-netty</artifactId>
+                    </exclusion>
+                    <!-- JSP engine, unused here; tomcat-jasper 9.0.93 carries open CVEs -->
+                    <exclusion>
+                        <groupId>org.apache.tomcat</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1296,6 +1317,12 @@ under the License.
                     <exclusion>
                         <groupId>org.lz4</groupId>
                         <artifactId>lz4-pure-java</artifactId>
+                    </exclusion>
+                    <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
+                         bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                    <exclusion>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcprov-jdk15on</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

@@ -91,6 +91,12 @@
                     <artifactId>lz4-pure-java</artifactId>
                     <groupId>org.lz4</groupId>
                 </exclusion>
+                <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
+                     bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcprov-jdk15on</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
