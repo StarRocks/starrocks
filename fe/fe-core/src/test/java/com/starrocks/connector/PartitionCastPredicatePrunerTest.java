@@ -237,6 +237,19 @@ public class PartitionCastPredicatePrunerTest {
         Assertions.assertTrue(mayMatch(eqConj, range("c2", dt(2020, 12, 1), dt(2020, 1, 1))));
     }
 
+    @Test
+    public void testRangeMayMatchDateCastConservative() {
+        // CAST(c2 AS DATE) compares with day-truncation semantics; range pruning uses full LocalDateTimes,
+        // so a DATE cast must be conservatively kept. A noon bound [12:00,12:00] compared as full datetime
+        // against the midnight constant would falsely prune, but the row's date still matches.
+        LocalDateTime noon = LocalDateTime.of(2020, 6, 14, 12, 0);
+        ScalarOperator dateEq = eq(castTo(strPartCol, DateType.DATE), datetime("2020-06-14 00:00:00"));
+        Assertions.assertTrue(mayMatch(dateEq, range("c2", noon, noon)));
+        // Sanity: the guard is DATE-specific. A DATETIME cast still range-prunes (12:00 != midnight).
+        ScalarOperator dtEq = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
+        Assertions.assertFalse(mayMatch(dtEq, range("c2", noon, noon)));
+    }
+
     private Map<String, String> singletonMap(String k, String v) {
         Map<String, String> map = new HashMap<>();
         map.put(k, v);

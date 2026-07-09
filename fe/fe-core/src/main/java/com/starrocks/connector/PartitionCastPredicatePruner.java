@@ -261,8 +261,13 @@ public class PartitionCastPredicatePruner {
     }
 
     private static String temporalCastColumnName(ScalarOperator operator) {
-        if (operator instanceof CastOperator
-                && (operator.getType().isDate() || operator.getType().isDatetime())) {
+        // Only DATETIME casts are range-pruned. CAST(col AS DATE) compares with day-truncation semantics,
+        // but the manifest bounds/constant here are full LocalDateTimes; range-pruning such a cast could drop
+        // a day-matching manifest (e.g. bound 2020-06-14T12:00 vs a midnight DATE constant), turning the safe
+        // over-estimate into an under-estimate. So DATE casts are left unhandled here (conservatively kept).
+        // string-vs-temporal binary predicates coerce to DATETIME, so a bare CAST(col AS DATE) only arises
+        // from explicit user casts and is rare.
+        if (operator instanceof CastOperator && operator.getType().isDatetime()) {
             ScalarOperator child = operator.getChild(0);
             if (child instanceof ColumnRefOperator && child.getType().isStringType()) {
                 return ((ColumnRefOperator) child).getName();
