@@ -351,13 +351,40 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    keys on id and would keep returning the stale pre-index schema — so data
     //    loaded after the index, and compaction output, would build no index.
     //    A new id forces every cache to miss and pick up this indexed schema.
-    //    Existing rowsets carry no rowset_to_schema pin, so they also resolve to
-    //    metadata->schema(); their segments' missing footer index is served by
-    //    the .idx sidecar until compaction rebuilds it inline.
     if (op.has_new_schema_id() && op.new_schema_id() > 0) {
-        schema->set_id(op.new_schema_id());
+        const int64_t new_schema_id = op.new_schema_id();
+        const int64_t old_schema_id = schema->id();
+        schema->set_id(new_schema_id);
         if (op.has_new_schema_version()) {
             schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
+        }
+        // Durability across the two schema-resolution regimes:
+        //  - Empty rowset_to_schema (fresh table / never fast-evolved): every
+        //    existing rowset and compaction resolve via metadata->schema(), whose
+        //    id/content we just bumped; their segments' missing footer index is
+        //    served by the .idx sidecar until compaction rebuilds it inline. No
+        //    map maintenance needed.
+        //  - Non-empty rowset_to_schema (table already fast-evolved): existing
+        //    rowsets are PINNED to a historical schema, and BOTH the read path
+        //    (rowset.cpp) and compaction's get_output_rowset_schema resolve through
+        //    historical_schemas — bumping metadata->schema() alone is bypassed, so
+        //    those rowsets (and compaction output) would never pick up the index.
+        //    Register the indexed schema under new_schema_id and repoint the pins
+        //    that referenced the pre-index current schema (old_schema_id, identical
+        //    columns) to it, so those rowsets read via the .idx sidecar and
+        //    compaction rebuilds the index inline. Rowsets pinned to OLDER
+        //    (fewer-column) historical schemas keep their pin. rowset.cpp CHECKs
+        //    that a pinned schema_id exists in historical_schemas, so the archive
+        //    and the repoint must happen together. Guarded on historical_schemas so
+        //    replay is idempotent (on replay schema()->id() already == new id).
+        if (!_tablet_meta->rowset_to_schema().empty() &&
+            _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
+            (*_tablet_meta->mutable_historical_schemas())[new_schema_id].CopyFrom(*schema);
+            for (auto& entry : *_tablet_meta->mutable_rowset_to_schema()) {
+                if (entry.second == old_schema_id) {
+                    entry.second = new_schema_id;
+                }
+            }
         }
         // Best-effort persist the new schema as a standalone SCHEMA_{id} file so
         // any by-id cold reader (get_tablet_schema_by_id) resolves the indexed

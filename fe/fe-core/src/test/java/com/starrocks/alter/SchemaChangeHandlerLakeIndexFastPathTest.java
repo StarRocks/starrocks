@@ -113,13 +113,17 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         when(t.getCopiedIndexes()).thenReturn(new ArrayList<>());
         when(t.incAndGetMaxIndexId()).thenReturn(101L, 102L, 103L);
         when(t.getMaxIndexId()).thenReturn(100L);
-        // The add-index / add-bloom-filter fast path bumps the schema id/version
-        // (durability fix) by reading the base index meta's schema version, so the
-        // mock must resolve it or tryBuild*() would NPE and return null.
+        // The add-index / add-bloom-filter fast path allocates a new schema
+        // id/version per index meta (durability fix): it iterates
+        // getIndexMetaIdToMeta() and reads each meta's schema version, so the mock
+        // must resolve both or tryBuild*() would NPE and return null.
         when(t.getBaseIndexMetaId()).thenReturn(100L);
         MaterializedIndexMeta baseIndexMeta = mock(MaterializedIndexMeta.class);
         when(baseIndexMeta.getSchemaVersion()).thenReturn(0);
         when(t.getIndexMetaByMetaId(anyLong())).thenReturn(baseIndexMeta);
+        HashMap<Long, MaterializedIndexMeta> indexMetaIdToMeta = new HashMap<>();
+        indexMetaIdToMeta.put(100L, baseIndexMeta);
+        when(t.getIndexMetaIdToMeta()).thenReturn(indexMetaIdToMeta);
         for (String name : columnNames) {
             Column col = new Column(name, IntegerType.BIGINT);
             when(t.getColumn(name)).thenReturn(col);

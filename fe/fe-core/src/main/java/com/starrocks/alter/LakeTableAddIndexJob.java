@@ -25,7 +25,9 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -69,39 +71,29 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     private List<String> addBfColumns = new ArrayList<>();
 
     /**
-     * New schema id/version allocated once at job build time (see
-     * SchemaChangeHandler.tryBuildLakeAddIndexJob). The fast path reuses the
-     * base index meta's schema_id but changes its content (adds the index), and
-     * every lake by-id schema cache assumes id==content — so without a new id,
-     * data loaded after the index and compaction output keep using the cached
-     * pre-index schema and build no index. Bumping the id (persisted here so
-     * replay is idempotent) forces every cache to miss and pick up the indexed
-     * schema. 0 = not set (older job / not applicable).
+     * Per-index-meta new schema id + version, allocated once at job build time
+     * (one getNextId() per affected index meta; version = that meta's own
+     * schemaVersion + 1). The fast path reuses each index meta's schema_id but
+     * changes its content (adds the index); every lake by-id schema cache assumes
+     * id==content, so without a fresh id per index, loads/compaction on that index
+     * keep resolving the cached pre-index schema and build no index. Each index's
+     * tablets are stamped with THAT index's new id (populateAlterRequest), and
+     * each affected meta is bumped in applyCatalogMutation — the dispatch set, the
+     * allocation set, and the mutation set are kept identical so FE and BE schema
+     * ids never diverge (e.g. on a table with rollup / sync-MV indexes). Persisted
+     * for idempotent replay. Key = index meta id; value = [schemaId, schemaVersion].
      */
-    @SerializedName(value = "newSchemaId")
-    private long newSchemaId = 0;
-    @SerializedName(value = "newSchemaVersion")
-    private long newSchemaVersion = 0;
-
-    /**
-     * Base index meta id captured at build time. Only tablets belonging to the
-     * base index may carry {@link #newSchemaId}: applyCatalogMutation bumps only
-     * the base index meta, so stamping a rollup/MV-index tablet would push its BE
-     * schema id ahead of its (unchanged) FE meta. -1 = not set.
-     */
-    @SerializedName(value = "baseIndexMetaId")
-    private long baseIndexMetaId = -1;
+    @SerializedName(value = "indexMetaIdToNewSchema")
+    private Map<Long, long[]> indexMetaIdToNewSchema = new HashMap<>();
 
     /** For deserialization / GSON. */
     public LakeTableAddIndexJob() {
         super(JobType.SCHEMA_CHANGE);
     }
 
-    /** Set the FE-allocated new schema id/version and the base index meta id. */
-    public void setNewSchema(long schemaId, long schemaVersion, long baseIndexMetaId) {
-        this.newSchemaId = schemaId;
-        this.newSchemaVersion = schemaVersion;
-        this.baseIndexMetaId = baseIndexMetaId;
+    /** Record the FE-allocated new schema id/version for one affected index meta. */
+    public void putNewSchema(long indexMetaId, long schemaId, long schemaVersion) {
+        indexMetaIdToNewSchema.put(indexMetaId, new long[] {schemaId, schemaVersion});
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -123,21 +115,20 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         this.newIndexes = other.newIndexes == null ? null : new ArrayList<>(other.newIndexes);
         this.indexesToAdd = other.indexesToAdd == null ? null : new ArrayList<>(other.indexesToAdd);
         this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
-        this.newSchemaId = other.newSchemaId;
-        this.newSchemaVersion = other.newSchemaVersion;
-        this.baseIndexMetaId = other.baseIndexMetaId;
+        this.indexMetaIdToNewSchema = other.indexMetaIdToNewSchema == null ? null
+                : new HashMap<>(other.indexMetaIdToNewSchema);
     }
 
     @Override
     protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId) {
         task.setOnlyAddIndex(indexesToAdd);
-        // Only the base index meta has its schema id/version bumped
-        // (applyCatalogMutation), so only base-index tablets may carry the new
-        // schema id. Stamping a rollup/MV-index tablet would push its BE schema
-        // id ahead of the unchanged FE meta; those tablets keep their existing
-        // schema id (pre-fix behavior).
-        if (newSchemaId > 0 && indexMetaId == baseIndexMetaId) {
-            task.setNewIndexSchema(newSchemaId, newSchemaVersion);
+        // Each affected index meta got its OWN new schema id/version; stamp this
+        // tablet with its index's id so BE bumps that index's schema, and
+        // applyCatalogMutation bumps the same meta. Keeps FE and BE schema ids
+        // aligned per index (base + any rollup / sync-MV index).
+        long[] newSchema = indexMetaIdToNewSchema.get(indexMetaId);
+        if (newSchema != null && newSchema[0] > 0) {
+            task.setNewIndexSchema(newSchema[0], newSchema[1]);
         }
     }
 
@@ -190,20 +181,29 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             table.setBloomFilterInfo(merged, fpp);
         }
 
-        // Bump the base index meta's schema id/version so subsequent loads and
-        // compaction resolve the now-indexed schema instead of the cached
-        // pre-index one (the fast path reuses the same schema_id but changed its
+        // Bump EACH affected index meta's schema id/version so subsequent loads
+        // and compaction resolve the now-indexed schema instead of the cached
+        // pre-index one (the fast path reuses the schema_id but changed its
         // content; every lake by-id schema cache would otherwise return stale).
-        // Idempotent on replay: the persisted newSchemaId/version are set
-        // verbatim. Mirrors LakeTableAsyncFastSchemaChangeJob's meta update.
-        if (newSchemaId > 0) {
-            long baseMetaId = table.getBaseIndexMetaId();
-            MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseMetaId);
-            if (baseMeta != null) {
-                MaterializedIndexMeta copy = baseMeta.shallowCopy();
-                copy.setSchemaId(newSchemaId);
-                copy.setSchemaVersion((int) newSchemaVersion);
-                table.getIndexMetaIdToMeta().put(baseMetaId, copy);
+        // Per-index — the same set stamped onto BE tablets (populateAlterRequest)
+        // — so a rollup / sync-MV index meta stays consistent with its tablets.
+        // Idempotent on replay: the persisted ids/versions are set verbatim.
+        // Mirrors LakeTableAsyncFastSchemaChangeJob's per-index meta update.
+        if (indexMetaIdToNewSchema != null && !indexMetaIdToNewSchema.isEmpty()) {
+            boolean bumped = false;
+            for (Map.Entry<Long, long[]> entry : indexMetaIdToNewSchema.entrySet()) {
+                MaterializedIndexMeta meta = table.getIndexMetaByMetaId(entry.getKey());
+                if (meta == null) {
+                    continue;
+                }
+                long[] newSchema = entry.getValue();
+                MaterializedIndexMeta copy = meta.shallowCopy();
+                copy.setSchemaId(newSchema[0]);
+                copy.setSchemaVersion((int) newSchema[1]);
+                table.getIndexMetaIdToMeta().put(entry.getKey(), copy);
+                bumped = true;
+            }
+            if (bumped) {
                 table.rebuildFullSchema();
             }
         }
@@ -234,9 +234,8 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         c.newIndexes = this.newIndexes == null ? null : new ArrayList<>(this.newIndexes);
         c.indexesToAdd = this.indexesToAdd == null ? null : new ArrayList<>(this.indexesToAdd);
         c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
-        c.newSchemaId = this.newSchemaId;
-        c.newSchemaVersion = this.newSchemaVersion;
-        c.baseIndexMetaId = this.baseIndexMetaId;
+        c.indexMetaIdToNewSchema = this.indexMetaIdToNewSchema == null ? null
+                : new HashMap<>(this.indexMetaIdToNewSchema);
     }
 
     // Accessors for tests / tooling.
