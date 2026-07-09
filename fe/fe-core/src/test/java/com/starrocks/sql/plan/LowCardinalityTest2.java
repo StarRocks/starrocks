@@ -2376,6 +2376,82 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testPartitionTopNPartitionByDecodedColumnKeepsStringRef() throws Exception {
+        boolean enablePipelineEngine = connectContext.getSessionVariable().isEnablePipelineEngine();
+        starRocksAssert.withTable("CREATE TABLE `topn_decoded_fact` (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `pid` bigint,\n" +
+                "  `s` varchar(128),\n" +
+                "  `ts` datetime\n" +
+                ") ENGINE=OLAP DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 16\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+        starRocksAssert.withTable("CREATE TABLE `topn_decoded_map` (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `pid` bigint,\n" +
+                "  `m` varchar(128)\n" +
+                ") ENGINE=OLAP DUPLICATE KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 16\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+        try {
+            connectContext.getSessionVariable().setEnablePipelineEngine(true);
+            // The inner window consumes `s` in dict form, so its Decode sits below the join.
+            // The outer ranking-window filter becomes a PARTITION-TOP-N above the join whose
+            // partition-by column must keep the string ref of `s` — rewriting it to the dict
+            // ref would reference a slot already pruned below (slot_id not found on BE).
+            String sql = "SELECT m, rn FROM (\n" +
+                    "  SELECT t.s, r.m,\n" +
+                    "         row_number() over (partition by t.s order by t.s) rn\n" +
+                    "  FROM (\n" +
+                    "    SELECT pid, s FROM (\n" +
+                    "      SELECT pid, s, row_number() over (partition by s order by ts) rn2\n" +
+                    "      FROM topn_decoded_fact\n" +
+                    "    ) x WHERE rn2 = 1\n" +
+                    "  ) t\n" +
+                    "  LEFT JOIN topn_decoded_map r ON r.pid = t.pid\n" +
+                    ") y WHERE rn = 1";
+            String plan = getVerboseExplain(sql);
+            Assertions.assertEquals(2, plan.split("PARTITION-TOP-N", -1).length - 1, plan);
+            // on branch-3.5 the inner window's Decode sits below the join, so `s` arrives
+            // at the outer window already decoded; the outer PARTITION-TOP-N and ANALYTIC
+            // must keep the string ref — a partition-by referencing the dict ref already
+            // decoded below would fail on BE with "slot_id not found"
+            assertContains(plan, "  11:PARTITION-TOP-N\n" +
+                    "  |  partition by: [3: s, VARCHAR(128), true]");
+            assertContains(plan, "  14:ANALYTIC\n" +
+                    "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
+                    "args nullable: false; result nullable: true], ]\n" +
+                    "  |  partition by: [3: s, VARCHAR(128), true]");
+            // the inner PARTITION-TOP-N still consumes `s` in dict form and keeps the dict ref
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: [10: s, INT, true]");
+
+            // lead() with a non-null default disables the dict form of `s` below the join,
+            // so `s` arrives at the outer PARTITION-TOP-N already decoded; its partition-by
+            // must keep the string ref — the dict slot no longer exists at that point and
+            // referencing it fails on BE with "slot_id not found"
+            String decodedSql = "SELECT m, rn FROM (\n" +
+                    "  SELECT t.s, r.m,\n" +
+                    "         row_number() over (partition by t.s order by t.s) rn\n" +
+                    "  FROM (\n" +
+                    "    SELECT pid, s FROM (\n" +
+                    "      SELECT pid, s, lead(s, 1, 'NONE') over (partition by pid order by ts) nxt\n" +
+                    "      FROM topn_decoded_fact\n" +
+                    "    ) x WHERE nxt != 'ZZZ'\n" +
+                    "  ) t\n" +
+                    "  LEFT JOIN topn_decoded_map r ON r.pid = t.pid\n" +
+                    ") y WHERE rn = 1";
+            String decodedPlan = getVerboseExplain(decodedSql);
+            int topnIdx = decodedPlan.indexOf("PARTITION-TOP-N");
+            Assertions.assertTrue(topnIdx > 0, decodedPlan);
+            String topnSection = decodedPlan.substring(topnIdx,
+                    decodedPlan.indexOf("order by", topnIdx));
+            Assertions.assertTrue(topnSection.contains(": s, VARCHAR"), decodedPlan);
+            Assertions.assertFalse(topnSection.contains(": s, INT"), decodedPlan);
+        } finally {
+            connectContext.getSessionVariable().setEnablePipelineEngine(enablePipelineEngine);
+        }
+    }
+
+    @Test
     public void testShuffleJoinWithDistributionCheck() throws Exception {
         FeConstants.runningUnitTest = true;
         try {
