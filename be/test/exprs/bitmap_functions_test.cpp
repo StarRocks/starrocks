@@ -17,6 +17,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
+=======
+#include "base/base64.h"
+#include "base/testutil/assert.h"
+>>>>>>> ddfcb93f99 ([UT] Fix FunctionContext leaks in base64ToBitmapConstNullHandling (#76072))
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -35,9 +40,9 @@ public:
         ctx = ctx_ptr.get();
     }
 
-private:
+protected:
     std::unique_ptr<FunctionContext> ctx_ptr;
-    FunctionContext* ctx;
+    FunctionContext* ctx = nullptr;
 };
 
 TEST_F(VecBitmapFunctionsTest, bitmapEmptyTest) {
@@ -3485,7 +3490,8 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstOptimization) {
 }
 
 TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstNullHandling) {
-    auto* ctx2 = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx2_ptr(FunctionContext::create_test_context());
+    auto* ctx2 = ctx2_ptr.get();
 
     // NULL constant
     {
@@ -3509,7 +3515,8 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstNullHandling) {
 
     // Empty string constant
     {
-        auto* ctx3 = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx3_ptr(FunctionContext::create_test_context());
+        auto* ctx3 = ctx3_ptr.get();
 
         auto value_col = BinaryColumn::create();
         value_col->append(Slice(""));
@@ -3535,7 +3542,8 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstNullHandling) {
 
     // Invalid base64 constant
     {
-        auto* ctx4 = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx4_ptr(FunctionContext::create_test_context());
+        auto* ctx4 = ctx4_ptr.get();
 
         auto value_col = BinaryColumn::create();
         value_col->append(Slice("!!!invalid_base64!!!"));
@@ -3561,7 +3569,8 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapConstNullHandling) {
 
     // Truncated valid base64 constant (missing last char -> incomplete final group)
     {
-        auto* ctx5 = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx5_ptr(FunctionContext::create_test_context());
+        auto* ctx5 = ctx5_ptr.get();
 
         const std::string truncated_base64 =
                 "CgsAAABaAAAAAAAAAFsAAAAAAAAAXAAAAAAAAABdAAAAAAAAAF4AAAAAAAAAXwAAAAAAAABgAAAAAAAAAGEAAAAAAAAA"
