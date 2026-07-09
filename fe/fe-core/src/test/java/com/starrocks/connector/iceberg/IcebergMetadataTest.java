@@ -1513,7 +1513,9 @@ public class IcebergMetadataTest extends TableTestBase {
         Map<ColumnRefOperator, Column> colMap = new HashMap<>();
         colMap.put(new ColumnRefOperator(3, VARCHAR, "k2", true), new Column("k2", VARCHAR));
         OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
-        Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
+        // Force the manifest-statistics path (Path C) explicitly, so the test does not depend on the
+        // default of enableIcebergColumnStatistics staying false.
+        context.getSessionVariable().setEnableIcebergColumnStatistics(false);
         TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
         return metadata.getTableStatistics(context, icebergTable, colMap, null, predicate, -1, versionRange)
                 .getOutputRowCount();
