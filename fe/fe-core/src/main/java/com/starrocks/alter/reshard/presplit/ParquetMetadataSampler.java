@@ -31,10 +31,15 @@ import java.util.Objects;
  * statistics into {@code requestedTabletCount - 1} row-quantile boundaries
  * directly, without materializing a row sample.
  *
- * <p>Restricted to single-column sort keys — per-column Parquet min/max
- * doesn't imply real composite lex-tuples. Throws
- * {@link MetaTierUnavailableException} when statistics are
- * missing/all-null/truncated or row-group ranges overlap above
+ * <p>Plans row-quantile boundaries from per-row-group {@code (minTuple, maxTuple)}
+ * statistics via lexicographic {@link Tuple} comparison, for one OR MANY sort-key
+ * columns. For a composite key the reader supplies a per-column bounding-box tuple:
+ * absent nulls, this is a valid loose lexicographic bound; a NULL sorts below every
+ * value and can fall under minTuple, but the BE routes every row by its true value
+ * so data is never mis-split, only the meta-tier boundary is looser. A row group
+ * whose leading-column range overlaps another's is caught by the existing overlap
+ * check and falls back to the data tier. Throws {@link MetaTierUnavailableException}
+ * when statistics are missing/all-null/truncated or row-group ranges overlap above
  * {@code overlapThreshold}; the caller then retries with data tier.
  */
 public final class ParquetMetadataSampler {
@@ -66,7 +71,6 @@ public final class ParquetMetadataSampler {
         Objects.requireNonNull(request, "request");
         Preconditions.checkArgument(requestedTabletCount >= 2,
                 "requestedTabletCount must be >= 2, was %s", requestedTabletCount);
-        rejectCompositeSortKey(request);
 
         List<RowGroupStatistics> fetched = statisticsProvider.fetch(request);
         if (fetched == null) {
@@ -105,14 +109,6 @@ public final class ParquetMetadataSampler {
                     "row-group metadata too coarse to place row-quantile boundaries");
         }
         return BoundaryPlannerResult.NO_SPLIT;
-    }
-
-    private static void rejectCompositeSortKey(SampleRequest request) throws MetaTierUnavailableException {
-        int arity = request.getSortKey().size();
-        if (arity != 1) {
-            throw new MetaTierUnavailableException(
-                    "composite sort key (arity " + arity + ") — meta tier supports single-column only");
-        }
     }
 
     private static List<RowGroupStatistics> filterUsableRowGroups(

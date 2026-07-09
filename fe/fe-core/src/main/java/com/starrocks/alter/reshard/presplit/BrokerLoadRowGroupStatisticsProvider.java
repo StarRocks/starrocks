@@ -63,10 +63,7 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
         rejectIfBrokerBacked(brokerDesc);
         List<BrokerFileGroup> fileGroups = context.fileGroups();
         List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
-        // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
-        // before this provider is invoked, so a single-element sort key is the
-        // contract by the time we get here.
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
 
@@ -86,7 +83,7 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
                         Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
                 FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn, context.loadTimeZone()));
+                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
             }
         }
         return aggregated;

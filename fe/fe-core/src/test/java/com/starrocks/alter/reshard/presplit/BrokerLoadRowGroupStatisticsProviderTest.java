@@ -19,6 +19,7 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -52,6 +53,24 @@ class BrokerLoadRowGroupStatisticsProviderTest {
 
         Assertions.assertFalse(rowGroupStatistics.isEmpty());
         Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
+    void compositeSortKeyProjectsAllColumns() throws Exception {
+        Path parquetPath = writeCompositeParquet(/*rowCount=*/ 16);
+
+        SampleRequest request = compositeSampleRequest(
+                List.of(parquetFileGroup()),
+                List.of(List.of(brokerFileStatus(parquetPath))));
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        for (RowGroupStatistics rg : rowGroupStatistics) {
+            // arity 2 proves the provider forwarded the FULL sort-key list, not get(0).
+            Assertions.assertEquals(2, rg.getMinTuple().getValues().size());
+            Assertions.assertEquals(2, rg.getMaxTuple().getValues().size());
+        }
     }
 
     @Test
@@ -194,6 +213,17 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 (group, rowIndex) -> group.append("sort_key", valueOffset + rowIndex));
     }
 
+    private Path writeCompositeParquet(int rowCount) throws IOException {
+        return PresplitTestSupport.writeParquetFixture(
+                tempDirectory,
+                "message schema { required binary tenant (UTF8); required int64 position; }",
+                rowCount,
+                (group, rowIndex) -> {
+                    group.append("tenant", String.format("tenant-%02d", rowIndex / 4));
+                    group.append("position", (long) rowIndex);
+                });
+    }
+
     private Path writeBigintOrc(int rowCount, long valueOffset) throws IOException {
         return PresplitTestSupport.writeOrcFixture(
                 tempDirectory,
@@ -218,6 +248,19 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 new BrokerLoadScanContext(
                         brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE,
+                /*seed=*/ 0L);
+    }
+
+    private SampleRequest compositeSampleRequest(
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
+        BrokerDesc brokerDesc = Mockito.mock(BrokerDesc.class);
+        Mockito.when(brokerDesc.hasBroker()).thenReturn(false);
+        Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
+        return new SampleRequest(
+                new BrokerLoadScanContext(
+                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(new Column("tenant", VarcharType.VARCHAR), new Column("position", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
     }

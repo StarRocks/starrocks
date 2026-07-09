@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -112,6 +113,32 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
                 /*seed=*/ 0L);
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void compositeSortKeyProjectsAllColumns() throws Exception {
+        Path parquetPath = PresplitTestSupport.writeParquetFixture(
+                tempDirectory,
+                "message schema { required binary tenant (UTF8); required int64 position; }",
+                /*rowCount=*/ 16,
+                (group, rowIndex) -> {
+                    group.append("tenant", String.format("tenant-%02d", rowIndex / 4));
+                    group.append("position", (long) rowIndex);
+                });
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(new Column("tenant", VarcharType.VARCHAR), new Column("position", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        for (RowGroupStatistics rg : rowGroupStatistics) {
+            // arity 2 proves the provider forwarded the FULL sort-key list, not get(0).
+            Assertions.assertEquals(2, rg.getMinTuple().getValues().size());
+            Assertions.assertEquals(2, rg.getMaxTuple().getValues().size());
+        }
     }
 
     @Test
