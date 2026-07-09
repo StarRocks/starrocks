@@ -61,4 +61,48 @@ public class RoutineLoadDescTest {
                         "WHERE `a` = 1",
                 desc.toSql());
     }
+
+    @Test
+    public void testIncludeMetadataRoundTrip() throws Exception {
+        // parse + AstBuilder.visitIncludeMetadata + buildLoadDesc populate the clause.
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " +
+                        "INCLUDE METADATA(KEY AS k, PARTITION AS p, OFFSET AS o, HEADERS AS h), " +
+                        "COLUMNS(a, b) " +
+                        "PROPERTIES (\"format\"=\"json\") " +
+                        "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+
+        Assertions.assertNotNull(originLoad.getMetadata());
+        Assertions.assertEquals(4, originLoad.getMetadata().getItems().size());
+        Assertions.assertEquals("KEY", originLoad.getMetadata().getItems().get(0).getKey());
+        Assertions.assertEquals("k", originLoad.getMetadata().getItems().get(0).getAlias());
+
+        // toSql renders the clause (write leg of the persistence round-trip).
+        RoutineLoadDesc desc = new RoutineLoadDesc();
+        desc.setMetadata(originLoad.getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(KEY AS `k`, PARTITION AS `p`, OFFSET AS `o`, HEADERS AS `h`)",
+                desc.toSql());
+
+        // re-parse the rendered SQL (read leg) -> the clause survives an origStmt round-trip.
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " + desc.toSql() +
+                        " PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+        Assertions.assertNotNull(reparsed.getMetadata());
+        Assertions.assertEquals(4, reparsed.getMetadata().getItems().size());
+        Assertions.assertEquals("OFFSET", reparsed.getMetadata().getItems().get(2).getKey());
+        Assertions.assertEquals("o", reparsed.getMetadata().getItems().get(2).getAlias());
+
+        // A reserved-word alias round-trips because ParseUtil.backquote quotes it; without the backquotes
+        // the rendered `AS from` would fail to re-parse.
+        RoutineLoadDesc reserved = new RoutineLoadDesc();
+        reserved.setMetadata(CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl INCLUDE METADATA(KEY AS `from`), COLUMNS(a, b) " +
+                        "PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null)
+                .getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(KEY AS `from`)", reserved.toSql());
+        RoutineLoadDesc reservedReparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " + reserved.toSql() +
+                        " PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+        Assertions.assertEquals("from", reservedReparsed.getMetadata().getItems().get(0).getAlias());
+    }
 }

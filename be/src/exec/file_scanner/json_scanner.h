@@ -20,6 +20,8 @@
 #include "column/nullable_column.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
+#include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "simdjson.h"
 #include "types/simple_json_path.h"
@@ -42,6 +44,13 @@ public:
     // Close this scanner
     void close() override;
     static Status parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
+
+#if BE_TEST
+    // Test-only: inject the per-message source metadata that production reads from the pipe buffer.
+    // BE_TEST feeds json from a file whose buffer carries no metadata, so the metadata-column fill path
+    // is otherwise unreachable from a test; this lets JsonScannerTest exercise it.
+    void set_test_stream_meta(const StreamMessageMeta* meta) { _test_meta = meta; }
+#endif
 
 private:
     Status _construct_json_types();
@@ -75,6 +84,10 @@ private:
     // It's mainly for optimizing the performance where get_next() returns Status::Timeout
     // frequently by avoiding creating a chunk in each call
     ChunkPtr _reusable_empty_chunk = nullptr;
+
+#if BE_TEST
+    const StreamMessageMeta* _test_meta = nullptr;
+#endif
 };
 
 // Reader to parse the json.
@@ -158,6 +171,12 @@ private:
     std::vector<uint8_t> _parsed_columns;
     // record the "__op" column's index
     int _op_col_index{-1};
+    // Hidden source-metadata columns, filled from the message's ByteBuffer meta (by slot id) rather than
+    // the JSON payload. _meta_col_by_slot_id keys by source slot id (used in the jsonpath path, which
+    // iterates _slot_descs); _meta_col_by_index keys by chunk column index -- the running slot order used
+    // for _op_col_index -- for the object-order null-fill path. Both empty for non-routine-load.
+    StreamSourceMetaColumns _meta_col_by_slot_id;
+    std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
 
     ByteBufferPtr _file_stream_buffer;
 
