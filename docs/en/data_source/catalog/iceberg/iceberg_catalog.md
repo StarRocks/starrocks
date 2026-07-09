@@ -775,6 +775,10 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 
 - To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
 
+  :::note
+  When vended credentials are used, StarRocks accesses GCS directly with the token vended by the REST catalog. Any `gcp.gcs.impersonation_service_account` configured on the catalog is ignored for that access.
+  :::
+
 `StorageCredentialParams` for Google GCS:
 
 ###### gcp.gcs.service_account_email

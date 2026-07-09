@@ -240,6 +240,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 copied.set(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
                         GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
                 copied.set(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, "true");
+                // The base conf may carry catalog-level impersonation, which gcs-connector would apply
+                // on top of the vended token; vended tokens typically lack IAM impersonation permission.
+                copied.unset(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY);
                 copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,

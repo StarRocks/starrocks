@@ -774,6 +774,10 @@ Iceberg クラスターのストレージとして Google GCS を選択した場
 
 - REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
+  :::note
+  Vended Credential を使用する場合、StarRocks は REST カタログから払い出されたトークンで GCS に直接アクセスします。このとき、カタログに設定された `gcp.gcs.impersonation_service_account` は無視されます。
+  :::
+
 Google GCS 用の `StorageCredentialParams`:
 
 ###### gcp.gcs.service_account_email

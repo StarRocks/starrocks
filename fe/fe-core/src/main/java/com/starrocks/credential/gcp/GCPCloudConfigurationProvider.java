@@ -39,6 +39,7 @@ public class GCPCloudConfigurationProvider implements CloudConfigurationProvider
     public static final String LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY = "fs.gs.auth.access.token.provider.impl";
     // Hadoop's FileSystem cache ignores Configuration; disable it so rotating vended tokens take effect
     public static final String DISABLE_FS_CACHE_KEY = "fs.gs.impl.disable.cache";
+    public static final String IMPERSONATION_SERVICE_ACCOUNT_KEY = "fs.gs.auth.impersonation.service.account";
     public static final String ACCESS_TOKEN_PROVIDER_IMPL =
             "com.starrocks.connector.gcp.TemporaryGCPAccessTokenProvider";
 
