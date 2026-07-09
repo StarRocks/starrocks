@@ -377,8 +377,7 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         //    that a pinned schema_id exists in historical_schemas, so the archive
         //    and the repoint must happen together. Guarded on historical_schemas so
         //    replay is idempotent (on replay schema()->id() already == new id).
-        if (!_tablet_meta->rowset_to_schema().empty() &&
-            _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
+        if (!_tablet_meta->rowset_to_schema().empty() && _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
             (*_tablet_meta->mutable_historical_schemas())[new_schema_id].CopyFrom(*schema);
             for (auto& entry : *_tablet_meta->mutable_rowset_to_schema()) {
                 if (entry.second == old_schema_id) {
