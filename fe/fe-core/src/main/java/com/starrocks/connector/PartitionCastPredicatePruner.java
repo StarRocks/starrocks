@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -187,6 +189,86 @@ public class PartitionCastPredicatePruner {
         } catch (Exception e) {
             // Strict cast parse failure or any other folding issue: fall back to keeping the file.
             LOG.debug("residual partition predicate not foldable, keep file: {}", conjunct, e);
+        }
+        return null;
+    }
+
+    /**
+     * Coarse manifest/partition-group level check for the residual conjuncts, given each referenced column's
+     * temporal value range {@code [min, max]} (parsed from the group's partition summary). Returns {@code false}
+     * only when some residual conjunct provably cannot be satisfied by ANY value within the ranges, so the group
+     * can be pruned; returns {@code true} (keep) for anything it cannot decide. This never prunes a group that
+     * might contain a match, so the resulting row-count estimate stays a safe over-estimate.
+     *
+     * @param partitionDateRanges column name (any case) -> [minDate, maxDate] for the group.
+     */
+    public static boolean rangeMayMatch(List<ScalarOperator> residualConjuncts,
+                                        Map<String, LocalDateTime[]> partitionDateRanges) {
+        Map<String, LocalDateTime[]> lowerRanges = new HashMap<>();
+        for (Map.Entry<String, LocalDateTime[]> entry : partitionDateRanges.entrySet()) {
+            lowerRanges.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
+        }
+        for (ScalarOperator conjunct : residualConjuncts) {
+            if (!conjunctMayMatchRange(conjunct, lowerRanges)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // False only if the conjunct provably cannot be satisfied by any value within the ranges. Handles the simple
+    // CAST(<string col>) <op> <temporal const> shape (column on the left); everything else keeps the group.
+    private static boolean conjunctMayMatchRange(ScalarOperator conjunct, Map<String, LocalDateTime[]> lowerRanges) {
+        if (!(conjunct instanceof BinaryPredicateOperator)) {
+            return true;
+        }
+        BinaryPredicateOperator bp = (BinaryPredicateOperator) conjunct;
+        String columnName = temporalCastColumnName(bp.getChild(0));
+        ConstantOperator constant = asTemporalConstant(bp.getChild(1));
+        if (columnName == null || constant == null) {
+            return true;
+        }
+        LocalDateTime[] range = lowerRanges.get(columnName.toLowerCase(Locale.ROOT));
+        if (range == null || range.length != 2 || range[0] == null || range[1] == null) {
+            return true;
+        }
+        LocalDateTime lo = range[0];
+        LocalDateTime hi = range[1];
+        LocalDateTime c = constant.getDatetime();
+        // Does some value d in [lo, hi] satisfy (d <op> c)?
+        switch (bp.getBinaryType()) {
+            case EQ:
+                return !c.isBefore(lo) && !c.isAfter(hi);
+            case LT:
+                return lo.isBefore(c);
+            case LE:
+                return !lo.isAfter(c);
+            case GT:
+                return hi.isAfter(c);
+            case GE:
+                return !hi.isBefore(c);
+            default:
+                return true;
+        }
+    }
+
+    private static String temporalCastColumnName(ScalarOperator operator) {
+        if (operator instanceof CastOperator
+                && (operator.getType().isDate() || operator.getType().isDatetime())) {
+            ScalarOperator child = operator.getChild(0);
+            if (child instanceof ColumnRefOperator && child.getType().isStringType()) {
+                return ((ColumnRefOperator) child).getName();
+            }
+        }
+        return null;
+    }
+
+    private static ConstantOperator asTemporalConstant(ScalarOperator operator) {
+        if (operator instanceof ConstantOperator) {
+            ConstantOperator constant = (ConstantOperator) operator;
+            if (!constant.isNull() && (constant.getType().isDate() || constant.getType().isDatetime())) {
+                return constant;
+            }
         }
         return null;
     }

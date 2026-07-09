@@ -1500,6 +1500,83 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(statistics.getColumnStatistic(columnRefOperator2).isUnknown());
     }
 
+    private IcebergMetadata newStatsMetadata() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        return new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+    }
+
+    private double manifestPrunedRowCount(IcebergMetadata metadata, IcebergTable icebergTable,
+                                          TestTables.TestTable table, ScalarOperator predicate) {
+        Map<ColumnRefOperator, Column> colMap = new HashMap<>();
+        colMap.put(new ColumnRefOperator(3, VARCHAR, "k2", true), new Column("k2", VARCHAR));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        return metadata.getTableStatistics(context, icebergTable, colMap, null, predicate, -1, versionRange)
+                .getOutputRowCount();
+    }
+
+    private ScalarOperator k2EqDate(int year, int month, int day) {
+        return new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DATETIME, new ColumnRefOperator(3, VARCHAR, "k2", true)),
+                ConstantOperator.createDatetime(LocalDateTime.of(year, month, day, 0, 0, 0)));
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountSinglePartitionManifests() throws Exception {
+        // STRING partition column, CAST(k2 AS DATETIME) = <ts>. Two commits => two single-partition manifests.
+        // The residual is evaluated against each manifest's partition range in the DATETIME domain: the
+        // 2020-06-15 manifest is pruned, the 2020-06-14 one is kept -> rowCount=3 (NOT the string-pruned 1, and
+        // tighter than the whole-table 7).
+        IcebergMetadata metadata = newStatsMetadata();
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbManifestSinglePart", 1);
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/data-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(3).build()).commit();
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/data-0615.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-15").withRecordCount(4).build()).commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+
+        Assertions.assertEquals(3.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2020, 6, 14)), 0.001);
+        // A date outside every partition -> both manifests pruned -> floor of 1.
+        Assertions.assertEquals(1.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2019, 1, 1)), 0.001);
+    }
+
+    @Test
+    public void testGetManifestPrunedRowCountMultiPartitionManifest() throws Exception {
+        // A single commit => ONE manifest spanning two partitions [2020-06-14, 2020-06-15]. A kept manifest is
+        // counted in full, so a match inside the range over-estimates (3+4=7); a const outside the whole range is
+        // still pruned (floor of 1).
+        IcebergMetadata metadata = newStatsMetadata();
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbManifestMultiPart", 1);
+        table.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/data-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(3).build())
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/data-0615.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-15").withRecordCount(4).build())
+                .commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+
+        // Const inside the manifest's [2020-06-14, 2020-06-15] range -> kept whole -> over-estimate 7.
+        Assertions.assertEquals(7.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2020, 6, 14)), 0.001);
+        // Const outside the whole range -> pruned -> floor of 1.
+        Assertions.assertEquals(1.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2019, 1, 1)), 0.001);
+    }
+
     @Test
     public void testGetTableStatisticsManifestPrunedKeepsIncrementalDelivery() throws Exception {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);

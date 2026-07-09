@@ -189,6 +189,51 @@ public class PartitionCastPredicatePrunerTest {
         Assertions.assertTrue(PartitionCastPredicatePruner.partitionMayMatch(residual, withNull));
     }
 
+    private LocalDateTime dt(int y, int m, int d) {
+        return LocalDateTime.of(y, m, d, 0, 0, 0);
+    }
+
+    private Map<String, LocalDateTime[]> range(String col, LocalDateTime lo, LocalDateTime hi) {
+        Map<String, LocalDateTime[]> map = new HashMap<>();
+        map.put(col, new LocalDateTime[] {lo, hi});
+        return map;
+    }
+
+    private boolean mayMatch(ScalarOperator conjunct, Map<String, LocalDateTime[]> ranges) {
+        return PartitionCastPredicatePruner.rangeMayMatch(Lists.newArrayList(conjunct), ranges);
+    }
+
+    @Test
+    public void testRangeMayMatchEquality() {
+        ScalarOperator eqConj = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
+        // single-value range == the value / range contains the value -> may match
+        Assertions.assertTrue(mayMatch(eqConj, range("c2", dt(2020, 6, 14), dt(2020, 6, 14))));
+        Assertions.assertTrue(mayMatch(eqConj, range("c2", dt(2020, 6, 10), dt(2020, 6, 20))));
+        // value above / below the range -> prune
+        Assertions.assertFalse(mayMatch(eqConj, range("c2", dt(2020, 6, 15), dt(2020, 6, 20))));
+        Assertions.assertFalse(mayMatch(eqConj, range("c2", dt(2020, 1, 1), dt(2020, 6, 13))));
+    }
+
+    @Test
+    public void testRangeMayMatchRangeComparison() {
+        // CAST(c2 AS DATETIME) >= '2020-06-15'
+        ScalarOperator geConj = new BinaryPredicateOperator(BinaryType.GE,
+                castTo(strPartCol, DateType.DATETIME), datetime("2020-06-15 00:00:00"));
+        Assertions.assertTrue(mayMatch(geConj, range("c2", dt(2020, 6, 10), dt(2020, 6, 20))));
+        // whole range below the bound -> prune
+        Assertions.assertFalse(mayMatch(geConj, range("c2", dt(2020, 1, 1), dt(2020, 6, 10))));
+    }
+
+    @Test
+    public void testRangeMayMatchConservativeKeep() {
+        ScalarOperator eqConj = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
+        // no range known for the referenced column -> keep
+        Assertions.assertTrue(mayMatch(eqConj, range("other", dt(2020, 1, 1), dt(2020, 1, 1))));
+        // non-binary conjunct (OR) -> keep
+        ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, eqConj, eqConj);
+        Assertions.assertTrue(mayMatch(or, range("c2", dt(2020, 1, 1), dt(2020, 1, 1))));
+    }
+
     private Map<String, String> singletonMap(String k, String v) {
         Map<String, String> map = new HashMap<>();
         map.put(k, v);
