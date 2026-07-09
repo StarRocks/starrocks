@@ -104,7 +104,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 CompletableFuture<Optional<ColumnDict>> asyncLoad(
                         @NonNull ColumnIdentifier columnIdentifier,
                         @NonNull Executor executor) {
-                    return CompletableFuture.supplyAsync(() -> {
+                    CompletableFuture<Optional<ColumnDict>> future = CompletableFuture.supplyAsync(() -> {
                         try {
                             long tableId = columnIdentifier.getTableId();
                             ColumnId columnName = columnIdentifier.getColumnName();
@@ -129,6 +129,16 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                             throw new CompletionException(e);
                         }
                     }, executor);
+                    // Rejected columns are also in NO_DICT_STRING_COLUMNS (which short-circuits lookups),
+                    // so their cached empty is redundant and never invalidated -- drop it so empties can't
+                    // pile up under the byte cap. Async so it runs after Caffeine stores the entry.
+                    future.whenCompleteAsync((result, throwable) -> {
+                        if (throwable == null && result != null && !result.isPresent()
+                                && NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
+                            dictStatistics.synchronous().invalidate(columnIdentifier);
+                        }
+                    }, executor);
+                    return future;
                 }
 
                 @Override
