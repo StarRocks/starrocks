@@ -36,7 +36,9 @@ jobs:
     steps:
       - name: Analyze unstable cases (history-aware)
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool
+          git pull >/dev/null || { echo "::error::ci-tool 'git pull' failed on the runner (dirty /var/lib/ci-tool); refusing to run stale code. Clean the runner tree and re-run."; exit 1; }
+          source lib/init.sh
 
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
