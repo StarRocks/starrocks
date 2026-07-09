@@ -365,8 +365,8 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         // metadata->schema() whose id now equals new_schema_id.
         if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
             auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
-            LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet "
-                                      << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
+            LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet " << _tablet_meta->id()
+                                      << " schema_id " << schema->id() << ": " << st;
         }
     }
 }
