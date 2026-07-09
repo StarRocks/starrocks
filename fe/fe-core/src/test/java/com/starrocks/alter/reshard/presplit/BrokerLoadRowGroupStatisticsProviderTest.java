@@ -74,6 +74,25 @@ class BrokerLoadRowGroupStatisticsProviderTest {
     }
 
     @Test
+    void nonIdentityFileGroupFallsBackToDataTier() throws Exception {
+        // A per-group SET/explicit-column-list (like WHERE / columns_from_path / negative / hadoop
+        // funcs) maps or filters the sort key, so the raw footer column diverges from the loaded
+        // value. The meta path must reject it before reading footers (reusing the data tier's guard)
+        // and fall back rather than emit skewed boundaries -- this is the shape composite keys reached
+        // once the up-front composite gate was removed.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        BrokerFileGroup nonIdentityGroup = Mockito.mock(BrokerFileGroup.class);
+        Mockito.when(nonIdentityGroup.getFileFormat()).thenReturn("parquet");
+        Mockito.when(nonIdentityGroup.getColumnExprList())
+                .thenReturn(List.of(Mockito.mock(com.starrocks.sql.ast.ImportColumnDesc.class)));
+
+        SampleRequest request = bigintSampleRequest(
+                List.of(nonIdentityGroup), List.of(List.of(brokerFileStatus(parquetPath))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
     void multipleFileGroupsAreAggregated() throws Exception {
         Path firstFile = writeBigintParquet(/*rowCount=*/ 16, /*valueOffset=*/ 0L);
         Path secondFile = writeBigintParquet(/*rowCount=*/ 24, /*valueOffset=*/ 1000L);
