@@ -94,9 +94,9 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
 };
 
-class TestConnectorChunkSink final : public connector::PartitionedConnectorChunkSink {
+class TestConnectorSink final : public connector::PartitionedConnectorChunkSink {
 public:
-    explicit TestConnectorChunkSink(RuntimeState* state)
+    explicit TestConnectorSink(RuntimeState* state)
             : PartitionedConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {
     }
 
@@ -234,11 +234,11 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_EQ(sink_mem_mgr->register_child_manager(std::move(op_mem_mgr_impl)), op_mem_mgr);
     ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
-    auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
+    auto connector_sink = std::make_unique<TestConnectorSink>(_runtime_state);
+    connector_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context);
+                                                      std::move(connector_sink), sink_mem_mgr, _fragment_context);
     ASSERT_OK(op->prepare(_runtime_state));
 
     {
@@ -273,13 +273,13 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     formats::AsyncFlushStreamPoller empty_poller;
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
 
-    auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
-    chunk_sink->set_finished(true);
-    chunk_sink->set_stream_to_enqueue_for_test(stream);
+    auto connector_sink = std::make_unique<TestConnectorSink>(_runtime_state);
+    connector_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
+    connector_sink->set_finished(true);
+    connector_sink->set_stream_to_enqueue_for_test(stream);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context);
+                                                      std::move(connector_sink), sink_mem_mgr, _fragment_context);
     ASSERT_OK(op->prepare(_runtime_state));
     stream.reset();
     ASSERT_OK(op->set_finishing(_runtime_state));

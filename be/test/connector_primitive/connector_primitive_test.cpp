@@ -40,7 +40,7 @@ public:
     const TupleDescriptor* tuple_descriptor(RuntimeState*) const override { return nullptr; }
 };
 
-class TestConnectorChunkSink final : public ConnectorChunkSink {
+class TestConnectorSink final : public ConnectorSink {
 public:
     Status init(formats::AsyncFlushStreamPoller*, RuntimeProfile*, SinkMemoryManager*) override { return Status::OK(); }
     Status add(const ChunkPtr&) override { return Status::OK(); }
@@ -58,12 +58,12 @@ public:
     SinkOperatorMemoryManager* registered_mem_mgr = nullptr;
 };
 
-struct TestConnectorChunkSinkContext final : public ConnectorChunkSinkContext {};
+struct TestConnectorSinkContext final : public ConnectorSinkContext {};
 
-class TestConnectorChunkSinkProvider final : public ConnectorChunkSinkProvider {
+class TestConnectorSinkProvider final : public ConnectorSinkProvider {
 public:
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t) override {
-        return std::make_unique<TestConnectorChunkSink>();
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t) override {
+        return std::make_unique<TestConnectorSink>();
     }
 };
 
@@ -158,10 +158,10 @@ TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue)
     ASSERT_EQ(1, queue->num_original_morsels());
 }
 
-TEST(ConnectorPrimitiveTest, ConnectorChunkSinkContractLivesInPrimitiveLayer) {
-    TestConnectorChunkSinkProvider provider;
+TEST(ConnectorPrimitiveTest, ConnectorSinkContractLivesInPrimitiveLayer) {
+    TestConnectorSinkProvider provider;
 
-    auto sink_or = provider.create_chunk_sink(7);
+    auto sink_or = provider.create_sink(7);
     ASSERT_TRUE(sink_or.ok()) << sink_or.status().to_string();
     auto sink = std::move(sink_or).value();
 

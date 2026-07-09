@@ -151,7 +151,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         FileChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_sink(0).value();
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_OK(sink->init(&poller, nullptr, &mgr));
         EXPECT_NE(sink->op_mem_mgr(), nullptr);
@@ -173,7 +173,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         FileChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_sink(0).value();
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_OK(sink->init(&poller, nullptr, &mgr));
         EXPECT_NE(sink->op_mem_mgr(), nullptr);
@@ -195,7 +195,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         FileChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_sink(0).value();
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_ERROR(sink->init(&poller, nullptr, &mgr));
     }

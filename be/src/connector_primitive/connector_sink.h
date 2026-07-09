@@ -31,9 +31,9 @@ namespace starrocks::connector {
 class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
-class ConnectorChunkSink {
+class ConnectorSink {
 public:
-    virtual ~ConnectorChunkSink() = default;
+    virtual ~ConnectorSink() = default;
 
     virtual Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
                         SinkMemoryManager* sink_mem_mgr) = 0;
@@ -53,17 +53,17 @@ public:
     virtual void register_memory_candidates(SinkOperatorMemoryManager*) {}
 };
 
-struct ConnectorChunkSinkContext {
-    virtual ~ConnectorChunkSinkContext() = default;
+struct ConnectorSinkContext {
+    virtual ~ConnectorSinkContext() = default;
 };
 
-class ConnectorChunkSinkProvider {
+class ConnectorSinkProvider {
 public:
-    virtual ~ConnectorChunkSinkProvider() = default;
+    virtual ~ConnectorSinkProvider() = default;
 
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) = 0;
 };
 
-using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;
+using ConnectorSinkProviderPtr = std::unique_ptr<ConnectorSinkProvider>;
 
 } // namespace starrocks::connector

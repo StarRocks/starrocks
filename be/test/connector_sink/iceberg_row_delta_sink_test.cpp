@@ -39,7 +39,7 @@
 
 namespace starrocks::connector {
 
-// A mock ConnectorChunkSink that records chunks passed to add().
+// A mock ConnectorSink that records chunks passed to add().
 class MockChunkSink : public PartitionedConnectorChunkSink {
 public:
     explicit MockChunkSink(RuntimeState* state)

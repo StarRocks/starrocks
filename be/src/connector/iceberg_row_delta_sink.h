@@ -25,7 +25,7 @@ namespace starrocks::connector {
 
 // Context for IcebergRowDeltaSink
 // Composes delete-sink and data-sink contexts plus routing column indices.
-struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
+struct IcebergRowDeltaSinkContext : public ConnectorSinkContext {
     ~IcebergRowDeltaSinkContext() override = default;
 
     // Sub-contexts for creating underlying sinks
@@ -40,12 +40,12 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
 
 // IcebergRowDeltaSinkProvider creates IcebergRowDeltaSink for Iceberg row-delta operations.
 // It composes an IcebergDeleteSinkProvider and an IcebergChunkSinkProvider.
-class IcebergRowDeltaSinkProvider final : public ConnectorChunkSinkProvider {
+class IcebergRowDeltaSinkProvider final : public ConnectorSinkProvider {
 public:
     explicit IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx);
     ~IcebergRowDeltaSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<IcebergRowDeltaSinkContext> _ctx;
@@ -68,7 +68,7 @@ public:
     static constexpr int8_t OP_UPDATE = 2;
     static constexpr int8_t OP_INSERT = 3;
 
-    IcebergRowDeltaSink(std::unique_ptr<ConnectorChunkSink> delete_sink, std::unique_ptr<ConnectorChunkSink> data_sink,
+    IcebergRowDeltaSink(std::unique_ptr<ConnectorSink> delete_sink, std::unique_ptr<ConnectorSink> data_sink,
                         int32_t op_code_index, RuntimeState* state);
 
     ~IcebergRowDeltaSink() override = default;
@@ -87,8 +87,8 @@ public:
     bool is_finished() override;
 
 private:
-    std::unique_ptr<ConnectorChunkSink> _delete_sink;
-    std::unique_ptr<ConnectorChunkSink> _data_sink;
+    std::unique_ptr<ConnectorSink> _delete_sink;
+    std::unique_ptr<ConnectorSink> _data_sink;
 
     int32_t _op_code_index;
 

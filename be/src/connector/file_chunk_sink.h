@@ -39,7 +39,7 @@ public:
     void callback_on_commit(const CommitResult& result) override;
 };
 
-struct FileChunkSinkContext : public ConnectorChunkSinkContext {
+struct FileChunkSinkContext : public ConnectorSinkContext {
     ~FileChunkSinkContext() override = default;
 
     std::string path;
@@ -55,12 +55,12 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
     pipeline::FragmentContext* fragment_context = nullptr;
 };
 
-class FileChunkSinkProvider : public ConnectorChunkSinkProvider {
+class FileChunkSinkProvider : public ConnectorSinkProvider {
 public:
     explicit FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx);
     ~FileChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<FileChunkSinkContext> _ctx;

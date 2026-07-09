@@ -47,7 +47,7 @@ private:
     std::vector<std::string> _transform_exprs;
 };
 
-struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
+struct IcebergChunkSinkContext : public ConnectorSinkContext {
     ~IcebergChunkSinkContext() override = default;
 
     std::string path;
@@ -77,12 +77,12 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
     std::string writer_tag;
 };
 
-class IcebergChunkSinkProvider : public ConnectorChunkSinkProvider {
+class IcebergChunkSinkProvider : public ConnectorSinkProvider {
 public:
     explicit IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx);
     ~IcebergChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<IcebergChunkSinkContext> _ctx;

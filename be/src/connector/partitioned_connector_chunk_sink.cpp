@@ -50,7 +50,7 @@ Status PartitionedConnectorChunkSink::init(formats::AsyncFlushStreamPoller* poll
 
 void PartitionedConnectorChunkSink::init_profile() {
     if (_profile == nullptr) {
-        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorChunkSink"));
+        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorSink"));
     }
 
     std::string partition_names = fmt::format("{}", fmt::join(_partition_column_names, ","));

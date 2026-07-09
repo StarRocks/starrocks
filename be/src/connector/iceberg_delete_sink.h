@@ -30,7 +30,7 @@ struct SortOrdering;
 
 // Context for IcebergDeleteSink
 // Contains configuration needed to write delete files
-struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
+struct IcebergDeleteSinkContext : public ConnectorSinkContext {
     std::string path;
     std::vector<std::string> column_names;
     std::vector<std::string> partition_column_names;
@@ -72,13 +72,13 @@ struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
 };
 
 // IcebergDeleteSinkProvider creates IcebergDeleteSink for writing position delete files
-class IcebergDeleteSinkProvider final : public ConnectorChunkSinkProvider {
+class IcebergDeleteSinkProvider final : public ConnectorSinkProvider {
 public:
     explicit IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx);
     ~IcebergDeleteSinkProvider() override = default;
 
     // Create a sink for writing delete files
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<IcebergDeleteSinkContext> _ctx;

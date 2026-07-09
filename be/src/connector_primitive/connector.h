@@ -19,7 +19,7 @@
 
 #include "common/logging.h"
 #include "common/statusor.h"
-#include "connector_primitive/connector_chunk_sink.h"
+#include "connector_primitive/connector_sink.h"
 #include "connector_primitive/data_source_provider.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -72,8 +72,8 @@ public:
         __builtin_unreachable();
     }
 
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> create_sink_provider(
-            ConnectorSinkProviderType /*type*/, std::shared_ptr<ConnectorChunkSinkContext> /*context*/) const {
+    virtual StatusOr<std::unique_ptr<ConnectorSinkProvider>> create_sink_provider(
+            ConnectorSinkProviderType /*type*/, std::shared_ptr<ConnectorSinkContext> /*context*/) const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     }

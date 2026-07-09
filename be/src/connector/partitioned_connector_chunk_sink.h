@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "connector_primitive/connector_chunk_sink.h"
+#include "connector_primitive/connector_sink.h"
 #include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
@@ -40,7 +40,7 @@ class SinkOperatorMemoryManager;
 
 using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
 
-class PartitionedConnectorChunkSink : public ConnectorChunkSink {
+class PartitionedConnectorChunkSink : public ConnectorSink {
 public:
     PartitionedConnectorChunkSink(std::vector<std::string> partition_columns,
                                   std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
