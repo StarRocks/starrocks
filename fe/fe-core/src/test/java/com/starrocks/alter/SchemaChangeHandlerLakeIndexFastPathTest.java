@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -111,6 +113,13 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         when(t.getCopiedIndexes()).thenReturn(new ArrayList<>());
         when(t.incAndGetMaxIndexId()).thenReturn(101L, 102L, 103L);
         when(t.getMaxIndexId()).thenReturn(100L);
+        // The add-index / add-bloom-filter fast path bumps the schema id/version
+        // (durability fix) by reading the base index meta's schema version, so the
+        // mock must resolve it or tryBuild*() would NPE and return null.
+        when(t.getBaseIndexMetaId()).thenReturn(100L);
+        MaterializedIndexMeta baseIndexMeta = mock(MaterializedIndexMeta.class);
+        when(baseIndexMeta.getSchemaVersion()).thenReturn(0);
+        when(t.getIndexMetaByMetaId(anyLong())).thenReturn(baseIndexMeta);
         for (String name : columnNames) {
             Column col = new Column(name, IntegerType.BIGINT);
             when(t.getColumn(name)).thenReturn(col);
