@@ -198,4 +198,14 @@ public interface AccessController {
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
+
+    default void checkContextBaseAction(ConnectContext context, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnContextBase(ConnectContext context, String name)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
 }

@@ -435,4 +435,16 @@ public class Authorizer {
                     .checkAnyActionOnWarehouse(context, name);
         }
     }
+
+    public static void checkContextBaseAction(ConnectContext context, String name,
+                                              PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkContextBaseAction(context, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnContextBase(ConnectContext context, String name)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnContextBase(context, name);
+    }
 }

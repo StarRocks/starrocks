@@ -73,6 +73,8 @@ public class ObjectType {
      */
     public static final ObjectType WAREHOUSE = new ObjectType(20003);
 
+    public static final ObjectType CONTEXTBASE = new ObjectType(20006);
+
     public static final Set<ObjectType> VALID_OBJECT_TYPE = new ImmutableSet.Builder<ObjectType>().add(
             TABLE,
             DATABASE,
@@ -88,7 +90,8 @@ public class ObjectType {
             STORAGE_VOLUME,
             PIPE,
             COLUMN,
-            WAREHOUSE
+            WAREHOUSE,
+            CONTEXTBASE
     ).build();
 
     public static final Map<Integer, Pair<String, String>> OBJECT_TO_NAME =
@@ -108,6 +111,7 @@ public class ObjectType {
                     .put(13, new Pair<>("PIPE", "PIPES"))
                     .put(14, new Pair<>("COLUMN", "COLUMNS"))
                     .put(20003, new Pair<>("WAREHOUSE", "WAREHOUSES"))
+                    .put(20006, new Pair<>("CONTEXTBASE", "CONTEXTBASES"))
                     .build();
 
     public static final Set<String> CASE_INSENSITIVE_NAMES = new ImmutableSet.Builder<String>().add(

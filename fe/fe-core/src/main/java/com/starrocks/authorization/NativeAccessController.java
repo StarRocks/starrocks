@@ -417,6 +417,18 @@ public class NativeAccessController implements AccessController {
         checkAnyActionOnObject(context, ObjectType.WAREHOUSE, Collections.singletonList(name));
     }
 
+    @Override
+    public void checkContextBaseAction(ConnectContext context, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(context, privilegeType, ObjectType.CONTEXTBASE,
+                Collections.singletonList(name));
+    }
+
+    @Override
+    public void checkAnyActionOnContextBase(ConnectContext context, String name) throws AccessDeniedException {
+        checkAnyActionOnObject(context, ObjectType.CONTEXTBASE, Collections.singletonList(name));
+    }
+
     /**
      * Built-in row access policy for the {@code _statistics_.rejected_records}
      * system table. Delegates to

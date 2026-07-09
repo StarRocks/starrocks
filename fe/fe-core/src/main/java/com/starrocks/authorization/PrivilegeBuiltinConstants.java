@@ -67,4 +67,8 @@ public class PrivilegeBuiltinConstants {
     public static final long ALL_PIPES_ID = -5;
 
     public static final long ALL_WAREHOUSES_ID = -1; // -1 represent all warehouses
+
+    // Sentinel for the ON ALL CONTEXTBASES grant. ContextBaseMeta.getId() is non-negative, so this
+    // negative value cannot collide with any real contextbase id.
+    public static final long ALL_CONTEXTBASES_ID = -6;
 }

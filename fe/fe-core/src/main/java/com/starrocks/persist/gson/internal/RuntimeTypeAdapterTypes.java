@@ -49,6 +49,7 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
 import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.ContextBasePEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.FunctionPEntryObject;
 import com.starrocks.authorization.GlobalFunctionPEntryObject;
@@ -362,7 +363,12 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
                         .registerSubtype(FailoverGroupPEntryObject.class, "FailoverGroupPEntryObject")
                         .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject")
-                        .registerSubtype(PipePEntryObject.class, "PipePEntryObject");
+                        .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
+                        // Without this registration, Gson's polymorphic writer throws
+                        // "did you forget to register a subtype?" when serializing a
+                        // ContextBasePEntryObject into a role's privilege collection edit-log
+                        // entry, so no GRANT ... ON CONTEXTBASE can be persisted or replayed.
+                        .registerSubtype(ContextBasePEntryObject.class, "ContextBasePEntryObject");
 
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(PEntryObject.class, p_entry_object_runtime_type_adapter_factory);
 

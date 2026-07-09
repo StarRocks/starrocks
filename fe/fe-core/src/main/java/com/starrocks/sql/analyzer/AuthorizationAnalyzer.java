@@ -321,7 +321,8 @@ public class AuthorizationAnalyzer {
                         || ObjectType.CATALOG.equals(objectType)
                         || ObjectType.RESOURCE_GROUP.equals(objectType)
                         || ObjectType.STORAGE_VOLUME.equals(objectType)
-                        || ObjectType.WAREHOUSE.equals(objectType)) {
+                        || ObjectType.WAREHOUSE.equals(objectType)
+                        || ObjectType.CONTEXTBASE.equals(objectType)) {
                     if (tokens.size() != 1) {
                         throw new SemanticException(
                                 "Invalid grant statement with error privilege object " + tokens);
@@ -401,7 +402,8 @@ public class AuthorizationAnalyzer {
                         || ObjectType.CATALOG.equals(objectType)
                         || ObjectType.RESOURCE_GROUP.equals(objectType)
                         || ObjectType.STORAGE_VOLUME.equals(objectType)
-                        || ObjectType.WAREHOUSE.equals(objectType)) {
+                        || ObjectType.WAREHOUSE.equals(objectType)
+                        || ObjectType.CONTEXTBASE.equals(objectType)) {
                     for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                         if (tokens.size() != 1) {
                             throw new SemanticException(

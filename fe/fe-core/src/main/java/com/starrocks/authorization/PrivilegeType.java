@@ -82,6 +82,17 @@ public class PrivilegeType {
      */
     public static final PrivilegeType CREATE_WAREHOUSE = new PrivilegeType(20004, "CREATE WAREHOUSE");
     public static final PrivilegeType SECURITY = new PrivilegeType(20005, "SECURITY");
+    // Semantic-context module: system-level privilege to create top-level contextbases. Per-base
+    // access is then granted with the generic verbs on ObjectType.CONTEXTBASE:
+    //   GRANT USAGE ON CONTEXTBASE <name> ...   -- read + write data in the base
+    //   GRANT ALTER ON CONTEXTBASE <name> ...   -- ALTER CONTEXTBASE / collection lifecycle
+    //   GRANT DROP  ON CONTEXTBASE <name> ...   -- DROP CONTEXTBASE
+    //
+    // NOTE: ids 20001-20003 and 20006 are reserved by the enterprise PrivilegeTypeEPack
+    // (CREATE MASKING/ROW ACCESS POLICY, APPLY, CREATE FAILOVER GROUP). PrivilegeType.equals/hashCode
+    // are keyed solely by id, so a colliding id would make two system privileges indistinguishable.
+    // Pick the next free id (20007) rather than any of the EPack-reserved ones.
+    public static final PrivilegeType CREATE_CONTEXTBASE = new PrivilegeType(20007, "CREATE CONTEXTBASE");
 
     public static final Set<PrivilegeType> VALID_PRIVILEGE_TYPE = new ImmutableSet.Builder<PrivilegeType>().add(
             GRANT,
@@ -113,7 +124,8 @@ public class PrivilegeType {
             CREATE_STORAGE_VOLUME,
             CREATE_PIPE,
             CREATE_WAREHOUSE,
-            SECURITY
+            SECURITY,
+            CREATE_CONTEXTBASE
     ).build();
 
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE = VALID_PRIVILEGE_TYPE.stream().collect(Collectors.toMap(

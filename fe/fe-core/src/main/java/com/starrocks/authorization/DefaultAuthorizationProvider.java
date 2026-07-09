@@ -65,7 +65,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.CREATE_GLOBAL_FUNCTION,
                 PrivilegeType.CREATE_STORAGE_VOLUME,
                 PrivilegeType.CREATE_WAREHOUSE,
-                PrivilegeType.SECURITY));
+                PrivilegeType.SECURITY,
+                PrivilegeType.CREATE_CONTEXTBASE));
 
         typeToActionList.put(ObjectType.USER, Lists.newArrayList(
                 PrivilegeType.IMPERSONATE));
@@ -115,6 +116,11 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.USAGE));
 
         typeToActionList.put(ObjectType.WAREHOUSE, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.CONTEXTBASE, Lists.newArrayList(
                 PrivilegeType.USAGE,
                 PrivilegeType.ALTER,
                 PrivilegeType.DROP));
@@ -191,6 +197,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return PipePEntryObject.generate(objectTokens);
         } else if (ObjectType.WAREHOUSE.equals(objectType)) {
             return WarehousePEntryObject.generate(objectTokens);
+        } else if (ObjectType.CONTEXTBASE.equals(objectType)) {
+            return ContextBasePEntryObject.generate(objectTokens);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

@@ -332,7 +332,8 @@ public class AuthorizationMgr {
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
-                || ObjectType.WAREHOUSE.equals(objectType)) {
+                || ObjectType.WAREHOUSE.equals(objectType)
+                || ObjectType.CONTEXTBASE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*")));
             collection.grant(objectType, actionList, objects, false);
