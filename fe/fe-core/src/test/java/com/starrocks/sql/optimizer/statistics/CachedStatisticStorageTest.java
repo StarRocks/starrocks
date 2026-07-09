@@ -30,6 +30,10 @@ import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.metric.CounterMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.StarRocksMetricRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -687,5 +691,65 @@ public class CachedStatisticStorageTest {
             Config.enable_statistic_cache_metrics = originalEnabled;
         }
 
+    }
+
+    @Test
+    public void testInitStatisticsCacheMetricsRegistersCountersAndGauge() {
+        // GIVEN
+        final boolean originalEnabled = Config.enable_statistic_cache_metrics;
+        final var globalStateMgr = GlobalStateMgr.getCurrentState();
+        final var originalStorage = globalStateMgr.getStatisticStorage();
+
+        final var counterMetrics = List.of(
+                "statistics_cache_hit_count",
+                "statistics_cache_miss_count",
+                "statistics_cache_eviction_count",
+                "statistics_cache_load_success_count",
+                "statistics_cache_load_failure_count");
+        final var gaugeMetrics = List.of("statistics_cache_estimated_size");
+        // Each metric is registered once per named cache, so this is the expected series count per metric name.
+        final int expectedCacheCount = new CachedStatisticStorage().getNamedCacheMap().size();
+
+        try {
+            Config.enable_statistic_cache_metrics = true;
+            globalStateMgr.setStatisticStorage(new CachedStatisticStorage());
+
+            // WHEN
+            Deencapsulation.invoke(MetricRepo.class, "initStatisticsCacheMetrics");
+
+            // THEN
+            for (String metricName : counterMetrics) {
+                final var metrics = MetricRepo.getMetricsByName(metricName);
+                Assertions.assertEquals(expectedCacheCount, metrics.size(),
+                        "expected one metric per cache for " + metricName);
+                for (var metric : metrics) {
+                    Assertions.assertEquals(Metric.MetricType.COUNTER, metric.getType(),
+                            metricName + " should be exposed as a counter");
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                    // increase() is a no-op: the value is pulled from Caffeine, never pushed.
+                    ((CounterMetric<Long>) metric).increase(1L);
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                }
+            }
+
+            for (String metricName : gaugeMetrics) {
+                final var metrics = MetricRepo.getMetricsByName(metricName);
+                Assertions.assertEquals(expectedCacheCount, metrics.size(),
+                        "expected one metric per cache for " + metricName);
+
+                for (var metric : metrics) {
+                    Assertions.assertEquals(Metric.MetricType.GAUGE, metric.getType(),
+                            metric + " should be exposed as a gauge");
+                    Assertions.assertTrue((Long) metric.getValue() >= 0L);
+                }
+            }
+        } finally {
+            // Avoid leaking the registered metrics into the shared registry used by other tests.
+            final var registry = Deencapsulation.getField(MetricRepo.class, StarRocksMetricRegistry.class);
+            counterMetrics.forEach(registry::removeMetrics);
+            gaugeMetrics.forEach(registry::removeMetrics);
+            globalStateMgr.setStatisticStorage(originalStorage);
+            Config.enable_statistic_cache_metrics = originalEnabled;
+        }
     }
 }
