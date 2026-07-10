@@ -689,7 +689,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
-<<<<<<< HEAD
     // In the advanced case (ori_base_version < base_version), base_metadata
     // was written by a prior publish_version attempt of the same batch that
     // failed to ack to FE; FE's visibleVersion therefore stays at
@@ -703,9 +702,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     const TabletMetadataPB* ancestor_source = (ori_base_version == base_version) ? base_metadata.get() : nullptr;
     build_metadata_ancestors(new_metadata.get(), ori_base_version, ancestor_source);
 
-    // Save new metadata
-    RETURN_IF_ERROR(log_applier->finish());
-=======
     // Save new metadata. finish() commits the primary index and writes the new
     // tablet metadata (and delvecs) to object storage; that metadata write is not
     // covered by the apply counters, so time the whole step here.
@@ -713,7 +709,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
         RETURN_IF_ERROR(log_applier->finish());
     }
->>>>>>> a123c063f0d... [Enhancement] Trace the uncovered lake load publish-version paths (#75901)
 
     delete_files_async(std::move(files_to_delete));
 
