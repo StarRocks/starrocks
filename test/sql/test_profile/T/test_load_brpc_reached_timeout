@@ -1,4 +1,4 @@
--- name: test_load_brpc_reached_timeout @sequential
+-- name: test_load_brpc_reached_timeout @sequential @native
 create database db_${uuid0};
 use db_${uuid0};
 
