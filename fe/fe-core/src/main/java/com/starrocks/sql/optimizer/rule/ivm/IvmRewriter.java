@@ -28,7 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -166,31 +165,36 @@ public class IvmRewriter {
     }
 
     private static boolean isPrimaryKeyTargetMv(OptimizerContext optimizerContext) {
-        StatementBase statement = optimizerContext.getStatement();
-        if (!(statement instanceof InsertStmt insertStmt)) {
-            return false;
+        // At refresh the optimizer's statement is not the InsertStmt, so resolve the target MV from the tvr
+        // context (loadTargetMv), falling back to the InsertStmt target for the direct-insert plan.
+        MaterializedView targetMv = loadTargetMv(optimizerContext);
+        if (targetMv == null && optimizerContext.getStatement() instanceof InsertStmt insertStmt
+                && insertStmt.getTargetTable() instanceof MaterializedView insertTarget) {
+            targetMv = insertTarget;
         }
-        if (!(insertStmt.getTargetTable() instanceof MaterializedView targetMv)) {
-            return false;
-        }
-        return targetMv.getKeysType() == KeysType.PRIMARY_KEYS;
+        return targetMv != null && targetMv.getKeysType() == KeysType.PRIMARY_KEYS;
     }
 
     private static OptExpression appendPkLoadOpColumn(OptExpression root, TaskContext rootTaskContext,
                                                       ColumnRefSet requiredColumns,
                                                       ColumnRefOperator actionColumn) {
+        OptimizerContext optimizerContext = rootTaskContext.getOptimizerContext();
         List<ColumnRefOperator> rootOutputColumns = root.getOutputColumns()
-                .getColumnRefOperators(rootTaskContext.getOptimizerContext().getColumnRefFactory());
-        boolean hasLoadOpColumn = rootOutputColumns.stream()
-                .anyMatch(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
-        if (hasLoadOpColumn) {
+                .getColumnRefOperators(optimizerContext.getColumnRefFactory());
+        // __op is pre-placed as a fixed trailing output before optimize (InsertPlanner); bind it to
+        // __ACTION__ (same domain: INSERT_ACTION=UPSERT, DELETE_ACTION=DELETE) so it rides the sink by
+        // position. Fall back to creating one for a direct insert that did not pre-place it.
+        List<ColumnRefOperator> ivmOutputColumns = optimizerContext.getTvrOptContext().getIvmInsertOutputColumns();
+        ColumnRefOperator loadOpColumn = ivmOutputColumns == null ? null : ivmOutputColumns.stream()
+                .filter(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()))
+                .findFirst().orElse(null);
+        if (loadOpColumn != null && rootOutputColumns.contains(loadOpColumn)) {
             return root;
         }
-
-        ColumnRefOperator loadOpColumn = rootTaskContext.getOptimizerContext().getColumnRefFactory()
-                .create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false);
-        // __op shares __ACTION__'s domain (INSERT_ACTION = UPSERT, DELETE_ACTION = DELETE) — direct alias.
-        ScalarOperator loadOpExpr = actionColumn;
+        if (loadOpColumn == null) {
+            loadOpColumn = optimizerContext.getColumnRefFactory()
+                    .create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false);
+        }
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator outputColumn : rootOutputColumns) {
@@ -198,7 +202,7 @@ public class IvmRewriter {
                 projectMap.put(outputColumn, outputColumn);
             }
         }
-        projectMap.put(loadOpColumn, loadOpExpr);
+        projectMap.put(loadOpColumn, actionColumn);
 
         requiredColumns.union(loadOpColumn);
         rootTaskContext.getRequiredColumns().union(loadOpColumn);
@@ -222,6 +226,12 @@ public class IvmRewriter {
                 optimizerContext.getTvrOptContext().getIvmInsertOutputColumns();
         if (outputColumns == null) {
             return;
+        }
+        // __op is a pre-placed sink control column appended last (InsertPlanner), not an MV schema column;
+        // exclude it so the positional binding against the MV schema stays aligned.
+        if (!outputColumns.isEmpty()
+                && Load.LOAD_OP_COLUMN.equalsIgnoreCase(outputColumns.get(outputColumns.size() - 1).getName())) {
+            outputColumns = outputColumns.subList(0, outputColumns.size() - 1);
         }
         Map<ColumnRefOperator, ScalarOperator> translations = Maps.newHashMap();
         LogicalAggregationOperator aggOperator = null;
