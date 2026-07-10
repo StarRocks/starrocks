@@ -25,6 +25,11 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_manager.h"
+<<<<<<< HEAD
+=======
+#include "storage_primitive/flat_json_config.h"
+#include "storage_primitive/tablet_basic_info.h"
+>>>>>>> a43b68ac51 ([Enhancement] Propagate flat_json config ALTER to BE via versioned task (#74747))
 
 namespace starrocks {
 
@@ -122,5 +127,35 @@ TEST_F(TabletTest, test_get_basic_info_uses_tablet_footprint) {
     ASSERT_EQ(54321 + 999, info.data_size);
     ASSERT_EQ(321, info.num_row);
     ASSERT_EQ(1, info.num_segment);
+}
+
+TEST_F(TabletTest, test_update_flat_json_config_version_gate) {
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    tablet_meta->set_tablet_id(1026);
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(KeysType::DUP_KEYS);
+    schema_pb.set_id(1027);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+    tablet_meta->set_tablet_schema(schema);
+    DataDir data_dir("./data_dir");
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, &data_dir);
+
+    // a higher version installs the config
+    FlatJsonConfig config_v2(true, 0.25, 0.75, 12);
+    config_v2.set_flat_json_config_version(2);
+    tablet->update_flat_json_config(config_v2);
+    auto installed = tablet->tablet_meta()->get_flat_json_config();
+    ASSERT_TRUE(installed != nullptr);
+    ASSERT_EQ(2, installed->get_flat_json_config_version());
+    ASSERT_DOUBLE_EQ(0.25, installed->get_flat_json_null_factor());
+
+    // a stale (lower or equal) version is skipped, keeping the current config
+    FlatJsonConfig config_v1(false, 0.5, 0.5, 8);
+    config_v1.set_flat_json_config_version(1);
+    tablet->update_flat_json_config(config_v1);
+    installed = tablet->tablet_meta()->get_flat_json_config();
+    ASSERT_EQ(2, installed->get_flat_json_config_version());
+    ASSERT_TRUE(installed->is_flat_json_enabled());
+    ASSERT_DOUBLE_EQ(0.25, installed->get_flat_json_null_factor());
 }
 } // namespace starrocks
