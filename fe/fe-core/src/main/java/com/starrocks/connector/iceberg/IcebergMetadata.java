@@ -40,6 +40,7 @@ import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
@@ -152,6 +153,7 @@ import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
@@ -1941,22 +1943,93 @@ public class IcebergMetadata implements ConnectorMetadata {
             return 1;
         }
 
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts> against a 'yyyy-MM-dd' partition)
+        // are pruned unsoundly by Iceberg's string-domain manifest evaluator, so keep them out of the pushed
+        // predicate. They are instead evaluated below against each manifest's partition summary in the DATETIME
+        // domain, so a manifest whose partition range definitely cannot satisfy them is still pruned. A kept
+        // manifest is counted in full (manifest-level granularity), so the result stays a safe over-estimate.
+        Set<String> stringPartitionColumns = identityStringPartitionColumns(icebergTable);
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                Utils.extractConjuncts(predicate), stringPartitionColumns);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
 
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTbl.io());
         List<ManifestFile> matchingManifests = filterManifests(dataManifests, nativeTbl, icebergPredicate);
 
         long rowCount = 0;
         for (ManifestFile manifest : matchingManifests) {
+            if (residual.hasResidual() && !PartitionCastPredicatePruner.rangeMayMatch(
+                    residual.residual, manifestPartitionDateRanges(manifest, icebergTable, stringPartitionColumns))) {
+                continue;
+            }
             if (!canCountRowsFromManifest(manifest)) {
                 return -1;
             }
             rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
         }
         return Math.max(rowCount, 1);
+    }
+
+    // Per identity string partition column, the manifest's [min, max] partition value parsed into the DATETIME
+    // domain, for coarse residual pruning. A column is omitted (treated as "unknown range" -> keep) when its
+    // bounds are absent or cannot be parsed as a temporal value, so pruning never drops a possibly-matching
+    // manifest.
+    private Map<String, LocalDateTime[]> manifestPartitionDateRanges(ManifestFile manifest, IcebergTable table,
+                                                                     Set<String> stringPartitionColumns) {
+        Map<String, LocalDateTime[]> ranges = new HashMap<>();
+        List<ManifestFile.PartitionFieldSummary> summaries = manifest.partitions();
+        if (summaries == null || summaries.isEmpty()) {
+            return ranges;
+        }
+        org.apache.iceberg.Table nativeTable = table.getNativeTable();
+        PartitionSpec spec = nativeTable.specs().get(manifest.partitionSpecId());
+        if (spec == null) {
+            return ranges;
+        }
+        List<PartitionField> fields = spec.fields();
+        List<org.apache.iceberg.types.Types.NestedField> partitionTypeFields = spec.partitionType().fields();
+        for (int i = 0; i < fields.size() && i < summaries.size() && i < partitionTypeFields.size(); i++) {
+            PartitionField field = fields.get(i);
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(nativeTable.schema(), field);
+            // findColumnName returns null when the field's source id is not in the current schema
+            // (e.g. partition evolution / dropped source column). Skip it -> manifest conservatively kept.
+            if (name == null) {
+                continue;
+            }
+            String nameLower = name.toLowerCase(Locale.ROOT);
+            if (!stringPartitionColumns.contains(nameLower)) {
+                continue;
+            }
+            ManifestFile.PartitionFieldSummary summary = summaries.get(i);
+            if (summary.lowerBound() == null || summary.upperBound() == null) {
+                continue;
+            }
+            try {
+                org.apache.iceberg.types.Type type = partitionTypeFields.get(i).type();
+                String lower = Conversions.fromByteBuffer(type, summary.lowerBound()).toString();
+                String upper = Conversions.fromByteBuffer(type, summary.upperBound()).toString();
+                LocalDateTime lo = DateUtils.parseStrictDateTime(lower);
+                LocalDateTime hi = DateUtils.parseStrictDateTime(upper);
+                // Iceberg computes the summary min/max in the string domain. For values that parse as
+                // dates but are not lexicographically ordered as dates (e.g. non-zero-padded fields),
+                // the parsed bounds can come out inverted (lo > hi). Skip such a column so the manifest
+                // is conservatively kept rather than pruned on an inverted range.
+                if (lo.isAfter(hi)) {
+                    LOG.debug("skip inverted manifest partition range for column {}: [{}, {}]", name, lower, upper);
+                    continue;
+                }
+                ranges.put(nameLower, new LocalDateTime[] {lo, hi});
+            } catch (Exception e) {
+                // Undecodable / non-temporal bounds -> leave the column out so the manifest is conservatively kept.
+                LOG.debug("skip manifest partition range for column {}", name, e);
+            }
+        }
+        return ranges;
     }
 
     private static long orZeroRows(Long value) {
