@@ -1465,6 +1465,7 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, Tab
                 fm.set_name(e.index_file());
                 if (e.has_file_size()) fm.set_size(e.file_size());
                 if (tgt_shared) fm.set_shared(true);
+                fm.set_version(e.version());
             }
         }
         if (ver.entries_size() == 0) continue;
