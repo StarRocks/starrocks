@@ -194,6 +194,45 @@ public class PartitionCastPredicatePruner {
     }
 
     /**
+     * Returns {@code true} only if EVERY residual conjunct definitively folds to {@code true} for the given
+     * partition values. This is the inverse of {@link #partitionMayMatch}: metadata-level DELETE may drop a whole
+     * partition/file only when all of its rows definitely match, so anything indeterminate (an unbound reference,
+     * a parse failure, a non-boolean or {@code null} fold, or a definite {@code false}) makes this return
+     * {@code false} - an indeterminate partition is never deleted.
+     *
+     * @param partitionValues column name (any case) -> raw partition string value.
+     */
+    public static boolean partitionDefinitelyMatches(List<ScalarOperator> residualConjuncts,
+                                                     Map<String, String> partitionValues) {
+        if (residualConjuncts.isEmpty()) {
+            return true;
+        }
+        Map<String, String> lowerValues = new HashMap<>();
+        for (Map.Entry<String, String> entry : partitionValues.entrySet()) {
+            if (entry.getValue() != null) {
+                lowerValues.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
+            }
+        }
+        for (ScalarOperator conjunct : residualConjuncts) {
+            Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
+            for (ColumnRefOperator ref : conjunct.getColumnRefs()) {
+                String value = lowerValues.get(ref.getName().toLowerCase(Locale.ROOT));
+                if (value == null) {
+                    // Cannot bind every reference to a partition value -> not a definite match -> do not delete.
+                    return false;
+                }
+                replaceMap.put(ref, ConstantOperator.createVarchar(value));
+            }
+            Boolean result = tryFoldToBoolean(conjunct, replaceMap);
+            if (result == null || !result) {
+                // Indeterminate or definitely false -> not a definite match -> do not delete.
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Coarse manifest/partition-group level check for the residual conjuncts, given each referenced column's
      * temporal value range {@code [min, max]} (parsed from the group's partition summary). Returns {@code false}
      * only when some residual conjunct provably cannot be satisfied by ANY value within the ranges, so the group
