@@ -51,6 +51,11 @@ BlockPostingReader::BlockPostingReader() = default;
 BlockPostingReader::~BlockPostingReader() = default;
 
 Status BlockPostingReader::load(const IndexReadOptions& opts, const PostingIndexPB& meta) {
+    // Only the PFOR block format exists today; a segment written by a future format-version would
+    // decode as garbage here, so reject anything else instead of silently mis-decoding.
+    if (meta.posting_format() != PostingIndexPB::PFOR) {
+        return Status::NotSupported("block posting: unsupported posting_format (only PFOR is supported)");
+    }
     _block_reader = std::make_unique<IndexedColumnReader>(meta.posting_block_column());
     _dir_reader = std::make_unique<IndexedColumnReader>(meta.posting_index_column());
     RETURN_IF_ERROR(_block_reader->load(opts));
@@ -66,6 +71,17 @@ Status BlockPostingReader::new_iterator(const IndexReadOptions& opts,
     RETURN_IF_ERROR(_dir_reader->new_iterator(opts, &dir_iter));
     *out = std::make_unique<BlockPostingIterator>(std::move(block_iter), std::move(dir_iter));
     return Status::OK();
+}
+
+size_t BlockPostingReader::mem_usage() const {
+    size_t size = 0;
+    if (_block_reader != nullptr) {
+        size += _block_reader->mem_usage();
+    }
+    if (_dir_reader != nullptr) {
+        size += _dir_reader->mem_usage();
+    }
+    return size;
 }
 
 // ---- BlockPostingIterator (per-scan cursor) -------------------------------------------------
@@ -104,11 +120,11 @@ Status BlockPostingIterator::seek_to_term(uint32_t term_ordinal) {
 }
 
 bool BlockPostingIterator::has_next_block() const {
-    return static_cast<uint32_t>(_cur_block + 1) < _num_blocks;
+    return _next_block_idx() < _num_blocks;
 }
 
 Status BlockPostingIterator::next_block() {
-    const uint32_t idx = (_cur_block == UINT32_MAX) ? 0 : _cur_block + 1;
+    const uint32_t idx = _next_block_idx();
     if (idx >= _num_blocks) {
         // Advancing past the last block would read the next term's block (block ids are a global
         // space), silently returning another term's postings. Reject instead.
@@ -118,11 +134,11 @@ Status BlockPostingIterator::next_block() {
 }
 
 Status BlockPostingIterator::seek_block(uint32_t target_docid) {
-    // _last_docid is ascending. Binary-search from the current block forward (never rewinding, to
-    // match WAND's monotonic-target access pattern) for the first block that can cover target_docid.
-    // lower_bound returns the first element >= target, i.e. the first block whose last_docid >= it.
-    const uint32_t start = (_cur_block == UINT32_MAX) ? 0 : _cur_block;
-    const auto it = std::lower_bound(_last_docid.begin() + start, _last_docid.end(), target_docid);
+    // _last_docid is ascending; lower_bound returns the first block whose last_docid >= target_docid.
+    // Search the whole directory (not just from _cur_block forward): WAND drives this monotonically,
+    // but a full-range search costs the same O(log n) and stays correct even for a backward target,
+    // removing the footgun of silently returning a later block instead of the covering one.
+    const auto it = std::lower_bound(_last_docid.begin(), _last_docid.end(), target_docid);
     if (it == _last_docid.end()) {
         return Status::NotFound("block posting: no block covers target docid");
     }

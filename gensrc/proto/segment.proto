@@ -350,7 +350,7 @@ message BloomFilterIndexPB {
     optional IndexedColumnMetaPB bloom_filter = 3;
 }
 
-// Block-posting index for BM25 scoring (present iff BuiltinInvertedIndexPB.index_options
+// Block-posting index for relevance scoring (present iff BuiltinInvertedIndexPB.index_options
 // == DOCS_AND_FREQS). Per-term (docid, tf) posting lists chunked into fixed-size blocks plus
 // per-block max statistics for WAND. Stored inline in the segment .dat via IndexedColumns.
 message PostingIndexPB {
@@ -368,6 +368,24 @@ message PostingIndexPB {
     optional PostingFormat posting_format = 4 [default = PFOR];
 }
 
+// Document-length norms for relevance scoring (present iff index_options == DOCS_AND_FREQS).
+message NormsPB {
+    // per-row document length (token count), ordinal = rowid
+    optional IndexedColumnMetaPB doc_len_column = 1;
+    // sum of doc_len over all rows in this segment (used for tablet-level avgdl)
+    optional uint64 sum_len = 2;
+}
+
 message BuiltinInvertedIndexPB {
+    // Lucene-style index options. DOCS (default, historical) = presence bitmap only.
+    // DOCS_AND_FREQS additionally stores block posting (docid+tf) + norms for scoring.
+    enum IndexOptions {
+        DOCS = 0;
+        DOCS_AND_FREQS = 1;
+    }
     optional BitmapIndexPB bitmap_index = 1;
+    optional IndexOptions index_options = 2 [default = DOCS];
+    // present iff index_options == DOCS_AND_FREQS
+    optional PostingIndexPB posting = 3;
+    optional NormsPB norms = 4;
 }

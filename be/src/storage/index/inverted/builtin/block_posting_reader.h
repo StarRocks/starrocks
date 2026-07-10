@@ -51,6 +51,9 @@ public:
     // reader must outlive the iterators it hands out (the segment is pinned for the scan).
     Status new_iterator(const IndexReadOptions& opts, std::unique_ptr<BlockPostingIterator>* out) const;
 
+    // Resident footprint of the two loaded IndexedColumns (for the index mem tracker).
+    size_t mem_usage() const;
+
 private:
     std::unique_ptr<IndexedColumnReader> _block_reader;
     std::unique_ptr<IndexedColumnReader> _dir_reader;
@@ -102,6 +105,10 @@ public:
 
 private:
     Status _load_block(uint32_t block_idx_in_term);
+    // Index of the block right after the cursor. Relies on unsigned wraparound of the UINT32_MAX
+    // "before first block" sentinel (UINT32_MAX + 1 == 0), so it yields 0 before the first
+    // next_block() and _cur_block + 1 afterwards -- no special-case for the sentinel needed.
+    uint32_t _next_block_idx() const { return _cur_block + 1; }
 
     std::unique_ptr<IndexedColumnIterator> _block_iter;
     std::unique_ptr<IndexedColumnIterator> _dir_iter;

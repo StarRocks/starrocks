@@ -308,6 +308,7 @@ SET(DW_TEST_FILES
     ./storage/index/builtin_inverted_index_test.cpp
     ./storage/index/gin_pfor_test.cpp
     ./storage/index/block_posting_test.cpp
+    ./storage/index/builtin_gin_freqs_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp

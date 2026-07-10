@@ -39,4 +39,9 @@ bool is_tokenized_from_properties(const std::map<std::string, std::string>& prop
 
 bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties);
 
+// Parse the builtin GIN `index_options` property into its level (default DOCS; an unrecognized value
+// warns and falls back to DOCS). Callers gate capabilities on `level >= threshold`, e.g.
+// `>= InvertedIndexOptions::DOCS_AND_FREQS` for freqs/norms.
+InvertedIndexOptions get_index_options_from_properties(const std::map<std::string, std::string>& properties);
+
 } // namespace starrocks

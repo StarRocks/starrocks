@@ -15,6 +15,7 @@
 #include "storage/index/inverted/inverted_index_option.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string/trim.hpp>
 
 namespace starrocks {
 
@@ -103,6 +104,25 @@ bool get_lower_case_from_properties(const std::map<std::string, std::string>& pr
         }
     }
     return true; // default: lower_case = true
+}
+
+InvertedIndexOptions get_index_options_from_properties(const std::map<std::string, std::string>& properties) {
+    for (const auto& prop : properties) {
+        if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_OPTIONS_KEY) {
+            const std::string value = boost::algorithm::trim_copy(boost::to_lower_copy(prop.second));
+            if (value == INVERTED_INDEX_OPTIONS_DOCS_AND_FREQS) {
+                return InvertedIndexOptions::DOCS_AND_FREQS;
+            }
+            if (value != INVERTED_INDEX_OPTIONS_DOCS) {
+                // Unrecognized value: fall back to DOCS but warn, so a typo does not silently
+                // produce a plain (docs-only) index when the user expected more.
+                LOG(WARNING) << "Unrecognized " << INVERTED_INDEX_OPTIONS_KEY << " value '" << prop.second
+                             << "', falling back to '" << INVERTED_INDEX_OPTIONS_DOCS << "'.";
+            }
+            return InvertedIndexOptions::DOCS;
+        }
+    }
+    return InvertedIndexOptions::DOCS; // default
 }
 
 } // namespace starrocks

@@ -48,6 +48,24 @@ const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 const std::string INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
+// Lucene-style index options for the builtin GIN index. "docs" (default) stores only the presence
+// bitmap; "docs_and_freqs" additionally stores block posting (docid+tf) + norms for scoring (e.g. BM25).
+const std::string INVERTED_INDEX_OPTIONS_KEY = "index_options";
+const std::string INVERTED_INDEX_OPTIONS_DOCS = "docs";
+const std::string INVERTED_INDEX_OPTIONS_DOCS_AND_FREQS = "docs_and_freqs";
+
+// Lucene-style ordered ladder for the builtin GIN `index_options`. Higher levels store strictly more
+// per-term data, so a capability is gated on `level >= threshold`: freqs/norms at DOCS_AND_FREQS,
+// and future levels (e.g. positions/offsets) slot in above without touching the existing checks.
+// Kept numerically in lock-step with BuiltinInvertedIndexPB::IndexOptions (static_assert'd where mapped).
+enum class InvertedIndexOptions {
+    DOCS = 0,
+    DOCS_AND_FREQS = 1,
+};
+inline bool operator>=(InvertedIndexOptions a, InvertedIndexOptions b) {
+    return static_cast<int>(a) >= static_cast<int>(b);
+}
+
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
     TEXT = 0,
