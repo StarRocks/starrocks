@@ -528,8 +528,17 @@ public class IcebergMetadata implements ConnectorMetadata {
                     return false;
                 }
             }
-            // Whole predicate is partition level; the matching partitions are deleted file-by-file in
-            // executeMetadataDelete after StarRocks-side residual evaluation.
+            // The residual is evaluated against each partition value at execution time. A non-deterministic
+            // function (rand(), uuid(), ...) only materializes per row at execution and never folds to a constant,
+            // so executeMetadataDelete could evaluate nothing and silently delete nothing. Such predicates must be
+            // evaluated per row -> fall back to row-level delete.
+            for (ScalarOperator conjunct : residual.residual) {
+                if (Utils.hasNonDeterministicFunc(conjunct)) {
+                    return false;
+                }
+            }
+            // Whole predicate is partition level and deterministic; the matching partitions are deleted
+            // file-by-file in executeMetadataDelete after StarRocks-side residual evaluation.
             return true;
         }
 
