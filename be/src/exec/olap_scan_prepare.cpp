@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
+#include "common/object_pool.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
