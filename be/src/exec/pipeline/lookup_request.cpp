@@ -885,8 +885,7 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
         //    missing rowset already surfaces earlier via _tablet_adaptor->get_iterator ->
         //    "not found lake rssid".)
         if (!row_locators.empty()) {
-            return Status::InternalError(
-                    "late materialization produced no rows for a non-empty set of row locators");
+            return Status::InternalError("late materialization produced no rows for a non-empty set of row locators");
         }
         return ChunkPtr(RuntimeChunkHelper::new_chunk(slots, 0));
     }
