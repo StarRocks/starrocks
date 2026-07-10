@@ -3856,6 +3856,73 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCanDeleteUsingMetadataStringDatePartitionCast() throws Exception {
+        // A STRING date partition column compared with a temporal value coerces to CAST(k2 AS DATETIME) = <ts>.
+        // The whole predicate is on the identity partition column, so metadata (whole-file) delete is eligible;
+        // the specific matching partitions are resolved StarRocks-side at execution time.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartCanDelete", 1);
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/del-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(3).build()).commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        Assertions.assertTrue(metadata.canDeleteUsingMetadata(icebergTable, k2EqDate(2020, 6, 14)),
+                "cast-on-string-partition predicate is partition level -> metadata delete eligible");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCast() throws Exception {
+        // Regression: previously CAST(k2 AS DATETIME) = <ts> was pushed to Iceberg as a string-domain filter
+        // (k2 = '2020-06-14 00:00:00'), which never matched the 'yyyy-MM-dd' partition value, so the delete was a
+        // silent no-op. Now the matching partition file is deleted and the non-matching one is kept.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartExec", 1);
+        table.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/del-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(3).build())
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/del-0615.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-15").withRecordCount(4).build())
+                .commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext);
+
+        table.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(table.newScan().planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size(), "only the 2020-06-14 partition file should be deleted");
+        Assertions.assertEquals("PartitionData{k2=2020-06-15}", fileScanTasks.get(0).file().partition().toString(),
+                "the non-matching 2020-06-15 partition must remain");
+    }
+
+    @Test
     public void testMetadataDeleteNodeExplainString() {
         // Test that IcebergMetadataDeleteNode generates correct EXPLAIN output
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
