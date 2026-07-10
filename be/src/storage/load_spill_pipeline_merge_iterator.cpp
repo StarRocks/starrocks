@@ -28,8 +28,13 @@ namespace starrocks {
 
 LoadSpillPipelineMergeIterator::LoadSpillPipelineMergeIterator(LoadChunkSpiller* spiller,
                                                                lake::TabletWriter* parent_writer,
-                                                               std::atomic<bool>* quit_flag, bool final_round)
-        : _spiller(spiller), _parent_writer(parent_writer), _quit_flag(quit_flag), _final_round(final_round) {
+                                                               std::atomic<bool>* quit_flag, bool final_round,
+                                                               bool op_aware)
+        : _spiller(spiller),
+          _parent_writer(parent_writer),
+          _quit_flag(quit_flag),
+          _final_round(final_round),
+          _op_aware(op_aware) {
     SchemaPtr schema = _spiller->schema();
 
     // PERFORMANCE OPTIMIZATION: DUP_KEYS tables don't require sorting or aggregation
@@ -82,7 +87,7 @@ Status LoadSpillPipelineMergeIterator::_generate_next_task() {
         // merge iterator, schema, quit flag for cancellation, and I/O metrics timer.
         _current_task = std::make_shared<lake::TabletInternalParallelMergeTask>(
                 std::move(writer), std::move(task), _spiller->_schema.get(), _quit_flag,
-                _spiller->spiller()->metrics().write_io_timer);
+                _spiller->spiller()->metrics().write_io_timer, _op_aware);
     } else {
         // No more data to merge - signal iteration completion by returning nullptr.
         // Pipeline operators check has_more() which tests for nullptr to know when to stop.
