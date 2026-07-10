@@ -43,6 +43,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -282,6 +283,64 @@ public class IcebergJdbcCatalogTest {
                 "iceberg.catalog.uri", URI));
         icebergJdbcCatalog.deleteUncommittedDataFiles(
                 Arrays.asList("/tmp/iceberg/db/table/part-00000", "/tmp/iceberg/db/table/part-00001"));
+    }
+
+    @Test
+    public void testJdbcCatalogNameDefaultToStarRocksCatalogName(@Mocked JdbcCatalog jdbcCatalog) {
+        final String[] capturedName = new String[1];
+        final Map<String, String>[] capturedProps = new Map[1];
+
+        new Expectations() {
+            {
+                jdbcCatalog.initialize(anyString, (Map<String, String>) any);
+                result = new mockit.Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void initialize(String name, Map<String, String> props) {
+                        capturedName[0] = name;
+                        capturedProps[0] = props;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        new IcebergJdbcCatalog("sr_catalog", new Configuration(),
+                ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
+                        "iceberg.catalog.uri", URI));
+
+        assertEquals("sr_catalog", capturedName[0]);
+        Assertions.assertNotNull(capturedProps[0]);
+        Assertions.assertFalse(capturedProps[0].containsKey("jdbc.catalog-name"));
+    }
+
+    @Test
+    public void testJdbcCatalogNameOverride(@Mocked JdbcCatalog jdbcCatalog) {
+        final String[] capturedName = new String[1];
+        final Map<String, String>[] capturedProps = new Map[1];
+
+        new Expectations() {
+            {
+                jdbcCatalog.initialize(anyString, (Map<String, String>) any);
+                result = new mockit.Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void initialize(String name, java.util.Map<String, String> props) {
+                        capturedName[0] = name;
+                        capturedProps[0] = props;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        new IcebergJdbcCatalog("sr_side_view", new Configuration(),
+                ImmutableMap.of(
+                        "iceberg.catalog.warehouse", LOCATION,
+                        "iceberg.catalog.uri", URI,
+                        "iceberg.catalog.jdbc.catalog-name", "spark_ice"));
+
+        assertEquals("spark_ice", capturedName[0]);
+        Assertions.assertNotNull(capturedProps[0]);
+        Assertions.assertFalse(capturedProps[0].containsKey("jdbc.catalog-name"));
     }
 
 }

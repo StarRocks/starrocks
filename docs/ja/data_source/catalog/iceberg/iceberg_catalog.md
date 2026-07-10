@@ -432,6 +432,11 @@ SHOW DATABASES FROM r2;
   - 必須：いいえ
   - 説明：`iceberg.catalog.uri` で指定されたデータベースにメタデータを格納するためのテーブル `iceberg_namespace_properties` および `iceberg_tables` を作成するかどうか。デフォルト値は `false` です。`iceberg.catalog.uri` で指定されたデータベースにこれらの 2 つのテーブルがまだ作成されていない場合は `true` を指定してください。
 
+- `iceberg.catalog.jdbc.catalog-name`
+  - 必須：いいえ
+  - 説明：Iceberg JDBC のメタデータテーブル（`iceberg_tables` および `iceberg_namespace_properties`）の `catalog_name` 列の値を明示的に指定します。未設定の場合は、StarRocks 側のカタログ名（`CREATE EXTERNAL CATALOG` の後に指定した `<catalog_name>`）が使用され、後方互換性が維持されます。
+  - StarRocks を、他のエンジン（例：Spark、Flink）で既に作成された Iceberg JDBC Catalog に接続し、同じメタデータを共有したい場合には、このパラメーターに相手側で使用しているカタログ名を設定する必要があります。設定しない場合、内部で発行される `WHERE catalog_name = ?` クエリが既存のメタデータにマッチせず、StarRocks 側から一切のデータベースやテーブルが見えなくなります。
+
 次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
 
 ```SQL
@@ -451,6 +456,25 @@ PROPERTIES
 ```
 
 MySQL やその他のカスタム JDBC ドライバを使用する場合、対応する JAR ファイルを `fe/lib` ディレクトリおよび `be/lib/jni-packages` ディレクトリに配置する必要があります。
+
+次の例は、他のエンジン（例：Spark）で既に作成され、内部の `catalog_name` が `"spark_ice"` になっている Iceberg JDBC Catalog に StarRocks を接続する方法を示しています。この場合、StarRocks 側のカタログ名 `sr_side_view` は内部の `catalog_name` と異なっていても構いません。`iceberg.catalog.jdbc.catalog-name` を明示的に指定するだけで接続できます。
+
+```SQL
+CREATE EXTERNAL CATALOG sr_side_view
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password",
+    "iceberg.catalog.jdbc.catalog-name" = "spark_ice",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 </TabItem>
 
