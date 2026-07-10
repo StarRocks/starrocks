@@ -768,6 +768,18 @@ public class QueryAnalyzer {
             }
         }
 
+        // True only for a semantic-context TVF. Kept as the branch condition in resolveTableRef so
+        // non-context table functions bypass the resolver entirely and keep their original analysis
+        // (alias registration / uniqueness). Name check only — no GlobalStateMgr lookups.
+        private static boolean isContextTableFunction(Relation relation) {
+            if (!(relation instanceof TableFunctionRelation)) {
+                return false;
+            }
+            TableFunctionRelation tfr = (TableFunctionRelation) relation;
+            String fnName = tfr.getFunctionName() == null ? null : tfr.getFunctionName().getFunction();
+            return com.starrocks.context.sql.ContextTvfRelationResolver.isContextTvf(fnName);
+        }
+
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
@@ -807,6 +819,26 @@ public class QueryAnalyzer {
                     tableFunctionRelation.setTable(table);
                     return relation;
                 }
+            } else if (isContextTableFunction(relation)) {
+                // Only semantic-context TVFs (context_search / context_get / text_search / ...) are
+                // intercepted here and rewritten to an FE-materialized relation. The gate is in the
+                // branch CONDITION, so every non-context table function (unnest / files /
+                // generate_series / ...) does NOT match and falls through to the default handling
+                // below — including the alias-uniqueness check in the final else. The name check is
+                // also cheap (no GlobalStateMgr lookups, no resolver allocation) for non-context TVFs.
+                TableFunctionRelation tableFunctionRelation = (TableFunctionRelation) relation;
+                com.starrocks.context.sql.ContextTvfRelationResolver resolver =
+                        new com.starrocks.context.sql.ContextTvfRelationResolver(
+                                GlobalStateMgr.getCurrentState().getContextMgr(),
+                                GlobalStateMgr.getCurrentState().getContextReadExecutor(),
+                                GlobalStateMgr.getCurrentState().getContextTextSearchExecutor(),
+                                GlobalStateMgr.getCurrentState().getContextVectorSearchExecutor(),
+                                GlobalStateMgr.getCurrentState().getContextReferenceExpander(),
+                                GlobalStateMgr.getCurrentState().getContextPacker(),
+                                GlobalStateMgr.getCurrentState().getContextSearchExecutor(),
+                                GlobalStateMgr.getCurrentState().getContextSnapshotResolver());
+                Relation resolved = resolver.resolve(tableFunctionRelation);
+                return resolved == null ? relation : resolved;
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();

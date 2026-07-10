@@ -122,6 +122,12 @@ import com.starrocks.context.ContextReadExecutor;
 import com.starrocks.context.SnapshotResolver;
 import com.starrocks.context.allocator.ContextSnapshotAllocator;
 import com.starrocks.context.allocator.ContextVersionAllocator;
+import com.starrocks.context.retrieval.ContextBudgetPlanner;
+import com.starrocks.context.retrieval.ContextPacker;
+import com.starrocks.context.retrieval.ContextSearchExecutor;
+import com.starrocks.context.retrieval.ReferenceExpander;
+import com.starrocks.context.retrieval.TextSearchExecutor;
+import com.starrocks.context.retrieval.VectorSearchExecutor;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.epack.alter.SystemHandlerEPack;
@@ -550,6 +556,11 @@ public class GlobalStateMgr {
     private final ContextSnapshotAllocator contextSnapshotAllocator;
     private final ContextReadExecutor contextReadExecutor;
     private final SnapshotResolver contextSnapshotResolver;
+    private final TextSearchExecutor contextTextSearchExecutor;
+    private final VectorSearchExecutor contextVectorSearchExecutor;
+    private final ReferenceExpander contextReferenceExpander;
+    private final ContextPacker contextPacker;
+    private final ContextSearchExecutor contextSearchExecutor;
 
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
@@ -980,6 +991,13 @@ public class GlobalStateMgr {
         this.contextSnapshotAllocator = new ContextSnapshotAllocator();
         this.contextReadExecutor = new ContextReadExecutor();
         this.contextSnapshotResolver = new SnapshotResolver();
+        this.contextTextSearchExecutor = new TextSearchExecutor();
+        this.contextVectorSearchExecutor = new VectorSearchExecutor();
+        this.contextReferenceExpander = new ReferenceExpander();
+        this.contextPacker = new ContextPacker(this.contextReadExecutor);
+        this.contextSearchExecutor = new ContextSearchExecutor(
+                this.contextMgr, this.contextTextSearchExecutor, this.contextReferenceExpander,
+                this.contextVectorSearchExecutor, new ContextBudgetPlanner(this.contextReadExecutor));
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1320,6 +1338,26 @@ public class GlobalStateMgr {
 
     public SnapshotResolver getContextSnapshotResolver() {
         return contextSnapshotResolver;
+    }
+
+    public TextSearchExecutor getContextTextSearchExecutor() {
+        return contextTextSearchExecutor;
+    }
+
+    public VectorSearchExecutor getContextVectorSearchExecutor() {
+        return contextVectorSearchExecutor;
+    }
+
+    public ReferenceExpander getContextReferenceExpander() {
+        return contextReferenceExpander;
+    }
+
+    public ContextPacker getContextPacker() {
+        return contextPacker;
+    }
+
+    public ContextSearchExecutor getContextSearchExecutor() {
+        return contextSearchExecutor;
     }
 
     public PipeManager getPipeManager() {
