@@ -184,6 +184,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/dictionary_cache_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
+    pipeline/sink/remote_scan_result_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
@@ -321,6 +322,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
+    remote_scan_arrow_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_deletion_vector_reader.cpp
     paimon/paimon_delete_file_builder.cpp
@@ -412,6 +414,7 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/http_result_writer.cpp
     data_sinks/iceberg_table_sink.cpp
     data_sinks/memory_scratch_sink.cpp
+    data_sinks/remote_scan_result_sink.cpp
     data_sinks/metadata_result_writer.cpp
     data_sinks/multi_cast_data_stream_sink.cpp
     data_sinks/multi_olap_table_sink.cpp

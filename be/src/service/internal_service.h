@@ -92,6 +92,10 @@ public:
     void fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                     PFetchDataResult* result, google::protobuf::Closure* done) override;
 
+    void fetch_remote_scan_chunk(google::protobuf::RpcController* controller,
+                                 const PFetchRemoteScanChunkRequest* request, PFetchRemoteScanChunkResult* result,
+                                 google::protobuf::Closure* done) override;
+
     void fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
                          PFetchDataCacheResponse* response, google::protobuf::Closure* done) override;
 
@@ -235,6 +239,10 @@ private:
 
     void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
                      PFetchDataResult* result, google::protobuf::Closure* done);
+
+    void _fetch_remote_scan_chunk(google::protobuf::RpcController* controller,
+                                  const PFetchRemoteScanChunkRequest* request, PFetchRemoteScanChunkResult* result,
+                                  google::protobuf::Closure* done);
 
     void _fetch_datacache(google::protobuf::RpcController* controller, const PFetchDataCacheRequest* request,
                           PFetchDataCacheResponse* response, google::protobuf::Closure* done);

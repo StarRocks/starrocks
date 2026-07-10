@@ -61,7 +61,8 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK,
     NOOP_SINK,
     ICEBERG_DELETE_SINK,
-    ICEBERG_ROW_DELTA_SINK
+    ICEBERG_ROW_DELTA_SINK,
+    REMOTE_SCAN_RESULT_SINK
 }
 
 enum TResultSinkType {
@@ -101,6 +102,12 @@ struct TResultFileSinkOptions {
 
 struct TMemoryScratchSink {
 
+}
+
+struct TRemoteScanResultSink {
+    1: optional PlanNodes.TStarRocksScanTransport transport
+    2: optional string scan_token
+    3: optional i64 expire_ms
 }
 
 // Specification of one output destination of a plan fragment
@@ -327,4 +334,5 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
+  30: optional TRemoteScanResultSink remote_scan_result_sink
 }

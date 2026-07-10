@@ -67,6 +67,9 @@ class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
+class RemoteChunkQueueMgr;
+class RemoteArrowQueueMgr;
+class RemoteScanTokenMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RuntimeFilterCache;
@@ -115,6 +118,9 @@ public:
     LookUpDispatcherMgr* lookup_dispatcher_mgr() { return _lookup_dispatcher_mgr; }
     ResultBufferMgr* result_mgr();
     ResultQueueMgr* result_queue_mgr();
+    RemoteChunkQueueMgr* remote_chunk_queue_mgr();
+    RemoteArrowQueueMgr* remote_arrow_queue_mgr();
+    RemoteScanTokenMgr* remote_scan_token_mgr();
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -186,6 +192,9 @@ private:
 
     AgentServer* _agent_server = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
+    RemoteChunkQueueMgr* _remote_chunk_queue_mgr = nullptr;
+    RemoteArrowQueueMgr* _remote_arrow_queue_mgr = nullptr;
+    RemoteScanTokenMgr* _remote_scan_token_mgr = nullptr;
     ExecutionEnv _execution_services;
     PlatformServices _platform_services;
     RpcServices _rpc_services;

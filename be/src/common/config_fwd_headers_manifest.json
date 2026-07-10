@@ -212,6 +212,7 @@
         "pipeline_datastream_timeout_guard_ms",
         "profile_report_interval",
         "max_memory_sink_batch_count",
+        "remote_scan_result_queue_mem_limit",
         "diagnose_stack_trace_interval_ms"
       ]
     },

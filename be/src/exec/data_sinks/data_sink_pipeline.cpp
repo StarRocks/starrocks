@@ -22,6 +22,7 @@
 #include "exec/data_sinks/export_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec/data_sinks/multi_olap_table_sink.h"
+#include "exec/data_sinks/remote_scan_result_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -44,6 +45,7 @@
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
+#include "exec/pipeline/sink/remote_scan_result_sink_operator.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec_primitive/data_sink.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -271,6 +273,14 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         DCHECK_EQ(dop, 1);
         OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
                                                                              output_expr, fragment_ctx);
+
+        prev_operators.emplace_back(op);
+        context->add_pipeline(prev_operators);
+    } else if (typeid(*this) == typeid(RemoteScanResultSink)) {
+        auto* remote_scan_result_sink = down_cast<RemoteScanResultSink*>(this);
+        OpFactoryPtr op = std::make_shared<RemoteScanResultSinkOperatorFactory>(
+                context->next_operator_id(), remote_scan_result_sink->get_row_desc(),
+                remote_scan_result_sink->get_output_expr(), remote_scan_result_sink->get_sink());
 
         prev_operators.emplace_back(op);
         context->add_pipeline(prev_operators);

@@ -301,6 +301,11 @@ public:
         _not_empty.notify_all();
     }
 
+    bool is_shutdown() const {
+        std::lock_guard<Lock> guard(_lock);
+        return _shutdown;
+    }
+
     size_t get_size() const {
         std::lock_guard<Lock> l(_lock);
         return _items.size();

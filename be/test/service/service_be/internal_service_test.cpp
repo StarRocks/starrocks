@@ -21,12 +21,15 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/time/time.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/data_sinks/tablet_sink_index_channel.h"
 #include "exec/exec_env.h"
 #include "platform/platform_env.h"
+#include "runtime/remote_chunk_queue_mgr.h"
+#include "runtime/remote_scan_token_mgr.h"
 #include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
 
@@ -88,6 +91,94 @@ TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
     auto st = Status(response.status());
     ASSERT_TRUE(st.is_not_supported());
     ASSERT_TRUE(st.message().find("Legacy incremental MV maintenance is no longer supported") != std::string::npos);
+}
+
+TEST_F(InternalServiceTest, test_fetch_remote_scan_chunk_repeated_eos_is_idempotent) {
+    auto* exec_env = ExecEnv::GetInstance();
+    BackendInternalServiceImpl<PInternalService> service(exec_env, nullptr, _load_channel_mgr.get());
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.hi = 120;
+    fragment_instance_id.lo = 220;
+    const std::string token = "repeated-eos-token";
+
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->register_token(
+            token, fragment_instance_id, TStarRocksScanTransport::STARROCKS_BRPC_CHUNK, UnixMillis() + 60000));
+    RemoteChunkQueueSharedPtr queue;
+    exec_env->remote_chunk_queue_mgr()->create_queue(fragment_instance_id, &queue);
+    ASSERT_TRUE(queue->put(nullptr));
+    // Simulate the producer's clean finish: mark the token completed before the sentinel is
+    // drained, so the post-EOS retry below is recognized as a legitimate idempotent EOS.
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->mark_completed(token));
+
+    PFetchRemoteScanChunkRequest request;
+    request.set_scan_token(token);
+    request.set_packet_seq(0);
+    PFetchRemoteScanChunkResult response;
+    brpc::Controller cntl;
+    service.PInternalServiceImplBase::_fetch_remote_scan_chunk(&cntl, &request, &response, nullptr);
+    ASSERT_OK(Status(response.status()));
+    ASSERT_TRUE(response.eos());
+
+    request.set_packet_seq(1);
+    response.Clear();
+    brpc::Controller second_cntl;
+    service.PInternalServiceImplBase::_fetch_remote_scan_chunk(&second_cntl, &request, &response, nullptr);
+    ASSERT_OK(Status(response.status()));
+    ASSERT_TRUE(response.eos());
+
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->remove(token));
+}
+
+TEST_F(InternalServiceTest, test_fetch_remote_scan_chunk_missing_queue_without_completion_is_error) {
+    auto* exec_env = ExecEnv::GetInstance();
+    BackendInternalServiceImpl<PInternalService> service(exec_env, nullptr, _load_channel_mgr.get());
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.hi = 123;
+    fragment_instance_id.lo = 223;
+    const std::string token = "missing-queue-no-completion-token";
+
+    // Token registered but never marked completed, and no queue ever created. A missing queue
+    // here is a genuine anomaly and must surface as an error, not a silent clean EOS.
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->register_token(
+            token, fragment_instance_id, TStarRocksScanTransport::STARROCKS_BRPC_CHUNK, UnixMillis() + 60000));
+
+    PFetchRemoteScanChunkRequest request;
+    request.set_scan_token(token);
+    request.set_packet_seq(0);
+    PFetchRemoteScanChunkResult response;
+    brpc::Controller cntl;
+    service.PInternalServiceImplBase::_fetch_remote_scan_chunk(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(Status(response.status()).is_not_found());
+
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->remove(token));
+}
+
+TEST_F(InternalServiceTest, test_fetch_remote_scan_chunk_returns_producer_failure) {
+    auto* exec_env = ExecEnv::GetInstance();
+    BackendInternalServiceImpl<PInternalService> service(exec_env, nullptr, _load_channel_mgr.get());
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.hi = 121;
+    fragment_instance_id.lo = 221;
+    const std::string token = "producer-failure-token";
+
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->register_token(
+            token, fragment_instance_id, TStarRocksScanTransport::STARROCKS_BRPC_CHUNK, UnixMillis() + 60000));
+    RemoteChunkQueueSharedPtr queue;
+    exec_env->remote_chunk_queue_mgr()->create_queue(fragment_instance_id, &queue);
+    queue->update_status(Status::InternalError("injected remote scan producer failure"));
+    queue->shutdown();
+
+    PFetchRemoteScanChunkRequest request;
+    request.set_scan_token(token);
+    request.set_packet_seq(0);
+    PFetchRemoteScanChunkResult response;
+    brpc::Controller cntl;
+    service.PInternalServiceImplBase::_fetch_remote_scan_chunk(&cntl, &request, &response, nullptr);
+    Status status(response.status());
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.message().find("injected remote scan producer failure") != std::string::npos);
+
+    ASSERT_OK(exec_env->remote_scan_token_mgr()->remove(token));
 }
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {

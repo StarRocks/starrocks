@@ -64,6 +64,9 @@
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/remote_arrow_queue_mgr.h"
+#include "runtime/remote_chunk_queue_mgr.h"
+#include "runtime/remote_scan_token_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -149,6 +152,9 @@ void ExecEnv::_refresh_service_contexts() {
             _compute_env == nullptr ? nullptr : _compute_env->load_spill_block_merge_executor();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
     _runtime_services.diagnose_daemon = runtime_env->diagnose_daemon();
+    _runtime_services.remote_chunk_queue_mgr = _remote_chunk_queue_mgr;
+    _runtime_services.remote_arrow_queue_mgr = _remote_arrow_queue_mgr;
+    _runtime_services.remote_scan_token_mgr = _remote_scan_token_mgr;
 
     _agent_services.agent_server = _agent_server;
 
@@ -217,6 +223,10 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
     RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
 
+    _remote_chunk_queue_mgr = new RemoteChunkQueueMgr(process_metrics);
+    _remote_arrow_queue_mgr = new RemoteArrowQueueMgr(process_metrics);
+    _remote_scan_token_mgr = new RemoteScanTokenMgr();
+
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
@@ -268,6 +278,18 @@ StreamContextMgr* ExecEnv::stream_context_mgr() {
 
 ProfileReportWorker* ExecEnv::profile_report_worker() {
     return _compute_env == nullptr ? nullptr : _compute_env->profile_report_worker();
+}
+
+RemoteChunkQueueMgr* ExecEnv::remote_chunk_queue_mgr() {
+    return _remote_chunk_queue_mgr;
+}
+
+RemoteArrowQueueMgr* ExecEnv::remote_arrow_queue_mgr() {
+    return _remote_arrow_queue_mgr;
+}
+
+RemoteScanTokenMgr* ExecEnv::remote_scan_token_mgr() {
+    return _remote_scan_token_mgr;
 }
 
 void ExecEnv::stop() {
@@ -323,6 +345,9 @@ void ExecEnv::destroy() {
     delete_and_null(_runtime_filter_cache);
     delete_and_null(_lookup_dispatcher_mgr);
     delete_and_null(_batch_write_mgr);
+    delete_and_null(_remote_scan_token_mgr);
+    delete_and_null(_remote_arrow_queue_mgr);
+    delete_and_null(_remote_chunk_queue_mgr);
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
     _compute_env = nullptr;

@@ -174,6 +174,9 @@ set(EXEC_FILES
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
+        ./runtime/remote_chunk_queue_mgr_test.cpp
+        ./runtime/remote_arrow_queue_mgr_test.cpp
+        ./runtime/remote_scan_token_mgr_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp

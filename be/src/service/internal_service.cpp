@@ -90,6 +90,8 @@
 #include "orchestration/runtime_filter_worker.h"
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
+#include "runtime/remote_chunk_queue_mgr.h"
+#include "runtime/remote_scan_token_mgr.h"
 #include "runtime/time_guard.h"
 #include "script/command_executor.h"
 #include "service/service_metrics.h"
@@ -797,6 +799,66 @@ void PInternalServiceImplBase<T>::_fetch_data(google::protobuf::RpcController* c
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_remote_scan_chunk(google::protobuf::RpcController* cntl_base,
+                                                          const PFetchRemoteScanChunkRequest* request,
+                                                          PFetchRemoteScanChunkResult* result,
+                                                          google::protobuf::Closure* done) {
+    auto task = [=]() { this->_fetch_remote_scan_chunk(cntl_base, request, result, done); };
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit fetch_remote_scan_chunk task failed").to_protobuf(result->mutable_status());
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_fetch_remote_scan_chunk(google::protobuf::RpcController* cntl_base,
+                                                           const PFetchRemoteScanChunkRequest* request,
+                                                           PFetchRemoteScanChunkResult* result,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    result->set_packet_seq(request->packet_seq());
+    if (!request->has_scan_token() || request->scan_token().empty()) {
+        Status::InvalidArgument("missing remote scan token").to_protobuf(result->mutable_status());
+        result->set_eos(true);
+        return;
+    }
+
+    TUniqueId fragment_instance_id;
+    bool token_completed = false;
+    auto status = _exec_env->remote_scan_token_mgr()->lookup(request->scan_token(),
+                                                             TStarRocksScanTransport::STARROCKS_BRPC_CHUNK,
+                                                             &fragment_instance_id, &token_completed);
+    if (!status.ok()) {
+        status.to_protobuf(result->mutable_status());
+        result->set_eos(true);
+        return;
+    }
+
+    bool eos = false;
+    status = _exec_env->remote_chunk_queue_mgr()->fetch_chunk(fragment_instance_id, request->packet_seq(),
+                                                              result->mutable_chunk(), &eos);
+    if (status.is_not_found()) {
+        // Queue is gone. If the producer already published EOS (token marked completed), this is
+        // a legitimate post-EOS / duplicate fetch -> idempotent clean EOS. Otherwise the queue
+        // vanished before the stream finished -> a real anomaly; surface the error instead of a
+        // silent empty result.
+        result->set_eos(true);
+        if (token_completed) {
+            Status::OK().to_protobuf(result->mutable_status());
+        } else {
+            status.to_protobuf(result->mutable_status());
+        }
+        return;
+    }
+    result->set_eos(eos);
+    if (!status.ok()) {
+        WARN_IF_ERROR(_exec_env->remote_scan_token_mgr()->remove(request->scan_token()),
+                      "Failed to remove failed remote scan token");
+    }
+    status.to_protobuf(result->mutable_status());
 }
 
 template <typename T>

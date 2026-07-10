@@ -70,6 +70,8 @@ public:
     METRIC_DEFINE_UINT_GAUGE(load_channel_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(result_buffer_block_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(result_block_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(remote_scan_chunk_queue_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(remote_scan_arrow_queue_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(routine_load_task_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(stream_load_pipe_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);

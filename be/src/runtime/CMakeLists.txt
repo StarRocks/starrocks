@@ -36,6 +36,9 @@ set(RUNTIME_SRCS
     bucket_aware_partition.cpp
     query_statistics.cpp
     runtime_metrics.cpp
+    remote_chunk_queue_mgr.cpp
+    remote_arrow_queue_mgr.cpp
+    remote_scan_token_mgr.cpp
     time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp

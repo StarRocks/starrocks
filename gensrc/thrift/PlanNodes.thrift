@@ -91,7 +91,8 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
   CHANGES_SCAN_NODE,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
+  STARROCKS_SCAN_NODE
 }
 
 // phases of an execution node
@@ -525,6 +526,18 @@ struct TChangesScanNode {
     3: optional list<Descriptors.TChangesMetaDescriptor> meta_descriptors
 }
 
+enum TStarRocksScanTransport {
+  STARROCKS_ARROW_FLIGHT,
+  STARROCKS_BRPC_CHUNK
+}
+
+struct TStarRocksScanRange {
+  1: optional string scan_token
+  2: optional Types.TNetworkAddress remote_be
+  3: optional TStarRocksScanTransport transport
+  4: optional i64 packet_seq
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -542,6 +555,7 @@ struct TScanRange {
   40: optional TBenchmarkScanRange benchmark_scan_range
 
   50: optional TChangesScanRange changes_scan_range
+  51: optional TStarRocksScanRange starrocks_scan_range
 }
 
 struct TMySQLScanNode {
@@ -661,6 +675,32 @@ struct TColumnAccessPath {
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
     6: optional bool extended
+}
+
+enum TStarRocksRemoteScanWireShape {
+  FULL_ROOT,
+  PRUNED_ROOT_STRUCT,
+  SCALAR_SUBFIELD,
+  ROW_MARKER,
+}
+
+struct TStarRocksRemoteScanRequiredOutput {
+  1: optional Types.TSlotId local_slot_id
+  2: optional string root_column
+  3: optional TColumnAccessPath access_path
+  4: optional TStarRocksRemoteScanWireShape wire_shape
+  5: optional Types.TTypeDesc expected_wire_type
+}
+
+struct TStarRocksRemoteScanOutput {
+  1: optional i32 output_index
+  2: optional Types.TSlotId local_slot_id
+  3: optional Types.TSlotId remote_slot_id
+  4: optional string name
+  5: optional Types.TTypeDesc actual_wire_type
+  6: optional bool nullable
+  7: optional bool is_const
+  8: optional TStarRocksRemoteScanWireShape wire_shape
 }
 
 struct TVectorSearchOptions {
@@ -1454,6 +1494,15 @@ struct TConnectorScanNode {
   3: optional string catalog_type
 }
 
+struct TStarRocksScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional TStarRocksScanTransport transport
+  // 3: reserved for deprecated node-level scan_token. Use TStarRocksScanRange.scan_token instead.
+  4: optional list<Types.TNetworkAddress> remote_bes
+  5: optional list<string> output_column_names
+  6: optional list<TStarRocksRemoteScanOutput> remote_outputs
+}
+
 // binlog meta column names
 const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
 const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
@@ -1636,6 +1685,8 @@ struct TPlanNode {
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
 
   150: optional TChangesScanNode changes_scan_node;
+
+  151: optional TStarRocksScanNode starrocks_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

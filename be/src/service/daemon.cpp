@@ -76,6 +76,9 @@
 #include "platform/user_function_cache.h"
 #include "runtime/memory/memory_lock.h"
 #include "runtime/process_memory_metrics.h"
+#include "runtime/remote_arrow_queue_mgr.h"
+#include "runtime/remote_chunk_queue_mgr.h"
+#include "runtime/remote_scan_token_mgr.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
@@ -155,6 +158,30 @@ void calculate_metrics(Daemon* daemon, ProcessMetricsRegistry* process_metrics_r
 
         process_metrics_registry->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
+    }
+}
+
+/*
+ * Periodically reclaim expired remote-scan sessions: drop expired tokens and cancel their
+ * result queues (routed by transport). This runs regardless of read traffic, so abandoned
+ * sessions whose consumer never fetches are still reclaimed instead of leaking their token and
+ * buffered queue data until an unrelated fetch happens to sweep them.
+ */
+void remote_scan_token_cleanup(Daemon* daemon) {
+    constexpr int kCleanupIntervalSec = 30;
+    while (!daemon->stopped()) {
+        auto* exec_env = ExecEnv::GetInstance();
+        auto* token_mgr = exec_env != nullptr ? exec_env->remote_scan_token_mgr() : nullptr;
+        if (token_mgr != nullptr) {
+            for (const auto& expired : token_mgr->cleanup_expired_tokens(UnixMillis())) {
+                if (expired.transport == TStarRocksScanTransport::STARROCKS_ARROW_FLIGHT) {
+                    exec_env->remote_arrow_queue_mgr()->cancel(expired.fragment_instance_id);
+                } else if (expired.transport == TStarRocksScanTransport::STARROCKS_BRPC_CHUNK) {
+                    exec_env->remote_chunk_queue_mgr()->cancel(expired.fragment_instance_id);
+                }
+            }
+        }
+        nap_sleep(kCleanupIntervalSec, [daemon] { return daemon->stopped(); });
     }
 }
 
@@ -399,6 +426,12 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
 #endif
+
+    {
+        std::thread remote_scan_token_cleanup_thread(remote_scan_token_cleanup, this);
+        Thread::set_thread_name(remote_scan_token_cleanup_thread, "rscan_token_gc");
+        _daemon_threads.emplace_back(std::move(remote_scan_token_cleanup_thread));
+    }
 
     init_signals();
     init_minidump();

@@ -26,6 +26,9 @@
 #include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exec/exec_env.h"
+#include "exec/remote_scan_arrow_batch_reader.h"
+#include "runtime/remote_arrow_queue_mgr.h"
+#include "runtime/remote_scan_token_mgr.h"
 
 namespace starrocks {
 
@@ -75,6 +78,23 @@ arrow::Result<std::unique_ptr<arrow::flight::FlightInfo>> ArrowFlightSqlServer::
 
 arrow::Result<std::unique_ptr<arrow::flight::FlightDataStream>> ArrowFlightSqlServer::DoGetStatement(
         const arrow::flight::ServerCallContext& context, const arrow::flight::sql::StatementQueryTicket& command) {
+    static constexpr const char* kRemoteScanTicketPrefix = "remote_scan:";
+    static constexpr size_t kRemoteScanTicketPrefixSize = 12;
+    if (command.statement_handle.compare(0, kRemoteScanTicketPrefixSize, kRemoteScanTicketPrefix) == 0) {
+        std::string token = command.statement_handle.substr(kRemoteScanTicketPrefixSize);
+        TUniqueId fragment_instance_id;
+        auto* exec_env = ExecEnv::GetInstance();
+        auto status = exec_env->remote_scan_token_mgr()->lookup(token, TStarRocksScanTransport::STARROCKS_ARROW_FLIGHT,
+                                                                &fragment_instance_id);
+        if (!status.ok()) {
+            return arrow::Status::Invalid("Invalid remote scan ticket: ", status.to_string());
+        }
+        auto reader = std::make_shared<RemoteScanArrowBatchReader>(
+                exec_env->remote_arrow_queue_mgr(), exec_env->remote_scan_token_mgr(), fragment_instance_id, token);
+        ARROW_RETURN_NOT_OK(reader->init());
+        return std::make_unique<arrow::flight::RecordBatchStream>(reader);
+    }
+
     ARROW_ASSIGN_OR_RAISE(auto pair, decode_ticket(command.statement_handle));
 
     const std::string query_id = pair.first;

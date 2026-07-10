@@ -975,6 +975,12 @@ CONF_Int32(routine_load_pulsar_timeout_second, "10");
 // default is 20, batch_size's defualt value is 1024 means 20 * 1024 rows will be cached
 CONF_mInt32(max_memory_sink_batch_count, "20");
 
+// Soft per-queue byte limit for the StarRocks external-catalog remote-scan result queues (one per
+// remote-scan fragment instance). The producer applies backpressure once a queue's buffered
+// serialized-chunk (brpc_chunk) / RecordBatch (arrow_flight) bytes reach this, in addition to the
+// max_memory_sink_batch_count item cap. Default 64MB.
+CONF_mInt64(remote_scan_result_queue_mem_limit, "67108864");
+
 // This configuration is used for the context gc thread schedule period
 // note: unit is minute, default is 5min
 CONF_mInt32(scan_context_gc_interval_min, "5");

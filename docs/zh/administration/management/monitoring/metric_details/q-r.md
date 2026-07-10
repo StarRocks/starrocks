@@ -114,6 +114,16 @@ description: "Alphabetical q - r"
 - 单位：个
 - 描述：FE Catalog 回收站中当前保留的表数量。
 
+## `remote_scan_arrow_queue_count`
+
+- 单位：计数
+- 描述：当前 BE 上活跃的 Arrow Flight 远程扫描结果队列数量（StarRocks 外部 Catalog 远程扫描数据面），每个进行中的远程扫描 fragment 实例对应一个。
+
+## `remote_scan_chunk_queue_count`
+
+- 单位：计数
+- 描述：当前 BE 上活跃的 brpc chunk 远程扫描结果队列数量（StarRocks 外部 Catalog 远程扫描数据面），每个进行中的远程扫描 fragment 实例对应一个。
+
 ## `resource_group_bigquery_count`
 
 - 单位：计数

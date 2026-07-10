@@ -34,6 +34,7 @@
 #include "exec/data_sinks/multi_cast_data_stream_sink.h"
 #include "exec/data_sinks/mysql_table_sink.h"
 #include "exec/data_sinks/noop_sink.h"
+#include "exec/data_sinks/remote_scan_result_sink.h"
 #include "exec/data_sinks/result_sink.h"
 #include "exec/data_sinks/schema_table_sink.h"
 #include "exec/data_sinks/table_function_table_sink.h"
@@ -82,6 +83,12 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing data buffer sink.");
         }
         *sink = std::make_unique<MemoryScratchSink>(row_desc, output_exprs, thrift_sink.memory_scratch_sink);
+        break;
+    case TDataSinkType::REMOTE_SCAN_RESULT_SINK:
+        if (!thrift_sink.__isset.remote_scan_result_sink) {
+            return Status::InternalError("Missing remote scan result sink.");
+        }
+        *sink = std::make_unique<RemoteScanResultSink>(row_desc, output_exprs, thrift_sink.remote_scan_result_sink);
         break;
     case TDataSinkType::MYSQL_TABLE_SINK: {
         if (!thrift_sink.__isset.mysql_table_sink) {

@@ -114,6 +114,16 @@ description: "Alphabetical q - r"
 - Unit: Count
 - Description: Number of tables currently held in the FE catalog recycle bin.
 
+## `remote_scan_arrow_queue_count`
+
+- Unit: Count
+- Description: Number of active Arrow Flight remote-scan result queues on this BE (the StarRocks external catalog remote-scan data plane), one per in-flight remote-scan fragment instance.
+
+## `remote_scan_chunk_queue_count`
+
+- Unit: Count
+- Description: Number of active brpc-chunk remote-scan result queues on this BE (the StarRocks external catalog remote-scan data plane), one per in-flight remote-scan fragment instance.
+
 ## `resource_group_bigquery_count`
 
 - Unit: Count
