@@ -35,6 +35,8 @@
 #pragma once
 
 #include <cmath>
+#include <string>
+#include <vector>
 
 #include "storage_primitive/filter_op.h"
 #include "storage_primitive/olap_tuple.h"

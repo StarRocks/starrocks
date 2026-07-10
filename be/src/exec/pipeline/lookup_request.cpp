@@ -30,6 +30,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "connector/hive/iceberg_global_late_materialization_context.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"

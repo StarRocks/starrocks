@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "connector_primitive/connector.h"
-#include "exec/olap_scan_prepare.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
