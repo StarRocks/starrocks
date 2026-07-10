@@ -35,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
@@ -268,7 +269,9 @@ public class S3FileSystem implements FileSystem {
         S3ClientBuilder builder = S3Client.builder()
                 .credentialsProvider(awsCloudCredential.generateAWSCredentialsProvider())
                 .region(awsCloudCredential.tryToResolveRegion())
-                .forcePathStyle(awsCloudConfiguration.getEnablePathStyleAccess());
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(awsCloudConfiguration.getEnablePathStyleAccess())
+                        .build());
         String endpoint = awsCloudCredential.getEndpoint();
         if (endpoint != null && !endpoint.isEmpty()) {
             builder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(endpoint));
