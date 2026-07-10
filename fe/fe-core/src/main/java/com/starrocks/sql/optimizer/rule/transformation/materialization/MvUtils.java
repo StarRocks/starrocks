@@ -703,7 +703,8 @@ public class MvUtils {
             }
 
             public Object visitLogicalTableScan(OptExpression optExpression, ColumnRefSet context) {
-                List<ScalarOperator> conjuncts = Utils.extractConjuncts(optExpression.getOp().getPredicate());
+                LogicalScanOperator scanOperator = optExpression.getOp().cast();
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(scanOperator.getPredicateForMvRewrite());
                 for (ScalarOperator conjunct : conjuncts) {
                     if (!isValidPredicate(conjunct)) {
                         continue;
