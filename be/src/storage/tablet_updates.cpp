@@ -21,6 +21,23 @@
 #include <filesystem>
 #include <memory>
 
+<<<<<<< HEAD
+=======
+#include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
+#include "base/random/random.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "base/utility/pretty_printer.h"
+#include "base/utility/scoped_cleanup.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
+>>>>>>> ce03ba620f ([BugFix] Fix BE crash in primary key auto-increment partial update apply (#76119))
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -5389,8 +5406,20 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            continue;
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // A rssid appears here only with non-empty rowids resolved from the primary index, so a 0-row
+            // segment means the index/rowset-meta disagree with the on-disk segment data. Silently skipping
+            // would return short read columns and later crash in append_selective; fail loudly instead.
+            std::string msg = strings::Substitute(
+                    "segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3; primary "
+                    "index/rowset-meta vs segment-data inconsistency (possibly a corrupt partial-update / "
+                    "auto-increment segment rewrite output)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
@@ -5452,8 +5481,18 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            return Status::OK();
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:auto_increment_segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // Same integrity guard as the main read loop: a 0-row segment with resolved rowids means the
+            // primary index / rowset meta disagree with the on-disk segment data.
+            std::string msg = strings::Substitute(
+                    "auto-increment: segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3 "
+                    "(primary index/rowset-meta vs segment-data inconsistency)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),

@@ -20,7 +20,11 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
+<<<<<<< HEAD
 #include "storage/task/engine_checksum_task.h"
+=======
+#include "storage/rowset_update_state.h"
+>>>>>>> ce03ba620f ([BugFix] Fix BE crash in primary key auto-increment partial update apply (#76119))
 #include "storage/txn_manager.h"
 #include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
@@ -3190,6 +3194,111 @@ TEST_F(TabletUpdatesTest, get_column_values_with_invalid_rssid) {
 
 TEST_F(TabletUpdatesTest, get_column_values_with_invalid_rssid_persistent_index) {
     test_get_column_values_with_invalid_rssid(true);
+}
+
+// Regression test for the read-side integrity guard of the PK auto-increment partial-update 0-row-segment crash.
+// When a resolved (valid) rssid points to a segment whose on-disk num_rows is 0 -- an index/rowset-meta vs
+// segment-data inconsistency, e.g. a corrupt partial-update/auto-increment rewrite -- get_column_values must fail
+// with Corruption instead of silently skipping the segment (which returned short read columns and later crashed
+// in append_selective). The 0-row condition cannot arise naturally, so it is injected via SyncPoint.
+TEST_F(TabletUpdatesTest, get_column_values_zero_row_segment) {
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowset(tablet, keys)).ok());
+
+    // Use the real (valid) rssid of the committed rowset so we pass the rssid-range guards and reach the
+    // 0-row integrity check.
+    uint32_t rssid = 0;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(2, &rowsets, &version).ok());
+        ASSERT_FALSE(rowsets.empty());
+        rssid = rowsets[0]->rowset_meta()->get_rowset_seg_id();
+    }
+
+    std::vector<uint32_t> read_column_ids = {1, 2};
+    MutableColumns read_columns(read_column_ids.size());
+    const auto& tablet_schema = tablet->unsafe_tablet_schema_ref();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        auto tablet_column = tablet_schema.column(read_column_ids[i]);
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    rowids_by_rssid[rssid] = {0, 1, 2};
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::get_column_values:segment_num_rows",
+                                          [](void* arg) { *(uint32_t*)arg = 0; });
+    auto st = tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns, nullptr,
+                                                   tablet->tablet_schema());
+    SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::get_column_values:segment_num_rows");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_FALSE(st.ok()) << "0-row segment with resolved rowids must fail loudly";
+    ASSERT_TRUE(st.is_corruption()) << st;
+}
+
+// Same integrity guard as get_column_values_zero_row_segment, but for the auto-increment default read path
+// (state != nullptr && with_default): a 0-row segment must yield Corruption, not a silent skip.
+TEST_F(TabletUpdatesTest, get_column_values_zero_row_segment_auto_increment) {
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowset(tablet, keys)).ok());
+
+    RowsetSharedPtr rowset;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(2, &rowsets, &version).ok());
+        ASSERT_FALSE(rowsets.empty());
+        rowset = rowsets[0];
+    }
+
+    // Drive the auto-increment default block: state != nullptr && with_default, with an empty rowids_by_rssid so
+    // the main read loop is skipped and control reaches the auto-increment default read.
+    AutoIncrementPartialUpdateState ai_state;
+    ai_state.init(rowset.get(), tablet->tablet_schema(), 0, 0);
+
+    std::vector<uint32_t> read_column_ids = {1};
+    MutableColumns read_columns(read_column_ids.size());
+    const auto& tablet_schema = tablet->unsafe_tablet_schema_ref();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        auto tablet_column = tablet_schema.column(read_column_ids[i]);
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::get_column_values:auto_increment_segment_num_rows",
+                                          [](void* arg) { *(uint32_t*)arg = 0; });
+    auto st = tablet->updates()->get_column_values(read_column_ids, 0, /*with_default=*/true, rowids_by_rssid,
+                                                   &read_columns, &ai_state, tablet->tablet_schema());
+    SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::get_column_values:auto_increment_segment_num_rows");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_FALSE(st.ok()) << "0-row segment on the auto-increment default path must fail loudly";
+    ASSERT_TRUE(st.is_corruption()) << st;
 }
 
 void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_t>& versions,
