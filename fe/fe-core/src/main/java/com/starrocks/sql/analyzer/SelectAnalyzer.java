@@ -638,10 +638,16 @@ public class SelectAnalyzer {
 
     /**
      * ROLLUP/CUBE/GROUPING SETS produce super-aggregate rows where grouping-key columns are NULL,
-     * regardless of whether the underlying column is declared NOT NULL. The optimizer's Repeat
-     * operator already accounts for this widening at plan time, but analysis-time output field
-     * nullability (used by views, CTAS, etc.) is otherwise derived solely from the grouping
-     * expression itself, so it must be widened here too.
+     * regardless of whether the underlying column is declared NOT NULL. The Repeat operator already
+     * accounts for this widening at plan/fragment-build time, but analysis-time nullability is
+     * otherwise derived solely from the grouping expression itself, so it must be widened here too.
+     *
+     * <p>Two analysis-time signals need widening: the output {@link Field} on the scope (consumed by
+     * materialized-view schema building and, via QueryAnalyzer.visitView, by view queries), and the
+     * output {@link Expr} itself (consumed directly by the Arrow Flight prepared-statement schema,
+     * which reads getOutputExpression().isNullable()). Without the latter, a direct
+     * {@code GROUP BY ROLLUP} query that is not wrapped in a view still reports the grouping key as
+     * NOT NULL while the executed result delivers NULLs.
      */
     private void widenGroupingKeyNullability(GroupByClause groupByClause, Scope outputScope,
                                              List<Expr> outputExpressions, List<Expr> groupByExpressions) {
@@ -656,8 +662,12 @@ public class SelectAnalyzer {
         }
         List<Field> outputFields = outputScope.getRelationFields().getAllFields();
         for (int i = 0; i < outputExpressions.size() && i < outputFields.size(); i++) {
-            if (groupByExpressions.stream().anyMatch(outputExpressions.get(i)::equals)) {
+            Expr outputExpr = outputExpressions.get(i);
+            if (groupByExpressions.stream().anyMatch(outputExpr::equals)) {
                 outputFields.get(i).setNullable(true);
+                if (outputExpr instanceof SlotRef) {
+                    ((SlotRef) outputExpr).setNullable(true);
+                }
             }
         }
     }

@@ -160,4 +160,37 @@ public class AnalyzeViewNullabilityTest {
         assertAnalysisNullability("SELECT id, tenant_id, cnt FROM nn_grouping_sets_view",
                 new boolean[] {true, true, false});
     }
+
+    @Test
+    public void testDirectRollupWidensGroupingKeyNullability() throws Exception {
+        // The widening must also apply to a direct GROUP BY ROLLUP query (not wrapped in a view):
+        // the Arrow Flight prepared-statement schema reads the output expression nullability, so a
+        // NOT NULL grouping key must be reported nullable to match the executed result.
+        assertAnalysisNullability(
+                "SELECT id, tenant_id, count(*) AS cnt FROM nn_base GROUP BY ROLLUP(id, tenant_id)",
+                new boolean[] {true, true, false});
+    }
+
+    @Test
+    public void testDirectGroupingSetsWidensGroupingKeyNullability() throws Exception {
+        assertAnalysisNullability(
+                "SELECT id, tenant_id, count(*) AS cnt FROM nn_base " +
+                        "GROUP BY GROUPING SETS ((id, tenant_id), (id), ())",
+                new boolean[] {true, true, false});
+    }
+
+    @Test
+    public void testDirectCubeWidensGroupingKeyNullability() throws Exception {
+        assertAnalysisNullability(
+                "SELECT id, tenant_id, count(*) AS cnt FROM nn_base GROUP BY CUBE(id, tenant_id)",
+                new boolean[] {true, true, false});
+    }
+
+    @Test
+    public void testPlainGroupByDoesNotWiden() throws Exception {
+        // Non-super-aggregate GROUP BY must NOT widen: plain grouping keys keep base nullability.
+        assertAnalysisNullability(
+                "SELECT id, tenant_id, count(*) AS cnt FROM nn_base GROUP BY id, tenant_id",
+                new boolean[] {false, false, false});
+    }
 }
