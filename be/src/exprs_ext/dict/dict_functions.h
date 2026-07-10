@@ -29,9 +29,9 @@ public:
     //   value         VARCHAR constant.
     //   dict_slot_id  INT constant: the global-dict column id whose dictionary to use.
     //
-    // A value absent from the dictionary encodes to a guaranteed-absent "no match" code (size + 1).
-    // This makes equality comparisons against it behave correctly, but it should not be used for order
-    // comparison. A NULL input value encodes to NULL.
+    // A value absent from the dictionary encodes to std::numeric_limits<DictId>::max() (a guaranteed-absent
+    // sentinel). This makes equality/membership comparisons against it behave correctly, but it must not be
+    // used for order comparison. A NULL input value encodes to NULL.
     DEFINE_VECTORIZED_FN(dict_encode);
 
     static Status dict_encode_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
