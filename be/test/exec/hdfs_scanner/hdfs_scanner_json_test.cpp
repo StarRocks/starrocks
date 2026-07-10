@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "formats/file_input_stream.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
@@ -40,7 +41,7 @@ public:
 
 protected:
     std::shared_ptr<FileSystem> _fs;
-    OpenFileOptions _opts;
+    formats::FileInputStreamOptions _opts;
     FormatScannerStats _app_stats;
     FormatScannerStats _fs_stats;
     RuntimeState _runtime_state;
@@ -64,7 +65,7 @@ void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& pat
     _opts.file_path = path;
     _opts.file_size = _fs->get_file_size(path).value();
     ASSIGN_OR_ABORT(_file,
-                    HdfsScanner::create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, _opts));
+                    formats::create_random_access_file(_shared_buffered_input_stream, _cache_input_stream, _opts));
 }
 
 TupleDescriptor* HdfsScannerJsonReaderTest::create_tuple_descriptor() {

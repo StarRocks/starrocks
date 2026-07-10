@@ -249,7 +249,9 @@ else()
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
-TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
+set(STARROCKS_TEST_LINK_LIBS ${TEST_LINK_LIBS})
+list(REMOVE_ITEM STARROCKS_TEST_LINK_LIBS arrow_testing)
+TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${STARROCKS_TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
 
