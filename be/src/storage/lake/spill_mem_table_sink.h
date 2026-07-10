@@ -34,7 +34,10 @@ class TabletWriter;
 // The slot_idx parameter is used to track the original flush order for correct merging.
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
+    // @param keep_op_column: snapshot of config::lake_enable_pk_preserve_txn_delete_order taken once by
+    // the DeltaWriter for the whole load, so the __op-keeping decision cannot change mid-load (see below).
+    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile,
+                      bool keep_op_column);
     ~SpillMemTableSink() override;
 
     // Spill chunk to temporary storage or write directly if eos and no prior spills
@@ -48,6 +51,20 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
+    // The spill sink keeps the __op column so the merge resolves upsert/delete order by slot.
+    // Keep the __op column (drive the op-aware merge) only when the in-transaction upsert/delete order
+    // feature is enabled. When it is off (the default), return false so the memtable takes the legacy
+    // _split_upserts_deletes path (deletes split into a del file, applied after all segments) -- keeping
+    // the spill path's behavior, del-file layout, and delete-with-merge-condition rejection identical to
+    // before this feature. Backed by _keep_op_column, a per-load snapshot of
+    // config::lake_enable_pk_preserve_txn_delete_order taken by the DeltaWriter, so the decision is
+    // stable for the whole load even if the mutable config is flipped mid-load.
+    bool keep_op_column() const override;
+
+    // Spill a chunk that still carries the trailing __op column (see keep_op_column()).
+    Status flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                               int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
+
     Status merge_blocks_to_segments();
 
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
@@ -56,7 +73,20 @@ public:
     int64_t tablet_id() override;
 
 private:
+    // Spill a chunk and, if the spill threshold is reached, kick off an eager merge task. Shared by
+    // flush_chunk() (after the single-flush shortcut) and flush_chunk_with_op().
+    Status _spill_and_maybe_eager_merge(const Chunk& chunk, int64_t slot_idx, int64_t* flush_data_size);
+
     TabletWriter* _writer;
+
+    // Per-load snapshot of config::lake_enable_pk_preserve_txn_delete_order (see keep_op_column()).
+    const bool _keep_op_column;
+
+    // Set once when flush_chunk_with_op() is first called, i.e. the memtable actually kept a hidden __op
+    // column (PK load with an op slot + _keep_op_column). This is the authoritative op-aware signal
+    // forwarded to the merge tasks -- distinct from _keep_op_column, which is true for any load while the
+    // config is on (including non-PK loads that never produce a hidden __op).
+    bool _op_aware = false;
 
     // Memory tracker for merge operations, parent is compaction tracker.
     // RATIONALE: Merge phase uses separate memory budget from normal load operations
