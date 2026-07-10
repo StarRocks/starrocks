@@ -994,8 +994,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
         long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+        if (mvStaleness < 0) {
+            // A base table's refresh timestamp regressed below the MV's own refresh timestamp, e.g. after an
+            // Iceberg `rollback_to_snapshot`/`rollback_to_timestamp`. Treat as outdated rather than trusting a
+            // negative staleness, otherwise the MV would be served as fresh without re-checking base tables.
+            LOG.debug("MV is outdated because base tables' lastRefreshTime {} is before MV's lastRefreshTime {}",
+                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId));
+            return false;
+        }
         if (mvStaleness > this.maxMVRewriteStaleness) {
-            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             LOG.debug("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
                             "MV's lastRefreshTime {}) is greater than the staleness config {}",
                     DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),

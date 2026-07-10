@@ -53,6 +53,8 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -1689,4 +1691,115 @@ public class MaterializedViewTest extends StarRocksTestBase {
         context.clearVisibleVersionMapByMVPartitions(Sets.newHashSet());
         Assertions.assertEquals(beforeNoOp, olapPartitionInfo.keySet());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJson() {
+        MaterializedView mv = new MaterializedView();
+        Assertions.assertEquals("{}", mv.getBaseTableRefreshVersionTimesJson());
+
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+        Assertions.assertEquals("{}", mv.getBaseTableRefreshVersionTimesJson());
+
+        // External base table reports the max partition modified time, keyed by catalog.db.table.
+        long modifiedTime = 1735697100000L;
+        BaseTableInfo ext = new BaseTableInfo("iceberg0", "ice_db", "ice_t", "ice_t");
+        Map<String, MaterializedView.BasePartitionInfo> extParts = Maps.newHashMap();
+        extParts.put("p1", new MaterializedView.BasePartitionInfo(-1, 1, modifiedTime - 60000));
+        extParts.put("p2", new MaterializedView.BasePartitionInfo(-1, 1, modifiedTime));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(ext, extParts);
+
+        Assertions.assertEquals("{\"iceberg0.ice_db.ice_t\":\"" + TimeUtils.longToTimeString(modifiedTime) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+
+        // A base table whose partitions only carry version ids (lastRefreshTime <= 0, as OLAP partitions do)
+        // contributes no entry.
+        BaseTableInfo noTime = new BaseTableInfo("iceberg0", "ice_db", "no_time_t", "no_time_t");
+        Map<String, MaterializedView.BasePartitionInfo> noTimeParts = Maps.newHashMap();
+        noTimeParts.put("p1", new MaterializedView.BasePartitionInfo(1, 1, -1));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(noTime, noTimeParts);
+
+        Assertions.assertEquals("{\"iceberg0.ice_db.ice_t\":\"" + TimeUtils.longToTimeString(modifiedTime) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+    }
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJsonNormalizesConnectorUnits() {
+        long wallClockMillis = 1735697100000L;
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+
+        // Iceberg stores microseconds (the stored value keeps its native unit); the column normalizes for display.
+        BaseTableInfo iceberg = new BaseTableInfo("iceberg0", "ice_db", "ice_us", "ice_us");
+        Map<String, MaterializedView.BasePartitionInfo> parts = Maps.newHashMap();
+        parts.put("p1", new MaterializedView.BasePartitionInfo(-1, 1, wallClockMillis * 1000));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(iceberg, parts);
+
+        Assertions.assertEquals(
+                "{\"iceberg0.ice_db.ice_us\":\"" + TimeUtils.longToTimeString(wallClockMillis) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+    }
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJsonOlapTable() {
+        long versionTimeMillis = 1735697100000L;
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+
+        // OLAP base table: keyed by table id in the OLAP version map; visibleVersionTime is already epoch millis.
+        long tableId = 10001L;
+        mv.setBaseTableInfos(Lists.newArrayList(new BaseTableInfo(100L, "db", "t_olap", tableId)));
+        Map<String, MaterializedView.BasePartitionInfo> parts = Maps.newHashMap();
+        parts.put("p1", new MaterializedView.BasePartitionInfo(1, 1, versionTimeMillis));
+        scheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(tableId, parts);
+
+        Assertions.assertEquals(
+                "{\"default_catalog.db.t_olap\":\"" + TimeUtils.longToTimeString(versionTimeMillis) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+    }
+
+    /**
+     * Test that isStalenessSatisfied() treats a negative staleness (base table's refresh timestamp
+     * regressed below the MV's own refresh timestamp, e.g. after an Iceberg rollback_to_snapshot) as
+     * outdated rather than incorrectly falling through to "fresh".
+     */
+    @Test
+    public void testIsStalenessSatisfiedWithNegativeStaleness() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(2_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test", columns, KeysType.AGG_KEYS,
+                null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                // base table's refresh timestamp is before the MV's own refresh timestamp
+                return Optional.of(1_000_000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    @Test
+    public void testIsStalenessSatisfiedWithPositiveStalenessWithinBudget() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test2", columns, KeysType.AGG_KEYS,
+                null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_000_000L + 500 * 1000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+>>>>>>> 86051d97cf ([BugFix] Fix MV rewrite serving stale results after Iceberg rollback_to_snapshot (#75924))
 }
