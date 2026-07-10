@@ -17,6 +17,7 @@ package com.starrocks.fs.s3;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Test;
@@ -36,8 +37,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class S3FileSystemTest {
 
-    private static Map<String, String> emptyProps() {
-        return Maps.newHashMap();
+    // Properties that resolve to an AwsCloudConfiguration, so globList takes the native path
+    // (the real client is never built because createS3Client is overridden in the fake).
+    private static Map<String, String> awsProps() {
+        Map<String, String> props = Maps.newHashMap();
+        props.put("aws.s3.use_aws_sdk_default_behavior", "true");
+        return props;
     }
 
     private static FileStatus file(String key) {
@@ -65,12 +70,12 @@ public class S3FileSystemTest {
         boolean throwOnList = false;
 
         FakeS3FileSystem(Map<String, List<FileStatus>> canned) {
-            super(emptyProps());
+            super(awsProps());
             this.canned = canned;
         }
 
         @Override
-        protected S3Client createS3Client() {
+        protected S3Client createS3Client(AwsCloudConfiguration awsCloudConfiguration) {
             return null; // unused: listWithPrefix is overridden
         }
 

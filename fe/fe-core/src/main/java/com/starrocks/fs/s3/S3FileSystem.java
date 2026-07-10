@@ -44,8 +44,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * A native S3 (and S3-compatible: oss/cosn/ks3/obs/tos) {@link FileSystem} implementation used to
- * accelerate glob listing for the FILES() table function.
+ * A native S3 (and S3-compatible: s3a/s3n/oss/cosn/ks3/obs/tos) {@link FileSystem} implementation
+ * used to accelerate glob listing for the FILES() table function.
  *
  * <p>The Hadoop {@code S3AFileSystem.globStatus} path resolves a wildcard pattern by listing the
  * parent "directory" of the first wildcard path component and filtering client-side. Because
@@ -89,17 +89,18 @@ public class S3FileSystem implements FileSystem {
     }
 
     /**
-     * Whether the given properties resolve to an AWS-style cloud configuration. When they do not
-     * (e.g. legacy {@code fs.oss.*} keys -> AliyunCloudConfiguration) the caller should fall back to
-     * the Hadoop path, since we build the client from {@link AwsCloudCredential}.
+     * Build the cloud configuration and return it only when it is an AWS-style configuration. Returns
+     * null when the properties do not resolve to AWS credentials (e.g. legacy {@code fs.oss.*} keys ->
+     * AliyunCloudConfiguration) or when building fails, in which case the caller falls back to the
+     * Hadoop path. The returned object is reused to build the client, so the map is parsed only once.
      */
-    public static boolean canHandle(Map<String, String> properties) {
+    protected AwsCloudConfiguration tryGetAwsCloudConfiguration() {
         try {
             CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-            return cc instanceof AwsCloudConfiguration;
+            return cc instanceof AwsCloudConfiguration ? (AwsCloudConfiguration) cc : null;
         } catch (Exception e) {
             LOG.warn("Failed to build cloud configuration for native S3 glob, will fall back to hadoop path", e);
-            return false;
+            return null;
         }
     }
 
@@ -118,14 +119,23 @@ public class S3FileSystem implements FileSystem {
             return fallbackGlobList(path, skipDir);
         }
 
+        // Resolve the cloud configuration once here (after the cheap pattern gate) and reuse it to
+        // build the client. Non-AWS configurations fall back to the Hadoop path.
+        AwsCloudConfiguration awsCloudConfiguration = tryGetAwsCloudConfiguration();
+        if (awsCloudConfiguration == null) {
+            return fallbackGlobList(path, skipDir);
+        }
+
         long startTime = System.currentTimeMillis();
-        try (S3Client s3Client = createS3Client()) {
+        try (S3Client s3Client = createS3Client(awsCloudConfiguration)) {
             List<FileStatus> result = nativeGlobList(s3Client, scheme, bucket, keyPattern);
             List<FileStatus> filtered = skipDir
                     ? result.stream().filter(f -> !f.isDirectory()).collect(Collectors.toList())
                     : result;
-            LOG.info("S3 native globList done, path={}, matched={}, costMs={}",
-                    path, filtered.size(), System.currentTimeMillis() - startTime);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("S3 native globList done, path={}, matched={}, costMs={}",
+                        path, filtered.size(), System.currentTimeMillis() - startTime);
+            }
             return filtered;
         } catch (Exception e) {
             // Availability over optimization: any unexpected failure on the native path (e.g. an
@@ -248,12 +258,7 @@ public class S3FileSystem implements FileSystem {
         }
     }
 
-    protected S3Client createS3Client() throws StarRocksException {
-        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-        if (!(cc instanceof AwsCloudConfiguration)) {
-            throw new StarRocksException("Native S3 glob requires an AWS cloud configuration");
-        }
-        AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) cc;
+    protected S3Client createS3Client(AwsCloudConfiguration awsCloudConfiguration) {
         AwsCloudCredential awsCloudCredential = awsCloudConfiguration.getAwsCloudCredential();
 
         S3ClientBuilder builder = S3Client.builder()
