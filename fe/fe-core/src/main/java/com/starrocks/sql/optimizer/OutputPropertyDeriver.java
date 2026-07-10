@@ -421,7 +421,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         leftOnPredicateColumns, rightOnPredicateColumns);
 
             } else if ((leftDistributionDesc.isShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
-                    (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
+                    (rightDistributionDesc.isShuffle() || rightDistributionDesc.isShuffleEnforce())) {
                 // shuffle join
                 PhysicalPropertySet outputProperty = computeShuffleJoinOutputProperty(node.getJoinType(),
                         leftDistributionDesc.getDistributionCols(), rightDistributionDesc.getDistributionCols());
