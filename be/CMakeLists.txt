@@ -848,6 +848,7 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
+    -Wl,-u,__wrap___floattidf
     ${WL_START_GROUP}
     Agent
     Common
