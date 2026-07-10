@@ -183,8 +183,9 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
             List<ColumnRefOperator> unionOutputColumns = Lists.newArrayList();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : ctx.localAgg().getAggregations().entrySet()) {
                 ColumnRefOperator output = entry.getKey();
+                boolean nullable = isPushedDownAggregateOutputNullable(output, entry.getValue());
                 unionOutputColumns.add(new ColumnRefOperator(output.getId(), entry.getValue().getType(),
-                        output.getName(), output.isNullable()));
+                        output.getName(), nullable));
             }
 
             // 1. Rewrite each branch of UNION ALL.
@@ -268,8 +269,9 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : localAgg.getAggregations().entrySet()) {
                 ColumnRefOperator oldOutput = entry.getKey();
                 CallOperator newCall = (CallOperator) aggRewriter.rewrite(entry.getValue());
+                boolean nullable = isPushedDownAggregateOutputNullable(oldOutput, newCall);
                 ColumnRefOperator newOutput = factory.create(oldOutput.getName(), newCall.getType(),
-                        oldOutput.isNullable());
+                        nullable);
                 newAggregations.put(newOutput, newCall);
                 localAggOutputRewriteMap.put(oldOutput, newOutput);
             }
@@ -308,6 +310,10 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
                     .setCost(cost)
                     .build();
             return new BranchRewriteResult(newExchangeExpr, branchOutputColumns);
+        }
+
+        private boolean isPushedDownAggregateOutputNullable(ColumnRefOperator output, CallOperator call) {
+            return output.isNullable() || !FunctionSet.COUNT.equals(call.getFnName());
         }
 
         private AggInputRewriteResult rewriteAggInput(RewriteContext ctx, PhysicalUnionOperator union,
@@ -372,7 +378,7 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
                 ColumnRefOperator oldOutput = entry.getKey();
                 ScalarOperator newExpression = childRewriter.rewrite(entry.getValue());
                 ColumnRefOperator newOutput = factory.create(oldOutput.getName(), newExpression.getType(),
-                        oldOutput.isNullable());
+                        newExpression.isNullable());
                 newProjectMap.put(newOutput, newExpression);
                 projectOutputRewriteMap.put(oldOutput, newOutput);
             }
