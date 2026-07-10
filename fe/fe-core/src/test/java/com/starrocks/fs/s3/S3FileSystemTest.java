@@ -175,6 +175,16 @@ public class S3FileSystemTest {
     }
 
     @Test
+    public void testEscapedWildcardFallsBack() throws StarRocksException {
+        // "\*" is a literal '*', not a wildcard, so this is an exact path and must not take the
+        // native listing path.
+        FakeS3FileSystem fs = new FakeS3FileSystem(Maps.newHashMap());
+        fs.globList("s3://bucket/data/part-\\*.parquet", true);
+        assertTrue(fs.fellBack);
+        assertTrue(fs.pushedDown.isEmpty());
+    }
+
+    @Test
     public void testNativeFailureFallsBackToHadoop() throws StarRocksException {
         FakeS3FileSystem fs = new FakeS3FileSystem(Maps.newHashMap());
         fs.throwOnList = true;

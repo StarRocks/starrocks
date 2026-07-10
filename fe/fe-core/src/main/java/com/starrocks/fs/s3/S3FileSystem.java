@@ -14,6 +14,7 @@
 
 package com.starrocks.fs.s3;
 
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksException;
@@ -163,7 +164,7 @@ public class S3FileSystem implements FileSystem {
      */
     private List<FileStatus> nativeGlobList(S3Client s3Client, String scheme, String bucket, String keyPattern)
             throws Exception {
-        List<String> components = getPathComponents(keyPattern);
+        List<String> components = Splitter.on(SEPARATOR).omitEmptyStrings().splitToList(keyPattern);
 
         // Candidate directory keys accumulated so far ("" == bucket root). Intermediate candidates
         // are always directories; only terminal matches may be files.
@@ -272,17 +273,6 @@ public class S3FileSystem implements FileSystem {
         return builder.build();
     }
 
-    // Split a key into non-empty path components, merging repeated slashes. E.g. "a//b/c" -> [a, b, c].
-    private static List<String> getPathComponents(String key) {
-        List<String> components = Lists.newArrayList();
-        for (String component : key.split(SEPARATOR)) {
-            if (!component.isEmpty()) {
-                components.add(component);
-            }
-        }
-        return components;
-    }
-
     // Longest literal prefix of a component: everything before the first glob metacharacter.
     private static String literalPrefixOf(String component) {
         for (int i = 0; i < component.length(); ++i) {
@@ -295,7 +285,15 @@ public class S3FileSystem implements FileSystem {
 
     private static boolean containsGlobWildcard(String key) {
         for (int i = 0; i < key.length(); ++i) {
-            if (GLOB_METACHARACTERS.indexOf(key.charAt(i)) >= 0) {
+            char c = key.charAt(i);
+            // A backslash escapes the next character, so "\X" is a literal X, not a wildcard
+            // (matching Hadoop GlobPattern). Skip the escaped char so escaped-only patterns such as
+            // "part-\*.parquet" are treated as exact paths and fall back to the efficient HEAD path.
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (GLOB_METACHARACTERS.indexOf(c) >= 0) {
                 return true;
             }
         }
