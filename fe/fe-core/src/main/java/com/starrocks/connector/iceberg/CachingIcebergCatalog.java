@@ -144,9 +144,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         }
                     }
                 });
-        this.partitionCache = newCacheBuilderWithMaximumSize(
-                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
+        long partitionCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergPartitionCacheMemoryUsageRatio());
+        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE)
+                .executor(executorService)
+                .maximumWeight(partitionCacheSize)
+                .weigher((Weigher<IcebergTableName, Map<String, Partition>>) this::weighPartitionEntry)
+                .build(
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
@@ -610,6 +614,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return (int) size;
     }
 
+    // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
+    // millions of partitions). Sample the partition values so weighing stays cheap on large maps.
+    private int weighPartitionEntry(IcebergTableName key, Map<String, Partition> partitions) {
+        long size = Estimator.estimate(key) + Estimator.estimate(partitions, 3);
+        if (size > Integer.MAX_VALUE) {
+            LOG.warn("Partition cache entry size for key {} is too large: {} bytes", key, size);
+            return Integer.MAX_VALUE;
+        }
+        return (int) size;
+    }
+
     private long estimateContentFilesSize(Set<? extends ContentFile<?>> files) {
         if (files == null || files.isEmpty()) {
             return 0L;
@@ -654,7 +669,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return Estimator.estimate(tables.asMap(), 10) +
                 Estimator.estimate(databases.asMap(), 10) +
                 estimateDataFileCacheSize() +
-                estimateDeleteFileCacheSize() + Estimator.estimate(metaFileCacheMap, 10);
+                estimateDeleteFileCacheSize() +
+                Estimator.estimate(partitionCache.asMap(), 10) +
+                Estimator.estimate(metaFileCacheMap, 10) +
+                Estimator.estimate(tableLatestAccessTime, 10) +
+                Estimator.estimate(tableLatestRefreshTime, 10);
     }
 
     private long estimateDataFileCacheSize() {
