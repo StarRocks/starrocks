@@ -42,6 +42,7 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks::lake {
 
@@ -573,6 +574,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

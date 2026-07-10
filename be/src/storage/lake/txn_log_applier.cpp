@@ -107,6 +107,13 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
                                      CompactionStrategyPB_Name(alter_meta.compaction_strategy()), metadata->id());
             metadata->set_compaction_strategy(alter_meta.compaction_strategy());
         }
+
+        if (alter_meta.has_flat_json_config()) {
+            LOG(INFO) << fmt::format("alter flat_json_config from version {} to version {} for tablet id: {}",
+                                     metadata->has_flat_json_config() ? metadata->flat_json_config().version() : 0,
+                                     alter_meta.flat_json_config().version(), metadata->id());
+            metadata->mutable_flat_json_config()->CopyFrom(alter_meta.flat_json_config());
+        }
     }
     return Status::OK();
 }
