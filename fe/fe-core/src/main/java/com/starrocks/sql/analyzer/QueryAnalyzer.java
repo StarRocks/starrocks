@@ -28,7 +28,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -47,10 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,7 +69,6 @@ import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
-import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -114,8 +109,6 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -832,7 +825,7 @@ public class QueryAnalyzer {
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
                 }
-                table = applyIcebergTimeTravelIfNeeded(table, tableRelation);
+                table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
                 Relation r;
                 if (table instanceof View) {
@@ -2480,48 +2473,6 @@ public class QueryAnalyzer {
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }
-    }
-
-    private Table applyIcebergTimeTravelIfNeeded(Table table, TableRelation tableRelation) {
-        if (table instanceof IcebergTable && tableRelation.getQueryPeriod() != null
-                && tableRelation.getTvrVersionRange() == null) {
-            return applyIcebergTimeTravel((IcebergTable) table, tableRelation);
-        }
-        return table;
-    }
-
-    // Resolve the query period to a version range once, pin it on the relation (so
-    // RelationTransformer reuses it), and rebind the table to the targeted snapshot's schema
-    // when it differs, so column resolution and the BE descriptor honor that snapshot.
-    private IcebergTable applyIcebergTimeTravel(IcebergTable icebergTable, TableRelation tableRelation) {
-        QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
-        QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
-        Optional<ConnectorTableVersion> startVersion =
-                QueryPeriodResolver.resolve(queryPeriod.getStart(), periodType, session);
-        Optional<ConnectorTableVersion> endVersion =
-                QueryPeriodResolver.resolve(queryPeriod.getEnd(), periodType, session);
-        TvrVersionRange versionRange = metadataMgr.getTableVersionRange(
-                tableRelation.getName().getDb(), icebergTable, startVersion, endVersion);
-        tableRelation.setTvrVersionRange(versionRange);
-
-        Optional<Long> snapshotId = versionRange.end();
-        if (snapshotId.isEmpty()) {
-            return icebergTable;
-        }
-        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
-        if (snapshotSchema == null) {
-            // Legacy metadata without a per-snapshot schema id: keep the current table state.
-            return icebergTable;
-        }
-        // Pin the snapshot's read metadata (schema + partition specs). Bind it whenever time travel
-        // resolves a snapshot, not only when the schema id differs: partition evolution can change the
-        // spec while leaving the schema id unchanged, and the descriptor/partition metadata must then
-        // still reflect the snapshot rather than the current spec.
-        Map<Integer, PartitionSpec> snapshotSpecs = IcebergMetadata.getSnapshotSpecs(nativeTable, snapshotId.get());
-        IcebergTable snapshotTable = icebergTable.withReadMetadata(snapshotSchema, snapshotSpecs);
-        tableRelation.setTable(snapshotTable);
-        return snapshotTable;
     }
 
     private Table resolveTableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc) {

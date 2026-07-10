@@ -14,10 +14,16 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.PointerType;
+import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.QueryPeriod;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -25,7 +31,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 
+import java.util.Map;
 import java.util.Optional;
 
 public class QueryPeriodResolver {
@@ -61,5 +70,57 @@ public class QueryPeriodResolver {
         }
         PointerType pointerType = type == QueryPeriod.PeriodType.TIMESTAMP ? PointerType.TEMPORAL : PointerType.VERSION;
         return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
+    }
+
+    /**
+     * Relation-level entry for the analyzer: resolve the relation's query period to a version range
+     * once, pin it on the relation (so RelationTransformer reuses it), and rebind the table to the
+     * targeted snapshot's read metadata, so column resolution and the BE descriptor honor that snapshot.
+     * Returns the (possibly rebound) table; the caller owns writing it back to the relation. No-op when
+     * the relation has no query period or its version range is already pinned (e.g. pre-resolved in the
+     * unlocked phase).
+     */
+    public static Table resolveAndBindTable(TableRelation tableRelation, Table table,
+                                            ConnectContext session, MetadataMgr metadataMgr) {
+        if (tableRelation.getQueryPeriod() == null || tableRelation.getTvrVersionRange() != null) {
+            return table;
+        }
+        // Only Iceberg resolves its version range and binds a per-query read view during analysis today;
+        // other temporal tables (Paimon, MySQL) keep resolving at transform time, so gate here to avoid
+        // adding any analysis-time overhead for them.
+        if (!(table instanceof IcebergTable)) {
+            return table;
+        }
+
+        QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
+        QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
+        Optional<ConnectorTableVersion> startVersion = resolve(queryPeriod.getStart(), periodType, session);
+        Optional<ConnectorTableVersion> endVersion = resolve(queryPeriod.getEnd(), periodType, session);
+        TvrVersionRange versionRange = metadataMgr.getTableVersionRange(
+                tableRelation.getName().getDb(), table, startVersion, endVersion);
+        tableRelation.setTvrVersionRange(versionRange);
+
+        return bindIcebergSnapshotReadView((IcebergTable) table, versionRange);
+    }
+
+    // Rebind the Iceberg table to the resolved snapshot's read metadata (schema + partition specs),
+    // returning an immutable per-query copy.
+    private static Table bindIcebergSnapshotReadView(IcebergTable icebergTable, TvrVersionRange versionRange) {
+        Optional<Long> snapshotId = versionRange.end();
+        if (snapshotId.isEmpty()) {
+            return icebergTable;
+        }
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
+        if (snapshotSchema == null) {
+            // Legacy metadata without a per-snapshot schema id: keep the current table state.
+            return icebergTable;
+        }
+        // Pin the snapshot's read metadata (schema + partition specs). Bind it whenever time travel
+        // resolves a snapshot, not only when the schema id differs: partition evolution can change the
+        // spec while leaving the schema id unchanged, and the descriptor/partition metadata must then
+        // still reflect the snapshot rather than the current spec.
+        Map<Integer, PartitionSpec> snapshotSpecs = IcebergMetadata.getSnapshotSpecs(nativeTable, snapshotId.get());
+        return icebergTable.withReadMetadata(snapshotSchema, snapshotSpecs);
     }
 }
