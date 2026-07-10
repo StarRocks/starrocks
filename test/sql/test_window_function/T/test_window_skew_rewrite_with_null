@@ -30,7 +30,7 @@ shell: sleep 5
 -- Plan should contain UNION and two branches
 SET enable_split_window_skew_to_union = true;
 
-function: assert_explain_costs_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'UNION', 'ANALYTIC', 'pk, INT, true] IS NOT NULL', 'pk, INT, true] IS NULL')
+function: assert_explain_costs_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'UNION', 'ANALYTIC', 'pk IS NOT NULL', 'pk IS NULL')
 SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
 
 -- Optimization disabled
