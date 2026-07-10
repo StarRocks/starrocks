@@ -546,6 +546,9 @@ Status rewrite_global_dict_mapping_expr(RuntimeState* state, ExprContext* contex
 StatusOr<DictId> DictOptimizeParser::lookup_dict_code(RuntimeState* runtime_state, SlotId slot_id, const Slice& value) {
     std::lock_guard<std::recursive_mutex> guard(_dict_maps_mutex);
 
+    if (_mutable_dict_maps == nullptr) {
+        return Status::InternalError("dict_encode: dict maps not initialized");
+    }
     auto it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
     if (it == _mutable_dict_maps->end()) {
         RETURN_IF_ERROR(eval_dict_expr(runtime_state, slot_id));
