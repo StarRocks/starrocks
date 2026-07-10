@@ -113,6 +113,7 @@ set(EXEC_JOIN_CORE_FILES
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
     join/join_hash_table.cpp
+    join/join_hash_map_factory.cpp
     join/join_hash_map_mapping_inst.cpp
     join/join_hash_map_linear_chained_inst.cpp
     join/join_hash_map_linear_chained_set_inst.cpp
