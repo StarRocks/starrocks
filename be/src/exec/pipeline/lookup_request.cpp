@@ -877,16 +877,16 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
         //  - There were no row locators to look up (empty lookup request). _build_row_id_range
         //    returns an empty locator set only when its input has 0 rows, so an empty chunk with
         //    the requested slots is the correct result.
-        //  - Row locators existed but none could be materialized. Under a version-consistent read
-        //    a located row must be readable, so this indicates the tablet changed under us between
-        //    the position scan and this fetch (concurrent ingest/updates/deletes, or
-        //    compaction/GC). Fail loudly so the query retries on a consistent snapshot rather than
-        //    silently returning fewer rows. (A missing rowset already surfaces as an error earlier
-        //    via _tablet_adaptor->get_iterator -> "not found lake rssid".)
+        //  - Row locators existed but none of them materialized any row. Report the inconsistency
+        //    plainly and fail loudly rather than silently returning fewer rows. This can have more
+        //    than one cause -- the tablet snapshot changing between the position scan and this fetch
+        //    (concurrent ingest/compaction/GC), or an rssid->rowset/segment resolution mismatch --
+        //    so the message states only the observed inconsistency and does not assert a cause. (A
+        //    missing rowset already surfaces earlier via _tablet_adaptor->get_iterator ->
+        //    "not found lake rssid".)
         if (!row_locators.empty()) {
             return Status::InternalError(
-                    "late materialization produced no rows for a non-empty set of row locators; "
-                    "the tablet changed between the position scan and the lookup fetch");
+                    "late materialization produced no rows for a non-empty set of row locators");
         }
         return ChunkPtr(RuntimeChunkHelper::new_chunk(slots, 0));
     }
