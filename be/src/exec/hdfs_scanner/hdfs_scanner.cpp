@@ -21,9 +21,9 @@
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "connector/deletion_vector/deletion_vector.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "formats/delta/deletion_vector.h"
 #include "formats/file_input_stream.h"
 #include "formats/reserved_columns.h"
 #include "fs/hdfs_metrics.h"
@@ -302,7 +302,7 @@ void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent
     if (_app_stats.deletion_vector_build_count == 0) {
         return;
     }
-    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    const std::string DV_TIMER = formats::DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 
     RuntimeProfile::Counter* delete_build_timer =
@@ -317,7 +317,7 @@ void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent
 }
 
 void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile) {
-    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    const std::string DV_TIMER = formats::DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 
     RuntimeProfile::Counter* delete_file_build_filter_timer =

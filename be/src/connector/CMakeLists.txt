@@ -51,7 +51,6 @@ ADD_BE_LIB(Connector
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
         iceberg_utils.cpp
-        deletion_vector/deletion_vector.cpp
         iceberg_delete_sink.cpp
         iceberg_row_delta_sink.cpp
 )

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "deletion_vector.h"
+#include "formats/delta/deletion_vector.h"
 
 #include <roaring/roaring64.h>
 
@@ -21,27 +21,28 @@
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/runtime_profile.h"
 #include "formats/deletion_bitmap.h"
 #include "formats/file_input_stream.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 const std::string DeletionVector::DELETION_VECTOR = "DeletionVector";
 
 Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx) {
-    if (_deletion_vector_descriptor->__isset.cardinality && _deletion_vector_descriptor->__isset.cardinality == 0) {
+    if (_options.descriptor.__isset.cardinality && _options.descriptor.__isset.cardinality == 0) {
         return Status::OK();
     } else if (is_inline()) {
-        return deserialized_inline_dv(_deletion_vector_descriptor->pathOrInlineDv, skip_rows_ctx);
+        return deserialized_inline_dv(_options.descriptor.pathOrInlineDv, skip_rows_ctx);
     } else {
         std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
         std::shared_ptr<CacheInputStream> cache_input_stream = nullptr;
         FormatScannerStats app_stats;
         FormatScannerStats fs_stats;
 
-        ASSIGN_OR_RETURN(auto path, get_absolute_path(_ctx.table_location));
-        int64_t offset = _deletion_vector_descriptor->offset;
-        int64_t length = _deletion_vector_descriptor->sizeInBytes;
+        ASSIGN_OR_RETURN(auto path, get_absolute_path(_options.table_location));
+        int64_t offset = _options.descriptor.offset;
+        int64_t length = _options.descriptor.sizeInBytes;
 
         ASSIGN_OR_RETURN(auto dv_file, open_random_access_file(path, fs_stats, app_stats, shared_buffered_input_stream,
                                                                cache_input_stream));
@@ -73,7 +74,7 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
         std::vector<char> deletion_vector(serialized_bitmap_length);
         RETURN_IF_ERROR(dv_file->read_at_fully(offset, deletion_vector.data(), serialized_bitmap_length));
 
-        update_dv_file_io_counter(_ctx.profile.runtime_profile, app_stats, fs_stats, cache_input_stream,
+        update_dv_file_io_counter(_options.runtime_profile, app_stats, fs_stats, cache_input_stream,
                                   shared_buffered_input_stream);
         return deserialized_deletion_vector(magic_number_from_deletion_vector_file, deletion_vector,
                                             serialized_bitmap_length, skip_rows_ctx);
@@ -84,16 +85,15 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
         const std::string& file_path, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
-    const formats::FileInputStreamOptions options{.fs = _ctx.fs,
-                                                  .file_path = file_path,
-                                                  .fs_stats = &fs_stats,
-                                                  .app_stats = &app_stats,
-                                                  .datacache_options = _ctx.datacache_options};
-    ASSIGN_OR_RETURN(auto file,
-                     formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+    const FileInputStreamOptions options{.fs = _options.fs,
+                                         .file_path = file_path,
+                                         .fs_stats = &fs_stats,
+                                         .app_stats = &app_stats,
+                                         .datacache_options = _options.datacache_options};
+    ASSIGN_OR_RETURN(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
-    int64_t offset = _deletion_vector_descriptor->offset;
-    int64_t length = _deletion_vector_descriptor->sizeInBytes + DV_SIZE_LENGTH;
+    int64_t offset = _options.descriptor.offset;
+    int64_t length = _options.descriptor.sizeInBytes + DV_SIZE_LENGTH;
     while (offset < length) {
         const int64_t remain_length = std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), length);
         io_ranges.emplace_back(offset, remain_length);
@@ -104,7 +104,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
     return file;
 }
 
-Status DeletionVector::deserialized_inline_dv(std::string& encoded_bitmap_data,
+Status DeletionVector::deserialized_inline_dv(const std::string& encoded_bitmap_data,
                                               const SkipRowsContextPtr& skip_rows_ctx) {
     ASSIGN_OR_RETURN(auto decoded_bitmap_data, base85_decode(encoded_bitmap_data));
     uint32_t inline_magic_number;
@@ -137,14 +137,14 @@ Status DeletionVector::deserialized_deletion_vector(uint32_t magic_number, std::
         skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
     }
 #ifndef BE_TEST
-    update_dv_build_counter(_ctx.profile.runtime_profile, _build_stats);
+    update_dv_build_counter(_options.runtime_profile, _build_stats);
 #endif
     return Status::OK();
 }
 
 StatusOr<std::string> DeletionVector::get_absolute_path(const std::string& table_location) const {
-    std::string& storage_type = _deletion_vector_descriptor->storageType;
-    std::string& path = _deletion_vector_descriptor->pathOrInlineDv;
+    const std::string& storage_type = _options.descriptor.storageType;
+    const std::string& path = _options.descriptor.pathOrInlineDv;
     if (storage_type == "u") {
         uint32_t random_prefix_len = path.length() - ENCODED_UUID_LENGTH;
         std::string random_prefix = path.substr(0, random_prefix_len);
@@ -165,7 +165,7 @@ StatusOr<std::string> DeletionVector::get_absolute_path(const std::string& table
 }
 
 std::string DeletionVector::assemble_deletion_vector_path(const string& table_location, string&& uuid,
-                                                          string& prefix) const {
+                                                          const string& prefix) const {
     std::string file_name = fmt::format("deletion_vector_{}.bin", uuid);
     if (prefix.empty()) {
         return fmt::format("{}/{}", table_location, file_name);
@@ -311,4 +311,4 @@ void DeletionVector::update_dv_build_counter(RuntimeProfile* parent_profile,
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats
