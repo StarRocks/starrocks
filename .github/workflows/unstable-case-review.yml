@@ -66,6 +66,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py prepare \
             --json files/unstable_case.json \
+            --repo "${{ github.repository }}" \
             --branch "${BRANCH}" \
             --case-types "${CASE_TYPES}"
 
@@ -253,6 +254,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py report \
             --json     files/unstable_case.json \
+            --repo     "${{ github.repository }}" \
             --branch   "${BRANCH}" \
             --commit   "${COMMIT_SHA}" \
             --case-types "${CASE_TYPES}" \
