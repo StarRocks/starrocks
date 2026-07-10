@@ -108,6 +108,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -3876,6 +3877,33 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertTrue(metadata.canDeleteUsingMetadata(icebergTable, k2EqDate(2020, 6, 14)),
                 "cast-on-string-partition predicate is partition level -> metadata delete eligible");
+    }
+
+    @Test
+    public void testCanDeleteUsingMetadataStringDatePartitionCastMixedIneligible() throws Exception {
+        // A residual (cast on the partition column) combined with a non-partition pushable conjunct must NOT be
+        // eligible for metadata delete: a file could contain both matching and non-matching rows.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartMixed", 1);
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/del-mix-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(3).build()).commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        // residual + a data-column (non-partition) conjunct: the pushable part is not partition level, so a file
+        // could hold both matching and non-matching rows -> not metadata-delete eligible -> row-level fallback.
+        ScalarOperator dataColConj = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(2, INT, "k1", true), ConstantOperator.createInt(1));
+        Assertions.assertFalse(metadata.canDeleteUsingMetadata(icebergTable,
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, k2EqDate(2020, 6, 14), dataColConj)),
+                "residual + non-partition data-column conjunct must not be metadata-delete eligible");
     }
 
     @Test

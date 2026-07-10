@@ -518,7 +518,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 return false;
             }
             if (!residual.pushable.isEmpty()) {
-                Expression pushableExpr = new ScalarOperatorToIcebergExpr().convert(residual.pushable,
+                // Strict conversion: a non-cast conjunct that cannot be converted/bound must make metadata delete
+                // ineligible. Non-strict convert would silently skip it and still return alwaysTrue, so
+                // selectsPartitions could wrongly pass and the skipped conjunct would be ignored at execution ->
+                // whole-file over-delete. On null (some pushable conjunct is unconvertible) fall back to row-level.
+                Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
                         new ScalarOperatorToIcebergExpr.IcebergContext(nativeTable.schema().asStruct()));
                 if (pushableExpr == null || !ExpressionUtil.selectsPartitions(pushableExpr, nativeTable, caseSensitive)) {
                     return false;
@@ -616,8 +620,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new StarRocksConnectorException("Cannot metadata-delete a cast-on-string-partition predicate on " +
                         "partition-transform-evolved table %s.%s", dbName, tableName);
             }
-            Expression pushableExpr = new ScalarOperatorToIcebergExpr().convert(residual.pushable,
+            // Strict conversion, consistent with canDeleteUsingMetadata: an unconvertible pushable conjunct must
+            // not be silently dropped (that would ignore it and over-delete). canDeleteUsingMetadata already
+            // guarantees non-null here; guard defensively.
+            Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
                     new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct()));
+            if (pushableExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Unconvertible pushable predicate for metadata delete", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete on %s.%s: pushable predicate is not " +
+                        "convertible to an Iceberg expression", dbName, tableName);
+            }
             int matchedFiles = 0;
             try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
                     .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
