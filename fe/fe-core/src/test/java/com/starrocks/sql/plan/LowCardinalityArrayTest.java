@@ -1182,12 +1182,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     @Test
     public void testArrayFunctionsWithConstant() throws Exception {
         String sql = """
-                SELECT  ARRAY_CONTAINS(S_ADDRESS, "A"),
-                        ARRAY_CONTAINS_ALL(S_ADDRESS, ["B", "C"]),
-                        ARRAY_CONTAINS_SEQ(S_ADDRESS, ["A", "C"]),
-                        ARRAY_INTERSECT(S_ADDRESS, ["B", "C"]),
-                        ARRAY_POSITION(S_ADDRESS, "D"),
-                        ARRAY_REMOVE(S_ADDRESS, "A")
+                SELECT  ARRAY_CONTAINS(S_ADDRESS, 'A'),
+                        ARRAY_CONTAINS_ALL(S_ADDRESS, ['B', 'C']),
+                        ARRAY_CONTAINS_SEQ(S_ADDRESS, ['A', 'C']),
+                        ARRAY_INTERSECT(S_ADDRESS, ['B', 'C']),
+                        ARRAY_POSITION(S_ADDRESS, 'D'),
+                        ARRAY_REMOVE(S_ADDRESS, 'A')
                 FROM supplier_nullable;
                 """;
 
@@ -1210,12 +1210,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                     SELECT ARRAY_AGG(UPPER(S_COMMENT)) AS arr
                     FROM supplier_nullable
                 )
-                SELECT  ARRAY_CONTAINS(arr, "A"),
-                        ARRAY_CONTAINS_ALL(arr, ["B", "C"]),
-                        ARRAY_CONTAINS_SEQ(arr, ["A", "C"]),
-                        ARRAY_INTERSECT(arr, ["B", "C"]),
-                        ARRAY_POSITION(arr, "D"),
-                        ARRAY_REMOVE(arr, "A")
+                SELECT  ARRAY_CONTAINS(arr, 'A'),
+                        ARRAY_CONTAINS_ALL(arr, ['B', 'C']),
+                        ARRAY_CONTAINS_SEQ(arr, ['A', 'C']),
+                        ARRAY_INTERSECT(arr, ['B', 'C']),
+                        ARRAY_POSITION(arr, 'D'),
+                        ARRAY_REMOVE(arr, 'A')
                 FROM CTE;
                 """;
 
@@ -1242,7 +1242,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
     @Test
     public void testArrayFunctionsWithConstantArray() throws Exception {
         String sql = """
-                SELECT  ARRAY_CONTAINS(["A", "B"], S_COMMENT)
+                SELECT  ARRAY_CONTAINS(['A', 'B'], S_COMMENT)
                 FROM supplier_nullable
                 ORDER BY S_COMMENT;
                 """;
