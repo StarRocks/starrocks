@@ -38,6 +38,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
@@ -54,6 +55,8 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -1329,6 +1332,63 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(2, testDefaultValue.size());
         Assertions.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
         Assertions.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
+    }
+
+    @Test
+    public void testDescribeTableSkipsUnloadableTable() throws Exception {
+        // A single table may fail to load/resolve (e.g. an external view whose definition
+        // cannot be parsed by StarRocks). describeTable must skip it and return an empty
+        // result instead of throwing, otherwise information_schema.columns scans break.
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                throw new StarRocksConnectorException("failed to parse hive view text");
+            }
+        };
+
+        starRocksAssert.useDatabase("test");
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        request.setDb("test");
+        request.setTable_name("unloadable_view");
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+
+        TDescribeTableResult response = impl.describeTable(request);
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.getColumns().isEmpty(),
+                "describeTable should skip a table that fails to load and return no columns");
+    }
+
+    @Test
+    public void testDescribeWithoutDbAndTableSkipsUnloadableTable() throws Exception {
+        // The no-db/no-table path (e.g. "select * from information_schema.columns limit N")
+        // iterates over every table. A single table that fails to load/resolve must be
+        // skipped instead of aborting the whole scan.
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                throw new StarRocksConnectorException("failed to parse hive view text");
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        // Neither db nor table set -> routes to describeWithoutDbAndTable.
+        request.setLimit(10);
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+
+        TDescribeTableResult response = impl.describeTable(request);
+        Assertions.assertNotNull(response);
+        Assertions.assertTrue(response.getColumns().isEmpty(),
+                "describeWithoutDbAndTable should skip tables that fail to load and return no columns");
     }
 
     @Test

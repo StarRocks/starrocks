@@ -933,7 +933,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(context, catalogName, params.db);
 
         if (db != null) {
-            Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            Table table;
+            try {
+                table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
+            } catch (Exception e) {
+                // A single table may fail to load/resolve (e.g. an external view whose
+                // definition cannot be parsed by StarRocks). Skip it instead of failing the
+                // whole describeTable RPC, which would break information_schema.columns scans.
+                LOG.warn("Failed to describe table {}.{}, skip it", params.db, params.table_name, e);
+                return result;
+            }
             if (table == null) {
                 return result;
             }
@@ -973,7 +982,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
-                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    Table table;
+                    try {
+                        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+                    } catch (Exception e) {
+                        // A single table may fail to load/resolve; skip it instead of aborting
+                        // the whole scan, mirroring the AccessDeniedException handling below.
+                        LOG.warn("Failed to describe table {}.{}, skip it", fullName, tableName, e);
+                        continue;
+                    }
                     if (table == null) {
                         continue;
                     }
