@@ -503,9 +503,12 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     // to drain, so the operator finishes promptly. reach_limit() reads MorselQueue's atomic flag (set
     // on the pull thread), so this is race-free -- unlike the non-atomic _is_finished, which
     // set_finishing writes under _task_mutex and this executor-thread path must not read unlocked.
-    // Finish for other reasons is covered by fp->cancelled() (factory close) and natural frontier
-    // catch-up on exhaustion.
-    if (_morsel_queue != nullptr && _morsel_queue->reach_limit()) {
+    // Cancel and fragment-level early finish (timeout, error, LIMIT above a join, etc.) are covered by
+    // state->is_cancelled(), an acquire-load atomic set promptly by FragmentContext::cancel()/finish();
+    // reading it here stops warm before teardown instead of waiting for the late fp->cancelled() in the
+    // factory close, which would otherwise let the whole lead window warm first. Natural frontier
+    // catch-up on exhaustion covers the remaining case.
+    if ((_morsel_queue != nullptr && _morsel_queue->reach_limit()) || (state != nullptr && state->is_cancelled())) {
         return;
     }
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
