@@ -1,3 +1,7 @@
+---
+description: "Explains StarRocks feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
+---
+
 # Beta 和实验性功能
 
 StarRocks 功能有五个潜在的成熟度级别：
