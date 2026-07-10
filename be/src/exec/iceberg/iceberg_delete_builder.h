@@ -15,10 +15,12 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
+class CacheInputStream;
+class SharedBufferedInputStream;
 struct IcebergColumnMeta;
 
 class IcebergDeleteBuilder {

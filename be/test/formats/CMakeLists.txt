@@ -15,6 +15,7 @@
 set(FORMAT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     disk_range_test.cpp
+    file_input_stream_test.cpp
     io/async_flush_output_stream_test.cpp
     io/async_flush_stream_poller_test.cpp
     io/formatted_output_stream_file_test.cpp
@@ -68,6 +69,9 @@ set(FORMAT_ORC_TEST_FILES
     orc/utils_test.cpp
 )
 
+set(FORMAT_TEST_DEPENDENCIES ${STARROCKS_DEPENDENCIES})
+list(REMOVE_ITEM FORMAT_TEST_DEPENDENCIES arrow_testing)
+
 set(FORMAT_TEST_LINK_LIBS
     Formats
     Expr
@@ -80,7 +84,7 @@ set(FORMAT_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
+    ${FORMAT_TEST_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}

@@ -16,8 +16,11 @@
 
 #include <storage/chunk_helper.h>
 
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "formats/file_input_stream.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
@@ -44,14 +47,14 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
         const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
-    const OpenFileOptions options{.fs = _ctx.fs,
-                                  .file_path = delete_file.full_path,
-                                  .file_size = delete_file.length,
-                                  .fs_stats = &fs_stats,
-                                  .app_stats = &app_stats,
-                                  .datacache_options = _ctx.datacache_options};
+    const formats::FileInputStreamOptions options{.fs = _ctx.fs,
+                                                  .file_path = delete_file.full_path,
+                                                  .file_size = delete_file.length,
+                                                  .fs_stats = &fs_stats,
+                                                  .app_stats = &app_stats,
+                                                  .datacache_options = _ctx.datacache_options};
     ASSIGN_OR_RETURN(auto file,
-                     HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+                     formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     int64_t offset = 0;
     while (offset < delete_file.length) {
