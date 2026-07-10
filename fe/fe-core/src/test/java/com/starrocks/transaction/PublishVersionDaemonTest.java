@@ -16,16 +16,31 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,9 +55,11 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class PublishVersionDaemonTest {
     public int oldValue;
@@ -522,4 +539,281 @@ public class PublishVersionDaemonTest {
         // finishTransaction was never reached because exception was thrown before it
         Assertions.assertEquals(0, finishedTxnIds.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTryFinishTransactionUsesReturnedTxnStateForCleanup(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws Exception {
+        long txnId = 2001L;
+        long dbId = 200L;
+        TransactionState originalState = createMockTransactionState(txnId, dbId, TransactionStatus.COMMITTED, true);
+        TransactionState latestState = createMockTransactionState(txnId, dbId, TransactionStatus.VISIBLE, true);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.finishTransaction(dbId, txnId, (Set<Long>) any, anyLong);
+                result = latestState;
+            }
+        };
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        MethodUtils.invokeMethod(daemon, true, "tryFinishTransaction", originalState);
+
+        Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
+        Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
+    }
+
+    @Test
+    public void testPublishVersionNewUsesReturnedTxnStateForCleanup(@Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws Exception {
+        long txnId = 2002L;
+        long dbId = 201L;
+        TransactionState originalState = createMockTransactionState(txnId, dbId, TransactionStatus.COMMITTED, true);
+        TransactionState latestState = createMockTransactionState(txnId, dbId, TransactionStatus.VISIBLE, true);
+
+        new MockUp<TransactionState>() {
+            @Mock
+            public boolean allPublishTasksFinishedOrQuorumWaitTimeout(Set<Long> publishErrorReplicas) {
+                return true;
+            }
+
+            @Mock
+            public boolean checkCanFinish() {
+                return true;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalTransactionMgr.finishTransactionNew(originalState, (Set<Long>) any);
+                result = latestState;
+            }
+        };
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        MethodUtils.invokeMethod(daemon, true, "publishVersionNew", globalTransactionMgr,
+                Lists.newArrayList(originalState));
+
+        Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
+        Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
+    }
+
+    @Test
+    public void testOnStoppedReleasesExecutorsAndDedupSets() throws Exception {
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        // Force lazy init of both executors through their getters; getDeleteTxnLogExecutor is private.
+        ThreadPoolExecutor taskExec = daemon.getTaskExecutor();
+        ThreadPoolExecutor deleteExec =
+                (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertNotNull(taskExec);
+        Assertions.assertNotNull(deleteExec);
+
+        // Populate both dedup sets so we can verify onStopped() clears them.
+        Set<Long> publishing = Sets.newConcurrentHashSet();
+        publishing.add(42L);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", publishing, true);
+        Set<Long> batchTable = Sets.newConcurrentHashSet();
+        batchTable.add(7L);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", batchTable, true);
+
+        daemon.onStopped();
+
+        Assertions.assertTrue(taskExec.isShutdown(), "taskExecutor must be shut down");
+        Assertions.assertTrue(deleteExec.isShutdown(), "deleteTxnLogExecutor must be shut down");
+        Assertions.assertNull(FieldUtils.readField(daemon, "taskExecutor", true));
+        Assertions.assertNull(FieldUtils.readField(daemon, "deleteTxnLogExecutor", true));
+        Assertions.assertTrue(publishing.isEmpty(), "publishingTransactionIds must be cleared");
+        Assertions.assertTrue(batchTable.isEmpty(), "publishingLakeTransactionsBatchTableId must be cleared");
+    }
+
+    @Test
+    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() throws Exception {
+        // Fresh instance: executors and dedup sets may both be null. onStopped must be no-op-safe.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        FieldUtils.writeField(daemon, "taskExecutor", null, true);
+        FieldUtils.writeField(daemon, "deleteTxnLogExecutor", null, true);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", null, true);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
+        Assertions.assertDoesNotThrow(daemon::onStopped);
+    }
+
+    @Test
+    public void testConfigRefreshListenersDoNotAccumulateAcrossStopCycles() throws Exception {
+        ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
+        @SuppressWarnings("unchecked")
+        List<?> listeners = (List<?>) FieldUtils.readField(configDaemon, "listeners", true);
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        int before = listeners.size();
+        // First activation: both listeners get registered.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "first getTaskExecutor + getDeleteTxnLogExecutor should register exactly two listeners");
+
+        // Simulate demote: executors are nulled so the next activation will recreate them.
+        daemon.onStopped();
+
+        // Re-activation: executors recreated, but listeners must not be registered again.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "re-creating executors after onStopped must not leak additional listeners");
+
+        // And a third cycle stays stable.
+        daemon.onStopped();
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "listener count must stay stable across repeated demote/re-elect cycles");
+    }
+
+    @Test
+    public void testMaybeLogSlowPublishPartition() {
+        // Fast path: total < 3000ms, helper returns without logging. No exception expected.
+        long now = System.currentTimeMillis();
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                1L, 2L, 3L,
+                now, now + 10, now + 20, now + 30, now + 100));
+
+        // Slow path: total >= 3000ms, helper formats and emits the warn log.
+        long submitTimeMs = now;
+        long lambdaEntryMs = submitTimeMs + 200;
+        long lockAcquiredMs = lambdaEntryMs + 400;
+        long rpcStartMs = lockAcquiredMs + 100;
+        long rpcEndMs = submitTimeMs + 5000;
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                10L, 20L, 30L,
+                submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, rpcEndMs));
+
+        // Boundary: total == 3000ms triggers the slow path (>=).
+        Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
+                11L, 21L, 31L,
+                submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, submitTimeMs + 3000));
+    }
+
+    // Regression for the file-bundling compaction-vs-rollup bug: a transaction whose touched-index set
+    // (publishedNormalIndexIds) misses a currently-visible NORMAL index (e.g. a rollup/MV index that a
+    // lake compaction did not touch) must carry that index's tablets forward, so the new version's bundle
+    // stays a complete whole-partition snapshot. SHADOW indexes are never carried forward.
+    @Test
+    public void testCollectFileBundlingCarryForwardTablets() {
+        TStorageMedium medium = TStorageMedium.HDD;
+        // base index (id=1): tablets 101,102 ; rollup index (id=2): tablets 201,202 ; shadow index (id=3): 301
+        MaterializedIndex baseIndex = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        baseIndex.addTablet(new LakeTablet(101L), new TabletMeta(1L, 2L, 3L, 1L, medium, true), false);
+        baseIndex.addTablet(new LakeTablet(102L), new TabletMeta(1L, 2L, 3L, 1L, medium, true), false);
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(2L, MaterializedIndex.IndexState.NORMAL);
+        rollupIndex.addTablet(new LakeTablet(201L), new TabletMeta(1L, 2L, 3L, 2L, medium, true), false);
+        rollupIndex.addTablet(new LakeTablet(202L), new TabletMeta(1L, 2L, 3L, 2L, medium, true), false);
+
+        MaterializedIndex shadowIndex = new MaterializedIndex(3L, MaterializedIndex.IndexState.SHADOW);
+        shadowIndex.addTablet(new LakeTablet(301L), new TabletMeta(1L, 2L, 3L, 3L, medium, true), false);
+
+        List<MaterializedIndex> visibleIndexes = Lists.newArrayList(baseIndex, rollupIndex, shadowIndex);
+
+        // Compaction touched only the base index (id=1): the rollup index (id=2) must be carried forward,
+        // and the SHADOW index (id=3) must be excluded.
+        List<Tablet> carry = PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet(1L));
+        Assertions.assertNotNull(carry);
+        Assertions.assertEquals(Lists.newArrayList(201L, 202L),
+                carry.stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+
+        // Every visible NORMAL index already touched (normal load): nothing to carry forward.
+        Assertions.assertNull(PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet(1L, 2L)));
+
+        // Nothing touched: both NORMAL indexes carried forward, SHADOW still excluded.
+        List<Tablet> carryAll = PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet());
+        Assertions.assertEquals(Lists.newArrayList(101L, 102L, 201L, 202L),
+                carryAll.stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+    }
+
+    // The touched tablets (this publish's real transactions) and the carry-forward tablets (untouched but
+    // visible indexes) must go into ONE aggregate request; two separate aggregate publishes would each
+    // truncate-write the same meta/0_<version>.meta and drop one set. Because a batch can span several
+    // versions, the carry-forward emits one no-op empty transaction per real transaction so the untouched
+    // tablets advance across every version (the BE requires new_version == base_version + txns.size()).
+    @Test
+    public void testAggregatePublishWithCarryForwardBuildsSingleRequest() throws Exception {
+        List<List<Tablet>> capturedTablets = new ArrayList<>();
+        List<List<TxnInfoPB>> capturedTxnInfos = new ArrayList<>();
+        List<AggregatePublishVersionRequest> capturedRequests = new ArrayList<>();
+        AtomicInteger sendCount = new AtomicInteger(0);
+        List<AggregatePublishVersionRequest> sentRequests = new ArrayList<>();
+
+        new MockUp<Utils>() {
+            @Mock
+            public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                    long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
+                    ComputeResource computeResource, AggregatePublishVersionRequest request) {
+                capturedTablets.add(tablets);
+                capturedTxnInfos.add(txnInfos);
+                capturedRequests.add(request);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource, Map<Long, Double> compactionScores,
+                    Map<Long, TabletRange> tabletRanges, Map<Long, TabletStatPB> tabletStats,
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                sendCount.incrementAndGet();
+                sentRequests.add(request);
+            }
+        };
+
+        List<Tablet> touched = Lists.newArrayList(new LakeTablet(101L), new LakeTablet(102L));
+        List<Tablet> carryForward = Lists.newArrayList(new LakeTablet(201L), new LakeTablet(202L));
+        // A two-transaction batch (versions 5 and 6): base is version 4, new version is 6.
+        TxnInfoPB t1 = new TxnInfoPB();
+        t1.txnId = 1001L;
+        t1.commitTime = 111L;
+        t1.gtid = 9001L;
+        TxnInfoPB t2 = new TxnInfoPB();
+        t2.txnId = 1002L;
+        t2.commitTime = 222L;
+        t2.gtid = 9002L;
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(t1, t2);
+
+        PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
+                4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
+                new java.util.HashMap<>(), new ArrayList<>());
+
+        // Exactly two sub-requests, both attached to the SAME request, sent exactly once.
+        Assertions.assertEquals(2, capturedRequests.size());
+        Assertions.assertSame(capturedRequests.get(0), capturedRequests.get(1));
+        Assertions.assertEquals(1, sendCount.get());
+        Assertions.assertSame(capturedRequests.get(0), sentRequests.get(0));
+
+        // First sub-request: the touched tablets with the real transactions unchanged.
+        Assertions.assertEquals(Lists.newArrayList(101L, 102L),
+                capturedTablets.get(0).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        Assertions.assertSame(txnInfos, capturedTxnInfos.get(0));
+
+        // Second sub-request: the carry-forward tablets with one no-op empty transaction per real transaction.
+        Assertions.assertEquals(Lists.newArrayList(201L, 202L),
+                capturedTablets.get(1).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        List<TxnInfoPB> carryTxnInfos = capturedTxnInfos.get(1);
+        Assertions.assertEquals(txnInfos.size(), carryTxnInfos.size());
+        for (int i = 0; i < carryTxnInfos.size(); i++) {
+            TxnInfoPB empty = carryTxnInfos.get(i);
+            Assertions.assertTrue(empty.noOpPublish, "carry-forward txn must be a no-op publish");
+            Assertions.assertEquals(-1L, empty.txnId, "carry-forward txn must carry the empty txn id");
+            Assertions.assertEquals(TxnTypePB.TXN_EMPTY, empty.txnType);
+            Assertions.assertFalse(empty.combinedTxnLog);
+            // commitTime / gtid are copied from the corresponding real transaction.
+            Assertions.assertEquals(txnInfos.get(i).commitTime, empty.commitTime);
+            Assertions.assertEquals(txnInfos.get(i).gtid, empty.gtid);
+        }
+    }
+>>>>>>> 35c68c6305 ([BugFix] Carry forward untouched indexes into the file-bundling bundle on compaction publish (#76105))
 }
