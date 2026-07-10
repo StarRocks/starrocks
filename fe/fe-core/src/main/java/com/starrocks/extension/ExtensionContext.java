@@ -16,6 +16,7 @@ package com.starrocks.extension;
 
 public interface ExtensionContext {
     <T> T get(Class<T> capability);
+    boolean hasComponent(Class<?> capability);
     <T> void register(Class<T> capability, T instance);
     
     /**

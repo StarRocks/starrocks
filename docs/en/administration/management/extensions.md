@@ -84,10 +84,40 @@ public class CustomAccessControlExtension implements StarRocksExtension {
                 connectorContext -> new CustomAccessController(connectorContext));
     }
 }
+
+class CustomAccessController extends ExternalAccessController {
+    CustomAccessController(ConnectorContext context) {
+    }
+}
 ```
 
 Set `catalog.access.control` to `extension` when creating the external catalog. The factory must return a non-null
 `AccessController`; otherwise, catalog initialization fails.
+
+#### Select a controller from catalog properties
+
+A static extension registers one factory capability per FE. To select a controller for each catalog, use a custom
+catalog property. The factory receives the complete property map through `ConnectorContext`.
+
+```sql
+CREATE EXTERNAL CATALOG external_catalog
+PROPERTIES (
+    "type" = "iceberg",
+    "catalog.access.control" = "extension",
+    "extension.access.control.type" = "example-a"
+);
+```
+
+```java
+ctx.register(AccessControllerFactory.class, connectorContext -> {
+    String type = connectorContext.getProperties().get("extension.access.control.type");
+    return switch (type) {
+        case "example-a" -> new ExampleAAccessController(connectorContext);
+        case "example-b" -> new ExampleBAccessController(connectorContext);
+        default -> throw new IllegalArgumentException("Unknown extension access-control type: " + type);
+    };
+});
+```
 
 ### Logs
 

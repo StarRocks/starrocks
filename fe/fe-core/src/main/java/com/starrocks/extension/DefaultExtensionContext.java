@@ -24,11 +24,14 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class DefaultExtensionContext implements ExtensionContext {
     private final Map<Class<?>, Object> capabilityMap = Maps.newHashMap();
     private final Map<Class<?>, ConstructorMetadata> constructorMetadataMap = Maps.newHashMap();
+    private final Set<Class<?>> registeredCapabilities = new HashSet<>();
 
     public DefaultExtensionContext() {
         registerDefault();
@@ -44,6 +47,12 @@ public class DefaultExtensionContext implements ExtensionContext {
             throw new IllegalArgumentException("Capability class or instance cannot be null");
         }
         capabilityMap.put(clazz, instance);
+        registeredCapabilities.add(clazz);
+    }
+
+    @Override
+    public boolean hasComponent(Class<?> clazz) {
+        return registeredCapabilities.contains(clazz);
     }
 
     /**
@@ -102,6 +111,7 @@ public class DefaultExtensionContext implements ExtensionContext {
     public <T> ConstructorMetadata registerConstructor(Class<T> keyClass, Class<? extends T> valueClass) {
         ConstructorMetadata metadata = resolveConstructorInternal(valueClass);
         constructorMetadataMap.put(keyClass, metadata);
+        registeredCapabilities.add(keyClass);
         return metadata;
     }
 

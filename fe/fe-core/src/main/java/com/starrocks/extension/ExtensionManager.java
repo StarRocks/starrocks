@@ -34,6 +34,10 @@ public class ExtensionManager {
         return getInstance().context.get(clazz);
     }
 
+    public static boolean hasComponent(Class<?> clazz) {
+        return getInstance().context.hasComponent(clazz);
+    }
+
     public void loadExtensionsFromDir(String dirPath) {
         final JarScanner scanner = new JarScanner();
         LOG.info("start to load extensions");

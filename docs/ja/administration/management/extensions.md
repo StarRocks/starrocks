@@ -84,10 +84,41 @@ public class CustomAccessControlExtension implements StarRocksExtension {
                 connectorContext -> new CustomAccessController(connectorContext));
     }
 }
+
+class CustomAccessController extends ExternalAccessController {
+    CustomAccessController(ConnectorContext context) {
+    }
+}
 ```
 
 外部カタログの作成時に `catalog.access.control` を `extension` に設定します。ファクトリーは null ではない
 `AccessController` を返す必要があります。返さない場合、カタログの初期化は失敗します。
+
+#### カタログプロパティでコントローラーを選択する
+
+静的拡張機能は FE ごとに 1 つのファクトリーケイパビリティを登録します。カタログごとにコントローラーを
+選択するには、カスタムカタログプロパティを使用します。ファクトリーは `ConnectorContext` を通じて完全な
+プロパティマップを受け取ります。
+
+```sql
+CREATE EXTERNAL CATALOG external_catalog
+PROPERTIES (
+    "type" = "iceberg",
+    "catalog.access.control" = "extension",
+    "extension.access.control.type" = "example-a"
+);
+```
+
+```java
+ctx.register(AccessControllerFactory.class, connectorContext -> {
+    String type = connectorContext.getProperties().get("extension.access.control.type");
+    return switch (type) {
+        case "example-a" -> new ExampleAAccessController(connectorContext);
+        case "example-b" -> new ExampleBAccessController(connectorContext);
+        default -> throw new IllegalArgumentException("Unknown extension access-control type: " + type);
+    };
+});
+```
 
 ### ログ
 

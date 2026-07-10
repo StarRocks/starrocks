@@ -84,10 +84,40 @@ public class CustomAccessControlExtension implements StarRocksExtension {
                 connectorContext -> new CustomAccessController(connectorContext));
     }
 }
+
+class CustomAccessController extends ExternalAccessController {
+    CustomAccessController(ConnectorContext context) {
+    }
+}
 ```
 
 创建外部 Catalog 时，将 `catalog.access.control` 设置为 `extension`。工厂必须返回非空的
 `AccessController`，否则 Catalog 初始化失败。
+
+#### 根据 Catalog 属性选择控制器
+
+静态扩展会为每个 FE 注册一个工厂能力。要为每个 Catalog 选择控制器，请使用自定义 Catalog 属性。
+工厂通过 `ConnectorContext` 接收完整的属性映射。
+
+```sql
+CREATE EXTERNAL CATALOG external_catalog
+PROPERTIES (
+    "type" = "iceberg",
+    "catalog.access.control" = "extension",
+    "extension.access.control.type" = "example-a"
+);
+```
+
+```java
+ctx.register(AccessControllerFactory.class, connectorContext -> {
+    String type = connectorContext.getProperties().get("extension.access.control.type");
+    return switch (type) {
+        case "example-a" -> new ExampleAAccessController(connectorContext);
+        case "example-b" -> new ExampleBAccessController(connectorContext);
+        default -> throw new IllegalArgumentException("Unknown extension access-control type: " + type);
+    };
+});
+```
 
 ### 日志
 

@@ -61,6 +61,12 @@ public class LazyConnector implements Connector {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
                         } else if (accessControl.equals("extension")) {
+                            if (!ExtensionManager.hasComponent(AccessControllerFactory.class)) {
+                                throw new StarRocksConnectorException(
+                                        "No AccessControllerFactory is registered for catalog %s. "
+                                                + "Load a static FE extension that registers one.",
+                                        context.getCatalogName());
+                            }
                             AccessControllerFactory factory =
                                     ExtensionManager.getComponent(AccessControllerFactory.class);
                             AccessController controller = Objects.requireNonNull(
