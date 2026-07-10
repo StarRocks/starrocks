@@ -27,7 +27,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
@@ -93,14 +92,8 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     @Override
     public ScalarOperator visitCall(CallOperator call, Void context) {
-        // PartitionColPredicateEvaluator evaluates a call by mapping each partition range's two
-        // boundary values through it, which is only sound for monotonic expressions. A non-monotonic
-        // function like month()/day()/hour() wraps around inside a partition's span: for a partition
-        // [2024-01-01, 2025-01-01), month() maps both bounds to 1, so a predicate month(dt) = 5
-        // would incorrectly prune the partition even though it contains matching rows.
         if (ConnectContext.get().getSessionVariable().isEnableExprPrunePartition()
-                && call.getColumnRefs().size() == 1 && partitionColumnSet.containsAll(call.getUsedColumns())
-                && OperatorFunctionChecker.onlyContainMonotonicFunctions(call).first) {
+                && call.getColumnRefs().size() == 1 && partitionColumnSet.containsAll(call.getUsedColumns())) {
             BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
                 @Override
                 public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
