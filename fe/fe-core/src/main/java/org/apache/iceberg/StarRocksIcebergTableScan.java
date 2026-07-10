@@ -607,6 +607,12 @@ public class StarRocksIcebergTableScan
         }
 
         if (files != null) {
+            if (!files.isEmpty()) {
+                // A non-empty entry that fails the count check is a corrupted/incomplete cache write, not a
+                // normal empty placeholder; log it so this failure path is no longer silent.
+                LOG.warn("Dropping incomplete Iceberg manifest cache entry {}: cached {} files, manifest expects {}",
+                        manifest.path(), files.size(), expectedLiveFilesCount(manifest));
+            }
             cache.invalidate(manifest.path());
         }
         return null;
