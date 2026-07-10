@@ -134,7 +134,11 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
+        if (_writer->get_err_status().ok()) {
+            task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
+        } else {
+            task.write_cb->run(_writer->get_err_status(), nullptr, &failed_info);
+        }
     }
 }
 
@@ -169,7 +173,11 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
+        if (_writer->get_err_status().ok()) {
+            task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
+        } else {
+            task.write_cb->run(_writer->get_err_status(), nullptr, &failed_info);
+        }
     }
 }
 
