@@ -72,6 +72,7 @@ set(EXEC_FILES
         ./exec/exec_factory_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
+        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/query_scan_metrics_test.cpp

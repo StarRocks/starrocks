@@ -24,10 +24,12 @@
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/scan_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 
@@ -99,12 +101,7 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
         return Status::InternalError(s);
     }
 
-    auto scanner_ctx = std::make_unique<HdfsScannerContext>();
-
     std::vector<FormatColumnInfo> columns;
-    THdfsScanRange scan_range;
-    scan_range.offset = 0;
-    scan_range.length = delete_file.length;
     std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
                                  &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
     for (size_t i = 0; i < slot_descriptors.size(); i++) {
@@ -134,20 +131,20 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     iceberg_schema.__set_fields(schema_fields);
 
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
-    scanner_ctx->format_scan_context.timezone = timezone;
-    scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->format_scan_context.materialized_columns = std::move(columns);
-    scanner_ctx->format_scan_context.stats = &app_stats;
-    scanner_ctx->fs = _ctx.fs;
-    scanner_ctx->datacache_options = _ctx.datacache_options;
-    scanner_ctx->format_scan_context.options = _ctx.format_scan_context.options;
-    scanner_ctx->format_scan_context.options.enable_split_tasks = false;
-    scanner_ctx->format_scan_context.lake_schema = &iceberg_schema;
-    scanner_ctx->format_scan_context.scan_range_offset = scan_range.offset;
-    scanner_ctx->format_scan_context.scan_range_length = scan_range.length;
-    scanner_ctx->scan_range = &scan_range;
-    scanner_ctx->format_scan_context.lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
-    RETURN_IF_ERROR(reader->init(&scanner_ctx->format_scan_context));
+    // TODO: Remove this empty placeholder once FileReader supports a null predicate tree for predicate-free scans.
+    PredicateTree predicate_tree;
+    FormatScanContext format_scan_context;
+    format_scan_context.timezone = _runtime_state->timezone();
+    format_scan_context.materialized_columns = std::move(columns);
+    format_scan_context.stats = &app_stats;
+    format_scan_context.options = _ctx.format_scan_context.options;
+    format_scan_context.options.enable_split_tasks = false;
+    format_scan_context.lake_schema = &iceberg_schema;
+    format_scan_context.scan_range_offset = 0;
+    format_scan_context.scan_range_length = delete_file.length;
+    format_scan_context.lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
+    format_scan_context.predicate_tree = &predicate_tree;
+    RETURN_IF_ERROR(reader->init(&format_scan_context));
 
     while (true) {
         ASSIGN_OR_RETURN(ChunkPtr chunk,
