@@ -113,6 +113,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -570,6 +571,9 @@ public class InsertPlanner {
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
+        // Retractable IVM: pre-place the sink __op control column as a fixed trailing output before optimize,
+        // so it flows into the sink tuple by position; IvmRewriter binds its value to __ACTION__.
+        boolean ivmOpPreplaced = preplaceIvmLoadOpColumn(session, targetTable, outputColumns, columnRefFactory);
         PreOptimizePlanContext preOptimizePlanContext = preparePreOptimizePlanContext(
                 insertStmt, session.getSessionVariable(), targetTable, outputColumns, columnRefFactory, logicalPlan);
 
@@ -597,13 +601,41 @@ public class InsertPlanner {
         //8. Build fragment exec plan
         boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                 || targetTable instanceof MysqlTable);
+        List<String> sinkColNames = queryRelation.getColumnOutputNames();
+        if (ivmOpPreplaced) {
+            sinkColNames = new ArrayList<>(sinkColNames);
+            sinkColNames.add(Load.LOAD_OP_COLUMN);
+        }
         ExecPlan execPlan;
         try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
             execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
         }
         return execPlan;
+    }
+
+    // Pre-place the sink __op control column (Load.LOAD_OP_COLUMN) as a fixed trailing output for a
+    // retractable PRIMARY KEY IVM refresh: append it to outputColumns and outputFullSchema (last) so it
+    // gets a trailing tuple slot and OUTPUT expr; IvmRewriter binds its value to __ACTION__.
+    private boolean preplaceIvmLoadOpColumn(ConnectContext session, Table targetTable,
+                                            List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory) {
+        if (!session.getSessionVariable().isEnableIVMRefresh()
+                || !(targetTable instanceof OlapTable olapTable)
+                || olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Idempotent across optimistic-lock retries (buildExecPlanWithRetry runs this per attempt):
+        // strip a prior attempt's __op before re-appending, or the columns accumulate a duplicate.
+        outputColumns.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        outputColumns.add(columnRefFactory.create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false));
+        Column opColumn = new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT);
+        opColumn.setIsAllowNull(false);
+        List<Column> extendedSchema = new ArrayList<>(outputFullSchema);
+        extendedSchema.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        extendedSchema.add(opColumn);
+        outputFullSchema = extendedSchema;
+        return true;
     }
 
     private PreOptimizePlanContext preparePreOptimizePlanContext(InsertStmt insertStmt,
