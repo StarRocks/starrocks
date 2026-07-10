@@ -43,16 +43,16 @@ FROM KAFKA (
 -- !result
 SHOW CREATE ROUTINE LOAD testherbavro;
 -- result:
-testherbavro	CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro
- COLUMNS TERMINATED BY '\t',
-COLUMNS (advertiser_id, advertiser_ad_type, advertiser_ad_width, advertiser_currency_type),
-PARTITIONS (p1, p2, p3),
+[REGEX](?s)testherbavro	CREATE ROUTINE LOAD test_show_create_routine_load\.testherbavro on herbavro
+ COLUMNS TERMINATED BY '\\t',
+COLUMNS \(advertiser_id, advertiser_ad_type, advertiser_ad_width, advertiser_currency_type\),
+PARTITIONS \(p1, p2, p3\),
 WHERE `advertiser_id` > -10
 PROPERTIES
-(
+\(
 "desired_concurrent_number"="1",
 "max_error_number"="1000",
-"max_filter_ratio"="1.0",
+"max_filter_ratio"="1\.0",
 "max_batch_interval"="5",
 "max_batch_rows"="200000",
 "task_consume_second"="15",
@@ -68,16 +68,15 @@ PROPERTIES
 "trim_space"="false",
 "enclose"="0",
 "escape"="0",
-"log_rejected_record_num"="0"
-)
+"log_rejected_record_num"="0",?\n("warehouse"="[^"]+"\n)?\)
 FROM KAFKA
-(
-"kafka_broker_list"="172.26.194.239:9092",
+\(
+"kafka_broker_list"="172\.26\.194\.239:9092",
 "kafka_topic"="herb-avro",
 "kafka_partitions"="0",
 "kafka_offsets"="OFFSET_BEGINNING",
-"confluent.schema.registry.url"="http://172.26.194.240:8081"
-);
+"confluent\.schema\.registry\.url"="http://172\.26\.194\.240:8081"
+\);
 -- !result
 STOP ROUTINE LOAD for testherbavro;
 -- result:
