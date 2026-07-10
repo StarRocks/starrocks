@@ -877,13 +877,9 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
         //  - There were no row locators to look up (empty lookup request). _build_row_id_range
         //    returns an empty locator set only when its input has 0 rows, so an empty chunk with
         //    the requested slots is the correct result.
-        //  - Row locators existed but none of them materialized any row. Report the inconsistency
-        //    plainly and fail loudly rather than silently returning fewer rows. This can have more
-        //    than one cause -- the tablet snapshot changing between the position scan and this fetch
-        //    (concurrent ingest/compaction/GC), or an rssid->rowset/segment resolution mismatch --
-        //    so the message states only the observed inconsistency and does not assert a cause. (A
-        //    missing rowset already surfaces earlier via _tablet_adaptor->get_iterator ->
-        //    "not found lake rssid".)
+        //  - Row locators existed but none of them materialized any row. Report the observed
+        //    inconsistency and fail loudly rather than silently returning fewer rows; the cause is
+        //    not determined here, so neither the message nor this comment asserts one.
         if (!row_locators.empty()) {
             return Status::InternalError("late materialization produced no rows for a non-empty set of row locators");
         }
