@@ -75,19 +75,19 @@ PROPERTIES (
 create table t(k int, v int);
 -- result:
 -- !result
-create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
--- result:
--- !result
 insert into t values(1,1),(1,2);
 -- result:
 -- !result
-[UC]refresh materialized view tva;
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
 -- result:
-8f3247bb-dff2-11ed-b085-00163e05ba4a
 -- !result
-select * from tva;
+function: assert_query_contains("show create materialized view tva", "CREATE MATERIALIZED VIEW `tva`", "DISTRIBUTED BY RANDOM", "REFRESH ASYNC")
 -- result:
-1	3
+None
+-- !result
+select sum(v) from t;
+-- result:
+3
 -- !result
 -- name: test_add_partition
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;

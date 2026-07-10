@@ -1,4 +1,4 @@
--- name: test_mv_refresh_list_partitions_with_nullable2
+-- name: test_mv_refresh_list_partitions_with_nullable1
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -42,7 +42,7 @@ PARTITION BY (province, dt)
 DISTRIBUTED BY RANDOM;
 INSERT INTO t5 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02'), (4, NULL, NULL, NULL);
 
---------- t5 ---------
+--------- t3 ---------
 -- test sync refresh & partition_refresh_number= -1
 create materialized view test_mv1
 partition by dt
@@ -53,39 +53,59 @@ PROPERTIES (
       'session.enable_insert_strict' = 'true',
       "replication_num" = "1"
 ) 
-as select dt, province, sum(age) from t5 group by dt, province;
+as select id, dt, province, age from t3 where id > 1;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: print_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
-INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
-function: print_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+function: print_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
+select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
+
 drop materialized view test_mv1;
 
---------- t6 ---------
--- test sync refresh & partition_refresh_number= -1 && partition_ttl_number =1
+--------- t3 ---------
+-- test sync refresh & partition_refresh_number= -1
 create materialized view test_mv1
 partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
       'partition_refresh_number' = '-1',
-      "partition_retention_condition" = "dt > '2024-01-01' or dt is null",
       'session.enable_insert_strict' = 'true',
       "replication_num" = "1"
 ) 
-as select dt, province, sum(age) from t5 group by dt, province;
+as select dt, province, sum(age) from t3 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: print_table_partitions_num("test_mv1")
-function: print_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
-INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
-function: print_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
-select dt, province, sum(age) from t5 group by dt, province order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
+
 drop materialized view test_mv1;
 
+--------- t4 ---------
+-- test sync refresh & partition_refresh_number= -1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+      'partition_refresh_number' = '-1',
+      'session.enable_insert_strict' = 'true',
+      "replication_num" = "1"
+) 
+as select dt, province, sum(age) from t4 group by dt, province;
+refresh materialized view  test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
+drop materialized view test_mv1;
 
 drop table t3;
 drop table t4;
