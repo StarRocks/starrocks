@@ -215,6 +215,37 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testPartitionCacheCountedInEstimateSize(@Mocked IcebergCatalog icebergCatalog) {
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+        Table nativeTable = createBaseTableWithManifests(1, 0, spec);
+        Map<String, Partition> partitionMap = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            partitionMap.put("dt=part-" + i, new Partition(1234L, 1L));
+        }
+        new Expectations() {
+            {
+                icebergCatalog.getTable((ConnectContext) any, "db", "test");
+                result = nativeTable;
+                minTimes = 0;
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = partitionMap;
+                minTimes = 0;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergTable table = IcebergTable.builder().setSrTableName("test")
+                .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
+
+        long before = cachingIcebergCatalog.estimateSize();
+        cachingIcebergCatalog.getPartitions(table, 1L, null);
+        long after = cachingIcebergCatalog.estimateSize();
+        Assertions.assertTrue(after > before,
+                "partitionCache must be counted in estimateSize; before=" + before + " after=" + after);
+    }
+
+    @Test
     public void testGetDB(@Mocked IcebergCatalog icebergCatalog, @Mocked Database db) {
         new Expectations() {
             {
