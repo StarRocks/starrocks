@@ -313,9 +313,9 @@ public class PluginMgrEditLogTest {
             }
         };
 
-        // Should silently return null — no exception, no re-install
+        // Should return the existing plugin info — no exception, no re-install
         PluginInfo result = masterPluginMgr.installPlugin(stmt);
-        Assertions.assertNull(result);
+        Assertions.assertSame(pluginInfo, result);
 
         // Plugin should still be registered (untouched)
         Assertions.assertTrue(pluginExists(masterPluginMgr, TEST_PLUGIN_NAME, PluginInfo.PluginType.AUDIT));

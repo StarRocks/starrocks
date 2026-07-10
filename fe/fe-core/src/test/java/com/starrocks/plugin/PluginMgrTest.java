@@ -59,7 +59,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginMgrTest {
@@ -120,7 +120,7 @@ public class PluginMgrTest {
         Map<String, String> props = Maps.newHashMap();
         InstallPluginStmt stmt = new InstallPluginStmt("http://dummy/test.zip", props, true, NodePosition.ZERO);
         PluginInfo result = pluginMgr.installPlugin(stmt);
-        assertNull(result);
+        assertSame(pluginInfo, result);
     }
 
     @Test

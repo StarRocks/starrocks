@@ -144,7 +144,8 @@ public class PluginMgr implements Writable {
 
             if (checkDynamicPluginNameExist(info.getName())) {
                 if (stmt.isIfNotExists()) {
-                    return null;
+                    LOG.info("install plugin[{}] which already exists", info.getName());
+                    return info;
                 }
                 throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
@@ -174,6 +175,7 @@ public class PluginMgr implements Writable {
         String pluginName = stmt.getPluginName();
         if (!checkDynamicPluginNameExist(pluginName)) {
             if (stmt.isIfExists()) {
+                LOG.info("uninstall plugin[{}] which does not exist", pluginName);
                 return;
             }
             throw new DdlException("Plugin " + pluginName + " does not exist");
