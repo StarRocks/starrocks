@@ -132,6 +132,8 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
         auto status = _timer->schedule((*stub_pool)->_cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
+            _stub_map.erase(endpoint);
+            return new_pool->get_or_create(endpoint);
         }
     } else {
         (*stub_pool)->_cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
@@ -269,6 +271,8 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
         auto status = _timer->schedule(stub_pair_ptr->cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
+            _stub_map.erase(endpoint);
+            return stub;
         }
     } else {
         stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
@@ -356,6 +360,8 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
         auto status = _timer->schedule(stub_pair_ptr->cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
+            _stub_map.erase(endpoint);
+            return stub;
         }
     } else {
         stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
