@@ -562,9 +562,12 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
         // Range-colocate dispatch:
         // - both children range + canRangeColocateJoin → skip exchange (return).
-        // - otherwise, normalize any range child to hash SHUFFLE_JOIN via
-        //   convertRangeToHashShuffle, then fall through to the existing
-        //   hash/hash compatibility path unchanged.
+        // - both children range but NOT colocate → force a full (PARTITIONED)
+        //   shuffle on both sides and return (see below).
+        // - exactly one range child (range × hash) → normalize the range child to
+        //   hash SHUFFLE_JOIN via convertRangeToHashShuffle, then fall through to the
+        //   existing hash/hash compatibility path unchanged (the hash side is a valid
+        //   crc32 bucket-shuffle stay side).
         DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
         DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
         boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
@@ -576,6 +579,24 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     leftShuffleColumns, rightShuffleColumns)) {
                 return visitOperator(node, context);
             }
+            // Two range children that cannot colocate (disable_colocate_join, different
+            // group, unstable/empty group, unsupported join type, ...) must be joined
+            // via a full PARTITIONED shuffle — a range table can never be the local
+            // (stay) side of a bucket-shuffle, because bucket-shuffle re-buckets the
+            // other side with crc32 which does not match the range tablet layout.
+            //
+            // We must NOT use convertRangeToHashShuffle (SourceType.SHUFFLE_JOIN) here:
+            // a range scan natively satisfies a SHUFFLE_JOIN requirement
+            // (RangeDistributionSpec.isSatisfyHashShuffle), so for a null-safe key (<=>)
+            // — whose required distribution is already null-strict, matching the enforced
+            // one — the memo discards the shuffle enforcer and reuses the un-exchanged
+            // range scan, yielding a SHUFFLE_HASH_BUCKET join that silently drops all
+            // matches. enforceChildShuffleDistribution uses SourceType.SHUFFLE_ENFORCE,
+            // which a range scan does not satisfy, so the shuffle exchange is guaranteed
+            // on both sides and the join is PARTITIONED.
+            enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+            enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+            return visitOperator(node, context);
         }
         if (leftIsRange) {
             leftChild = convertRangeToHashShuffle(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
