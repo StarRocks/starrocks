@@ -1848,6 +1848,17 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
                 catalogName, dbName, tableName, PlanMode.LOCAL, ConnectContext.get());
+        // Bind the delete-file scan to the query's read schema, mirroring buildFileScanTaskIterator, so the
+        // pushed predicate (already converted against getReadSchema) and the file specs resolve against the
+        // same schema instead of the snapshot schema useSnapshot would otherwise fall back to:
+        //  - time-travel read: the targeted snapshot's schema;
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN is visible.
+        Snapshot currentSnapshot = table.currentSnapshot();
+        if (icebergTable.isTimeTravelRead()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(table.schema());
+        }
 
         TableScan scan = icebergCatalog.getTableScan(table, scanContext)
                 .useSnapshot(snapshotId)

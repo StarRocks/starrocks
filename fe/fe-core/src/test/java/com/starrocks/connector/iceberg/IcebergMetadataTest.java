@@ -4601,6 +4601,57 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetDeleteFilesBindsReadSchemaForTimeTravel() {
+        // The equality-delete rewrite path (getDeleteFiles) converts its predicate against getReadSchema(),
+        // so it must also pin that read schema on the scan context -- mirroring buildFileScanTaskIterator --
+        // otherwise useSnapshot falls back to the snapshot's per-snapshot schema and the pushed predicate /
+        // file specs bind against the wrong schema. Capture the context handed to getTableScan and assert the
+        // targeted snapshot schema is set on it.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1);
+        Assertions.assertNotNull(snapshotSchema);
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
+                mockedNativeTableB, Maps.newHashMap());
+        IcebergTable snapshotTable = icebergTable.withReadMetadata(snapshotSchema,
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
+        Assertions.assertTrue(snapshotTable.isTimeTravelRead());
+
+        // Capture the read schema bound onto the scan context. Intercept setReadSchema directly (a regular
+        // instance method) rather than the inherited default getTableScan, which MockUp cannot fake:
+        // getDeleteFiles must call setReadSchema with the targeted snapshot schema (it never did before the fix).
+        Schema[] boundReadSchema = new Schema[1];
+        new MockUp<StarRocksIcebergTableScanContext>() {
+            @Mock
+            public void setReadSchema(Schema schema) {
+                boundReadSchema[0] = schema;
+            }
+        };
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+        try {
+            metadata.getDeleteFiles(snapshotTable, s1, predicate, FileContent.EQUALITY_DELETES);
+        } catch (Exception ignore) {
+            // The mock table carries no equality deletes; we assert only the read-schema binding, which happens
+            // before the scan runs.
+        }
+
+        Assertions.assertSame(snapshotSchema, boundReadSchema[0],
+                "getDeleteFiles must bind the targeted snapshot schema on the scan context for time travel");
+    }
+
+    @Test
     public void testTimeTravelSnapshotSchemaThroughAnalyzer() throws Exception {
         // End-to-end through QueryAnalyzer: SELECT * VERSION AS OF <old snapshot> must expose the
         // old column name, and the analyzer must pin the resolved version range on the relation
