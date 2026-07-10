@@ -119,97 +119,97 @@ SELECT n_nationkey, n_name, COUNT(c_custkey) as customer_count FROM nation LEFT 
 8	INDIA	0
 9	INDONESIA	0
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 None	None	None	ALGERIA	None	None	0	1
 None	None	None	BRAZIL	None	None	2	1
 None	None	None	CANADA	None	None	3	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|nation.n_nationkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|nation.n_nationkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 None	None	None	ALGERIA	None	None	0	1
 None	None	None	BRAZIL	None	None	2	1
 None	None	None	CANADA	None	None	3	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|nation.n_nationkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|nation.n_nationkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1,2,8)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 None	None	None	ALGERIA	None	None	0	1
 None	None	None	BRAZIL	None	None	2	1
 None	None	None	CANADA	None	None	3	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation join [skew|skew_customer.c_custkey(1)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from nation left join [skew|skew_customer.c_custkey(1, NULL)] skew_customer on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 None	None	None	ALGERIA	None	None	0	1
 None	None	None	BRAZIL	None	None	2	1
 None	None	None	CANADA	None	None	3	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1,2,8)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer join [skew|skew_customer.c_custkey(1)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1
 1	Customer#Skew003	3000.00	ARGENTINA	SkewAddr003	33-333-333-3333	1	1
 -- !result
-select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by all limit 3;
+select c_custkey, c_name, c_acctbal, n_name, c_address, c_phone, n_nationkey, count(1) from skew_customer left join [skew|skew_customer.c_custkey(1, NULL)] nation on c_custkey = n_nationkey group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, n_nationkey order by 1, 2, 3, 4, 5, 6, 7, 8 limit 3;
 -- result:
 1	Customer#Skew001	1000.00	ARGENTINA	SkewAddr001	11-111-111-1111	1	1
 1	Customer#Skew002	2000.00	ARGENTINA	SkewAddr002	22-222-222-2222	1	1

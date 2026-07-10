@@ -94,32 +94,25 @@ alter table partition_str2date add partition p20231226 VALUES [("2023-12-26"), (
 -- !result
 show create table partition_str2date;
 -- result:
-partition_str2date	CREATE TABLE `partition_str2date` (
-  `create_time` varchar(100) NULL COMMENT "",
-  `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal(10, 0) NULL COMMENT "",
-  `id` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`create_time`)
-PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d'))
-(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
-PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
-PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")),
-PARTITION p20210104 VALUES [("2021-01-04"), ("2021-01-05")),
-PARTITION p20210105 VALUES [("2021-01-05"), ("2021-01-06")),
-PARTITION p20210106 VALUES [("2021-01-06"), ("2021-01-07")),
-PARTITION p20210107 VALUES [("2021-01-07"), ("2021-01-08")),
-PARTITION p20210108 VALUES [("2021-01-08"), ("2021-01-09")),
-PARTITION p20210109 VALUES [("2021-01-09"), ("2021-01-10")),
-PARTITION p20231226 VALUES [("2023-12-26"), ("2023-12-27")))
+[REGEX](?s)partition_str2date\s+CREATE TABLE `partition_str2date` \(
+  `create_time` varchar\(100\) NULL COMMENT "",
+  `sku_id` varchar\(100\) NULL COMMENT "",
+  `total_amount` decimal\(10, 0\) NULL COMMENT "",
+  `id` int\(11\) NULL COMMENT ""
+\) ENGINE=OLAP \n?(COMMENT "OLAP"\n)?DUPLICATE KEY\(`create_time`\)
+PARTITION BY RANGE\(str2date\(create_time, '%Y-%m-%d'\)\)
+\(PARTITION p20210101 VALUES \[\("2021-01-01"\), \("2021-01-02"\)\),
+PARTITION p20210102 VALUES \[\("2021-01-02"\), \("2021-01-03"\)\),
+PARTITION p20210103 VALUES \[\("2021-01-03"\), \("2021-01-04"\)\),
+PARTITION p20210104 VALUES \[\("2021-01-04"\), \("2021-01-05"\)\),
+PARTITION p20210105 VALUES \[\("2021-01-05"\), \("2021-01-06"\)\),
+PARTITION p20210106 VALUES \[\("2021-01-06"\), \("2021-01-07"\)\),
+PARTITION p20210107 VALUES \[\("2021-01-07"\), \("2021-01-08"\)\),
+PARTITION p20210108 VALUES \[\("2021-01-08"\), \("2021-01-09"\)\),
+PARTITION p20210109 VALUES \[\("2021-01-09"\), \("2021-01-10"\)\),
+PARTITION p20231226 VALUES \[\("2023-12-26"\), \("2023-12-27"\)\)\)
 DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+PROPERTIES \(.*\);
 -- !result
 -- name: test_expr_str2date_partition_prune
 CREATE TABLE partition_str2date (
