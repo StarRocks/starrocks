@@ -497,6 +497,51 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Use caseSensitive=false to be consistent with StarRocks expression conversion
         boolean caseSensitive = false;
 
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts>) cannot be soundly expressed as an
+        // Iceberg (string-domain) filter, so they are split out and evaluated StarRocks-side per partition in
+        // executeMetadataDelete. Metadata (whole-file) delete stays sound only when every candidate file is
+        // entirely matched or entirely unmatched by the whole predicate.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        boolean droppedExists = residual.pushable.size() + residual.residual.size() < conjuncts.size();
+        if (droppedExists) {
+            // A cast-on-string conjunct references a non-partition column (or a mixed OR): a file may contain
+            // both matching and non-matching rows, so it cannot be whole-file deleted -> fall back to row-level.
+            return false;
+        }
+        if (residual.hasResidual()) {
+            // Partition values must be readable (no partition-transform evolution) to evaluate the residual, and
+            // the pushable part must also be partition level so each file is wholly matched/unmatched; otherwise
+            // fall back to row-level delete.
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                return false;
+            }
+            if (!residual.pushable.isEmpty()) {
+                // Strict conversion: a non-cast conjunct that cannot be converted/bound must make metadata delete
+                // ineligible. Non-strict convert would silently skip it and still return alwaysTrue, so
+                // selectsPartitions could wrongly pass and the skipped conjunct would be ignored at execution ->
+                // whole-file over-delete. On null (some pushable conjunct is unconvertible) fall back to row-level.
+                Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                        new ScalarOperatorToIcebergExpr.IcebergContext(nativeTable.schema().asStruct()));
+                if (pushableExpr == null || !ExpressionUtil.selectsPartitions(pushableExpr, nativeTable, caseSensitive)) {
+                    return false;
+                }
+            }
+            // The residual is evaluated against each partition value at execution time. A non-deterministic
+            // function (rand(), uuid(), ...) only materializes per row at execution and never folds to a constant,
+            // so executeMetadataDelete could evaluate nothing and silently delete nothing. Such predicates must be
+            // evaluated per row -> fall back to row-level delete.
+            for (ScalarOperator conjunct : residual.residual) {
+                if (Utils.hasNonDeterministicFunc(conjunct)) {
+                    return false;
+                }
+            }
+            // Whole predicate is partition level and deterministic; the matching partitions are deleted
+            // file-by-file in executeMetadataDelete after StarRocks-side residual evaluation.
+            return true;
+        }
+
         // Convert ScalarOperator to Iceberg Expression
         Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTable.schema());
         if (deleteExpr == null) {
@@ -565,26 +610,85 @@ public class IcebergMetadata implements ConnectorMetadata {
         long startMs = System.currentTimeMillis();
         String deleteType = "metadata";
 
-        // Convert ScalarOperator to Iceberg Expression
-        Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
-        if (deleteExpr == null) {
-            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    "Failed to convert predicate to Iceberg expression", deleteType);
-            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    System.currentTimeMillis() - startMs, deleteType);
-            throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
-        }
+        // Cast-on-string-partition conjuncts cannot be expressed as a sound Iceberg filter; evaluate them
+        // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
+        // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
 
-        DeleteFiles deleteFiles = nativeTbl.newDelete()
-                .deleteFromRowFilter(deleteExpr);
+        DeleteFiles deleteFiles = nativeTbl.newDelete();
+        String deleteDesc;
+        if (residual.hasResidual()) {
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                // Defensive: canDeleteUsingMetadata should have returned false; never silently mis-delete.
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Cannot metadata-delete cast-on-string-partition predicate under partition evolution", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete a cast-on-string-partition predicate on " +
+                        "partition-transform-evolved table %s.%s", dbName, tableName);
+            }
+            // Strict conversion, consistent with canDeleteUsingMetadata: an unconvertible pushable conjunct must
+            // not be silently dropped (that would ignore it and over-delete). canDeleteUsingMetadata already
+            // guarantees non-null here; guard defensively.
+            Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                    new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct()));
+            if (pushableExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Unconvertible pushable predicate for metadata delete", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete on %s.%s: pushable predicate is not " +
+                        "convertible to an Iceberg expression", dbName, tableName);
+            }
+            int matchedFiles = 0;
+            try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
+                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    if (PartitionCastPredicatePruner.partitionDefinitelyMatches(residual.residual,
+                            icebergPartitionValues(task, icebergTable, false))) {
+                        deleteFiles.deleteFile(task.file());
+                        matchedFiles++;
+                    }
+                }
+            } catch (IOException e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to plan files for metadata delete on %s.%s: %s",
+                        dbName, tableName, e.getMessage());
+            }
+            if (matchedFiles == 0) {
+                // No partition matched the residual -> nothing to delete; do not commit an empty snapshot.
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                LOG.info("Metadata delete on {}.{} matched no partitions; nothing deleted", dbName, tableName);
+                return;
+            }
+            deleteDesc = "cast-on-string-partition residual, matchedFiles=" + matchedFiles;
+        } else {
+            // Convert ScalarOperator to Iceberg Expression
+            Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
+            if (deleteExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Failed to convert predicate to Iceberg expression", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
+            }
+            deleteFiles.deleteFromRowFilter(deleteExpr);
+            deleteDesc = deleteExpr.toString();
+        }
 
         // Set engine info and user for audit
         updateCommitInfo(deleteFiles, context);
 
         try {
             deleteFiles.commit();
-            LOG.info("Successfully executed metadata delete on {}.{}, delete expression: {}",
-                    dbName, tableName, deleteExpr);
+            LOG.info("Successfully executed metadata delete on {}.{}, delete: {}",
+                    dbName, tableName, deleteDesc);
 
             // Get deleted rows and bytes from snapshot summary
             Snapshot newSnapshot = nativeTbl.currentSnapshot();
