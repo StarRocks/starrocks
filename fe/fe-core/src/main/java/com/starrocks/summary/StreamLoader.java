@@ -40,7 +40,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-class StreamLoader {
+// Public so the semantic-context write path (com.starrocks.context.ContextWriteExecutor) can
+// reuse the same stream-load client the query-history writer uses, rather than duplicating it.
+public class StreamLoader {
     private static final String LOAD_URL_PATTERN = "/api/%s/%s/_stream_load";
 
     private static final int CONNECT_TIMEOUT_SECOND = 5;
