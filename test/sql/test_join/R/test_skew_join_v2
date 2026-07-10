@@ -760,11 +760,11 @@ select t1.c_key, t2.c_key from t2 join [skew|t1.c_string("1","2","99999")] t1 on
 -- !result
 select t1.c_key, t2.c_key from t1 left join [skew|t1.c_string("1","2","99999)] t2 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'CEIL', 'FALSE', 'DATETIME', 'INTERVAL', '?', '-'}.")
+E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'FALSE', 'DATETIME', 'INTERVAL', INTEGER_VALUE, '?', '-'}.")
 -- !result
 select t1.c_key, t2.c_key from t2 left join [skew|t1.c_string("1","2","99999)] t1 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'CEIL', 'FALSE', 'DATETIME', 'INTERVAL', '?', '-'}.")
+E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'FALSE', 'DATETIME', 'INTERVAL', INTEGER_VALUE, '?', '-'}.")
 -- !result
 truncate table t1;
 -- result:

@@ -28,8 +28,8 @@ insert into repro_la select generate_series, generate_series from TABLE(generate
 insert into repro_lb select generate_series, generate_series * 10, cast(generate_series as varchar) from TABLE(generate_series(1, 8));
 -- result:
 -- !result
-analyze table repro_la;
-analyze table repro_lb;
+[UC]analyze table repro_la;
+[UC]analyze table repro_lb;
 set enable_plan_advisor_blacklist = false;
 -- result:
 -- !result

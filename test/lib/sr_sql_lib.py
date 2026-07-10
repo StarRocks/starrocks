@@ -3610,9 +3610,11 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return query_detail
 
             # To ensure that the output string is in a JSON-compatible format that can be processed by the
-            # function `parse_json()` in StarRocks, escaping is required.
+            # function `parse_json()` in StarRocks, escaping is required. Single quotes are doubled
+            # because the caller embeds the result in a single-quoted SQL literal (parse_json('...')),
+            # and fields like userIdentity contain quotes ('root'@'%').
             def escaped_str(s):
-                return s.replace('\n', r'\n').replace('"', r'\"')
+                return s.replace('\n', r'\n').replace('"', r'\"').replace("'", "''")
 
             escaped_detail = {}
             for key, value in query_detail.items():
