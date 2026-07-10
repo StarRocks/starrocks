@@ -231,6 +231,16 @@ public class S3FileSystemTest {
     }
 
     @Test
+    public void testResolveEndpointUriHonorsSsl() {
+        // No scheme: follow enable_ssl.
+        assertEquals("https://minio:9000", S3FileSystem.resolveEndpointUri("minio:9000", true).toString());
+        assertEquals("http://minio:9000", S3FileSystem.resolveEndpointUri("minio:9000", false).toString());
+        // Explicit scheme in the endpoint wins regardless of enable_ssl.
+        assertEquals("http://minio:9000", S3FileSystem.resolveEndpointUri("http://minio:9000", true).toString());
+        assertEquals("https://minio:9000", S3FileSystem.resolveEndpointUri("https://minio:9000", false).toString());
+    }
+
+    @Test
     public void testBuildListObjectsRequestPushesNarrowPrefix() {
         ListObjectsV2Request request =
                 S3FileSystem.buildListObjectsRequest("mybucket", "sn-fstore", "2026-06-24-13");

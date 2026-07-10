@@ -19,7 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.connector.share.credential.AwsCredentialUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
@@ -41,6 +40,7 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -278,9 +278,20 @@ public class S3FileSystem implements FileSystem {
                         .build());
         String endpoint = awsCloudCredential.getEndpoint();
         if (endpoint != null && !endpoint.isEmpty()) {
-            builder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(endpoint));
+            builder.endpointOverride(resolveEndpointUri(endpoint, awsCloudConfiguration.getEnableSSL()));
         }
         return builder.build();
+    }
+
+    // Resolve the endpoint override URI. An explicit scheme in the endpoint wins; otherwise the
+    // scheme follows aws.s3.enable_ssl (http when SSL is disabled) so a plaintext S3-compatible
+    // endpoint (e.g. MinIO) is not first attempted over TLS and forced through the fallback path.
+    // Unlike AwsCredentialUtil.ensureSchemeInEndpoint, which always prepends https.
+    static URI resolveEndpointUri(String endpoint, boolean enableSSL) {
+        if (endpoint.contains("://")) {
+            return URI.create(endpoint);
+        }
+        return URI.create((enableSSL ? "https://" : "http://") + endpoint);
     }
 
     // Longest literal prefix of a component: everything before the first unescaped glob
