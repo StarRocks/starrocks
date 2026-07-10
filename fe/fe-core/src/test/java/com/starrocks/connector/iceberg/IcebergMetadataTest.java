@@ -4443,7 +4443,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // old column name must plan files of the targeted snapshot instead of failing.
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
                 new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
@@ -4474,7 +4474,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
         ScalarOperator predicate = new IsNullPredicateOperator(false,
                 new ColumnRefOperator(3, INT, "k3", true));
         List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
@@ -4525,7 +4525,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // A scan of the pre-evolution snapshot plans its files (which use the old spec).
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
         List<RemoteFileInfo> res = metadata.getRemoteFiles(snapshotTable,
                 GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(s1)))
                         .setFieldNames(Lists.newArrayList()).setLimit(10).build());
@@ -4572,32 +4572,39 @@ public class IcebergMetadataTest extends TableTestBase {
         // column renamed after the snapshot. Local planning rebinds to the snapshot spec, so a predicate
         // on the old column name plans the snapshot's files instead of routing to the remote scanner.
         StarRocksAssert starRocksAssert = new StarRocksAssert();
+        // Restore the plan mode afterwards: this test shares the thread-local ConnectContext, so leaking
+        // DISTRIBUTED would push later tests (e.g. testGetRemoteFileStringDatePartitionPrune) onto the remote
+        // metadata-planning path and make them fail.
+        String previousPlanMode = starRocksAssert.getCtx().getSessionVariable().getPlanMode();
         starRocksAssert.getCtx().getSessionVariable().setPlanMode(PlanMode.DISTRIBUTED.modeName());
+        try {
+            mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+            mockedNativeTableB.refresh();
+            long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+            mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+            mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+            mockedNativeTableB.refresh();
 
-        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
-        mockedNativeTableB.refresh();
-        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
-        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
-        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
-        mockedNativeTableB.refresh();
+            IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                    Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+            IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                    "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
+                    mockedNativeTableB, Maps.newHashMap());
+            icebergTable = icebergTable.withReadMetadata(IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1),
+                    IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
 
-        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
-                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
-                mockedNativeTableB, Maps.newHashMap());
-        icebergTable = icebergTable.withReadMetadata(IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1),
-                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
-
-        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
-                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
-        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
-                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(s1)))
-                        .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
-        Assertions.assertEquals(3, res.stream()
-                .map(f -> (IcebergRemoteFileInfo) f)
-                .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                    new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+            List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                    GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(s1)))
+                            .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
+            Assertions.assertEquals(3, res.stream()
+                    .map(f -> (IcebergRemoteFileInfo) f)
+                    .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+        } finally {
+            starRocksAssert.getCtx().getSessionVariable().setPlanMode(previousPlanMode);
+        }
     }
 
     @Test
@@ -4619,7 +4626,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
                 "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
                 mockedNativeTableB, Maps.newHashMap());
