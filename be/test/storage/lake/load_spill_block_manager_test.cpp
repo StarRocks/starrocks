@@ -115,6 +115,34 @@ TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
     ASSERT_TRUE(status.ok()) << "Expected parent path to still exist after destroy, but got: " << status;
 }
 
+// Test that clear_parent_path() is a no-op when only local blocks were acquired.
+// A purely local spill never creates the remote parent directory, so clear_parent_path()
+// must skip the remote acquire_dir + delete_dir work and must not create anything.
+TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_skipped_for_local_only) {
+    TUniqueId load_id;
+    load_id.hi = 12345;
+    load_id.lo = 67890;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, 1, 1, kTestDir);
+    ASSERT_OK(block_manager->init());
+
+    // Acquire a local block only (force_remote=false) — the remote parent path is never created.
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
+    ASSERT_FALSE(block->is_remote());
+    ASSERT_OK(block->append({Slice("local_only")}));
+    ASSERT_OK(block->flush());
+
+    std::string parent_path = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+    ASSERT_TRUE(FileSystem::Default()->path_exists(parent_path).is_not_found());
+
+    ASSERT_OK(block_manager->release_block(block));
+    block.reset();
+
+    // No remote block was ever acquired, so clear_parent_path() returns OK without creating
+    // or touching the remote parent directory.
+    ASSERT_OK(block_manager->clear_parent_path());
+    ASSERT_TRUE(FileSystem::Default()->path_exists(parent_path).is_not_found());
+}
+
 // Test that clear_parent_path() is safe to call when init() was not called.
 TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_without_init) {
     auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), 1, 1, kTestDir);
