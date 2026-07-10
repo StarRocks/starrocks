@@ -32,14 +32,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/olap_common.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 #include <algorithm>
 #include <set>
 #include <utility>
 #include <vector>
 
-#include "storage/query/olap_scan_range.h"
+#include "storage_primitive/olap_scan_range.h"
 #include "storage_primitive/olap_tuple.h"
 #include "storage_primitive/value_cast.h"
 

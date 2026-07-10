@@ -25,10 +25,10 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/query/olap_scan_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/olap_scan_range.h"
 
 namespace starrocks {
 

@@ -25,10 +25,10 @@
 #include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/runtime_filter_predicate.h"
 #include "storage/seek_range.h"
 #include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class ColumnAccessPath;

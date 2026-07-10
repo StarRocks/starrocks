@@ -379,6 +379,7 @@
       "owned_roots": ["be/src/storage_primitive"],
       "allowed_include_prefixes": [
         "storage_primitive/",
+        "exec_primitive/",
         "exprs/",
         "runtime/",
         "column/",
@@ -390,9 +391,9 @@
       ],
       "forbidden_include_prefixes": ["storage/", "exec/", "service/", "connector/", "http/", "cache/", "util/"],
       "forbidden_includes": ["exec/exec_env.h"],
-      "allowed_target_deps": ["Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecPrimitive", "Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["storage_primitive_test"],
-      "allowed_test_link_deps": ["StoragePrimitive", "Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward."
     },
     {
