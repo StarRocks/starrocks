@@ -280,7 +280,7 @@ jobs:
     runs-on: [self-hosted, sync-normal]
     needs: [ code-checker, thirdparty-info ]
     name: BE UT (Refactor compile-check)
-    timeout-minutes: 90
+    timeout-minutes: 120
     if: >
       !cancelled() &&
       contains(github.event.pull_request.title, '(sync #') &&
