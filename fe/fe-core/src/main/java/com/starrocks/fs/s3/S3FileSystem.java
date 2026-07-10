@@ -137,6 +137,10 @@ public class S3FileSystem implements FileSystem {
             List<FileStatus> filtered = skipDir
                     ? result.stream().filter(f -> !f.isDirectory()).collect(Collectors.toList())
                     : result;
+            // S3 returns CommonPrefixes (dirs) and Contents (files) as separate groups; sort by path
+            // so the result order matches the Hadoop globStatus path (Globber does Arrays.sort) and is
+            // deterministic.
+            filtered.sort(null);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("S3 native globList done, path={}, matched={}, costMs={}",
                         path, filtered.size(), System.currentTimeMillis() - startTime);

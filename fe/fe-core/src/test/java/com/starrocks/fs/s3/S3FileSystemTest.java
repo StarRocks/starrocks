@@ -144,6 +144,22 @@ public class S3FileSystemTest {
     }
 
     @Test
+    public void testResultsSortedByPath() throws StarRocksException {
+        // S3 returns dirs (CommonPrefixes) and files (Contents) as separate groups and in listing
+        // order; the result must be globally sorted by path, matching the Hadoop globStatus path.
+        Map<String, List<FileStatus>> canned = Maps.newHashMap();
+        canned.put("", Lists.newArrayList(
+                dir("orc1"), file("basic2.csv"), dir("orc0"), file("basic1.csv"), dir("parquet")));
+        FakeS3FileSystem fs = new FakeS3FileSystem(canned);
+
+        List<FileStatus> res = fs.globList("s3://bucket/*", false);
+
+        // Actual returned order (not re-sorted by the assertion) must already be sorted.
+        List<String> names = res.stream().map(f -> f.getPath().getName()).collect(Collectors.toList());
+        assertEquals(Lists.newArrayList("basic1.csv", "basic2.csv", "orc0", "orc1", "parquet"), names);
+    }
+
+    @Test
     public void testSkipDirFlag() throws StarRocksException {
         Map<String, List<FileStatus>> canned = Maps.newHashMap();
         canned.put("data/part", Lists.newArrayList(
