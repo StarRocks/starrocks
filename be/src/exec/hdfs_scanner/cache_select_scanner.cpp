@@ -16,6 +16,7 @@
 
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
+#include "formats/file_input_stream.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
@@ -232,7 +233,7 @@ Status CacheSelectScanner::_fetch_iceberg_delete_files() {
 }
 
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
-    OpenFileOptions options{};
+    formats::FileInputStreamOptions options{};
     options.fs = _scanner_ctx->fs;
     options.file_path = file_path;
     options.file_size = file_size;
@@ -243,7 +244,7 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<CacheInputStream> cache_input_stream;
     ASSIGN_OR_RETURN(auto dummy_file,
-                     create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+                     formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
 
     std::vector<DiskRange> disk_ranges{};
     disk_ranges.emplace_back(0, file_size);

@@ -18,6 +18,7 @@ ADD_BE_LIB(FormatCore
         column_evaluator.cpp
         deletion_bitmap.cpp
         disk_range.hpp
+        file_input_stream.cpp
         file_writer.cpp
         io/async_flush_output_stream.cpp
         io/async_flush_stream_poller.cpp
@@ -29,6 +30,7 @@ ADD_BE_LIB(FormatCore
         )
 
 target_link_libraries(FormatCore PUBLIC
+        Cache
         ComputeEnv
         ExecPrimitive
         Expr

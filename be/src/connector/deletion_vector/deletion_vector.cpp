@@ -18,8 +18,11 @@
 
 #include "base/string/base85.h"
 #include "base/uuid/uuid_generator.h"
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/file_input_stream.h"
 
 namespace starrocks {
 
@@ -81,13 +84,13 @@ StatusOr<std::unique_ptr<RandomAccessFile>> DeletionVector::open_random_access_f
         const std::string& file_path, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
         std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
-    const OpenFileOptions options{.fs = _ctx.fs,
-                                  .file_path = file_path,
-                                  .fs_stats = &fs_stats,
-                                  .app_stats = &app_stats,
-                                  .datacache_options = _ctx.datacache_options};
+    const formats::FileInputStreamOptions options{.fs = _ctx.fs,
+                                                  .file_path = file_path,
+                                                  .fs_stats = &fs_stats,
+                                                  .app_stats = &app_stats,
+                                                  .datacache_options = _ctx.datacache_options};
     ASSIGN_OR_RETURN(auto file,
-                     HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+                     formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     int64_t offset = _deletion_vector_descriptor->offset;
     int64_t length = _deletion_vector_descriptor->sizeInBytes + DV_SIZE_LENGTH;

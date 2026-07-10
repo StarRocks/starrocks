@@ -28,20 +28,6 @@
 
 namespace starrocks {
 
-struct OpenFileOptions {
-    FileSystem* fs = nullptr;
-    std::string file_path;
-    int64_t file_size = -1;
-    FormatScannerStats* fs_stats = nullptr;
-    FormatScannerStats* app_stats = nullptr;
-
-    // for datacache
-    DataCacheOptions datacache_options;
-
-    // for compressed text file
-    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
-};
-
 class HdfsScanner {
 public:
     HdfsScanner() = default;
@@ -73,10 +59,6 @@ public:
     bool has_split_tasks() const {
         return _scanner_ctx != nullptr && _scanner_ctx->format_scan_context.split.has_split_tasks;
     }
-
-    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
-            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
 
 protected:
     Status open_random_access_file();
