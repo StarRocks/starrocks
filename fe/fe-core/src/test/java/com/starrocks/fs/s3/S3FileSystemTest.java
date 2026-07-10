@@ -175,11 +175,31 @@ public class S3FileSystemTest {
     }
 
     @Test
+    public void testEscapedLiteralIsPartOfPushedPrefix() throws StarRocksException {
+        // "\*" is a literal '*', so the literal head before the real wildcard is "part-*abc" and can
+        // be pushed down as the prefix (not just "part-").
+        FakeS3FileSystem fs = new FakeS3FileSystem(Maps.newHashMap());
+        fs.globList("s3://bucket/dir/part-\\*abc*.parquet", true);
+        assertEquals(1, fs.pushedDown.size());
+        assertEquals("dir", fs.pushedDown.get(0)[0]);
+        assertEquals("part-*abc", fs.pushedDown.get(0)[1]);
+    }
+
+    @Test
     public void testEscapedWildcardFallsBack() throws StarRocksException {
         // "\*" is a literal '*', not a wildcard, so this is an exact path and must not take the
         // native listing path.
         FakeS3FileSystem fs = new FakeS3FileSystem(Maps.newHashMap());
         fs.globList("s3://bucket/data/part-\\*.parquet", true);
+        assertTrue(fs.fellBack);
+        assertTrue(fs.pushedDown.isEmpty());
+    }
+
+    @Test
+    public void testBucketRootFallsBack() throws StarRocksException {
+        // s3://bucket has an empty path; it must fall back gracefully (no NPE, no native listing).
+        FakeS3FileSystem fs = new FakeS3FileSystem(Maps.newHashMap());
+        fs.globList("s3://bucket", true);
         assertTrue(fs.fellBack);
         assertTrue(fs.pushedDown.isEmpty());
     }

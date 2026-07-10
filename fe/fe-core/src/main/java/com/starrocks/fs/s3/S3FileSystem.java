@@ -15,6 +15,7 @@
 package com.starrocks.fs.s3;
 
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.common.StarRocksException;
@@ -110,7 +111,9 @@ public class S3FileSystem implements FileSystem {
         WildcardURI uri = new WildcardURI(path);
         String scheme = uri.getUri().getScheme();
         String bucket = uri.getAuthority();
-        String keyPattern = stripLeadingSlash(uri.getPath());
+        // uri.getPath() is "" for a bucket-root path (s3://bucket) and null for a malformed opaque
+        // URI (s3:foo); normalize both to "" so they fall back to the Hadoop path instead of NPEing.
+        String keyPattern = stripLeadingSlash(Strings.nullToEmpty(uri.getPath()));
 
         // Fall back to the Hadoop globStatus path for cases the native prefix pushdown does not
         // handle:
@@ -273,14 +276,27 @@ public class S3FileSystem implements FileSystem {
         return builder.build();
     }
 
-    // Longest literal prefix of a component: everything before the first glob metacharacter.
+    // Longest literal prefix of a component: everything before the first unescaped glob
+    // metacharacter, with escapes resolved. A backslash escapes the next character, so "\X" is a
+    // literal X that is still part of the prefix (matching Hadoop GlobPattern). For example
+    // "part-\*abc*.parquet" yields "part-*abc", which can be pushed down as the ListObjectsV2 prefix.
     private static String literalPrefixOf(String component) {
+        StringBuilder head = new StringBuilder(component.length());
         for (int i = 0; i < component.length(); ++i) {
-            if (GLOB_METACHARACTERS.indexOf(component.charAt(i)) >= 0) {
-                return component.substring(0, i);
+            char c = component.charAt(i);
+            if (c == '\\') {
+                if (i + 1 >= component.length()) {
+                    break; // trailing backslash: stop, treat as end of the literal head
+                }
+                head.append(component.charAt(++i)); // the escaped char is a literal
+                continue;
             }
+            if (GLOB_METACHARACTERS.indexOf(c) >= 0) {
+                break; // first unescaped wildcard
+            }
+            head.append(c);
         }
-        return component;
+        return head.toString();
     }
 
     private static boolean containsGlobWildcard(String key) {
