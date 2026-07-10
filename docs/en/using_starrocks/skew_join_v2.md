@@ -104,7 +104,7 @@ Do not omit the brackets in the skew hint.
     ```SQL
     SELECT o.order_id, c.customer_name, o.amount
     FROM orders o 
-    JOIN [skew|o.customer_id(1001)] c 
+    JOIN [skew|o.customer_id(1001)] customers c 
     ON o.customer_id = c.customer_id;
     ```
 
