@@ -529,7 +529,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
         auto hdfs_scan_node = glm_ctx->hdfs_scan_node;
         hdfs_scan_node.tuple_id = _ctx->request_tuple_id;
 
-        auto provider = std::make_unique<connector::HiveDataSourceProvider>(nullptr, _ctx->scan_id, hdfs_scan_node);
+        auto provider = std::make_unique<connector::HiveDataSourceProvider>(_ctx->scan_id, hdfs_scan_node);
         const auto& scan_range = glm_ctx->get_hdfs_scan_range(scan_range_id);
         auto data_source = std::make_shared<connector::HiveDataSource>(provider.get(), scan_range);
         data_source->set_runtime_profile(_ctx->profile);

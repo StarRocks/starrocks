@@ -23,6 +23,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
@@ -33,7 +34,6 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
-#include "exec/pipeline/query_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
@@ -50,9 +50,9 @@ static const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSer
 
 // ================================
 
-DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNode* /*scan_node*/,
                                                                  const TPlanNode& plan_node) const {
-    return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
+    return std::make_unique<HiveDataSourceProvider>(plan_node);
 }
 
 StatusOr<std::unique_ptr<ConnectorSinkProvider>> HiveConnector::create_sink_provider(
@@ -70,16 +70,15 @@ StatusOr<std::unique_ptr<ConnectorSinkProvider>> HiveConnector::create_sink_prov
 
 // ================================
 
-HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _plan_node_id(plan_node.node_id), _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+HiveDataSourceProvider::HiveDataSourceProvider(const TPlanNode& plan_node)
+        : _plan_node_id(plan_node.node_id), _hdfs_scan_node(plan_node.hdfs_scan_node) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
 }
 
-HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id,
-                                               const THdfsScanNode& hdfs_scan_node)
-        : _plan_node_id(plan_node_id), _scan_node(scan_node), _hdfs_scan_node(hdfs_scan_node) {
+HiveDataSourceProvider::HiveDataSourceProvider(int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node)
+        : _plan_node_id(plan_node_id), _hdfs_scan_node(hdfs_scan_node) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }

@@ -14,7 +14,10 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include <cstdint>
+
+#include "base/status.h"
+#include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 

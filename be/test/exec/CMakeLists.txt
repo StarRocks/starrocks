@@ -25,8 +25,6 @@ set(EXEC_RUNTIME_TEST_FILES
     pipeline_execution_group_exec_runtime_test.cpp
     pipeline_builder_context_exec_runtime_test.cpp
     pipeline_fragment_context_exec_runtime_test.cpp
-    pipeline_fragment_runtime_state_exec_runtime_test.cpp
-    pipeline_query_runtime_state_exec_runtime_test.cpp
     pipeline/query_context_manger_test.cpp
 )
 

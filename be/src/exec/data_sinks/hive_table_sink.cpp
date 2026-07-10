@@ -110,7 +110,7 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
             sink_ctx->options[formats::CSVWriterOptions::MAPKEY_DELIM] = t_hive_sink.text_file_desc.mapkey_delim;
         }
     }
-    sink_ctx->fragment_context = fragment_ctx;
+    sink_ctx->runtime_state = runtime_state;
 
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::HIVE);
     ASSIGN_OR_RETURN(auto sink_provider,

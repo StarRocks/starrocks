@@ -15,12 +15,13 @@
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 
 #include "common/runtime_profile.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/delta/deletion_vector.h"
 #include "formats/parquet/file_reader.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -234,7 +235,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+    if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter",
                               _scanner_ctx->predicates.predicate_tree.root().debug_string());
     }

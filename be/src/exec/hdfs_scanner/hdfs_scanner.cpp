@@ -20,13 +20,14 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/delta/deletion_vector.h"
 #include "formats/file_input_stream.h"
 #include "formats/reserved_columns.h"
 #include "fs/hdfs_metrics.h"
+#include "runtime/runtime_state.h"
 #include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
@@ -148,7 +149,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.runtime_state = _runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
-    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = _runtime_state->fragment_runtime_state()->pred_tree_params();
 
     ctx.predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(ctx.predicates.conjuncts_manager->parse_conjuncts());
