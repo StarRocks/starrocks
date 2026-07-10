@@ -263,6 +263,13 @@ private:
 
     int64_t _max_buffer_size;
 
+    // Snapshot the in-transaction upsert/delete-order feature flag once for the whole load.
+    // lake_enable_pk_preserve_txn_delete_order is a mutable BE config, but it must not change
+    // mid-load: it drives both whether the spill path keeps the __op column (fixing LoadChunkSpiller's
+    // serde/schema from the first chunk) and whether finish() emits the del_op_offsets array. Reading
+    // it live in each place could tear a single load across the legacy and op-aware paths.
+    const bool _preserve_txn_delete_order = config::lake_enable_pk_preserve_txn_delete_order;
+
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
@@ -428,8 +435,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
-            _mem_table_sink =
-                    std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(), _profile);
+            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(),
+                                                                  _profile, _preserve_txn_delete_order);
             // Use concurrent flush token to improve the flush speed when spilling is enabled.
             // PERFORMANCE: Concurrent mode allows multiple memtables to flush in parallel,
             // which improves throughput when data is spilled to temporary storage before
@@ -829,7 +836,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         // after all segments" path -- this never writes the new on-disk state that a pre-fix BE
         // (rollback / not-yet-upgraded node / cross-version OpReplication target) would misread into a
         // duplicate primary key. See config::lake_enable_pk_preserve_txn_delete_order.
-        if (config::lake_enable_pk_preserve_txn_delete_order) {
+        if (_preserve_txn_delete_order) {
             for (size_t i = 0; i < del_idx; ++i) {
                 op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
             }

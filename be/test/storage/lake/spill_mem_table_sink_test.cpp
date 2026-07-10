@@ -111,7 +111,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     for (int i = 0; i < 3; i++) {
         // 3 times
         auto chunk = gen_data(kChunkSize, i);
@@ -151,7 +152,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     for (int i = 0; i < 3; i++) {
         // 3 times
         auto chunk = gen_data(kChunkSize, i);
@@ -189,7 +191,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment, true, nullptr, 0));
@@ -204,7 +207,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
     ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true, nullptr, 0));
@@ -220,7 +224,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     for (int i = 0; i < 3; i++) {
         int64_t old_val = config::load_spill_max_chunk_bytes;
         config::load_spill_max_chunk_bytes = 1;
@@ -263,7 +268,8 @@ TEST_P(SpillMemTableSinkTest, test_merge) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment0;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment0, false));
@@ -288,7 +294,8 @@ TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment0;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment0, false));
@@ -306,7 +313,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_slot_idx) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
 
     // Flush chunks with different slot_idx
     for (int i = 0; i < 3; i++) {
@@ -335,7 +343,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes_and_slot_idx) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
 
     // Flush chunks with deletes and different slot_idx
     for (int i = 0; i < 3; i++) {
@@ -361,7 +370,8 @@ TEST_P(SpillMemTableSinkTest, test_slot_idx_ordering_after_merge) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
 
     // Flush chunks in non-sequential slot_idx order
     auto chunk0 = gen_data(kChunkSize, 0);
@@ -399,7 +409,8 @@ TEST_P(SpillMemTableSinkTest, test_flush_data_size_with_slot_idx) {
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
 
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
@@ -433,7 +444,8 @@ TEST_P(SpillMemTableSinkTest, test_merge_blocks_after_eager_merge_consumed_all) 
     ASSERT_OK(block_manager->init());
     auto tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), tablet_id, _tablet_schema,
                                                                          txn_id, false);
-    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile,
+                           /*keep_op_column=*/false);
 
     // Flush 2 chunks normally (no eager merge, threshold is high by default)
     auto chunk0 = gen_data(kChunkSize, 0);
@@ -486,7 +498,8 @@ TEST_P(SpillMemTableSinkTest, test_merge_task_results_orders_by_slot) {
         auto batch = std::make_unique<LoadSpillPipelineMergeTask>();
         batch->slot_idx = slot;
         auto task = std::make_shared<TabletInternalParallelMergeTask>(std::move(writer), std::move(batch),
-                                                                      _schema.get(), nullptr, nullptr);
+                                                                      _schema.get(), nullptr, nullptr,
+                                                                      /*op_aware=*/false);
         context.add_merge_task(task);
     }
 

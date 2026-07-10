@@ -89,8 +89,10 @@ public:
      * @param quit_flag - Shared cancellation flag for all generated tasks
      * @param final_round - If true, merge directly to tablet; if false, merge to intermediate blocks
      */
+    // @param op_aware - forwarded to each TabletInternalParallelMergeTask: whether the merge input carries
+    //                   a trailing hidden __op column (set by the sink, not inferred from the schema).
     LoadSpillPipelineMergeIterator(LoadChunkSpiller* spiller, lake::TabletWriter* parent_writer,
-                                   std::atomic<bool>* quit_flag, bool final_round);
+                                   std::atomic<bool>* quit_flag, bool final_round, bool op_aware);
     ~LoadSpillPipelineMergeIterator() = default;
 
     // Returns current merge task, or nullptr if iteration exhausted
@@ -129,6 +131,9 @@ private:
     // If true, this is the final merge round writing to tablet. If false, intermediate
     // round writing back to spill blocks for next iteration.
     bool _final_round = false;
+
+    // Whether the merge input carries a trailing hidden __op column (forwarded to each task).
+    bool _op_aware = false;
 
     // WHY NEEDED: Determines merge iterator type. DUP_KEYS tables use union iterator
     // (simple concatenation), while AGG/UNIQUE keys use merge iterator (sorted merge
