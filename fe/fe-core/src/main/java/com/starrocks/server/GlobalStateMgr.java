@@ -119,7 +119,9 @@ import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.context.ContextMetaManager;
 import com.starrocks.context.ContextMgr;
 import com.starrocks.context.ContextReadExecutor;
+import com.starrocks.context.ContextWriteExecutor;
 import com.starrocks.context.SnapshotResolver;
+import com.starrocks.context.WorkspaceObjectWriter;
 import com.starrocks.context.allocator.ContextSnapshotAllocator;
 import com.starrocks.context.allocator.ContextVersionAllocator;
 import com.starrocks.context.retrieval.ContextBudgetPlanner;
@@ -555,6 +557,8 @@ public class GlobalStateMgr {
     private final ContextVersionAllocator contextVersionAllocator;
     private final ContextSnapshotAllocator contextSnapshotAllocator;
     private final ContextReadExecutor contextReadExecutor;
+    private final ContextWriteExecutor contextWriteExecutor;
+    private final WorkspaceObjectWriter workspaceObjectWriter;
     private final SnapshotResolver contextSnapshotResolver;
     private final TextSearchExecutor contextTextSearchExecutor;
     private final VectorSearchExecutor contextVectorSearchExecutor;
@@ -990,6 +994,10 @@ public class GlobalStateMgr {
         this.contextVersionAllocator = new ContextVersionAllocator();
         this.contextSnapshotAllocator = new ContextSnapshotAllocator();
         this.contextReadExecutor = new ContextReadExecutor();
+        this.contextWriteExecutor = new ContextWriteExecutor(
+                this.contextMgr, this.contextVersionAllocator, this.contextSnapshotAllocator);
+        this.workspaceObjectWriter = new WorkspaceObjectWriter(
+                this.contextMgr, this.contextSnapshotAllocator);
         this.contextSnapshotResolver = new SnapshotResolver();
         this.contextTextSearchExecutor = new TextSearchExecutor();
         this.contextVectorSearchExecutor = new VectorSearchExecutor();
@@ -1334,6 +1342,14 @@ public class GlobalStateMgr {
 
     public ContextReadExecutor getContextReadExecutor() {
         return contextReadExecutor;
+    }
+
+    public ContextWriteExecutor getContextWriteExecutor() {
+        return contextWriteExecutor;
+    }
+
+    public WorkspaceObjectWriter getWorkspaceObjectWriter() {
+        return workspaceObjectWriter;
     }
 
     public SnapshotResolver getContextSnapshotResolver() {

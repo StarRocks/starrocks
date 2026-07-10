@@ -35,6 +35,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.context.service.ContextCommandService;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -158,6 +159,19 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.context.AlterContextBaseRenameStmt;
+import com.starrocks.sql.ast.context.AlterContextBaseStmt;
+import com.starrocks.sql.ast.context.ContextDeleteStmt;
+import com.starrocks.sql.ast.context.ContextUpsertStmt;
+import com.starrocks.sql.ast.context.CreateContextBaseStmt;
+import com.starrocks.sql.ast.context.CreateContextCollectionStmt;
+import com.starrocks.sql.ast.context.CreateRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.CreateWorkspaceStmt;
+import com.starrocks.sql.ast.context.DropContextBaseStmt;
+import com.starrocks.sql.ast.context.DropContextCollectionStmt;
+import com.starrocks.sql.ast.context.DropRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.DropWorkspaceStmt;
+import com.starrocks.sql.ast.context.WorkspaceUpsertStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -1363,6 +1377,275 @@ public class DDLStmtExecutor {
                     context.getGlobalStateMgr().getPipeManager().alterPipe(stmt)
             );
             return null;
+        }
+
+        //=========================================== Semantic Context Statement =======================================
+        @Override
+        public ShowResultSet visitCreateContextBaseStatement(CreateContextBaseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // Stamp the creator on the metadata so per-base ownership checks at ALTER/DROP/
+                // UPSERT/DELETE time can authorize against an actual user. Admin overrides
+                // (OPERATE / SECURITY system privileges) bypass the ownership check entirely.
+                // Strip any client-supplied _owner_user before merging so a caller can't forge
+                // ownership; the stored value is always the current principal.
+                // Stored value is the bare principal (UserIdentity.getUser()), NOT toString():
+                // toString() embeds the per-request remote host/IP for ephemeral identities, so a
+                // toString-keyed _owner_user would fail to match on the next request from a
+                // different egress IP. Principal-only keying is stable across IPs.
+                java.util.Map<String, String> props = new java.util.LinkedHashMap<>();
+                if (stmt.getProperties() != null) {
+                    props.putAll(stmt.getProperties());
+                    props.remove("_owner_user");
+                }
+                if (context.getCurrentUserIdentity() != null) {
+                    props.put("_owner_user", context.getCurrentUserIdentity().getUser());
+                }
+                context.getGlobalStateMgr().getContextMgr().createContextBase(
+                        stmt.getName().getName(), props, stmt.isIfNotExists());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterContextBaseStatement(AlterContextBaseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // Strip privileged metadata keys from caller-supplied properties unless the caller
+                // is a system admin. Without this guard, anyone who holds the ALTER privilege on
+                // a contextbase (e.g. via per-base GRANT) could `SET ("_owner_user" = "self@…")`
+                // and silently transfer ownership to themselves, locking out the original owner.
+                // Owner-transfer via ALTER stays available to OPERATE/SECURITY admins (this is the
+                // path the production backfill SQL uses to retrofit owners onto pre-existing bases).
+                java.util.Map<String, String> props = new java.util.LinkedHashMap<>();
+                if (stmt.getProperties() != null) {
+                    props.putAll(stmt.getProperties());
+                }
+                if (props.containsKey("_owner_user")
+                        && !com.starrocks.context.ContextVisibility.hasFullVisibility(context)) {
+                    props.remove("_owner_user");
+                }
+                context.getGlobalStateMgr().getContextMgr().alterContextBase(
+                        stmt.getName().getName(), props, /*ifExists*/ false);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterContextBaseRenameStatement(
+                AlterContextBaseRenameStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextMgr().renameContextBase(
+                            stmt.getName().getName(), stmt.getNewName()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropContextBaseStatement(DropContextBaseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextMgr().dropContextBase(
+                            stmt.getName().getName(), stmt.isIfExists()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateContextCollectionStatement(
+                CreateContextCollectionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                String cb = stmt.getName().getContextBase();
+                if (cb == null) {
+                    throw new com.starrocks.sql.analyzer.SemanticException(
+                            "collection must be qualified as contextbase.collection");
+                }
+                String collectionType = stmt.getProperties() == null ? "knowledge"
+                        : stmt.getProperties().getOrDefault("collection_type", "knowledge");
+                context.getGlobalStateMgr().getContextMgr().createCollection(
+                        cb, stmt.getName().getCollection(), collectionType,
+                        stmt.getProperties(), stmt.isIfNotExists());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropContextCollectionStatement(
+                DropContextCollectionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                String cb = stmt.getName().getContextBase();
+                if (cb == null) {
+                    throw new com.starrocks.sql.analyzer.SemanticException(
+                            "collection must be qualified as contextbase.collection");
+                }
+                context.getGlobalStateMgr().getContextMgr().dropCollection(
+                        cb, stmt.getName().getCollection(), stmt.isIfExists());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateContextWorkspaceStatement(
+                CreateWorkspaceStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // A workspace is `<contextbase>.<collection>.<workspace>`; ContextMgr.createWorkspace
+                // rejects the write unless the supplied collection id matches the parent collection's
+                // real (positive) id, so resolve the parent collection here instead of passing -1.
+                com.starrocks.sql.ast.context.WorkspaceName wsName = stmt.getName();
+                com.starrocks.context.ContextMgr.CollectionMeta parentCollection =
+                        context.getGlobalStateMgr().getContextMgr()
+                                .getCollection(wsName.getContextBase(), wsName.getCollection());
+                if (parentCollection == null) {
+                    throw new com.starrocks.sql.analyzer.SemanticException(
+                            "workspace parent collection not found: "
+                                    + wsName.getContextBase() + "." + wsName.getCollection());
+                }
+                context.getGlobalStateMgr().getContextMgr().createWorkspace(
+                        wsName.toString(), parentCollection.getId(),
+                        stmt.getProperties(), stmt.isIfNotExists());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropContextWorkspaceStatement(
+                DropWorkspaceStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextMgr().dropWorkspace(
+                            stmt.getName().toString(), stmt.isIfExists()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateRetrievalProfileStatement(
+                CreateRetrievalProfileStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextMgr().createRetrievalProfile(
+                            stmt.getName(), stmt.getProperties(), stmt.isIfNotExists()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRetrievalProfileStatement(
+                DropRetrievalProfileStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextMgr().dropRetrievalProfile(
+                            stmt.getName(), stmt.isIfExists()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitContextUpsertStatement(ContextUpsertStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getContextWriteExecutor().upsert(
+                            stmt.getCollection(), stmt.getEntityArgs(), stmt.getEdges(), stmt.getOptions()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitContextDeleteStatement(ContextDeleteStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                // The WHERE predicate is parsed into a generic Expr. The SQL form currently supports
+                // two conventional shapes: `WHERE id = <num>` and `WHERE entity_key = '<string>'`.
+                // Anything richer (e.g. compound predicates) requires the M3 planner pass; that work
+                // is queued for the retrieval-planner milestone.
+                Long id = extractEqId(stmt.getPredicate(), "id");
+                String entityKey = extractEqString(stmt.getPredicate(), "entity_key");
+                if (id == null && entityKey == null) {
+                    throw new com.starrocks.sql.analyzer.SemanticException(
+                            "CONTEXT DELETE supports only `WHERE id = <num>` or `WHERE entity_key = '<key>'`");
+                }
+                new ContextCommandService(
+                        context.getGlobalStateMgr().getContextReadExecutor(),
+                        context.getGlobalStateMgr().getContextWriteExecutor())
+                        .delete(stmt.getCollection(), id, entityKey, false, stmt.getOptions());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitWorkspaceUpsertStatement(WorkspaceUpsertStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                String objectId = extractStringArg(stmt.getObjectArgs(), "object_id");
+                String objectType = extractStringArg(stmt.getObjectArgs(), "object_type");
+                double priority = extractDoubleArg(stmt.getObjectArgs(), "priority", 0.5);
+                long ttlHours = extractLongArg(stmt.getObjectArgs(), "ttl_hours", 24L);
+                context.getGlobalStateMgr().getWorkspaceObjectWriter()
+                        .upsert(stmt.getWorkspace().toString(), objectId, objectType,
+                                null, priority, ttlHours);
+            });
+            return null;
+        }
+
+        private Long extractEqId(com.starrocks.sql.ast.expression.Expr predicate, String column) {
+            if (predicate instanceof com.starrocks.sql.ast.expression.BinaryPredicate) {
+                com.starrocks.sql.ast.expression.BinaryPredicate bp =
+                        (com.starrocks.sql.ast.expression.BinaryPredicate) predicate;
+                if (bp.getOp() == com.starrocks.sql.ast.expression.BinaryType.EQ) {
+                    String col = extractColumnName(bp.getChild(0));
+                    if (column.equals(col)
+                            && bp.getChild(1) instanceof com.starrocks.sql.ast.expression.IntLiteral) {
+                        return ((com.starrocks.sql.ast.expression.IntLiteral) bp.getChild(1)).getLongValue();
+                    }
+                }
+            }
+            return null;
+        }
+
+        private String extractEqString(com.starrocks.sql.ast.expression.Expr predicate, String column) {
+            if (predicate instanceof com.starrocks.sql.ast.expression.BinaryPredicate) {
+                com.starrocks.sql.ast.expression.BinaryPredicate bp =
+                        (com.starrocks.sql.ast.expression.BinaryPredicate) predicate;
+                if (bp.getOp() == com.starrocks.sql.ast.expression.BinaryType.EQ) {
+                    String col = extractColumnName(bp.getChild(0));
+                    if (column.equals(col)
+                            && bp.getChild(1) instanceof com.starrocks.sql.ast.expression.StringLiteral) {
+                        return ((com.starrocks.sql.ast.expression.StringLiteral) bp.getChild(1)).getValue();
+                    }
+                }
+            }
+            return null;
+        }
+
+        private String extractColumnName(com.starrocks.sql.ast.expression.Expr expr) {
+            if (expr instanceof com.starrocks.sql.ast.expression.SlotRef) {
+                return ((com.starrocks.sql.ast.expression.SlotRef) expr).getColumnName();
+            }
+            return null;
+        }
+
+        private String extractStringArg(java.util.Map<String, com.starrocks.sql.ast.expression.Expr> args,
+                                        String key) {
+            if (args == null) {
+                return null;
+            }
+            com.starrocks.sql.ast.expression.Expr e = args.get(key);
+            if (e instanceof com.starrocks.sql.ast.expression.StringLiteral) {
+                return ((com.starrocks.sql.ast.expression.StringLiteral) e).getValue();
+            }
+            return null;
+        }
+
+        private double extractDoubleArg(java.util.Map<String, com.starrocks.sql.ast.expression.Expr> args,
+                                        String key, double defaultValue) {
+            if (args == null) {
+                return defaultValue;
+            }
+            com.starrocks.sql.ast.expression.Expr e = args.get(key);
+            if (e instanceof com.starrocks.sql.ast.expression.FloatLiteral) {
+                return ((com.starrocks.sql.ast.expression.FloatLiteral) e).getValue();
+            }
+            if (e instanceof com.starrocks.sql.ast.expression.IntLiteral) {
+                return ((com.starrocks.sql.ast.expression.IntLiteral) e).getLongValue();
+            }
+            return defaultValue;
+        }
+
+        private long extractLongArg(java.util.Map<String, com.starrocks.sql.ast.expression.Expr> args,
+                                    String key, long defaultValue) {
+            if (args == null) {
+                return defaultValue;
+            }
+            com.starrocks.sql.ast.expression.Expr e = args.get(key);
+            if (e instanceof com.starrocks.sql.ast.expression.IntLiteral) {
+                return ((com.starrocks.sql.ast.expression.IntLiteral) e).getLongValue();
+            }
+            return defaultValue;
         }
 
         // ==========================================Data Cache Management==============================================

@@ -114,6 +114,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.context.ContextMgr;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.TabletRepairHelper;
@@ -240,6 +241,12 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.context.ShowContextBasesStmt;
+import com.starrocks.sql.ast.context.ShowContextCollectionsStmt;
+import com.starrocks.sql.ast.context.ShowContextProfileStmt;
+import com.starrocks.sql.ast.context.ShowContextStatusStmt;
+import com.starrocks.sql.ast.context.ShowContextTasksStmt;
+import com.starrocks.sql.ast.context.ShowContextWorkspacesStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -3251,6 +3258,336 @@ public class ShowExecutor {
 
             rows.add(row);
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        //============================================= Semantic Context =============================================
+
+        private static ShowResultSetMetaData contextBaseMeta() {
+            return ShowResultSetMetaData.builder()
+                    .addColumn(new Column("id", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("name", TypeFactory.createVarcharType(256)))
+                    .addColumn(new Column("collection_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("entity_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("updated_time", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("status", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("owner", TypeFactory.createVarcharType(256)))
+                    .build();
+        }
+
+        private static ShowResultSetMetaData collectionMeta() {
+            return ShowResultSetMetaData.builder()
+                    .addColumn(new Column("contextbase", TypeFactory.createVarcharType(256)))
+                    .addColumn(new Column("name", TypeFactory.createVarcharType(256)))
+                    .addColumn(new Column("collection_type", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("entity_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("updated_time", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("status", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("retrieval_profile", TypeFactory.createVarcharType(256)))
+                    .addColumn(new Column("policy", TypeFactory.createVarcharType(256)))
+                    .build();
+        }
+
+        private static ShowResultSetMetaData workspaceMeta() {
+            return ShowResultSetMetaData.builder()
+                    .addColumn(new Column("id", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("qualified_name", TypeFactory.createVarcharType(512)))
+                    .addColumn(new Column("memory_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("scratch_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("output_count", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("last_activity", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("ttl_hours", TypeFactory.createVarcharType(32)))
+                    .build();
+        }
+
+        @Override
+        public ShowResultSet visitShowContextBasesStatement(ShowContextBasesStmt statement, ConnectContext context) {
+            ContextMgr mgr = GlobalStateMgr.getCurrentState().getContextMgr();
+            com.starrocks.context.ContextReadExecutor reader =
+                    GlobalStateMgr.getCurrentState().getContextReadExecutor();
+            // Apply the same per-base USAGE filter the REST list endpoint uses (admin sees all,
+            // non-admin sees their owned + per-base-granted subset). Without this, every
+            // authenticated user could enumerate every contextbase regardless of grants —
+            // exactly the leak the analyzer-side gate change opens up.
+            List<ContextMgr.ContextBaseMeta> visible = com.starrocks.context.ContextVisibility
+                    .filterVisibleBases(context, mgr.listContextBases());
+            PatternMatcher matcher = statement.getLikePattern() == null ? null
+                    : PatternMatcher.createMysqlPattern(statement.getLikePattern(),
+                            CaseSensibility.TABLE.getCaseSensibility());
+            List<List<String>> rows = Lists.newArrayList();
+            for (ContextMgr.ContextBaseMeta m : visible) {
+                if (matcher != null && !matcher.match(m.getName())) {
+                    continue;
+                }
+                List<String> r = Lists.newArrayList();
+                r.add(String.valueOf(m.getId()));
+                r.add(m.getName());
+                r.add(String.valueOf(mgr.listCollections(m.getName()).size()));
+                r.add(formatCount(reader.countEntitiesForContextBase(m.getId())));
+                String updatedTime = reader.maxUpdatedTimeForContextBase(m.getId());
+                r.add(updatedTime == null ? "" : updatedTime);
+                r.add(updatedTime == null ? "EMPTY" : "ACTIVE");
+                // Display the access-control owner (`_owner_user`), not the user-set free-form
+                // "owner" string property: the former is what the per-base authorization helpers
+                // actually consult, the latter was an unauthenticated documentation slot that
+                // displayed "" for every base in practice and gave operators a misleading
+                // ownership view.
+                String owner = m.getOwner();
+                r.add(owner == null ? "" : owner);
+                rows.add(r);
+            }
+            return new ShowResultSet(contextBaseMeta(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowContextCollectionsStatement(
+                ShowContextCollectionsStmt statement, ConnectContext context) {
+            ContextMgr mgr = GlobalStateMgr.getCurrentState().getContextMgr();
+            com.starrocks.context.ContextReadExecutor reader =
+                    GlobalStateMgr.getCurrentState().getContextReadExecutor();
+            String scopedBase = statement.getContextBase();
+            // Filter to collections under bases the caller can see. For a scoped form
+            // (SHOW CONTEXT COLLECTIONS IN <name>) the analyzer already ran the per-base
+            // ownership check and we list only that base's collections; for the unscoped form
+            // we walk every collection and filter, which is how non-admin users discover their
+            // visible slice.
+            List<ContextMgr.CollectionMeta> visible = com.starrocks.context.ContextVisibility
+                    .filterVisibleCollections(context, mgr.listCollections(scopedBase));
+            PatternMatcher matcher = statement.getLikePattern() == null ? null
+                    : PatternMatcher.createMysqlPattern(statement.getLikePattern(),
+                            CaseSensibility.TABLE.getCaseSensibility());
+            List<List<String>> rows = Lists.newArrayList();
+            for (ContextMgr.CollectionMeta m : visible) {
+                if (matcher != null && !matcher.match(m.getName())) {
+                    continue;
+                }
+                List<String> r = Lists.newArrayList();
+                // Resolve the contextbase name per row. The previous code printed
+                // statement.getContextBase() which was empty for the unscoped form — every
+                // row's "contextbase" column would render as an empty string and the operator
+                // couldn't tell which base each collection belonged to.
+                String baseName = scopedBase != null && !scopedBase.isEmpty()
+                        ? scopedBase
+                        : com.starrocks.context.ContextVisibility
+                                .resolveContextBaseName(m.getContextBaseId());
+                r.add(baseName);
+                r.add(m.getName());
+                r.add(m.getCollectionType());
+                r.add(formatCount(reader.countEntitiesForCollection(m.getId())));
+                String updatedTime = reader.maxUpdatedTimeForCollection(m.getId());
+                r.add(updatedTime == null ? "" : updatedTime);
+                r.add(updatedTime == null ? "EMPTY" : "ACTIVE");
+                r.add(m.getProperties().getOrDefault("retrieval_profile", ""));
+                r.add(m.getProperties().getOrDefault("policy", ""));
+                rows.add(r);
+            }
+            return new ShowResultSet(collectionMeta(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowContextWorkspacesStatement(
+                ShowContextWorkspacesStmt statement, ConnectContext context) {
+            ContextMgr mgr = GlobalStateMgr.getCurrentState().getContextMgr();
+            // Apply visibility filter BEFORE the aggregation SQL is built; otherwise the
+            // SELECT … WHERE workspace_id IN (…) would include ids the caller cannot read,
+            // and the resulting counts would carry information about workspaces they're not
+            // allowed to see. For a scoped (SHOW … IN <name>) form the analyzer already ran
+            // the per-base ownership check, so filterVisibleWorkspaces is a no-op there.
+            List<ContextMgr.WorkspaceMeta> workspaces = com.starrocks.context.ContextVisibility
+                    .filterVisibleWorkspaces(context, mgr.listWorkspaces(statement.getContextBase()));
+            if (statement.getLikePattern() != null) {
+                // Apply the LIKE filter on the workspace name before the aggregation SQL is built,
+                // so we neither scan nor count objects for workspaces the pattern excludes.
+                PatternMatcher matcher = PatternMatcher.createMysqlPattern(statement.getLikePattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+                List<ContextMgr.WorkspaceMeta> filtered = Lists.newArrayList();
+                for (ContextMgr.WorkspaceMeta m : workspaces) {
+                    if (matcher.match(m.getName())) {
+                        filtered.add(m);
+                    }
+                }
+                workspaces = filtered;
+            }
+            java.util.Map<Long, java.util.List<String>> summaryByWorkspace = new java.util.LinkedHashMap<>();
+            for (ContextMgr.WorkspaceMeta m : workspaces) {
+                summaryByWorkspace.put(m.getId(), Lists.newArrayList("0", "0", "0", ""));
+            }
+            if (!workspaces.isEmpty()) {
+                // Aggregate in SQL instead of pulling every workspace_object history row into the
+                // FE. The earlier implementation streamed each (workspace_id, object_id, version)
+                // tuple back, deduped in Java by walking the ordered list, and counted scopes —
+                // SHOW WORKSPACES therefore scanned the full history of every workspace_object
+                // every time, and a workspace with 100k object versions blew up the FE heap. Here
+                // ROW_NUMBER picks the latest version per (workspace_id, object_id), the outer
+                // GROUP BY collapses to (workspace_id, workspace_scope) rows (bounded by
+                // workspaces * 3 scopes), and the FE only walks the small aggregated result.
+                StringBuilder ids = new StringBuilder();
+                for (int i = 0; i < workspaces.size(); i++) {
+                    if (i > 0) {
+                        ids.append(", ");
+                    }
+                    ids.append(workspaces.get(i).getId());
+                }
+                String sql = "SELECT workspace_id, workspace_scope, COUNT(*) AS cnt, "
+                        + "MAX(updated_time) AS max_updated FROM ("
+                        + "SELECT workspace_id, object_id, workspace_scope, updated_time, deleted, "
+                        + "ROW_NUMBER() OVER (PARTITION BY workspace_id, object_id ORDER BY version DESC) AS rn FROM "
+                        + com.starrocks.context.ContextInternalTables.DATABASE + "."
+                        + com.starrocks.context.ContextInternalTables.WORKSPACE_OBJECTS
+                        + " WHERE workspace_id IN (" + ids + ")"
+                        + ") sub WHERE rn = 1 AND deleted = false "
+                        + "GROUP BY workspace_id, workspace_scope";
+                java.util.List<java.util.List<String>> rowsRaw = decodeRowsToStrings(sql, 4);
+                for (java.util.List<String> rowRaw : rowsRaw) {
+                    if (rowRaw.size() < 4) {
+                        continue;
+                    }
+                    long workspaceId = Long.parseLong(rowRaw.get(0));
+                    java.util.List<String> summary = summaryByWorkspace.get(workspaceId);
+                    if (summary == null) {
+                        continue;
+                    }
+                    String scope = com.starrocks.context.WorkspaceObjectWriter
+                            .normalizeWorkspaceScopeForRead(rowRaw.get(1));
+                    int index = "memory".equals(scope) ? 0 : ("output".equals(scope) ? 2 : 1);
+                    summary.set(index, String.valueOf(Integer.parseInt(summary.get(index))
+                            + Integer.parseInt(rowRaw.get(2))));
+                    String updatedTime = rowRaw.get(3);
+                    if (updatedTime != null && !updatedTime.isEmpty()
+                            && (summary.get(3).isEmpty() || updatedTime.compareTo(summary.get(3)) > 0)) {
+                        summary.set(3, updatedTime);
+                    }
+                }
+            }
+            List<List<String>> rows = Lists.newArrayList();
+            for (ContextMgr.WorkspaceMeta m : workspaces) {
+                java.util.List<String> summary = summaryByWorkspace.get(m.getId());
+                List<String> r = Lists.newArrayList();
+                r.add(String.valueOf(m.getId()));
+                r.add(m.getName());
+                r.add(summary == null ? "0" : summary.get(0));
+                r.add(summary == null ? "0" : summary.get(1));
+                r.add(summary == null ? "0" : summary.get(2));
+                r.add(summary == null ? "" : summary.get(3));
+                r.add(m.getProperties().getOrDefault("ttl_hours", ""));
+                rows.add(r);
+            }
+            return new ShowResultSet(workspaceMeta(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowContextStatusStatement(
+                ShowContextStatusStmt statement, ConnectContext context) {
+            ContextMgr mgr = GlobalStateMgr.getCurrentState().getContextMgr();
+            com.starrocks.context.ContextReadExecutor reader =
+                    GlobalStateMgr.getCurrentState().getContextReadExecutor();
+            ShowResultSetMetaData meta = ShowResultSetMetaData.builder()
+                    .addColumn(new Column("metric", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("value", TypeFactory.createVarcharType(64)))
+                    .build();
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList("contextbase_count",
+                    String.valueOf(mgr.listContextBases().size())));
+            rows.add(Lists.newArrayList("collection_count",
+                    String.valueOf(mgr.listCollections(null).size())));
+            rows.add(Lists.newArrayList("workspace_count",
+                    String.valueOf(mgr.listWorkspaces(null).size())));
+            rows.add(Lists.newArrayList("retrieval_profile_count",
+                    String.valueOf(mgr.listRetrievalProfiles().size())));
+            rows.add(Lists.newArrayList("entity_count",
+                    formatCount(reader.countRows(
+                            com.starrocks.context.ContextInternalTables.HEADS))));
+            rows.add(Lists.newArrayList("version_count",
+                    formatCount(reader.countRows(
+                            com.starrocks.context.ContextInternalTables.VERSIONS))));
+            rows.add(Lists.newArrayList("fragment_count",
+                    formatCount(reader.countRows(
+                            com.starrocks.context.ContextInternalTables.FRAGMENTS))));
+            rows.add(Lists.newArrayList("ref_count",
+                    formatCount(reader.countRows(
+                            com.starrocks.context.ContextInternalTables.REFS))));
+            rows.add(Lists.newArrayList("commit_count",
+                    formatCount(reader.countRows(
+                            com.starrocks.context.ContextInternalTables.COMMITS))));
+            return new ShowResultSet(meta, rows);
+        }
+
+        private String formatCount(long value) {
+            return value < 0 ? "n/a" : String.valueOf(value);
+        }
+
+        @Override
+        public ShowResultSet visitShowContextTasksStatement(
+                ShowContextTasksStmt statement, ConnectContext context) {
+            ShowResultSetMetaData meta = ShowResultSetMetaData.builder()
+                    .addColumn(new Column("task_id", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("contextbase_id", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("task_type", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("state", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("updated_time", TypeFactory.createVarcharType(64)))
+                    .addColumn(new Column("error_message", TypeFactory.createVarcharType(2048)))
+                    .build();
+            String sql = "SELECT task_id, contextbase_id, task_type, state, updated_time, error_message "
+                    + "FROM __internal_context.context_tasks ORDER BY updated_time DESC LIMIT 200";
+            return new ShowResultSet(meta, decodeRowsToStrings(sql, 6));
+        }
+
+        private List<List<String>> decodeRowsToStrings(String sql, int columnCount) {
+            List<List<String>> rows = Lists.newArrayList();
+            try {
+                java.util.List<com.starrocks.thrift.TResultBatch> batches =
+                        com.starrocks.qe.SimpleExecutor.getRepoExecutor().executeDQL(sql);
+                for (com.starrocks.thrift.TResultBatch batch : batches) {
+                    if (batch.getRows() == null) {
+                        continue;
+                    }
+                    for (java.nio.ByteBuffer buf : batch.getRows()) {
+                        io.netty.buffer.ByteBuf copied = io.netty.buffer.Unpooled.copiedBuffer(buf);
+                        com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(
+                                copied.toString(java.nio.charset.Charset.defaultCharset()));
+                        com.google.gson.JsonArray data = parsed.getAsJsonObject().getAsJsonArray("data");
+                        List<String> row = Lists.newArrayListWithCapacity(columnCount);
+                        for (int i = 0; i < columnCount && i < data.size(); i++) {
+                            com.google.gson.JsonElement e = data.get(i);
+                            row.add(e.isJsonNull() ? "" : e.getAsString());
+                        }
+                        rows.add(row);
+                    }
+                }
+            } catch (Exception e) {
+                // When the internal tables have not been created yet (before the TableKeeper runs)
+                // we want SHOW to return an empty result rather than fail. But in steady state a
+                // query failure is a real signal — log it at WARN so operators can diagnose it
+                // instead of staring at a silently empty SHOW.
+                LOG.warn("SHOW CONTEXT * query failed: sql={}, err={}", sql, e.toString());
+            }
+            return rows;
+        }
+
+        @Override
+        public ShowResultSet visitShowContextProfileStatement(
+                ShowContextProfileStmt statement, ConnectContext context) {
+            ContextMgr mgr = GlobalStateMgr.getCurrentState().getContextMgr();
+            List<List<String>> rows = Lists.newArrayList();
+            ShowResultSetMetaData meta = ShowResultSetMetaData.builder()
+                    .addColumn(new Column("name", TypeFactory.createVarcharType(256)))
+                    .addColumn(new Column("fusion_mode", TypeFactory.createVarcharType(32)))
+                    .addColumn(new Column("properties", TypeFactory.createVarcharType(4096)))
+                    .build();
+            java.util.List<ContextMgr.RetrievalProfileMeta> profiles;
+            if (statement.getProfileName() != null) {
+                ContextMgr.RetrievalProfileMeta m = mgr.getRetrievalProfile(statement.getProfileName());
+                profiles = m == null ? Lists.newArrayList() : Lists.newArrayList(m);
+            } else {
+                profiles = mgr.listRetrievalProfiles();
+            }
+            for (ContextMgr.RetrievalProfileMeta m : profiles) {
+                List<String> r = Lists.newArrayList();
+                r.add(m.getName());
+                r.add(m.getProperties().getOrDefault("fusion_mode", "RRF"));
+                r.add(m.getProperties().toString());
+                rows.add(r);
+            }
+            return new ShowResultSet(meta, rows);
         }
 
         @Override
