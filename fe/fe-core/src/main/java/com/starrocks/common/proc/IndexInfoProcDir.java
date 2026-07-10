@@ -43,7 +43,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -148,7 +147,15 @@ public class IndexInfoProcDir implements ProcDirInterface {
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
-            if (table.getType() == TableType.OLAP) {
+            // Cloud-native (lake) OLAP tables also carry per-index metadata and must resolve
+            // the schema by the requested index meta id. The old `getType() == OLAP` check
+            // excluded lake tables (whose type is CLOUD_NATIVE), so
+            // `SHOW PROC .../index_schema/<id>` fell into the else branch and returned the base
+            // index schema for every rollup on a shared-data table instead of that rollup's own
+            // declared columns. Keep materialized views on the getBaseSchema() path (as before):
+            // DESC on an async MV routes here with an index meta id that is not in the MV's own
+            // index-meta map, so getSchemaByIndexMetaId() would return an empty schema.
+            if (table.isOlapOrCloudNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
                 schema = olapTable.getSchemaByIndexMetaId(idxMetaId);
                 if (schema == null) {

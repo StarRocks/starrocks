@@ -452,7 +452,10 @@ public class ShowStmtAnalyzer {
                     // show base table schema only
                     String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
                             + "/";
-                    if (table.getType() == Table.TableType.OLAP) {
+                    // Cloud-native (lake) tables must also address the base index by its meta id:
+                    // IndexInfoProcDir.lookup() now resolves cloud-native tables per index meta id,
+                    // so passing table.getId() here would yield an empty schema for DESC <lake_table>.
+                    if (table.isOlapOrCloudNativeTable()) {
                         procString += ((OlapTable) table).getBaseIndexMetaId();
                     } else {
                         procString += table.getId();
