@@ -18,11 +18,24 @@
 
 namespace starrocks {
 
+// Force-link anchor: referenced from join_hash_map_factory.cpp so this TU (and its
+// static-initializer factory registrations) is pulled from the static library.
+int join_hash_map_inst_anchor_asof = 0;
+
 #define DEF_JOIN_MAP(LT, CT, MT) JoinHashMap<LT, JoinKeyConstructorType::CT, JoinHashMapMethodType::MT>
-#define INSTANTIATE_JOIN_HASH_MAP(LT, CT, MT)                                                       \
-    template class DEF_JOIN_MAP(LT, CT, MT);                                                        \
-    template void DEF_JOIN_MAP(LT, CT, MT)::lazy_output<true>(RuntimeState*, ChunkPtr*, ChunkPtr*); \
-    template void DEF_JOIN_MAP(LT, CT, MT)::lazy_output<false>(RuntimeState*, ChunkPtr*, ChunkPtr*);
+#define INSTANTIATE_JOIN_HASH_MAP(LT, CT, MT)                                                            \
+    template class DEF_JOIN_MAP(LT, CT, MT);                                                             \
+    template void DEF_JOIN_MAP(LT, CT, MT)::lazy_output<true>(RuntimeState*, ChunkPtr*, ChunkPtr*);      \
+    template void DEF_JOIN_MAP(LT, CT, MT)::lazy_output<false>(RuntimeState*, ChunkPtr*, ChunkPtr*);     \
+    template std::unique_ptr<JoinHashMapBase>                                                            \
+    make_join_hash_map<LT, JoinKeyConstructorType::CT, JoinHashMapMethodType::MT>(JoinHashTableItems*,   \
+                                                                                  HashTableProbeState*); \
+    [[maybe_unused]] static const bool _jhm_reg_##LT##_##CT##_##MT =                                     \
+            (register_join_hash_map_factory(                                                             \
+                     JoinKeyConstructorTypeTraits<JoinKeyConstructorType::CT, LT>::unary_type,           \
+                     JoinHashMapMethodTypeTraits<JoinHashMapMethodType::MT, LT>::unary_type,             \
+                     &make_join_hash_map<LT, JoinKeyConstructorType::CT, JoinHashMapMethodType::MT>),    \
+             true);
 
 INSTANTIATE_JOIN_HASH_MAP(TYPE_INT, ONE_KEY, LINEAR_CHAINED_ASOF)
 INSTANTIATE_JOIN_HASH_MAP(TYPE_BIGINT, ONE_KEY, LINEAR_CHAINED_ASOF)
