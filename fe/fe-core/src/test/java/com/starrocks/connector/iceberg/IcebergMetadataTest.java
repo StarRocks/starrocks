@@ -4045,7 +4045,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 propsCaptor.capture())).thenReturn(true);
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProps);
+                Executors.newSingleThreadExecutor(), catalogProps);
 
         CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", new HashMap<>());
         Assertions.assertTrue(metadata.createTable(connectContext, stmt));
@@ -4079,7 +4079,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 propsCaptor.capture())).thenReturn(true);
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProps);
+                Executors.newSingleThreadExecutor(), catalogProps);
 
         Map<String, String> tableProps = new HashMap<>();
         tableProps.put(ICEBERG_MAX_SNAPSHOT_AGE_MS, "999999");
