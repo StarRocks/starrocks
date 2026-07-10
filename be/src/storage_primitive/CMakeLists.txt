@@ -41,9 +41,11 @@ ADD_BE_LIB(StoragePrimitive
     flat_json_config.cpp
     key_coder.cpp
     projection_iterator.cpp
+    olap_scan_keys.cpp
     range.cpp
     predicate_parser.cpp
     primary_key_encoder.cpp
+    runtime_filter_predicate.cpp
     row_source_mask_buffer.cpp
     schema_helper.cpp
     predicate_tree/predicate_tree.cpp
@@ -56,6 +58,7 @@ ADD_BE_LIB(StoragePrimitive
 )
 
 target_link_libraries(StoragePrimitive PUBLIC
+    ExecPrimitive
     Expr
     Runtime
     ColumnSortCore

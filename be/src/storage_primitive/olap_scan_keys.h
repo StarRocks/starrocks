@@ -41,8 +41,10 @@
 #include <utility>
 #include <vector>
 
-#include "storage/query/olap_scan_range.h"
+#include "base/logging.h"
+#include "base/status.h"
 #include "storage_primitive/column_value_range.h"
+#include "storage_primitive/olap_scan_range.h"
 #include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {

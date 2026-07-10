@@ -264,7 +264,6 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    olap_common.cpp
     write_combined_txn_log.cpp
     local_file_writer.cpp
     plain_text_builder.cpp

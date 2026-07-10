@@ -23,11 +23,11 @@
 #include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "common/statusor.h"
-#include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/expr_context.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 class DescriptorTbl;

@@ -30,7 +30,7 @@
 #include "column/global_dict/types.h"
 #include "common/runtime_profile.h"
 #include "compute_env/query/file_scan_split_context.h"
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

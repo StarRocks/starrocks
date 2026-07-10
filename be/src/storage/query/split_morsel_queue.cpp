@@ -19,13 +19,13 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/query/olap_scan_range.h"
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/olap_scan_range.h"
 #include "storage_primitive/range.h"
 
 namespace starrocks::pipeline {
