@@ -189,6 +189,33 @@ public class PartitionCastPredicatePrunerTest {
         Assertions.assertTrue(PartitionCastPredicatePruner.partitionMayMatch(residual, withNull));
     }
 
+    @Test
+    public void testPartitionDefinitelyMatches() {
+        List<ScalarOperator> residual = Lists.newArrayList(
+                eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00")));
+
+        // partition value casts to the constant -> definite match (safe to delete this partition)
+        Assertions.assertTrue(PartitionCastPredicatePruner.partitionDefinitelyMatches(
+                residual, singletonMap("c2", "2020-06-14")));
+        // case-insensitive column name lookup
+        Assertions.assertTrue(PartitionCastPredicatePruner.partitionDefinitelyMatches(
+                residual, singletonMap("C2", "2020-06-14")));
+
+        // definitely false -> not a match
+        Assertions.assertFalse(PartitionCastPredicatePruner.partitionDefinitelyMatches(
+                residual, singletonMap("c2", "2020-06-15")));
+        // unbound reference -> indeterminate -> NOT a definite match (must not delete)
+        Assertions.assertFalse(PartitionCastPredicatePruner.partitionDefinitelyMatches(
+                residual, singletonMap("other", "2020-06-14")));
+        // unparseable partition value -> indeterminate -> NOT a definite match (must not delete)
+        Assertions.assertFalse(PartitionCastPredicatePruner.partitionDefinitelyMatches(
+                residual, singletonMap("c2", "not-a-date")));
+        // null partition value -> unbound -> NOT a definite match
+        Map<String, String> withNull = new HashMap<>();
+        withNull.put("c2", null);
+        Assertions.assertFalse(PartitionCastPredicatePruner.partitionDefinitelyMatches(residual, withNull));
+    }
+
     private LocalDateTime dt(int y, int m, int d) {
         return LocalDateTime.of(y, m, d, 0, 0, 0);
     }
