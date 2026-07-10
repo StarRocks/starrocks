@@ -16,7 +16,9 @@ set(FORMAT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     disk_range_test.cpp
     io/async_flush_output_stream_test.cpp
+    io/async_flush_stream_poller_test.cpp
     io/formatted_output_stream_file_test.cpp
+    ${BE_TEST_JNI_ENV_STUB}
 )
 
 set(FORMAT_CSV_TEST_FILES
@@ -38,6 +40,7 @@ set(FORMAT_CSV_TEST_FILES
 )
 
 set(FORMAT_JSON_TEST_FILES
+    json/json_parser_test.cpp
     json/binary_column_test.cpp
     json/map_column_test.cpp
     json/nullable_column_test.cpp
@@ -58,6 +61,7 @@ set(FORMAT_AVRO_TEST_FILES
 )
 
 set(FORMAT_ORC_TEST_FILES
+    orc/compressed_input_stream_lzo_test.cpp
     orc/orc_column_reader_test.cpp
     orc/orc_emit_rejected_rows_test.cpp
     orc/orc_lazy_load_test.cpp
@@ -65,14 +69,10 @@ set(FORMAT_ORC_TEST_FILES
 )
 
 set(FORMAT_TEST_LINK_LIBS
-    FormatOrc
-    FormatAvro
-    FormatJson
-    FormatCsv
-    FormatCore
-    ExprCore
-    RuntimeCore
-    FSCore
+    Formats
+    Expr
+    Runtime
+    FileSystem
     ChunkCore
     ColumnCore
     Types

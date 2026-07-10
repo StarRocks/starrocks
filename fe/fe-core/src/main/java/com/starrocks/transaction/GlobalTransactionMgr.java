@@ -643,6 +643,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTransactionMgr == null) {
+            // The database transaction manager may be absent if the database was dropped concurrently.
+            // Treat that as "no committed transactions" rather than throwing NPE, since callers invoke
+            // this lock-free (e.g. the online optimize visibility gate).
+            return false;
+        }
         if (tableId == null && partitionId == null) {
             return !dbTransactionMgr.getCommittedTxnList().isEmpty();
         }
@@ -651,7 +657,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             if (transactionState.getTableIdList().contains(tableId)) {
                 if (partitionId == null) {
                     return true;
-                } else if (transactionState.getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId) != null) {
+                }
+                // getTableCommitInfo is @Nullable: a committed txn can list the table in its tableIdList
+                // before its TableCommitInfo is populated, so guard against NPE here (this method is called
+                // lock-free, e.g. by the online optimize visibility gate).
+                TableCommitInfo tableCommitInfo = transactionState.getTableCommitInfo(tableId);
+                if (tableCommitInfo != null && tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
                     return true;
                 }
             }

@@ -379,7 +379,6 @@ public class RemoteFileOperationsTest {
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
 
-        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         // RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
 
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();

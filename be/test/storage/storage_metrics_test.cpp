@@ -144,15 +144,12 @@ TEST(StorageMetricsTest, InstallRegistersCompactionMetrics) {
     assert_metric_value(&registry, "running_update_compaction_task_num", "17");
 }
 
-TEST(StorageMetricsTest, InstallRegistersFlushAndSpillMetrics) {
+TEST(StorageMetricsTest, InstallRegistersFlushAndDeltaWriterMetrics) {
     MetricRegistry registry("test_registry");
     StorageMetrics metrics(&registry);
 
     metrics.async_delta_writer_execute_total.increment(18);
     assert_metric_value(&registry, "async_delta_writer_execute_total", "18");
-
-    metrics.load_spill_remote_bytes_read_total.increment(19);
-    assert_metric_value(&registry, "load_spill_remote_bytes_read_total", "19");
 
     metrics.delta_writer_wait_flush_duration_us.increment(20);
     assert_metric_value(&registry, "delta_writer_wait_flush_duration_us", "20");
@@ -232,7 +229,7 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
-    metrics.register_thread_pool_metrics("pindex_load", threadpool.get());
+    metrics.register_thread_pool_metrics("pindex_load", &metrics.pindex_load, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
@@ -252,7 +249,7 @@ TEST(StorageMetricsTest, RegisterStorageCleanupThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
-    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
+    metrics.register_thread_pool_metrics("storage_cleanup", &metrics.storage_cleanup, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

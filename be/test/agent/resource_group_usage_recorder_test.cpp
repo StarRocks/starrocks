@@ -18,10 +18,10 @@
 #include "common/system/cpu_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

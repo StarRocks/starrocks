@@ -55,6 +55,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Reads one Parquet file's footer and emits per-row-group min/max/row-count
@@ -69,11 +70,20 @@ import java.util.Objects;
  *   <li>Unannotated Parquet INT32/INT64 → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>Unannotated Parquet BOOLEAN → StarRocks BOOLEAN</li>
  *   <li>Parquet INT32 with DATE annotation → StarRocks DATE</li>
- *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
- *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
- *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
- *   <li>Parquet BINARY with UTF8 (string) annotation → StarRocks CHAR/VARCHAR
- *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
+ *   <li>Parquet INT64 with a TIMESTAMP annotation (MILLIS/MICROS/NANOS) -> StarRocks DATETIME.
+ *       A non-UTC-adjusted (local) timestamp is stored verbatim. A UTC-adjusted
+ *       ({@code isAdjustedToUTC=true}) timestamp reaches the meta tier only when the load session
+ *       timezone is a fixed offset: the reader then adds that constant offset (the same one the BE
+ *       load applies) to the decoded UTC value. A DST / named / unknown load timezone -> data tier.</li>
+ *   <li>Parquet BINARY with UTF8 (string) annotation -> StarRocks VARCHAR or CHAR
+ *       (footer min/max are decoded as UTF-8 and used directly; FE compares them in the
+ *       same unsigned-byte order the BE uses to route rows). CHAR is safe even though the BE
+ *       right-pads a CHAR routing key with '\0' to its fixed width before routing: '\0' is the
+ *       minimum byte, so fixed-width '\0'-padding is order-preserving under the BE unsigned
+ *       memcmp + shorter-prefix-is-smaller tiebreak, and the BE stores the boundary itself
+ *       stripped, so a NUL-free CHAR boundary separates rows exactly as VARCHAR does. A CHAR
+ *       min/max that contains a '\0' is the one exception (the BE truncates a CHAR boundary at
+ *       the first NUL while FE compares raw bytes) and is rejected -> data tier.</li>
  *   <li>Parquet INT32/INT64 with DECIMAL annotation → StarRocks DECIMAL of the SAME
  *       precision and scale (the unscaled integer's signed order equals the decimal order).</li>
  *   <li>Parquet FIXED_LEN_BYTE_ARRAY/BINARY with DECIMAL annotation → StarRocks DECIMAL of the
@@ -84,13 +94,14 @@ import java.util.Objects;
  *       integer sort key (decoded as the true unsigned magnitude and range-checked), but ONLY when
  *       the file's raw footer declares a TypeDefinedOrder column order for that leaf.</li>
  * </ul>
- * <p>A DATE boundary is gated to {@code [0001-01-01, 9999-12-31]} and a DATETIME boundary to the
- * narrower {@code [1970-01-01, 9999-12-31]}; a value outside its window falls back to data tier.
- * DATE reaches year 1 because the BE day-of-epoch load is proleptic-Gregorian with no sub-second
- * part, so the boundary is FE/BE-identical; DATETIME keeps the epoch lower bound because the BE
- * timestamp load does not yet decode a pre-1970 sub-second tick to a boundary-matching wall clock
+ * <p>DATE and DATETIME boundaries are gated to {@code [0001-01-01, 9999-12-31]}; a value outside
+ * that window falls back to data tier. The window reaches year 1 because the BE day-of-epoch DATE
+ * load is proleptic-Gregorian and the BE timestamp load reconstructs the same wall clock the FE
+ * {@code floorDiv}/{@code floorMod} split computes (it borrows a whole second for a negative
+ * sub-second remainder), so the boundary is FE/BE-identical down to year 1
  * (see {@link MetaTierTemporalWindow}).
- * Anything else (UINT_64, signed INT_8/16/32 annotations, UTC-adjusted/INT96 timestamps, JSON,
+ * Anything else (UINT_64, signed INT_8/16/32 annotations, INT96 timestamps, UTC-adjusted timestamps
+ * under a non-fixed-offset load timezone, JSON,
  * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
  * raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
@@ -105,7 +116,8 @@ public final class ParquetRowGroupStatisticsReader {
     }
 
     public static List<RowGroupStatistics> read(
-            FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn) throws StarRocksException {
+            FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn, String loadTimeZone)
+            throws StarRocksException {
         Objects.requireNonNull(fileStatus, "fileStatus");
         Objects.requireNonNull(hadoopConfig, "hadoopConfig");
         Objects.requireNonNull(sortKeyColumn, "sortKeyColumn");
@@ -114,8 +126,9 @@ public final class ParquetRowGroupStatisticsReader {
             HadoopInputFile inputFile = HadoopInputFile.fromStatus(fileStatus, hadoopConfig);
             try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
                 ParquetMetadata metadata = reader.getFooter();
+                Optional<ZoneOffset> loadOffset = MetaTierTemporalWindow.fixedLoadOffset(loadTimeZone);
                 SortKeyLocation location = locateSortKeyColumn(
-                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn);
+                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn, loadOffset);
                 List<BlockMetaData> blocks = metadata.getBlocks();
                 List<RowGroupStatistics> rowGroupStatistics = new ArrayList<>(blocks.size());
                 for (BlockMetaData block : blocks) {
@@ -130,8 +143,8 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn)
-            throws MetaTierUnavailableException {
+    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn,
+            Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
         for (int i = 0; i < schema.getFieldCount(); i++) {
@@ -171,8 +184,17 @@ public final class ParquetRowGroupStatisticsReader {
             typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(
                     readColumnOrders(inputFile), leafColumnIndex(schema, path));
         }
-        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn);
-        return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn);
+        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn,
+                loadOffset);
+        // A UTC-adjusted INT64 TIMESTAMP is stored by the BE as a local wall clock = UTC instant + the
+        // fixed session-tz offset. The gate above accepted it only when loadOffset is present, so capture
+        // that constant offset to apply per row group; every other mapping leaves it null (no shift).
+        ZoneOffset utcAdjustedOffset = null;
+        if (logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
+                && timestampAnnotation.isAdjustedToUTC()) {
+            utcAdjustedOffset = loadOffset.orElse(null);
+        }
+        return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn, utcAdjustedOffset);
     }
 
     /**
@@ -192,7 +214,8 @@ public final class ParquetRowGroupStatisticsReader {
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
             boolean typeDefinedColumnOrder,
-            Column sortKeyColumn) throws MetaTierUnavailableException {
+            Column sortKeyColumn,
+            Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
             case INT32 -> {
@@ -225,11 +248,12 @@ public final class ParquetRowGroupStatisticsReader {
                     yield starRocksPrimitive.isIntegerType();
                 }
                 if (logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
-                    // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
-                    // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
-                    // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
-                    yield !timestampAnnotation.isAdjustedToUTC()
-                            && starRocksPrimitive == PrimitiveType.DATETIME;
+                    // Local (non-UTC-adjusted) timestamps store their ticks verbatim as the DATETIME
+                    // wall clock. UTC-adjusted timestamps get a session-tz offset at load time; the meta
+                    // tier can match that boundary only for a fixed-offset load timezone (loadOffset
+                    // present) -- otherwise data tier.
+                    yield starRocksPrimitive == PrimitiveType.DATETIME
+                            && (!timestampAnnotation.isAdjustedToUTC() || loadOffset.isPresent());
                 }
                 // INT64-backed DECIMAL: same signed-order safety as INT32. Exact precision/scale.
                 yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
@@ -238,7 +262,13 @@ public final class ParquetRowGroupStatisticsReader {
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
-                    yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
+                    // VARCHAR and CHAR. The BE right-pads a CHAR routing key with '\0' to its fixed
+                    // width before routing (_padding_char_column, be/src/exec/data_sinks/tablet_sink.cpp),
+                    // but '\0' is the minimum byte, so fixed-width '\0'-padding is order-preserving under
+                    // the BE unsigned memcmp + shorter-prefix tiebreak, and a CHAR StringVariant is
+                    // canonicalized (truncated at the first '\0') to match the BE's strnlen view of a
+                    // CHAR value, so a CHAR boundary separates rows exactly as a VARCHAR one does.
+                    yield starRocksPrimitive.isCharFamily();
                 }
                 yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
@@ -284,23 +314,21 @@ public final class ParquetRowGroupStatisticsReader {
                     "Parquet stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
         }
-        // Parquet writers commonly truncate BINARY/string min/max (parquet-mr defaults
-        // to 64 bytes). Truncation does not just inflate spurious overlap — it can also
-        // hide real overlap when adjacent row groups share a long common prefix, which
-        // the downstream overlap detector cannot recover. Mark binary stats as
-        // truncated unconditionally so the pipeline falls back to data tier for string
-        // sort keys until column-index exactness flags are read explicitly. Numeric
-        // and boolean stats are always exact and stay false.
-        // Only string-annotated BINARY is truncation-prone (parquet-mr truncates long binary
-        // min/max at 64 bytes). Numeric stats — including BINARY-backed and FLBA-backed DECIMAL —
-        // are exact; marking a decimal truncated would force a needless data-tier fallback.
-        boolean truncated = location.parquetTypeName == PrimitiveTypeName.BINARY
-                && location.logicalAnnotation instanceof StringLogicalTypeAnnotation;
+        // String (BINARY+UTF8) chunk min/max are exact in practice: parquet-cpp and
+        // parquet-mr do not truncate chunk-level Statistics (parquet-mr's
+        // parquet.statistics.truncate.length defaults to Integer.MAX_VALUE; parquet-cpp
+        // drops stats past max_statistics_size, which the isEmpty() guard above already
+        // routes to data tier). Pre-split is a pure planning optimization: the BE routes
+        // every loaded row to a tablet by its true value, independent of these stats. So
+        // even under a hypothetical custom-truncating writer, a widened min/max can only
+        // skew split boundaries or trigger a conservative overlap fallback -- it can never
+        // misroute or drop data. All numeric/temporal stats are exact too, so this reader
+        // never marks a Parquet row group truncated.
         return new RowGroupStatistics(
                 new Tuple(List.of(minVariant)),
                 new Tuple(List.of(maxVariant)),
                 rowCount,
-                truncated);
+                /*truncated=*/ false);
     }
 
     private static Variant toVariant(Object parquetValue, SortKeyLocation location)
@@ -308,16 +336,22 @@ public final class ParquetRowGroupStatisticsReader {
         if (location.logicalAnnotation instanceof DateLogicalTypeAnnotation) {
             // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
             LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
-            MetaTierTemporalWindow.rejectDateOutsideWindow(date);
+            MetaTierTemporalWindow.rejectOutsideWindow(date);
             return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER_UNIX));
         }
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // A negative (pre-1970) tick lands before the DATETIME window's lower bound and is
-            // rejected here: the BE timestamp load does not yet decode a pre-1970 sub-second tick to
-            // the wall clock this floorDiv/floorMod boundary expects (see MetaTierTemporalWindow).
-            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(dateTime.toLocalDate());
+            if (timestampAnnotation.isAdjustedToUTC()) {
+                // UTC-adjusted ticks are a UTC instant; add the fixed session-tz offset (captured on the
+                // location, guaranteed present for an accepted UTC-adjusted timestamp) to get the stored
+                // local wall clock -- matching the BE load. A non-UTC-adjusted tick is already local.
+                dateTime = dateTime.plusSeconds(location.utcAdjustedOffset.getTotalSeconds());
+            }
+            // A pre-1970 (negative) tick is in window too: epochTicksToUtcDateTime's floorDiv/floorMod
+            // split matches the BE timestamp load, so the boundary equals the loaded value
+            // (see MetaTierTemporalWindow).
+            MetaTierTemporalWindow.rejectOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
@@ -345,6 +379,7 @@ public final class ParquetRowGroupStatisticsReader {
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
+        // A CHAR value is NUL-canonicalized in the StringVariant constructor; VARCHAR keeps raw bytes.
         return Variant.of(location.starRocksColumn.getType(), rendered);
     }
 
@@ -507,6 +542,6 @@ public final class ParquetRowGroupStatisticsReader {
 
     private record SortKeyLocation(
             ColumnPath path, PrimitiveTypeName parquetTypeName,
-            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn) {
+            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn, ZoneOffset utcAdjustedOffset) {
     }
 }

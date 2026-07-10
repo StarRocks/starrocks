@@ -36,8 +36,12 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
+#include "exec/stream_load/transaction_mgr.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/download_action.h"
@@ -45,11 +49,7 @@
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/runtime_env.h"
 
 class mg_connection;
 
@@ -84,7 +84,7 @@ static Status init_platform_env_for_stream_load_test(MetricRegistry* metrics, bo
 
 static ComputeEnvOptions make_stream_load_compute_env_options(MetricRegistry* metrics) {
     ComputeEnvOptions options;
-    options.global_env = GlobalEnv::GetInstance();
+    options.runtime_env = RuntimeEnv::GetInstance();
     options.metrics = metrics;
     options.store_paths = PlatformEnv::GetInstance()->store_path_registry()->store_path_roots();
     options.as_cn = true;

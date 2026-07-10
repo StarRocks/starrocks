@@ -222,6 +222,17 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
+    // Per-segment unique id embedded in this segment's vector index (.vi) filenames
+    // ("<segment_base>_<segment_vector_index_uid>_<index_id>.vi") so that bundle-file segments
+    // sharing one physical file across tablets still get distinct .vi files. Its VALUE is the id of
+    // the tablet that WROTE the segment, used purely as a unique key (do not treat it as a live
+    // tablet reference): it is RECORDED here, instead of using the reading tablet's id, so the name
+    // is stable and reader-agnostic -- carried verbatim by CopyFrom across tablet SPLIT so every
+    // child sharing this segment resolves the same .vi. Always stamped by the writer in the same
+    // step that records vector_index_ids, so a segment carrying vector_index_ids always carries this
+    // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
+    // DCHECK its presence -- there is no fall back to the reading tablet's id.
+    optional int64 segment_vector_index_uid = 13;
 }
 
 message RowsetMetadataPB {
@@ -379,6 +390,15 @@ message TxnLogPB {
         repeated FileMetaPB dels_meta = 19;
         // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
         repeated FileMetaPB rewrite_segments_meta = 20;
+        // Parallel to `dels_meta` (index by del_id): the in-rowset segment index each delete
+        // logically follows, so its rssid is `rowset_id + op_offset`. Used to preserve the
+        // in-transaction upsert/delete order. A UINT32_MAX entry means "not recorded" (e.g.
+        // spill / concurrent flush); readers then fall back to the max segment index (legacy
+        // "all deletes after all upserts"). Empty (size != dels_meta_size) means no del carries
+        // an offset -- the downgrade-safe default until the cluster is fully upgraded
+        // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
+        // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
+        repeated uint32 del_op_offsets = 21;
     }
 
     message OpCompaction {

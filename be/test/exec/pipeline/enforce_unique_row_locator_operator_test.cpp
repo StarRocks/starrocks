@@ -28,7 +28,6 @@
 #include "common/config_exec_fwd.h"
 #include "exec/enforce_unique_row_locator_node.h"
 #include "exec/pipeline/empty_set_operator.h"
-#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -348,14 +347,13 @@ protected:
         TTupleDescriptor t_tuple_desc;
         t_tuple_desc.id = 1;
         t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
-        // _file (slot 10, VARCHAR) and _pos (slot 11, BIGINT): decompose_to_pipeline
-        // resolves these by slot id to build the row-locator local-shuffle partition exprs.
+        // _file (slot 10, VARCHAR) and _pos (slot 11, BIGINT): the node stores these
+        // slot ids and the operator resolves them from each chunk's slot-id map.
         addSlot(t_desc_table, /*slot_id=*/10, /*parent_tuple=*/1, TPrimitiveType::VARCHAR);
         addSlot(t_desc_table, /*slot_id=*/11, /*parent_tuple=*/1, TPrimitiveType::BIGINT);
         ASSERT_OK(DescriptorTbl::create(&_state, &_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size));
         _fragment_ctx = std::make_shared<pipeline::FragmentContext>();
-        // decompose_to_pipeline resolves row-locator slots via context->runtime_state(),
-        // i.e. the fragment's runtime state, so it must carry the descriptor table.
+        // The fragment context mirrors the real pipeline-builder setup.
         auto fragment_state = std::make_shared<RuntimeState>();
         fragment_state->set_desc_tbl(_desc_tbl);
         _fragment_ctx->set_runtime_state(std::move(fragment_state));
@@ -453,19 +451,18 @@ TEST_F(EnforceUniqueRowLocatorNodeTest, DecomposeWithLimitAppendsLimitOperator) 
     node.close(&_state);
 }
 
-// With DOP > 1 and a child source not partitioned by the row-locator key, decompose
-// must interpolate a local shuffle by (_file, _pos) below the check; the interpolated
-// local-exchange source becomes the pipeline head feeding the enforce operator.
-TEST_F(EnforceUniqueRowLocatorNodeTest, DecomposeInterpolatesRowLocatorShuffleUnderParallelism) {
+// MERGE correctness depends on the merge join preserving local key distribution.
+// EnforceUniqueRowLocatorNode itself must not add a row-locator local shuffle:
+// NOT-MATCHED insert rows have NULL row-locator keys and should not be funneled by
+// a duplicate-check partition key they never use.
+TEST_F(EnforceUniqueRowLocatorNodeTest, DecomposeDoesNotInterpolateRowLocatorShuffleUnderParallelism) {
     EnforceUniqueRowLocatorNode node = make_node({10, 11});
     node._children.push_back(make_child());
 
     auto context = make_context(/*dop=*/4);
     ASSIGN_OR_ABORT(auto ops, node.decompose_to_pipeline(&context));
-    ASSERT_GE(ops.size(), 2);
-    // The child's plain source was not locally partitioned by (_file, _pos), so a local
-    // shuffle exchange must be interpolated: its source operator heads the pipeline.
-    EXPECT_NE(dynamic_cast<LocalExchangeSourceOperatorFactory*>(ops.front().get()), nullptr);
+    ASSERT_EQ(ops.size(), 2);
+    EXPECT_NE(dynamic_cast<EmptySetOperatorFactory*>(ops.front().get()), nullptr);
     EXPECT_NE(dynamic_cast<EnforceUniqueRowLocatorOperatorFactory*>(ops.back().get()), nullptr);
     node.close(&_state);
 }

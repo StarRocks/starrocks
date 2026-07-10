@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/isomorphic_batch_write.h"
+#include "exec/batch_write/isomorphic_batch_write.h"
 
 #include <gtest/gtest.h>
 
@@ -24,9 +24,9 @@
 #include "common/util/bthreads/executor.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/http_load_params.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
 
 namespace starrocks {
 

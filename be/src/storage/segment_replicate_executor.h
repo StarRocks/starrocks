@@ -22,9 +22,9 @@
 #include "base/concurrency/spinlock.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

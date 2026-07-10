@@ -32,8 +32,8 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -62,7 +62,7 @@ public:
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
 
         _load_channel_mgr =
-                std::make_unique<LoadChannelMgr>(_tablet_manager.get(), GlobalEnv::GetInstance()->diagnose_daemon(),
+                std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
                                                  PlatformEnv::GetInstance()->brpc_stub_cache());
 
         auto metadata = new_tablet_metadata(10086);
@@ -199,7 +199,7 @@ protected:
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel = std::make_shared<LoadChannel>(
-                _load_channel_mgr.get(), _tablet_manager.get(), GlobalEnv::GetInstance()->diagnose_daemon(),
+                _load_channel_mgr.get(), _tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
                 PlatformEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(), string(), 1000,
                 std::move(load_mem_tracker));
     }

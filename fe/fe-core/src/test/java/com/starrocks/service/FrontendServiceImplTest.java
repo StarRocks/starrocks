@@ -115,7 +115,6 @@ import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -1555,7 +1554,7 @@ public class FrontendServiceImplTest {
         request.keys = Lists.newArrayList("mysql_server_version");
         request.values = Lists.newArrayList("5.1.1");
 
-        TSetConfigResponse result = impl.setConfig(request);
+        impl.setConfig(request);
         Assertions.assertEquals("5.1.1", GlobalVariable.version);
 
         request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
@@ -1809,8 +1808,8 @@ public class FrontendServiceImplTest {
         loadRequest.setAuth_code(100);
         loadRequest.setUser("user1");
         loadRequest.setUser_ip("127.0.0.1");
-        TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
-        TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
     }
 
     @Test

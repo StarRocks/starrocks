@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
 
 #include <gtest/gtest.h>
 

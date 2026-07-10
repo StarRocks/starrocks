@@ -20,15 +20,15 @@
 
 #include "column/global_dict/config.h"
 #include "compute_env/runtime_range_pruner.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_in_filter.h"
-#include "storage/primitive/column_and_predicate.h"
-#include "storage/primitive/column_or_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/column_value_range.h"
-#include "storage/primitive/filter_condition.h"
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/column_and_predicate.h"
+#include "storage_primitive/column_or_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/column_value_range.h"
+#include "storage_primitive/filter_condition.h"
+#include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
 namespace detail {

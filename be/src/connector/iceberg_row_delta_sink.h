@@ -17,16 +17,15 @@
 #include <memory>
 
 #include "common/status.h"
-#include "connector/connector_chunk_sink.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/iceberg_delete_sink.h"
-#include "connector/sink_memory_manager.h"
 
 namespace starrocks::connector {
 
 // Context for IcebergRowDeltaSink
 // Composes delete-sink and data-sink contexts plus routing column indices.
-struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
+struct IcebergRowDeltaSinkContext : public ConnectorSinkContext {
     ~IcebergRowDeltaSinkContext() override = default;
 
     // Sub-contexts for creating underlying sinks
@@ -37,22 +36,19 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
     // The default -1 means no extra op_code column (such as UPDATE operation),
     // every row goes to both delete and data sub-sinks.
     int32_t op_code_index = -1;
-
-    // Query-level memory manager for creating child managers for sub-sinks.
-    // Set by ConnectorSinkOperatorFactory via set_sink_mem_mgr() after construction.
-    SinkMemoryManager* sink_mem_mgr = nullptr;
-
-    void set_sink_mem_mgr(SinkMemoryManager* mgr) override { sink_mem_mgr = mgr; }
 };
 
 // IcebergRowDeltaSinkProvider creates IcebergRowDeltaSink for Iceberg row-delta operations.
 // It composes an IcebergDeleteSinkProvider and an IcebergChunkSinkProvider.
-class IcebergRowDeltaSinkProvider final : public ConnectorChunkSinkProvider {
+class IcebergRowDeltaSinkProvider final : public ConnectorSinkProvider {
 public:
+    explicit IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx);
     ~IcebergRowDeltaSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergRowDeltaSinkContext> _ctx;
 };
 
 // IcebergRowDeltaSink routes rows from an input chunk to a delete sink and a data sink.
@@ -64,7 +60,7 @@ public:
 //   1 = delete only (position delete)
 //   2 = update (delete old row + insert new row)
 //   3 = insert only (new data row)
-class IcebergRowDeltaSink final : public ConnectorChunkSink {
+class IcebergRowDeltaSink final : public PartitionedConnectorChunkSink {
 public:
     // Op code constants
     static constexpr int8_t OP_NO_OP = 0;
@@ -72,12 +68,13 @@ public:
     static constexpr int8_t OP_UPDATE = 2;
     static constexpr int8_t OP_INSERT = 3;
 
-    IcebergRowDeltaSink(std::unique_ptr<ConnectorChunkSink> delete_sink, std::unique_ptr<ConnectorChunkSink> data_sink,
-                        int32_t op_code_index, SinkMemoryManager* sink_mem_mgr, RuntimeState* state);
+    IcebergRowDeltaSink(std::unique_ptr<ConnectorSink> delete_sink, std::unique_ptr<ConnectorSink> data_sink,
+                        int32_t op_code_index, RuntimeState* state);
 
     ~IcebergRowDeltaSink() override = default;
 
-    Status init() override;
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                SinkMemoryManager* sink_mem_mgr) override;
 
     void callback_on_commit(const CommitResult& result) override;
 
@@ -90,12 +87,10 @@ public:
     bool is_finished() override;
 
 private:
-    std::unique_ptr<ConnectorChunkSink> _delete_sink;
-    std::unique_ptr<ConnectorChunkSink> _data_sink;
+    std::unique_ptr<ConnectorSink> _delete_sink;
+    std::unique_ptr<ConnectorSink> _data_sink;
 
     int32_t _op_code_index;
-
-    SinkMemoryManager* _sink_mem_mgr = nullptr;
 
     // Reused across add() calls to avoid per-chunk heap allocations
     std::vector<uint32_t> _delete_rows;

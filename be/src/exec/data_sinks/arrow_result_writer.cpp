@@ -22,12 +22,12 @@
 #include "column/const_column.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
-#include "exec/arrow/result_to_arrow_converter.h"
+#include "exec/exec_env.h"
+#include "exec_primitive/arrow/result_to_arrow_converter.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "rapidjson/writer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

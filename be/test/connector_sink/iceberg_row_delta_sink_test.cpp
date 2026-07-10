@@ -27,28 +27,30 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "connector/iceberg_connector.h"
+#include "connector_primitive/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
-// A mock ConnectorChunkSink that records chunks passed to add().
-class MockChunkSink : public ConnectorChunkSink {
+// A mock ConnectorSink that records chunks passed to add().
+class MockChunkSink : public PartitionedConnectorChunkSink {
 public:
     explicit MockChunkSink(RuntimeState* state)
-            : ConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true) {}
+            : PartitionedConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true) {}
 
     void callback_on_commit(const CommitResult& result) override {}
 
-    // Skip the base class setup (profile / writer factory / op_mem_mgr wiring) that a
-    // mock doesn't need. The outer IcebergRowDeltaSink's init() still drives real
-    // assignments against `_op_mem_mgr` before invoking this, which is what the init()
-    // test inspects via get_op_mem_mgr().
-    Status init() override { return Status::OK(); }
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                SinkMemoryManager* sink_mem_mgr) override {
+        return PartitionedConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+    }
 
     Status add(const ChunkPtr& chunk) override {
         received_chunks.push_back(chunk);
@@ -65,7 +67,7 @@ public:
 
     bool is_finished() override { return finished; }
 
-    // Expose protected _op_mem_mgr so tests can assert init() wired it.
+    // Expose protected _op_mem_mgr so tests can assert provider-time wiring.
     SinkOperatorMemoryManager* get_op_mem_mgr() const { return _op_mem_mgr; }
 
     std::vector<ChunkPtr> received_chunks;
@@ -193,7 +195,7 @@ protected:
         auto* data_ptr = data_sink.get();
 
         auto row_delta_sink = std::make_unique<IcebergRowDeltaSink>(std::move(delete_sink), std::move(data_sink),
-                                                                    op_code_index, nullptr, _runtime_state.get());
+                                                                    op_code_index, _runtime_state.get());
 
         return {std::move(row_delta_sink), delete_ptr, data_ptr};
     }
@@ -214,14 +216,12 @@ TEST_F(IcebergRowDeltaSinkTest, create_row_delta_sink) {
     auto* row_delta_sink = dynamic_cast<IcebergRowDeltaSink*>(sink.get());
     ASSERT_NE(row_delta_sink, nullptr);
 
-    // Verify that a provider rejects a wrong context type
-    auto provider = std::make_unique<IcebergRowDeltaSinkProvider>();
+    // Verify that the connector rejects a wrong context type before constructing a provider.
+    IcebergConnector connector;
     auto bad_ctx = std::make_shared<IcebergDeleteSinkContext>();
-    bad_ctx->fragment_context = _fragment_context.get();
-    auto result = provider->create_chunk_sink(bad_ctx, 0);
+    auto result = connector.create_sink_provider(ConnectorSinkProviderType::ROW_DELTA, bad_ctx);
     ASSERT_FALSE(result.ok());
-    EXPECT_THAT(std::string(result.status().message()),
-                testing::HasSubstr("context is not IcebergRowDeltaSinkContext"));
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("requires IcebergRowDeltaSinkContext"));
 }
 
 // Test 2: Verify op_code routing sends rows to correct sub-sinks
@@ -338,10 +338,9 @@ TEST_F(IcebergRowDeltaSinkTest, rollback_forwards_to_both_sub_sinks) {
     EXPECT_EQ(data_mock->rollback_count, 1);
 }
 
-// Test 7: Verify init() creates a child SinkOperatorMemoryManager for each sub-sink
-// when a SinkMemoryManager is supplied, so memory pressure logic can see both
-// sub-sinks' writer lists (OOM-safety wiring described in the commit).
-TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
+// Test 7: Verify init() gives the composite sink and both sub-sinks distinct
+// SinkOperatorMemoryManagers.
+TEST_F(IcebergRowDeltaSinkTest, init_wires_distinct_outer_and_sub_sink_mem_managers) {
     auto query_pool_tracker =
             std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest_pool");
     auto query_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY, -1, "IcebergRowDeltaSinkTest_query");
@@ -352,19 +351,18 @@ TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
     auto* delete_ptr = delete_sink.get();
     auto* data_ptr = data_sink.get();
 
-    IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, &mgr,
-                             _runtime_state.get());
-    // Provide an outer SinkOperatorMemoryManager so the base init() path doesn't
-    // dereference a null pointer and so the add_candidates() branch is exercised.
-    sink.set_operator_mem_mgr(mgr.create_child_manager());
+    IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, _runtime_state.get());
+    formats::AsyncFlushStreamPoller poller;
 
-    ASSERT_OK(sink.init());
+    ASSERT_OK(sink.init(&poller, nullptr, &mgr));
 
-    // Each sub-sink should now have its own child manager, distinct from each other
-    // and from nullptr. This confirms lines 40–43 of iceberg_row_delta_sink.cpp ran.
+    auto* outer_mgr = sink.op_mem_mgr();
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), nullptr);
     EXPECT_NE(data_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_NE(outer_mgr, nullptr);
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), data_ptr->get_op_mem_mgr());
+    EXPECT_NE(delete_ptr->get_op_mem_mgr(), outer_mgr);
+    EXPECT_NE(data_ptr->get_op_mem_mgr(), outer_mgr);
 }
 
 // Test 8: When every row in a chunk routes to the same sub-sink (pure DELETE or

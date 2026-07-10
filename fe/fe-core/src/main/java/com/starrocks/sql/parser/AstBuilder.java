@@ -232,6 +232,7 @@ import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
@@ -1104,12 +1105,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     visit(rollupItemContext.dupKeys().identifierList().identifier(), Identifier.class);
             dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
         }
+        List<String> sortKeys = null;
+        if (rollupItemContext.rollupOrderByDesc() != null) {
+            final List<Identifier> sortIdentifiers =
+                    visit(rollupItemContext.rollupOrderByDesc().identifierList().identifier(), Identifier.class);
+            sortKeys = sortIdentifiers.stream().map(Identifier::getValue).collect(toList());
+        }
         String baseRollupName = rollupItemContext.fromRollup() != null ?
                 ((Identifier) visit(rollupItemContext.fromRollup().identifier())).getValue() : null;
         Map<String, String> properties = rollupItemContext.properties() == null ?
                 null : getCaseSensitiveProperties(rollupItemContext.properties());
         return new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                dupKeys, baseRollupName,
+                dupKeys, sortKeys, baseRollupName,
                 properties, createPos(rollupItemContext));
     }
 
@@ -1297,7 +1304,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     tempTableRef,
                     null,
                     context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                    "",
+                    context.engineDesc() == null ? "" :
+                            ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                     null,
                     context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                     partitionDesc,
@@ -1327,7 +1335,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 tableRef,
                 null,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                "",
+                context.engineDesc() == null ? "" :
+                        ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 null,
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 partitionDesc,
@@ -1901,7 +1910,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         boolean isSecurity = false;
-        if (context.SECURITY() != null) {
+        boolean securityExplicit = context.SECURITY() != null;
+        if (securityExplicit) {
             if (context.NONE() != null) {
                 isSecurity = false;
             } else if (context.INVOKER() != null) {
@@ -1916,6 +1926,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
+                securityExplicit,
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
@@ -2454,6 +2465,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             alterTableClause = (DropMVColumnClause) visit(context.dropMVColumnClause());
         }
 
+        // reorder columns (sort key) of materialized view
+        if (context.reorderColumnsClause() != null) {
+            alterTableClause = (ReorderColumnsClause) visit(context.reorderColumnsClause());
+        }
+
         return new AlterMaterializedViewStmt(mvTableRef, alterTableClause, createPos(context));
     }
 
@@ -2868,8 +2884,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitShowRoutineLoadStatement(
             com.starrocks.sql.parser.StarRocksParser.ShowRoutineLoadStatementContext context) {
         boolean isVerbose = context.ALL() != null;
-        String database = null;
-        StarRocksParser.ShowPredicateClausesContext showPredicateClauses = context.showPredicateClauses();
         Expr where = getWhereFrom(context.showPredicateClauses());
         List<OrderByElement> orderByElements = getOrderByFrom(context.showPredicateClauses());
         LimitElement limitElement = getLimitFrom(context.showPredicateClauses());
@@ -10014,6 +10028,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 loadPropertyList.add(importColumnsStmt);
             }
 
+            if (loadPropertiesContext.includeMetadata() != null) {
+                loadPropertyList.add(visit(loadPropertiesContext.includeMetadata()));
+            }
+
             if (loadPropertiesContext.expression() != null) {
                 Expr where = (Expr) visit(loadPropertiesContext.expression());
                 loadPropertyList.add(new ImportWhereStmt(where, where.getPos()));
@@ -10044,6 +10062,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             columns.add(columnDesc);
         }
         return new ImportColumnsStmt(columns, createPos(importColumnsContext));
+    }
+
+    @Override
+    public ParseNode visitIncludeMetadata(
+            com.starrocks.sql.parser.StarRocksParser.IncludeMetadataContext context) {
+        List<ImportMetadataStmt.Item> items = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.MetadataItemContext itemContext : context.metadataItem()) {
+            com.starrocks.sql.parser.StarRocksParser.MetaKeyContext metaKeyContext = itemContext.metaKey();
+            // metaKey is KEY | PARTITION | identifier; the KEY/PARTITION tokens are read via getText(),
+            // a free-form key (OFFSET, HEADERS, MESSAGE_ID, ...) via the identifier (strips backquotes).
+            // Case is normalized later, at the META_KEYS lookup in RoutineLoadMetadata.validateIncludeMetadata.
+            String key;
+            if (metaKeyContext.identifier() != null) {
+                key = ((Identifier) visit(metaKeyContext.identifier())).getValue();
+            } else {
+                key = metaKeyContext.getText();
+            }
+            String alias = ((Identifier) visit(itemContext.alias)).getValue();
+            items.add(new ImportMetadataStmt.Item(key, alias, createPos(itemContext)));
+        }
+        return new ImportMetadataStmt(items, createPos(context));
     }
 
     private Map<String, String> getJobProperties(

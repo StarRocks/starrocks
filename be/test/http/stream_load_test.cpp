@@ -56,18 +56,18 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/runtime_env.h"
 
 class mg_connection;
 
@@ -103,7 +103,7 @@ static Status init_platform_env_for_stream_load_test(MetricRegistry* metrics, bo
 
 static ComputeEnvOptions make_stream_load_compute_env_options(MetricRegistry* metrics) {
     ComputeEnvOptions options;
-    options.global_env = GlobalEnv::GetInstance();
+    options.runtime_env = RuntimeEnv::GetInstance();
     options.metrics = metrics;
     options.store_paths = PlatformEnv::GetInstance()->store_path_registry()->store_path_roots();
     options.as_cn = true;
@@ -741,6 +741,21 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
 
         EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
     }
+}
+
+TEST_F(StreamLoadActionTest, format_arrow) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+    HttpRequest request(_evhttp_req);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_FORMAT_KEY, "arrow");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request.set_handler(&action);
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_EQ(TFileFormatType::FORMAT_ARROW, ctx->format);
 }
 
 } // namespace starrocks

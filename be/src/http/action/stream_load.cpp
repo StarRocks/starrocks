@@ -65,6 +65,11 @@
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/batch_write/batch_write_mgr.h"
+#include "exec/batch_write/batch_write_util.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -75,13 +80,8 @@
 #include "platform/http/http_request.h"
 #include "platform/http/http_response.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/batch_write/batch_write_util.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
 #include "simdjson.h"
 
 namespace starrocks {
@@ -105,6 +105,8 @@ static TFileFormatType::type parse_format(const std::string& format_str) {
         return TFileFormatType::FORMAT_CSV_DEFLATE;
     } else if (boost::iequals(format_str, "zstd")) {
         return TFileFormatType::FORMAT_CSV_ZSTD;
+    } else if (boost::iequals(format_str, "arrow")) {
+        return TFileFormatType::FORMAT_ARROW;
     }
     return TFileFormatType::FORMAT_UNKNOWN;
 }
@@ -118,6 +120,7 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     case TFileFormatType::FORMAT_CSV_DEFLATE:
     case TFileFormatType::FORMAT_CSV_ZSTD:
     case TFileFormatType::FORMAT_JSON:
+    case TFileFormatType::FORMAT_ARROW:
         return true;
     default:
         return false;

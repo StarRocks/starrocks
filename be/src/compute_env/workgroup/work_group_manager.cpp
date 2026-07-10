@@ -22,7 +22,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "glog/logging.h"
 #include "runtime/mem_tracker.h"
 

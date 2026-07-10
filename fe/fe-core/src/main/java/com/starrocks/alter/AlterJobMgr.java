@@ -692,6 +692,11 @@ public class AlterJobMgr {
                 view.setOriginalViewDef(originalViewDef);
                 view.setNewFullSchema(alterViewInfo.getNewFullSchema());
                 view.setComment(alterViewInfo.getComment());
+                // CREATE OR REPLACE VIEW persists the redefined SQL SECURITY characteristic atomically with the
+                // definition.
+                if (alterViewInfo.isUpdateSecurity()) {
+                    view.setSecurity(alterViewInfo.getSecurity());
+                }
             });
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()));
@@ -713,6 +718,9 @@ public class AlterJobMgr {
             view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
             view.setNewFullSchema(alterViewInfo.getNewFullSchema());
             view.setComment(alterViewInfo.getComment());
+            if (alterViewInfo.isUpdateSecurity()) {
+                view.setSecurity(alterViewInfo.getSecurity());
+            }
             LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);

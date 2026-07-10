@@ -27,17 +27,17 @@
 #include "base/utility/defer_op.h"
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "common/system/cpu_info.h"
 #include "common/system/master_info.h"
 #include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/load/engine_batch_load_task.h"
+#include "exec/exec_env.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "platform/store_path.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
-#include "storage/primitive/storage_define.h"
+#include "runtime/runtime_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
 #include "testutil/local_snapshot_client.h"
@@ -279,7 +279,7 @@ TEST_F(AgentTaskTest, batch_load_task_reports_invalid_push_type_through_storage_
     push_req.__set_push_type(static_cast<TPushType::type>(-1));
 
     std::vector<TTabletInfo> tablet_infos;
-    EngineBatchLoadTask task(push_req, &tablet_infos, 1, GlobalEnv::GetInstance()->load_mem_tracker());
+    EngineBatchLoadTask task(push_req, &tablet_infos, 1, RuntimeEnv::GetInstance()->load_mem_tracker());
     Status st = StorageEngine::instance()->execute_task(&task);
 
     ASSERT_TRUE(st.is_invalid_argument()) << st;

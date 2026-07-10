@@ -18,19 +18,24 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/connector_chunk_sink.h"
-#include "connector/partition_chunk_writer.h"
+#include "connector/common/partition_chunk_writer.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 #include "formats/file_writer.h"
 
 namespace starrocks {
+class PriorityThreadPool;
 class RuntimeState;
+
+namespace pipeline {
+class FragmentContext;
+} // namespace pipeline
 
 namespace connector {
 struct SortOrdering;
 
 // Context for IcebergDeleteSink
 // Contains configuration needed to write delete files
-struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
+struct IcebergDeleteSinkContext : public ConnectorSinkContext {
     std::string path;
     std::vector<std::string> column_names;
     std::vector<std::string> partition_column_names;
@@ -72,18 +77,21 @@ struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
 };
 
 // IcebergDeleteSinkProvider creates IcebergDeleteSink for writing position delete files
-class IcebergDeleteSinkProvider final : public ConnectorChunkSinkProvider {
+class IcebergDeleteSinkProvider final : public ConnectorSinkProvider {
 public:
+    explicit IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx);
     ~IcebergDeleteSinkProvider() override = default;
 
     // Create a sink for writing delete files
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergDeleteSinkContext> _ctx;
 };
 
 // IcebergDeleteSink writes position delete files for Iceberg Merge-On-Read operations.
 // It receives chunks with columns: file_path, row_position and writes them to Parquet delete files.
-class IcebergDeleteSink final : public ConnectorChunkSink {
+class IcebergDeleteSink final : public PartitionedConnectorChunkSink {
 public:
     IcebergDeleteSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,

@@ -17,7 +17,7 @@
 #include "column/chunk_factory.h"
 #include "column/serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 

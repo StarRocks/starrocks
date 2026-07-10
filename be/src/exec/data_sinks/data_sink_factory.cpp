@@ -16,7 +16,6 @@
 #include <sstream>
 
 #include "common/logging.h"
-#include "exec/data_sink.h"
 #include "exec/data_sinks/blackhole_table_sink.h"
 #include "exec/data_sinks/data_stream_sender.h"
 #include "exec/data_sinks/dictionary_cache_sink.h"
@@ -24,6 +23,7 @@
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec/data_sinks/multi_olap_table_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
+#include "exec_primitive/data_sink.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/InternalService_types.h"

@@ -41,13 +41,13 @@
 
 #include "column/chunk.h"
 #include "common/logging.h"
-#include "exec/arrow/result_to_arrow_converter.h"
+#include "exec/exec_env.h"
+#include "exec_primitive/arrow/result_to_arrow_converter.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

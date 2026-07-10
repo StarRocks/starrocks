@@ -20,16 +20,35 @@
 
 namespace starrocks::connector {
 
-std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_data_sink_provider() const {
-    return std::make_unique<IcebergChunkSinkProvider>();
-}
-
-std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_delete_sink_provider() const {
-    return std::make_unique<connector::IcebergDeleteSinkProvider>();
-}
-
-std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_row_delta_sink_provider() const {
-    return std::make_unique<IcebergRowDeltaSinkProvider>();
+StatusOr<std::unique_ptr<ConnectorSinkProvider>> IcebergConnector::create_sink_provider(
+        ConnectorSinkProviderType type, std::shared_ptr<ConnectorSinkContext> context) const {
+    switch (type) {
+    case ConnectorSinkProviderType::DATA: {
+        auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
+        if (ctx == nullptr) {
+            return Status::InternalError("Iceberg connector data sink requires IcebergChunkSinkContext");
+        }
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergChunkSinkProvider>(std::move(ctx));
+        return provider;
+    }
+    case ConnectorSinkProviderType::DELETE: {
+        auto ctx = std::dynamic_pointer_cast<IcebergDeleteSinkContext>(context);
+        if (ctx == nullptr) {
+            return Status::InternalError("Iceberg connector delete sink requires IcebergDeleteSinkContext");
+        }
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergDeleteSinkProvider>(std::move(ctx));
+        return provider;
+    }
+    case ConnectorSinkProviderType::ROW_DELTA: {
+        auto ctx = std::dynamic_pointer_cast<IcebergRowDeltaSinkContext>(context);
+        if (ctx == nullptr) {
+            return Status::InternalError("Iceberg connector row-delta sink requires IcebergRowDeltaSinkContext");
+        }
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergRowDeltaSinkProvider>(std::move(ctx));
+        return provider;
+    }
+    }
+    return Status::NotSupported("Unknown Iceberg connector sink provider type");
 }
 
 } // namespace starrocks::connector

@@ -18,9 +18,13 @@
 
 #include "base/url_coding.h"
 #include "common/config_connector_sink_fwd.h"
-#include "connector/async_flush_stream_poller.h"
+#include "common/logging.h"
+#include "connector/common/utils.h"
+#include "connector/iceberg_utils.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
@@ -28,7 +32,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 
@@ -36,43 +39,46 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                                    RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, true),
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)) {}
 
+IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
+
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(result.rollback_action);
-    if (result.io_status.ok()) {
-        _state->update_num_rows_load_sink(result.file_statistics.record_count);
+    push_rollback_action(result.file_result.rollback_action);
+    if (result.file_result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
 
         TIcebergColumnStats iceberg_column_stats;
-        if (result.file_statistics.column_sizes.has_value()) {
-            iceberg_column_stats.__set_column_sizes(result.file_statistics.column_sizes.value());
+        if (result.file_result.file_statistics.column_sizes.has_value()) {
+            iceberg_column_stats.__set_column_sizes(result.file_result.file_statistics.column_sizes.value());
         }
-        if (result.file_statistics.value_counts.has_value()) {
-            iceberg_column_stats.__set_value_counts(result.file_statistics.value_counts.value());
+        if (result.file_result.file_statistics.value_counts.has_value()) {
+            iceberg_column_stats.__set_value_counts(result.file_result.file_statistics.value_counts.value());
         }
-        if (result.file_statistics.null_value_counts.has_value()) {
-            iceberg_column_stats.__set_null_value_counts(result.file_statistics.null_value_counts.value());
+        if (result.file_result.file_statistics.null_value_counts.has_value()) {
+            iceberg_column_stats.__set_null_value_counts(result.file_result.file_statistics.null_value_counts.value());
         }
-        if (result.file_statistics.lower_bounds.has_value()) {
-            iceberg_column_stats.__set_lower_bounds(result.file_statistics.lower_bounds.value());
+        if (result.file_result.file_statistics.lower_bounds.has_value()) {
+            iceberg_column_stats.__set_lower_bounds(result.file_result.file_statistics.lower_bounds.value());
         }
-        if (result.file_statistics.upper_bounds.has_value()) {
-            iceberg_column_stats.__set_upper_bounds(result.file_statistics.upper_bounds.value());
+        if (result.file_result.file_statistics.upper_bounds.has_value()) {
+            iceberg_column_stats.__set_upper_bounds(result.file_result.file_statistics.upper_bounds.value());
         }
 
         TIcebergDataFile iceberg_data_file;
         iceberg_data_file.__set_column_stats(iceberg_column_stats);
-        iceberg_data_file.__set_partition_path(PathUtils::get_parent_path(result.location));
-        iceberg_data_file.__set_path(result.location);
-        iceberg_data_file.__set_format(result.format);
-        iceberg_data_file.__set_record_count(result.file_statistics.record_count);
-        iceberg_data_file.__set_file_size_in_bytes(result.file_statistics.file_size);
-        iceberg_data_file.__set_partition_null_fingerprint(result.extra_data);
+        iceberg_data_file.__set_partition_path(PathUtils::get_parent_path(result.file_result.location));
+        iceberg_data_file.__set_path(result.file_result.location);
+        iceberg_data_file.__set_format(result.file_result.format);
+        iceberg_data_file.__set_record_count(result.file_result.file_statistics.record_count);
+        iceberg_data_file.__set_file_size_in_bytes(result.file_result.file_statistics.file_size);
+        iceberg_data_file.__set_partition_null_fingerprint(result.partition_null_fingerprint);
 
-        if (result.file_statistics.split_offsets.has_value()) {
-            iceberg_data_file.__set_split_offsets(result.file_statistics.split_offsets.value());
+        if (result.file_result.file_statistics.split_offsets.has_value()) {
+            iceberg_data_file.__set_split_offsets(result.file_result.file_statistics.split_offsets.value());
         }
 
         TSinkCommitInfo commit_info;
@@ -80,14 +86,13 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         _state->add_sink_commit_info(commit_info);
 
         COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
-        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
-        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_result.file_statistics.file_size);
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
@@ -116,7 +121,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
-                        ctx->fragment_context,
+                        runtime_state,
                         query_execution_services->runtime->connector_sink_spill_executor,
                         ctx->override_tuple_desc != nullptr
                                 ? ctx->override_tuple_desc
@@ -132,9 +137,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     }
 
-    return std::make_unique<connector::IcebergChunkSink>(partition_columns, transform_exprs,
-                                                         std::move(partition_evaluators),
-                                                         std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::IcebergChunkSink>(partition_columns, transform_exprs,
+                                                              std::move(partition_evaluators),
+                                                              std::move(partition_chunk_writer_factory), runtime_state);
+    return sink;
 }
 
 Status IcebergChunkSink::add(const ChunkPtr& chunk) {
@@ -142,13 +148,13 @@ Status IcebergChunkSink::add(const ChunkPtr& chunk) {
     bool partitioned = !_partition_column_names.empty();
     std::vector<int8_t> partition_field_null_list;
     if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
+        ASSIGN_OR_RETURN(partition, IcebergUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators,
                                             dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk.get(),
                                             _support_null_partition, partition_field_null_list));
     }
 
-    RETURN_IF_ERROR(ConnectorChunkSink::write_partition_chunk(partition, partition_field_null_list, chunk));
+    RETURN_IF_ERROR(PartitionedConnectorChunkSink::write_partition_chunk(partition, partition_field_null_list, chunk));
     return Status::OK();
 }
 

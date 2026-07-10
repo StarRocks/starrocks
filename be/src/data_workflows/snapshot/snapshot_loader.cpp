@@ -42,6 +42,7 @@
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
 #include "common/system/master_info.h"
+#include "exec/exec_env.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -52,7 +53,6 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "platform/broker_mgr.h"
 #include "platform/fs_broker.h"
-#include "runtime/exec_env.h"
 #include "storage/index/index_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"

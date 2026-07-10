@@ -64,7 +64,7 @@ public class GtidGeneratorTest {
 
     @Test
     public void testNextGtidResetsSequenceOnNewMillisecond() throws InterruptedException {
-        long firstGtid = gtidGenerator.nextGtid();
+        gtidGenerator.nextGtid();
         Thread.sleep(1); // Ensure the next GTID is in a new millisecond
         long nextGtid = gtidGenerator.nextGtid();
 

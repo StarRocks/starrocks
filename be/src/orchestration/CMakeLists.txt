@@ -43,7 +43,7 @@ target_link_libraries(Orchestration PUBLIC
     ConnectorPrimitive
     Platform
     ColumnCore
-    RuntimeCore
+    Runtime
     Common
     Base
     Gutil

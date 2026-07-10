@@ -16,8 +16,8 @@
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/chunks_sorter_full_sort.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/spillable_chunks_sorter_sort.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(chunk_sorter_spill_on_set_finishing);

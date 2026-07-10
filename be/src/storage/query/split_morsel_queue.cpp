@@ -19,7 +19,6 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/primitive/range.h"
 #include "storage/query/olap_scan_range.h"
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
@@ -27,6 +26,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::pipeline {
 
@@ -643,7 +643,9 @@ BaseRowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<Base
 }
 
 SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
-    const auto& segments = rowset->get_segments();
+    // get_non_null_segments() drops any lost-segment placeholders (experimental_lake_ignore_lost_segment).
+    // Logical split does not need positional alignment, so this compacted view is fine.
+    const auto segments = rowset->get_non_null_segments();
     if (segments.empty()) {
         return nullptr;
     }
@@ -661,9 +663,13 @@ SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rows
 StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRowset* rowset) {
     std::vector<SegmentSharedPtr> segments;
     if (rowset->is_overlapped()) {
-        segments.emplace_back(_find_largest_segment(rowset));
+        // _find_largest_segment returns nullptr only if the whole rowset was lost
+        // (experimental_lake_ignore_lost_segment) -- then there is no segment to add.
+        if (auto largest = _find_largest_segment(rowset); largest != nullptr) {
+            segments.emplace_back(std::move(largest));
+        }
     } else {
-        segments = rowset->get_segments();
+        segments = rowset->get_non_null_segments();
     }
 
     for (const auto& segment : segments) {

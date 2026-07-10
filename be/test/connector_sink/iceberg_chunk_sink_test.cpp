@@ -27,17 +27,20 @@
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
-#include "connector/connector_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
+#include "connector/common/utils.h"
+#include "connector/iceberg_utils.h"
+#include "connector_primitive/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
+using FileCommitResult = formats::FileCommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
@@ -75,7 +78,7 @@ public:
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
     MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
-    MOCK_METHOD(CommitResult, close, (), (override));
+    MOCK_METHOD(FileCommitResult, close, (), (override));
 };
 
 class MockFile final : public WritableFile {
@@ -90,7 +93,7 @@ public:
     MOCK_METHOD(const std::string&, filename, (), (const, override));
 };
 
-class MockPoller : public AsyncFlushStreamPoller {
+class MockPoller : public formats::AsyncFlushStreamPoller {
 public:
     MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
 };
@@ -106,6 +109,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         WriterAndStream ws;
         ws.writer = std::make_unique<MockWriter>();
         ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        EXPECT_CALL(*mock_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_writer_factory, create(::testing::_))
                 .WillRepeatedly(::testing::Return(ByMove(StatusOr<WriterAndStream>(std::move(ws)))));
 
@@ -117,8 +121,8 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 partition_column_names, transform, std::move(partition_column_evaluators),
                 std::move(partition_chunk_writer_factory), _runtime_state);
         auto poller = MockPoller();
-        sink->set_io_poller(&poller);
-        sink->init_profile();
+        SinkMemoryManager mgr(nullptr, nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
 
         Columns partition_key_columns;
         ChunkPtr chunk = std::make_shared<Chunk>();
@@ -138,15 +142,18 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto ret = sink->add(chunk);
         EXPECT_EQ(ret.ok(), true);
         sink->callback_on_commit(CommitResult{
-                .io_status = Status::OK(),
-                .format = formats::PARQUET,
-                .file_statistics =
+                .file_result =
                         {
-                                .record_count = 100,
+                                .io_status = Status::OK(),
+                                .format = formats::PARQUET,
+                                .file_statistics =
+                                        {
+                                                .record_count = 100,
+                                        },
+                                .location = "path/to/directory/data.parquet",
                         },
-                .location = "path/to/directory/data.parquet",
         }
-                                         .set_extra_data("0"));
+                                         .set_partition_null_fingerprint("0"));
         sink->set_status(Status::OK());
 
         EXPECT_EQ(sink->is_finished(), true);
@@ -157,7 +164,6 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
 
 TEST_F(IcebergChunkSinkTest, test_factory) {
     SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
-    IcebergChunkSinkProvider provider;
 
     {
         auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
@@ -172,10 +178,13 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        IcebergChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -191,10 +200,12 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_ERROR(sink->init()); // format is not supported
+        IcebergChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_ERROR(sink->init(&poller, nullptr, &mgr)); // format is not supported
     }
 }
 
@@ -204,12 +215,6 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
     EXPECT_EQ("123", str128);
     str128 = integer_to_string(-val);
     EXPECT_EQ("-123", str128);
-
-    auto format_dec = HiveUtils::format_decimal_value<int32_t>(123, 2);
-    EXPECT_EQ("1.23", format_dec.value());
-    format_dec = HiveUtils::format_decimal_value<int32_t>(123, 4);
-    EXPECT_EQ("0.0123", format_dec.value());
-    EXPECT_ERROR(HiveUtils::format_decimal_value<int32_t>(123, -1));
 
     {
         Columns partition_key_columns;
@@ -240,12 +245,12 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"day", "hour"},
-                                                          chunk.get(), true, field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"day", "hour"},
+                                                             chunk.get(), true, field_is_null);
 
         EXPECT_EQ("k1=1970-01-24/k2=1970-01-02-16/", ret.value());
-        ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"year", "month"},
-                                                     chunk.get(), true, field_is_null);
+        ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"year", "month"},
+                                                        chunk.get(), true, field_is_null);
         EXPECT_EQ("k1=1993/k2=1973-05/", ret.value());
     }
 
@@ -281,8 +286,8 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators,
-                                                          {"identity", "truncate"}, chunk.get(), true, field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name(
+                {"k1", "k2"}, partition_column_evaluators, {"identity", "truncate"}, chunk.get(), true, field_is_null);
         EXPECT_EQ("k1=abc/k2=1999-12-31/", ret.value());
     }
 
@@ -375,7 +380,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
                 {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TypeDescriptor::from_logical_type(TYPE_CHAR),
                  TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_TINYINT),
                  TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
-        auto ret = HiveUtils::iceberg_make_partition_name(
+        auto ret = IcebergUtils::iceberg_make_partition_name(
                 {"k1", "k2", "k3", "k4", "k5", "k6", "k7"}, partition_column_evaluators,
                 {"bucket", "identity", "truncate", "truncate", "truncate", "truncate", "truncate"}, chunk.get(), true,
                 field_is_null);
@@ -427,9 +432,9 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
                  TypeDescriptor::from_logical_type(TYPE_DECIMAL128)});
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2", "k3"}, partition_column_evaluators,
-                                                          {"identity", "truncate", "bucket"}, chunk.get(), true,
-                                                          field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2", "k3"}, partition_column_evaluators,
+                                                             {"identity", "truncate", "bucket"}, chunk.get(), true,
+                                                             field_is_null);
         EXPECT_EQ("k1=12.34/k2=33.44/k3=78.93/", ret.value());
     }
 }

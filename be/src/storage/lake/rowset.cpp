@@ -26,9 +26,10 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
@@ -37,9 +38,6 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -47,6 +45,9 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -181,6 +182,21 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
     for (size_t i = 0; i < metadata().next_compaction_offset(); ++i) {
         auto* segment_meta = output_rowset->add_segment_metas();
         segment_meta->CopyFrom(metadata().segment_metas(i));
+        if (already_compacted_segments[i].segment == nullptr) {
+            // A null slot here is only expected when a physically-lost segment was tolerated by
+            // experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug, so fail
+            // loudly instead of silently mis-accounting.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment when collecting compacted segment info, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              _tablet_id, metadata().id(), i));
+            // Its file size is unknown, so drop the file-size info (like the get_data_size failure branch).
+            // Still account its metadata row count so the output rowset's num_rows stays consistent with
+            // the sum of the segment_metas we copied above.
+            clear_file_size_info = true;
+            uncompacted_num_rows += metadata().segment_metas(i).num_rows();
+            continue;
+        }
         StatusOr<int64_t> size_or = already_compacted_segments[i].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
@@ -216,6 +232,21 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
          i < metadata().segment_metas_size(); ++i, ++idx) {
         auto* segment_meta = output_rowset->add_segment_metas();
         segment_meta->CopyFrom(metadata().segment_metas(i));
+        if (uncompacted_segments[idx].segment == nullptr) {
+            // A null slot here is only expected when a physically-lost segment was tolerated by
+            // experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug, so fail
+            // loudly instead of silently mis-accounting.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment when collecting uncompacted segment info, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              _tablet_id, metadata().id(), i));
+            // Its file size is unknown, so drop the file-size info (like the get_data_size failure branch).
+            // Still account its metadata row count so the output rowset's num_rows stays consistent with
+            // the sum of the segment_metas we copied above.
+            clear_file_size_info = true;
+            uncompacted_num_rows += metadata().segment_metas(i).num_rows();
+            continue;
+        }
         StatusOr<int64_t> size_or = uncompacted_segments[idx].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
@@ -379,6 +410,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
+        // Owner tablet id for .vi naming: a segment shared across tablets after a split must
+        // resolve the same .vi from every reader (see resolve_segment_vector_index_uid). Set only for
+        // vector-indexed segments; read() is the sole entry point that sets belonged_to_cloud_native,
+        // so only its iterators reach the ANN-reader path that consumes this.
+        if (meta_pos < _metadata->segment_metas_size() &&
+            _metadata->segment_metas(meta_pos).vector_index_ids_size() > 0) {
+            seg_options.segment_vector_index_uid = resolve_segment_vector_index_uid(_metadata->segment_metas(meta_pos));
+        }
 
         if (options.rowid_range_option != nullptr) { // physical split.
             auto [rowid_range, is_first_split_of_segment] =
@@ -422,6 +461,12 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 
     size_t segment_num = 0;
     for (auto& seg_ptr : segments) {
+        // This count is position-agnostic, so a null placeholder slot (e.g. a lost segment dropped by
+        // experimental_lake_ignore_lost_segment) simply contributes no read iterator -- skip it whatever
+        // its cause.
+        if (seg_ptr == nullptr) {
+            continue;
+        }
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -440,8 +485,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    // Size the result up front and write each iterator to its segment's position, so the returned
+    // vector stays positionally aligned with `segments` (and its size always equals num_segments).
+    // Callers index it by position and assert on the size; a segment that produces no iterator -- a
+    // lost segment (experimental_lake_ignore_lost_segment) or an EndOfFile segment -- is left as the
+    // default null in its own slot. Mirrors get_each_segment_iterator_with_delvec.
+    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
@@ -468,6 +517,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
+        if (seg_ptr == nullptr) {
+            // This vector must stay positionally aligned, so a null segment can only be tolerated (its
+            // slot left as the default null placeholder) when experimental_lake_ignore_lost_segment
+            // dropped a physically-lost segment. With the flag off it is an unexpected bug -- fail loudly.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment in get_each_segment_iterator, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              tablet_id(), metadata().id(), i));
+            continue;
+        }
         seg_options.tablet_range = std::nullopt;
         const int32_t meta_pos = segments[i].segment_meta_pos;
         if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
@@ -476,12 +535,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave seg_iterators[i] as the default null placeholder, preserving alignment.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
 }
@@ -521,6 +581,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
+        if (seg_ptr == nullptr) {
+            // This vector must stay positionally aligned (callers derive the rssid from a segment's
+            // position), so a null segment can only be tolerated -- leaving seg_iterators[i] as the
+            // default null placeholder, same as the EOF case -- when experimental_lake_ignore_lost_segment
+            // dropped a physically-lost segment. With the flag off it is an unexpected bug -- fail loudly.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment in get_each_segment_iterator_with_delvec, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              tablet_id(), metadata().id(), i));
+            continue;
+        }
         // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
         // shared stats object; otherwise all segments share `stats`.
         if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
@@ -669,6 +740,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             }
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
+            // Keep the segment vector positionally aligned with metadata: leave a nullptr placeholder
+            // for the lost segment instead of dropping it (mirrors the metadata-filter skip above).
+            // Callers index the result by segment position (to derive rssid) and assert
+            // size == num_segments; a dropped entry would misalign every later segment and trip those
+            // checks. In index-mapping mode the slot is already nullptr from the earlier resize(), so
+            // only the sequential path needs to push the placeholder.
+            if (!use_index_mapping) {
+                segments->emplace_back(LoadedSegment{nullptr, meta_pos});
+            }
         } else {
             return segment_or.status().clone_and_prepend(fmt::format(
                     "load_segments failed tablet:{} rowset:{} segid:{}", _tablet_id, metadata().id(), seg_id));
@@ -729,7 +809,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load segment serially
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

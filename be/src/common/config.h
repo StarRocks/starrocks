@@ -316,7 +316,7 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
 // Number of threads for internal JVM calls that must run on pthreads.
-CONF_Int32(jvm_call_thread_pool_size, "1");
+CONF_Int32(jvm_call_thread_pool_size, "4");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -1262,6 +1262,12 @@ CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
+// Maximum number of object storage clients (S3 and Azure Blob) cached per client factory.
+// Mutable at runtime: the value is snapshotted on each client creation, so a lowered value
+// takes effect as cached clients are evicted on subsequent creations. Values below 1 are
+// treated as 1.
+CONF_mInt64(object_storage_client_cache_size, "8");
+
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
@@ -1456,6 +1462,15 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enable only
+// after the cluster is fully upgraded and no rollback to a pre-fix BE is expected.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread

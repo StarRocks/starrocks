@@ -21,7 +21,7 @@
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 
 namespace starrocks {
 

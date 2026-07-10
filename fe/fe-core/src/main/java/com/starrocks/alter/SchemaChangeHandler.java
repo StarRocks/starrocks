@@ -56,6 +56,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -93,6 +94,8 @@ import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -619,7 +622,6 @@ public class SchemaChangeHandler extends AlterHandler {
         ColumnPosition fieldPos = alterClause.getFieldPos();
         ArrayList<StructField> oriFields = oriFieldType.getFields();
         int posIndex = -1;
-        boolean hasPos = (fieldPos != null);
         if (fieldPos != null) {
             if (fieldPos.isFirst()) {
                 posIndex = 0;
@@ -727,6 +729,33 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void fillKeyAndAggregationTypeForModColumn(OlapTable olapTable, Column modColumn) {
+        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null) {
+                if (baseColumn.isKey()) {
+                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
+                    // we will keep it as a key column which is the same as before.
+                    modColumn.setIsKey(baseColumn.isKey());
+                }
+                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
+            }
+        } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
+            if (null == modColumn.getAggregationType()) {
+                // in aggregate key table, no aggregation method indicate key column
+                modColumn.setIsKey(true);
+            }
+        } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.REPLACE, true);
+            }
+        } else {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.NONE, true);
+            }
+        }
+    }
+
     // Returns true when the MODIFY COLUMN clause changes nothing but the column comment, so it can take the
     // lightweight ModifyColumnComment path instead of spawning a schema change job.
     private boolean isCommentOnlyModification(ModifyColumnClause alterClause, OlapTable olapTable) {
@@ -741,26 +770,8 @@ public class SchemaChangeHandler extends AlterHandler {
             // Leave the "column does not exist" error to processModifyColumn.
             return false;
         }
-        // The KEY designation is table-level and is not repeated in the MODIFY COLUMN clause, so a rebuilt
-        // column inherits the stored key flag the same way processModifyColumn does.
-        if (!modColumn.isKey()) {
-            modColumn.setIsKey(oriColumn.isKey());
-        }
-        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            // AlterTableClauseAnalyzer force-injects REPLACE on PK value columns (and keeps key columns as
-            // keys), so modColumn always carries an aggregation type here. Mirror the PK branch in
-            // processModifyColumn, which unconditionally realigns the type + implicit flag from the stored
-            // column, so an explicitly-typed clause still compares as comment-only.
-            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
-        } else if (oriColumn.isAggregationTypeImplicit() && modColumn.getAggregationType() == null) {
-            // For DUP/UNIQUE the value column's aggregation (NONE/REPLACE) is implied by the table model and
-            // the user omits it; inherit it as implicit so the comparison matches. If the user *explicitly*
-            // wrote an aggregation method, leave it explicit so the comparison fails and processModifyColumn
-            // raises the proper "Can not assign aggregation method" error instead of being silently dropped
-            // into the lightweight comment path.
-            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
-        }
-        return oriColumn.equalsIgnoreComment(modColumn);
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
+        return oriColumn.equalsIgnoreComment(modColumn) && !Objects.equals(oriColumn.getComment(), modColumn.getComment());
     }
 
     // User can modify column type and column position
@@ -774,20 +785,14 @@ public class SchemaChangeHandler extends AlterHandler {
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
-            if (baseColumn != null) {
-                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
-                if (baseColumn.isKey()) {
-                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
-                    // we will keep it as a key column which is the same as before.
-                    modColumn.setIsKey(baseColumn.isKey());
-                    if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
-                        throw new DdlException(
-                            "Can not modify key column: " + modColumn.getName() +
-                                " for primary key table except for increasing varchar length");
-                    }
-                    if (modColumn.isAllowNull()) {
-                        throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
-                    }
+            if (baseColumn != null && baseColumn.isKey()) {
+                if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
+                    throw new DdlException(
+                        "Can not modify key column: " + modColumn.getName() +
+                            " for primary key table except for increasing varchar length");
+                }
+                if (modColumn.isAllowNull()) {
+                    throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
                 }
             }
 
@@ -807,26 +812,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
             } else if (null == modColumn.getAggregationType()) {
                 Preconditions.checkArgument(modColumn.getType().isScalarType());
-                // in aggregate key table, no aggregation method indicate key column
-                modColumn.setIsKey(true);
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.REPLACE, true);
-            }
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.NONE, true);
-            }
         }
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
 
         if (!modColumn.isGeneratedColumn() && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
@@ -2239,13 +2237,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
-        final ConnectContext connectContext = ConnectContext.get();
-        final ComputeResource computeResource = connectContext != null
-                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        if (!warehouseManager.isResourceAvailable(computeResource)) {
-            throw new DdlException("no available compute nodes:" + computeResource);
-        }
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2253,6 +2245,24 @@ public class SchemaChangeHandler extends AlterHandler {
 
         LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
                 jobId, db.getId(), olapTable.getId(), olapTable.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, keysType, sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+        return job;
+    }
+
+    /**
+     * Populate the new-schema / new-sort-key / shadow-identity fields shared by every
+     * {@link LakeRangeRewriteSchemaChangeJob} (including its MV subclass {@link LakeMvSortKeyRewriteJob}):
+     * the new full schema, the new sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds} and the
+     * projected sort-key {@link Column}s used to sample the K-tablet boundaries), the (possibly
+     * unchanged) keysType, and the shadow/origin index identity. Package-visible so
+     * {@link AlterMVJobExecutor} can populate a {@link LakeMvSortKeyRewriteJob} identically to
+     * {@link #buildRangeRewriteJob}.
+     */
+    static void populateRangeRewriteJob(LakeRangeRewriteSchemaChangeJob job, List<Column> newSchema,
+                                        KeysType keysType, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds,
+                                        long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
+                                        short shortKeyColumnCount, ComputeResource computeResource) {
         job.setNewSchema(newSchema);
         job.setNewKeysType(keysType);
         job.setNewSortKeyIdxes(sortKeyIdxes);
@@ -2260,7 +2270,64 @@ public class SchemaChangeHandler extends AlterHandler {
         job.setNewSortKeyColumns(resolveSortKeyColumns(newSchema, sortKeyIdxes));
         job.setShadowIndex(shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount);
         job.setComputeResource(computeResource);
-        return job;
+    }
+
+    /**
+     * Resolve the current session's compute resource and verify it is available, for use by the
+     * range-rewrite job builders ({@link #buildRangeRewriteJob} and {@link #submitMvSortKeyRewriteJob}).
+     */
+    private static ComputeResource resolveAndValidateComputeResource() throws DdlException {
+        final ConnectContext connectContext = ConnectContext.get();
+        final ComputeResource computeResource = connectContext != null
+                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            throw new DdlException("no available compute nodes:" + computeResource);
+        }
+        return computeResource;
+    }
+
+    /**
+     * Submit a {@link LakeMvSortKeyRewriteJob} for {@code ALTER MATERIALIZED VIEW ... ORDER BY} on a
+     * shared-data range-distribution materialized view. Model B: the MV's base schema (column set and
+     * order) is UNCHANGED -- only the sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds}) changes,
+     * exactly the shipped {@code ALTER TABLE ... ORDER BY} reorder shape (see {@link #createRangeRewriteJob}).
+     * Runs under the MV table WRITE lock already held by
+     * {@code AlterJobExecutor.visitAlterMaterializedViewStatement} -- does NOT acquire a lock of its own.
+     *
+     * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the colocate / AUTO_INCREMENT gates
+     * from {@link #needsRangeRewriteSchemaChange}: both are structurally unreachable for an MV here.
+     * Colocation requires hash distribution, but {@code AlterMVClauseAnalyzerVisitor} already requires
+     * range distribution before routing to this method. An AUTO_INCREMENT row-id column implies a
+     * PRIMARY_KEYS MV, which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects.
+     */
+    void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,
+                                   List<Integer> sortKeyUniqueIds) throws StarRocksException {
+        long baseIndexMetaId = mv.getBaseIndexMetaId();
+        List<Column> newSchema = mv.getSchemaByIndexMetaId(baseIndexMetaId);
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes);
+
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        String shadowIndexName = SHADOW_NAME_PREFIX + mv.getIndexNameByMetaId(baseIndexMetaId);
+
+        LakeMvSortKeyRewriteJob job = new LakeMvSortKeyRewriteJob(
+                jobId, db.getId(), mv.getId(), mv.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, mv.getKeysType(), sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, baseIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+
+        // Capture BEFORE any suspend: a user-paused refresh task (or an INACTIVE MV, whose task is
+        // paused) must not be silently resumed on settle/replay.
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        job.setRefreshWasActiveAtSubmit(task != null && task.getState() != Constants.TaskState.PAUSE);
+
+        // Register the job and flip the MV to SCHEMA_CHANGE atomically, mirroring #process(...) below.
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job, wal -> {
+            mv.setState(OlapTableState.SCHEMA_CHANGE);
+            addAlterJobV2(job);
+        });
     }
 
     /**
@@ -2322,7 +2389,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
                                     List<List<Comparable>> schemaChangeJobInfos) {
-        ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;
@@ -2645,11 +2711,28 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             String compactionStrategy = "";
+            FlatJsonConfig flatJsonConfig = null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index.
+                // The local-disk persistent index and the in-memory index are deprecated: disabling
+                // the persistent index or switching to LOCAL is no longer allowed (migrating an
+                // existing LOCAL table to CLOUD_NATIVE is still permitted). These restrictions only
+                // apply to primary key tables; enable_persistent_index is a no-op for other key types.
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    if (!enablePersistentIndex) {
+                        throw new DdlException("The persistent index can not be disabled for shared-data primary key " +
+                                "tables, the in-memory index is no longer supported");
+                    }
+                    if (!TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                        throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                                "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                                persistentIndexType);
+                    }
+                }
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
                 String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
@@ -2658,10 +2741,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
                             + "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
-                }
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
-                        && !enablePersistentIndex) {
-                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 // only support set persistent_index_type when enable_persistent_index is true
@@ -2673,6 +2752,14 @@ public class SchemaChangeHandler extends AlterHandler {
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index; switching
+                // to LOCAL is deprecated (migrating an existing LOCAL table to CLOUD_NATIVE is still allowed).
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                        && !TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                    throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                            "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                            persistentIndexType);
+                }
                 if (oldPersistentIndexType.equals(persistentIndexType)) {
                     LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
                             olapTable.getName(), persistentIndexType));
@@ -2725,16 +2812,43 @@ public class SchemaChangeHandler extends AlterHandler {
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                FlatJsonConfig newConfig = olapTable.containsFlatJsonConfig()
+                        ? new FlatJsonConfig(olapTable.getFlatJsonConfig())
+                        : new FlatJsonConfig();
+                newConfig.buildFromProperties(properties);
+                // The analyzer's enabled-check ran without the table lock, so a concurrent ALTER
+                // may have disabled flat_json since; re-validate against the locked state so a
+                // factor change cannot land on a disabled config (mirrors updateFlatJsonConfigMeta).
+                if (!newConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+                newConfig.incVersion();
+                metaType = TTabletMetaType.FLAT_JSON_CONFIG;
+                flatJsonConfig = newConfig;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
-            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(),
-                    olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        flatJsonConfig);
+            } else {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            }
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2885,6 +2999,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             return false;
         }
+        List<Partition> partitions = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2894,6 +3009,7 @@ public class SchemaChangeHandler extends AlterHandler {
             } else {
                 newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
             }
+            partitions.addAll(olapTable.getPartitions());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
@@ -2942,6 +3058,25 @@ public class SchemaChangeHandler extends AlterHandler {
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            // check for concurrent modifications by version
+            if (olapTable.containsFlatJsonConfig()
+                    && olapTable.getFlatJsonConfig().getVersion() != newFlatJsonConfig.getVersion()) {
+                Map<String, String> newProperties = olapTable.getFlatJsonConfig().toProperties();
+                newProperties.putAll(properties);
+                newFlatJsonConfig.buildFromProperties(newProperties);
+                newFlatJsonConfig.setVersion(olapTable.getFlatJsonConfig().getVersion());
+                // Re-validate after rebasing onto the (possibly concurrently-modified) current
+                // config: a factor change must not be silently merged onto a now-disabled config,
+                // which would persist an invalid disabled-with-factor state (the factor is dropped
+                // by toProperties() while disabled, diverging in-memory vs replay/failover).
+                if (!newFlatJsonConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+            }
+            newFlatJsonConfig.incVersion();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
         } catch (Exception e) {
             isModifiedSuccess = false;
@@ -2949,7 +3084,111 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
+        if (isModifiedSuccess) {
+            try {
+                for (Partition partition : partitions) {
+                    updateFlatJsonPartitionTabletMeta(db, olapTable.getName(), partition.getName(),
+                            olapTable.getFlatJsonConfig());
+                }
+            } catch (DdlException e) {
+                LOG.warn("Failed to execute updateFlatJsonPartitionTabletMeta", e);
+            }
+        }
+
         return isModifiedSuccess;
+    }
+
+    /**
+     * Update one specified partition's flat_json_config by partition name of table
+     */
+    public void updateFlatJsonPartitionTabletMeta(Database db,
+                                                  String tableName,
+                                                  String partitionName,
+                                                  FlatJsonConfig flatJsonConfig) throws DdlException {
+        // be id -> Set<tablet id>
+        Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        if (olapTable == null) {
+            throw new DdlException("Table[" + tableName + "] does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                        tabletSet.add(tablet.getId());
+                    }
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+
+        int totalTaskNum = beIdToTabletId.keySet().size();
+        if (totalTaskNum == 0) {
+            return;
+        }
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        AgentBatchTask batchTask = new AgentBatchTask();
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletId.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createFlatJsonConfigUpdateTask(kv.getKey(), kv.getValue(), flatJsonConfig);
+            task.setLatch(countDownLatch);
+            batchTask.addTask(task);
+        }
+        if (!FeConstants.runningUnitTest) {
+            AgentTaskQueue.addBatchTask(batchTask);
+            AgentTaskExecutor.submit(batchTask);
+            LOG.info("send update flat_json_config tablet meta task for table {}, partition {}, number: {}",
+                    tableName, partitionName, batchTask.getTaskNum());
+            waitForTabletMetaBatchTask(batchTask, countDownLatch, totalTaskNum,
+                    "Failed to update partition[" + partitionName + "] flat_json_config tablet meta.");
+        }
+    }
+
+    // Wait for a dispatched tablet-meta batch task and turn a timeout/error into a DdlException.
+    private static void waitForTabletMetaBatchTask(AgentBatchTask batchTask,
+                                                   MarkedCountDownLatch<Long, Set<Long>> countDownLatch,
+                                                   int totalTaskNum, String errMsgPrefix) throws DdlException {
+        long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+        timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = errMsgPrefix;
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                }
+            }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
+        }
     }
 
     // return true means that the modification of FEMeta is successful,
@@ -3212,6 +3451,7 @@ public class SchemaChangeHandler extends AlterHandler {
             try {
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 LOG.warn("InterruptedException: ", e);
             }
 

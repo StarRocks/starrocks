@@ -41,12 +41,12 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"

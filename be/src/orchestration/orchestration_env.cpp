@@ -25,6 +25,8 @@
 #include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/pipeline_fragment_reporter.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/external_scan_orchestrator.h"
@@ -33,8 +35,6 @@
 #include "orchestration/routine_load_task_executor.h"
 #include "orchestration/runtime_filter_worker.h"
 #include "orchestration/stream_load_orchestrator.h"
-#include "runtime/exec_env.h"
-#include "runtime/pipeline_fragment_reporter.h"
 
 namespace starrocks::orchestration {
 

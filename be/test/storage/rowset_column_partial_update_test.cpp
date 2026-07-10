@@ -32,8 +32,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset_column_update_state.h"
@@ -45,6 +43,8 @@
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

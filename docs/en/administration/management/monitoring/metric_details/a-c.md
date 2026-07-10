@@ -305,6 +305,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
 
+## `block_cache_hit_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache hits.
+
+## `block_cache_miss_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache misses.
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`

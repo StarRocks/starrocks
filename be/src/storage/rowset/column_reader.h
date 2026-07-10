@@ -44,15 +44,15 @@
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/datum.h"
 
 namespace starrocks {

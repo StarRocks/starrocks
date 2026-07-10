@@ -41,7 +41,7 @@
 #include "column/global_dict/types.h"
 #include "common/status.h"
 #include "gutil/macros.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

@@ -7,6 +7,7 @@ keywords: ['session','variable']
 # 系统变量
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
@@ -428,6 +429,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**: `InnoDB`
 * **类型**: String
 * **引入版本**: v3.4.2, v3.5.0
+
+### default_view_sql_security
+
+* **描述**: 创建视图时，如果 `CREATE VIEW` 语句未显式指定 `SECURITY` 子句，则使用该变量作为默认的 SQL SECURITY 特性。`NONE`（等价于显式的 `SECURITY NONE` 子句）表示查询视图时只需要执行者拥有该视图本身的 `SELECT` 权限，不会针对执行者校验视图所引用的表的权限；`INVOKER`（等价于 `SECURITY INVOKER`）表示执行者还必须拥有视图所引用的表的 `SELECT` 权限。语句中显式指定的 `SECURITY NONE` 或 `SECURITY INVOKER` 子句始终优先于该变量。该变量仅影响 `CREATE VIEW`，不影响 `ALTER VIEW`。
+* **范围**: Session
+* **默认值**: `NONE`
+* **类型**: String
+* **取值范围**: `NONE`, `INVOKER`
+* **引入版本**: v4.1.1
 
 ### disable_colocate_join
 
@@ -1443,6 +1453,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
 
+### allow_lake_without_partition_filter
+
+* 描述：是否允许对湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）进行无分区过滤条件的查询。当设置为 `false` 时，未包含有效分区过滤条件的查询将被拒绝，以防止意外的全表扫描。
+* 作用域：Session
+* 默认值：`true`
+* 数据类型：Boolean
+* 别名：`allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* 描述：单张湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）允许扫描的最大分区数。设置为 `0` 表示无限制。超出限制时查询将报错。注意：对于增量式枚举分片的 catalog 类型（Iceberg、Delta Lake），分区数限制在 scan-range 分发阶段检查，查询可能在执行中途失败而非被立即拒绝。
+* 作用域：Session
+* 默认值：`0`（无限制）
+* 数据类型：Int
+* 别名：`scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **描述**: 会话标志，指示 FE 在构建 scan ranges 时为每个 tablet 的内部扫描范围标记 `skip_disk_cache`。当设置为 `true` 时，`OlapScanNode.addScanRangeLocations()` 会在创建的 `TInternalScanRange` 对象上调用 `internalRange.setSkip_disk_cache(true)`，从而通知下游 BE 的扫描节点在该扫描中绕过本地磁盘缓存。该设置按会话应用，并在计划/扫描范围构建时评估。可与 `skip_page_cache`（控制页面缓存跳过）和数据缓存相关变量（`enable_scan_datacache` / `enable_populate_datacache`）结合使用。
@@ -1588,5 +1614,7 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 默认值：28800（即 8 小时）
 * 单位：秒
 * 类型：Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

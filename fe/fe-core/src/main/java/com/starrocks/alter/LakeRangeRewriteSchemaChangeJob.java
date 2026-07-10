@@ -151,6 +151,10 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         this.newSortKeyColumns = newSortKeyColumns;
     }
 
+    protected List<Column> getNewSortKeyColumns() {
+        return newSortKeyColumns;
+    }
+
     public void setShadowIndex(long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
                                short shadowShortKeyColumnCount) {
         this.shadowIndexMetaId = shadowIndexMetaId;
@@ -179,6 +183,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     @Override
     protected OlapTable.OlapTableState jobTableState() {
         return OlapTable.OlapTableState.SCHEMA_CHANGE;
+    }
+
+    @Override
+    protected boolean flipNotYetApplied(@NotNull OlapTable table) {
+        // Replace flip drops the origin index meta; if it is gone, the flip has already run.
+        return table.getIndexMetaByMetaId(originIndexMetaId) != null;
     }
 
     @Override

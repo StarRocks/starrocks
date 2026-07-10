@@ -133,20 +133,21 @@ public:
     // representation used by this BinaryColumnBase instance.
     Status is_payload_size_representable() const {
         if constexpr (std::is_same_v<T, uint32_t>) {
+            constexpr uint64_t max_capacity_limit = Column::MAX_CAPACITY_LIMIT;
             const auto bytes_size = get_immutable_bytes().size();
-            if (bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+            if (bytes_size >= max_capacity_limit) {
                 return Status::CapacityLimitExceed(fmt::format(
                         "Binary column byte payload size is not representable with legacy u32 format, bytes_size: {}, "
                         "limit: {}",
-                        bytes_size, Column::MAX_CAPACITY_LIMIT));
+                        bytes_size, max_capacity_limit));
             }
 
             const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
-            if (offset_bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+            if (offset_bytes_size >= max_capacity_limit) {
                 return Status::CapacityLimitExceed(
                         fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
                                     "offset_bytes_size: {}, limit: {}",
-                                    offset_bytes_size, Column::MAX_CAPACITY_LIMIT));
+                                    offset_bytes_size, max_capacity_limit));
             }
 
             return Status::OK();

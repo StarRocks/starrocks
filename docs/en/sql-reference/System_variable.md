@@ -7,6 +7,7 @@ description: "StarRocks provides many system variables that can be set and modif
 # System variables
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
@@ -192,7 +193,7 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
-* **Description**: Controls whether the optimizer will consider ARRAY&lt;VARCHAR&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY&lt;VARCHAR&gt;. When disabled, only scalar VARCHAR columns are eligible and ARRAY&lt;VARCHAR&gt; types are ignored by those low-cardinality optimizations.
+* **Description**: Controls whether the optimizer will consider `ARRAY<VARCHAR>` columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or `ARRAY<VARCHAR>`. When disabled, only scalar VARCHAR columns are eligible and `ARRAY<VARCHAR>` types are ignored by those low-cardinality optimizations.
 * **Default**: true
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
@@ -506,6 +507,15 @@ Used to set the default storage format used by the storage engine of the computi
 * **Default**: `InnoDB`
 * **Data Type**: String
 * **Introduced in**: v3.4.2, v3.5.0
+
+### default_view_sql_security
+
+* **Description**: The default SQL SECURITY characteristic applied when a `CREATE VIEW` statement does not specify a `SECURITY` clause. `NONE` (equivalent to an explicit `SECURITY NONE` clause) means querying the view only requires the invoker to have the `SELECT` privilege on the view itself; the tables the view references are not checked against the invoker. `INVOKER` (equivalent to `SECURITY INVOKER`) means the invoker must additionally have the `SELECT` privilege on the tables the view references. An explicit `SECURITY NONE` or `SECURITY INVOKER` clause in the statement always overrides this variable. This variable only affects `CREATE VIEW`; `ALTER VIEW` is unaffected.
+* **Scope**: Session
+* **Default**: `NONE`
+* **Data Type**: String
+* **Valid values**: `NONE`, `INVOKER`
+* **Introduced in**: v4.1.1
 
 ### disable_colocate_join
 
@@ -1684,6 +1694,22 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **Description**: Whether to allow queries on lake tables (Hive, Iceberg, Delta Lake, Paimon, etc.) without a partition filter predicate. When set to `false`, queries that do not contain a valid partition predicate on these tables will be rejected to prevent accidental full-table scans.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Alias**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **Description**: The maximum number of partitions allowed to be scanned for a single lake table (Hive, Iceberg, Delta Lake, Paimon, etc.). When set to `0`, no limit is applied. When exceeded, the query will return an error. Note that for catalog types that enumerate splits incrementally (Iceberg, Delta Lake), the limit check is performed during scan-range dispatch and the query may fail mid-execution rather than being rejected upfront.
+* **Scope**: Session
+* **Default**: `0` (No limit)
+* **Data type**: Int
+* **Alias**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **Description**: Session flag that instructs the FE, when building scan ranges, to mark each tablet's internal scan range with `skip_disk_cache`. When set to `true`, `OlapScanNode.addScanRangeLocations()` sets `internalRange.setSkip_disk_cache(true)` on the created `TInternalScanRange` objects so downstream BE scan nodes are told to bypass the local disk cache for that scan. It is applied per-session and is evaluated at plan/scan-range construction time. Use this together with `skip_page_cache` (to control page cache skipping) and data-cache related variables (`enable_scan_datacache` / `enable_populate_datacache`) as appropriate.
@@ -1877,5 +1903,7 @@ The StarRocks version. Cannot be changed.
 * **Default**: 28800 (8 hours).
 * **Unit**: Second
 * **Data type**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

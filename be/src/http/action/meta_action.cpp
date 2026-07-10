@@ -39,12 +39,12 @@
 
 #include "base/json/json_util.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
 #include "gutil/strings/substitute.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/batch_write_util.h"
+#include "exec/batch_write/batch_write_util.h"
 
 #include <gtest/gtest.h>
 
+#include "exec/stream_load/http_load_params.h"
 #include "platform/http/http_request.h"
-#include "runtime/stream_load/http_load_params.h"
 
 namespace starrocks {
 

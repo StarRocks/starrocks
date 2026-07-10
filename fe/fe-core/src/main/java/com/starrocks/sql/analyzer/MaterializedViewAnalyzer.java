@@ -384,7 +384,13 @@ public class MaterializedViewAnalyzer {
                     statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
-                    // if not ivm, set query statement directly
+                    // AUTO mode swallows the IVM SemanticException and falls back to PCT, but the trial may
+                    // have prepended __ROW_ID__ to the query in place before bailing. Re-parse the pre-trial
+                    // SQL so the PCT MV is built from the original query, not the half-rewritten one.
+                    queryStatement = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
+                            context.getSessionVariable()).get(0);
+                    Analyzer.analyze(queryStatement, context);
+                    statement.setQueryStatement(queryStatement);
                     statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
                 }
             } else {
@@ -1116,7 +1122,6 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column", partitionRefTableExpr.getPos());
                 }
                 Column refPartitionCol = refPartitionColOpt.get();
-                Type partitionExprType = refPartitionCol.getType();
                 // To olap table, determine mv's partition by its ref base table's partition column type:
                 // - if the partition column is string type && no use `str2date`, use list partition.
                 // - otherwise use range partition as before.
@@ -1625,13 +1630,11 @@ public class MaterializedViewAnalyzer {
 
     private static @NotNull Column getPartitionColumn(List<Column> columns, SlotRef slotRef) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             throw new SemanticException("Materialized view partition exp column:"
@@ -1771,13 +1774,11 @@ public class MaterializedViewAnalyzer {
      */
     public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");

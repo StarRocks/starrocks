@@ -18,16 +18,16 @@
 
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::orchestration {
 

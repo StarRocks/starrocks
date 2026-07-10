@@ -23,10 +23,10 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "common/logging.h"
+#include "exec/exec_env.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "gutil/endian.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

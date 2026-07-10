@@ -1,0 +1,121 @@
+-- name: test_iceberg_string_date_partition_prune
+create external catalog ice_cat_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+use ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+create table t_datestr (
+    c1 int,
+    c2 string
+) partition by (c2);
+-- result:
+-- !result
+insert into t_datestr values (1, '2020-01-02'), (2, '2020-06-08'), (3, '2020-06-14'), (4, '2020-06-15'), (5, '2020-06-22');
+-- result:
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-06-15' as date) - interval 1 day order by c1;
+-- result:
+3	2020-06-14
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-06-14' as date) + interval 1 day order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-06-15' as date) + interval 1 week order by c1;
+-- result:
+5	2020-06-22
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-06-15' as date) - interval 1 week order by c1;
+-- result:
+2	2020-06-08
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-05-15' as date) + interval 1 month order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-07-15' as date) - interval 1 month order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2019-06-15' as date) + interval 1 year order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2021-06-15' as date) - interval 1 year order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-03-15' as date) + interval 1 quarter order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = cast('2020-09-15' as date) - interval 1 quarter order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = date_add(cast('2020-06-15' as date), interval 7 day) order by c1;
+-- result:
+5	2020-06-22
+-- !result
+select c1, c2 from t_datestr where c2 = date_sub(cast('2020-06-15' as date), interval 7 day) order by c1;
+-- result:
+2	2020-06-08
+-- !result
+select c1, c2 from t_datestr where c2 = adddate(cast('2020-06-14' as date), 1) order by c1;
+-- result:
+4	2020-06-15
+-- !result
+select c1, c2 from t_datestr where c2 = subdate(cast('2020-06-15' as date), 1) order by c1;
+-- result:
+3	2020-06-14
+-- !result
+select c1, c2 from t_datestr where c2 = days_sub(cast('2020-06-15' as date), 1) order by c1;
+-- result:
+3	2020-06-14
+-- !result
+select c1, c2 from t_datestr where c2 >= cast('2020-06-15' as date) - interval 1 day order by c1;
+-- result:
+3	2020-06-14
+4	2020-06-15
+5	2020-06-22
+-- !result
+select c1, c2 from t_datestr where c2 = '2020-06-14' order by c1;
+-- result:
+3	2020-06-14
+-- !result
+function: assert_explain_verbose_contains("select c1, c2 from t_datestr where c2 = cast('2020-06-15' as date) - interval 1 day", "partitions=1/5")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("select c1, c2 from t_datestr where c2 = cast('2019-06-15' as date) + interval 1 year", "partitions=1/5")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("select c1, c2 from t_datestr where c2 = cast('2020-09-15' as date) - interval 1 quarter", "partitions=1/5")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("select c1, c2 from t_datestr where c2 = date_sub(cast('2020-06-15' as date), interval 7 day)", "partitions=1/5")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("select c1, c2 from t_datestr where c2 >= cast('2020-06-15' as date) - interval 1 day", "partitions=3/5")
+-- result:
+None
+-- !result
+drop table t_datestr force;
+-- result:
+-- !result
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result

@@ -52,7 +52,6 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
     @BeforeAll
@@ -87,7 +86,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
     public void testCollectStatisticSync(@Mocked StmtExecutor executor) throws Exception {
         Config.internal_log_json_format = true;
         // mock
-        MockUp<StmtExecutor> mock = new MockUp<StmtExecutor>() {
+        new MockUp<StmtExecutor>() {
             @Mock
             public void execute() {
             }
@@ -96,8 +95,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
-        List<Long> partitionIdList =
-                table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
@@ -141,21 +138,29 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
     @Test
     public void testQueryStatisticSync() throws AnalysisException {
-        String res;
+        String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1").getUUID();
+        // table_uuid is stored hashed (StatisticUtils.hashTableUuidForPkStorage) to stay within
+        // BE's primary_key_limit_size; queries match both the hashed and raw value so historical
+        // rows written before hashing was introduced remain visible.
+        String hashedTableUUID = StatisticUtils.hashTableUuidForPkStorage(tableUUID);
+        String tableUUIDPredicate = "table_uuid in (\"" + hashedTableUUID + "\", \"" + tableUUID + "\")";
         new MockUp<StatisticExecutor>() {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assertions.assertEquals(
                         "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
-                                "cast(min(cast(min as string)) as string), max(update_time) FROM external_column_statistics " +
-                                "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
-                                "and column_name in (\"c2\") GROUP BY table_uuid, column_name UNION ALL " +
+                                "cast(min(cast(min as string)) as string), max(update_time) FROM (SELECT *, row_number() " +
+                                "over ( partition by partition_name, column_name order by update_time desc) as rn " +
+                                "FROM external_column_statistics WHERE " + tableUUIDPredicate +
+                                " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
                                 "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
-                                "cast(min(cast(min as bigint)) as string), max(update_time) " +
-                                "FROM external_column_statistics WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
-                                " and column_name in (\"c1\") GROUP BY table_uuid, column_name", sql);
+                                "cast(min(cast(min as bigint)) as string), max(update_time) FROM (SELECT *, row_number() " +
+                                "over ( partition by partition_name, column_name order by update_time desc) as rn " +
+                                "FROM external_column_statistics WHERE " + tableUUIDPredicate +
+                                " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
                 return Lists.newArrayList();
             }
         };
@@ -163,7 +168,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db",
                 "t1");
-        String tableUUID = table.getUUID();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
     }
