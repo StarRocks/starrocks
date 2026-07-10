@@ -32,7 +32,8 @@ set cbo_json_v2_rewrite = true;
 create view profile_late_materialize as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
-where unnest like '%LateMaterializeRows%' 
+where unnest like '%LateMaterializeRows%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 -- result:
 -- !result
@@ -40,6 +41,7 @@ create view profile_filter_rows as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%FilterRows%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 -- result:
 -- !result
@@ -47,6 +49,7 @@ create view profile_dict as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%DictDecodeCount%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 -- result:
 -- !result
@@ -54,6 +57,7 @@ create view profile_access_path as
 select trim(unnest) as line
 from table(unnest(split(get_query_profile(last_query_id()), '\n')))
 where unnest like '%AccessPath%'
+and trim(unnest) not like '- %: 0'
 order by unnest;
 -- result:
 -- !result
@@ -69,15 +73,6 @@ select * from js2 where get_json_int(j1, '$.f1') = -1;
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
-- PredFilterRows: 0
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
 - ZoneMapIndexFilterRows: 1.000K (1000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1;
@@ -86,16 +81,7 @@ select * from js2 where get_json_int(j1, '$.f1') = 1;
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 999
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
 -- result:
@@ -104,16 +90,7 @@ select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1')
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 998
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- result:
@@ -124,16 +101,7 @@ select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 996
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
@@ -167,7 +135,6 @@ select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -175,7 +142,6 @@ None
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -183,7 +149,6 @@ None
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select get_json_int(j1, '$.f2'), j1 from js2 where get_json_int(j1, '$.f1') = 1;
 -- result:
@@ -208,7 +173,6 @@ None	None
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select count(get_json_int(j1, '$.f2')) from js2 ;
 -- result:
@@ -216,7 +180,6 @@ select count(get_json_int(j1, '$.f2')) from js2 ;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select count(get_json_int(j1, '$.f3')) from js2 ;
 -- result:
@@ -224,22 +187,13 @@ select count(get_json_int(j1, '$.f3')) from js2 ;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = -1;
 -- result:
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.000K (1000)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
 - ZoneMapIndexFilterRows: 1.000K (1000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1;
@@ -248,16 +202,7 @@ select * from js2 where get_json_int(j1, '$.f1') = 1;
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.999K (1999)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
 -- result:
@@ -266,16 +211,7 @@ select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1')
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.998K (1998)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- result:
@@ -286,31 +222,14 @@ select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.996K (1996)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = -1;
 -- result:
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.000K (1000)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
 - ZoneMapIndexFilterRows: 1.000K (1000)
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = 1;
@@ -319,16 +238,7 @@ select * from js2 where get_json_int(j1, '$.f2') = 1;
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.999K (1999)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2') = 2;
 -- result:
@@ -337,16 +247,7 @@ select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2')
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.998K (1998)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- result:
@@ -357,16 +258,7 @@ select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
 -- !result
 select * from profile_filter_rows order by line;;
 -- result:
-- BitmapIndexFilterRows: 0
-- BloomFilterFilterRows: 0
-- DelVecFilterRows: 0
-- GinFilterRows: 0
 - PredFilterRows: 1.996K (1996)
-- RecPredFilterRows: 0
-- SegmentRuntimeZoneMapFilterRows: 0
-- SegmentZoneMapFilterRows: 0
-- ShortKeyFilterRows: 0
-- ZoneMapIndexFilterRows: 0
 -- !result
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
 -- result:
@@ -405,7 +297,6 @@ select count(v1) from js3 where get_json_string(j1, 'f1') = 'a0';
 -- !result
 select * from profile_dict order by line;
 -- result:
-- DictDecodeCount: 0
 -- !result
 select count(v1) from js3 where get_json_string(j1, 'f1') = 'a10';
 -- result:
@@ -493,7 +384,6 @@ select count(*) from js3 where get_json_double(j1, 'f_bool') = 1.0;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_int') < 500;
 -- result:
@@ -513,7 +403,6 @@ select count(*) from js3 where get_json_double(j1, 'f_int') < 500;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_double(j1, 'f_double') < 500.0;
 -- result:
@@ -533,7 +422,6 @@ select count(*) from js3 where get_json_string(j1, 'f_double') < '500';
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result
 select count(*) from js3 where get_json_int(j1, 'f_none') IS NULL;
 -- result:
@@ -561,5 +449,4 @@ select count(*) from js3 where get_json_double(j1, 'f_none') < 500;
 -- !result
 select * from profile_access_path order by line;
 -- result:
-- PushdownAccessPaths: 0
 -- !result

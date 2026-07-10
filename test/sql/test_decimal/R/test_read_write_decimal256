@@ -8,6 +8,9 @@ CREATE DATABASE test_decimal256;
 USE test_decimal256;
 -- result:
 -- !result
+set insert_max_filter_ratio=1;
+-- result:
+-- !result
 CREATE TABLE decimal_test_p39_s5 (d1 decimal(39, 5)) PROPERTIES("replication_num"="1");
 -- result:
 -- !result

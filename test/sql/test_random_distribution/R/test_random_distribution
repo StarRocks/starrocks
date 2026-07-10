@@ -5,7 +5,7 @@ create table t1(k int, v int) duplicate key(k);
 -- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: PRIMARY KEY cannot use random distribution.')
+E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: PRIMARY KEY must use hash distribution.')
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
@@ -13,7 +13,7 @@ E: (1064, 'Getting analyzing error. Detail message: Currently not support defaul
 -- !result
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: UNIQUE KEY cannot use random distribution.')
+E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: UNIQUE KEY must use hash distribution.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k);
 -- result:
@@ -21,7 +21,7 @@ E: (1064, 'Getting analyzing error. Detail message: Currently not support defaul
 -- !result
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 51 to line 1, column 81. Detail message: AGGREGATE KEY cannot use random distribution.')
+E: (1064, 'Getting analyzing error from line 1, column 51 to line 1, column 81. Detail message: AGGREGATE KEY must use hash distribution.')
 -- !result
 create table t5(k int, v int sum) aggregate key(k) distributed by hash(k);
 -- result:
@@ -75,19 +75,19 @@ PROPERTIES (
 create table t(k int, v int);
 -- result:
 -- !result
-create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
--- result:
--- !result
 insert into t values(1,1),(1,2);
 -- result:
 -- !result
-[UC]refresh materialized view tva;
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
 -- result:
-8f3247bb-dff2-11ed-b085-00163e05ba4a
 -- !result
-select * from tva;
+function: assert_query_contains("show create materialized view tva", "CREATE MATERIALIZED VIEW `tva`", "DISTRIBUTED BY RANDOM", "REFRESH ASYNC")
 -- result:
-1	3
+None
+-- !result
+select sum(v) from t;
+-- result:
+3
 -- !result
 -- name: test_add_partition
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;

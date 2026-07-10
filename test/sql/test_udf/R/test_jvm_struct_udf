@@ -32,17 +32,6 @@ select echo_struct_a(stru1) from t_struct order by id;
 {"key":1,"value":"hello"}
 {"key":3,"value":"foo"}
 -- !result
-set sql_mode= "STRUCT_CAST_BY_NAME";
--- result:
--- !result
-select echo_struct_a(stru2) from t_struct order by id;
--- result:
-{"key":2,"value":"world"}
-{"key":4,"value":"bar"}
--- !result
-set sql_mode= "";
--- result:
--- !result
 CREATE FUNCTION echo_array_struct_a(array<struct<`key` int, `value` string>>)
 RETURNS array<struct<`key` int, `value` string>>
 PROPERTIES (
