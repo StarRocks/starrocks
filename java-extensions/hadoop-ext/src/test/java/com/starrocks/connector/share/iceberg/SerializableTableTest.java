@@ -24,11 +24,19 @@ import org.apache.iceberg.inmemory.InMemoryFileIO;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SerializableTableTest {
@@ -80,6 +88,35 @@ public class SerializableTableTest {
 
         assertNotNull(serializable.schema());
         assertNotNull(serializable.locationProvider());
+    }
+
+    @Test
+    public void testConcurrentLazyAccessIsConsistent() throws Exception {
+        // The deserialized table is shared across scan tasks, so its lazy fields are read concurrently.
+        // The double-checked-locking init must publish a single instance, never a half-built or duplicate one.
+        SerializableTable table = new SerializableTable(createTable(new HashMap<>()), new InMemoryFileIO());
+        int threads = 32;
+        CyclicBarrier gate = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<Schema>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    gate.await();
+                    table.specs();
+                    table.sortOrder();
+                    return table.schema();
+                }));
+            }
+            Schema first = futures.get(0).get(10, TimeUnit.SECONDS);
+            assertNotNull(first);
+            for (Future<Schema> future : futures) {
+                assertSame(first, future.get(10, TimeUnit.SECONDS),
+                        "double-checked lazy init must publish a single schema instance");
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private Table createTable(Map<String, String> properties) {
