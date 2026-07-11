@@ -580,10 +580,10 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
-    public void preSubmit_recordsTierForBaseOnly() throws Exception {
+    public void preSubmit_recordsTierForFirstContributingIndexOnly() throws Exception {
         // Base yields 1 boundary, rollup yields 2 -- if tier/boundary recording ran per-index
-        // instead of base-only, the tier counter would bump by 2 and the histogram would also
-        // record the rollup's 2-boundary sample.
+        // instead of once for the first contributing index, the tier counter would bump by 2 and
+        // the histogram would also record the rollup's 2-boundary sample.
         stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
         BoundaryPlannerResult baseResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
         BoundaryPlannerResult rollupResult = new BoundaryPlannerResult(List.of(bigintTuple(10), bigintTuple(20)));
@@ -598,11 +598,11 @@ public class DefaultPreSplitPipelineTest {
         LongCounterMetric savedSamplerInvocations = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
         MetricRepo.hasInit = true;
         MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED =
-                new MetricRegistry().histogram("presubmit_records_tier_for_base_only_test");
+                new MetricRegistry().histogram("presubmit_records_tier_for_first_contributing_index_test");
         // recordSamplerInvocation() (called unconditionally at the top of preSubmit) needs this
         // non-null once hasInit is forced true; MetricRepo.init() is never run in this bare test.
         MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS =
-                new LongCounterMetric("presubmit_records_tier_for_base_only_test_invocations",
+                new LongCounterMetric("presubmit_records_tier_for_first_contributing_index_test_invocations",
                         MetricUnit.REQUESTS, "test-local sampler invocations");
         try {
             String tierLabel = DefaultPreSplitPipeline.TIER_LABEL_META_TIER;
@@ -620,11 +620,67 @@ public class DefaultPreSplitPipelineTest {
 
             Assertions.assertEquals(baselineTierCount + 1,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue().longValue(),
-                    "tier_used must be recorded exactly once (base only), not once per index");
+                    "tier_used must be recorded exactly once (first contributing index), not once per index");
             Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount(),
-                    "boundaries_planned must be recorded exactly once (base only)");
+                    "boundaries_planned must be recorded exactly once (first contributing index)");
             Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax(),
                     "the recorded boundary count must be the base's (1), not the rollup's (2)");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = savedHistogram;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = savedSamplerInvocations;
+        }
+    }
+
+    @Test
+    public void preSubmit_baseNoCutsRollupCuts_recordsTierForRollup() throws Exception {
+        // The base's own sort key yields NO_SPLIT while the rollup still produces cuts -- a
+        // real (rollup-only) job is submitted, and the rollup must be the one recorded as the
+        // first contributing index (not zero recordings, since it is not literally index 0).
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult rollupResult = new BoundaryPlannerResult(List.of(bigintTuple(10), bigintTuple(20)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) ->
+                request.getSortKey().equals(BASE_SORT_KEY) ? BoundaryPlannerResult.NO_SPLIT : rollupResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        Histogram savedHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+        LongCounterMetric savedSamplerInvocations = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+        MetricRepo.hasInit = true;
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED =
+                new MetricRegistry().histogram("presubmit_base_no_cuts_rollup_cuts_test");
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS =
+                new LongCounterMetric("presubmit_base_no_cuts_rollup_cuts_test_invocations",
+                        MetricUnit.REQUESTS, "test-local sampler invocations");
+        try {
+            String tierLabel = DefaultPreSplitPipeline.TIER_LABEL_META_TIER;
+            long baselineTierCount = MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue();
+
+            TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                                eq(database), eq(table), eq(ROLLUP_TABLET_ID), any()))
+                        .thenReturn(fakeJob);
+
+                DefaultPreSplitPipeline pipeline =
+                        newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+                Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                        pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+                Assertions.assertTrue(prepared.isPresent(),
+                        "rollup-only cuts must still submit (allowed base-no-cut/rollup-cut)");
+                mocked.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()), never());
+            }
+
+            Assertions.assertEquals(baselineTierCount + 1,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue().longValue(),
+                    "tier_used must be recorded once for the rollup, the first (and only) contributing index");
+            Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount(),
+                    "boundaries_planned must be recorded once for the rollup, not skipped");
+            Assertions.assertEquals(2, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax(),
+                    "the recorded boundary count must be the rollup's (2)");
         } finally {
             MetricRepo.hasInit = savedHasInit;
             MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = savedHistogram;

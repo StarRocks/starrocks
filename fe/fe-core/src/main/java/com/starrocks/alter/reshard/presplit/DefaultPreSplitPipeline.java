@@ -225,15 +225,15 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
-        for (int i = 0; i < indexTargets.size(); i++) {
-            IndexPreSplitTarget indexTarget = indexTargets.get(i);
+        for (IndexPreSplitTarget indexTarget : indexTargets) {
             SampleRequest indexRequest = new SampleRequest(request.getScanContext(), indexTarget.sortKey(),
                     request.getSampleByteLimit(), request.getSeed());
             TierOutcome outcome = planBoundariesWithFallback(indexRequest, requestedTabletCount, deadline);
             if (outcome.result().isNoSplit()) {
                 continue;
             }
-            if (i == 0) {
+            if (oldTabletIdToRanges.isEmpty()) {
+                // first index that produced cuts -> record load-level tier/boundary metrics once
                 recordTierUsed(outcome.tier());
                 recordBoundariesPlanned(outcome.result().getBoundaries().size());
             }
