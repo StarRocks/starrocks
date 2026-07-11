@@ -53,6 +53,8 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -1688,5 +1690,45 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Set<String> beforeNoOp = Sets.newHashSet(olapPartitionInfo.keySet());
         context.clearVisibleVersionMapByMVPartitions(Sets.newHashSet());
         Assertions.assertEquals(beforeNoOp, olapPartitionInfo.keySet());
+    }
+
+    /**
+     * Test that isStalenessSatisfied() treats a negative staleness (base table's refresh timestamp
+     * regressed below the MV's own refresh timestamp, e.g. after an Iceberg rollback_to_snapshot) as
+     * outdated rather than incorrectly falling through to "fresh".
+     */
+    @Test
+    public void testIsStalenessSatisfiedWithNegativeStaleness() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(2_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test", columns, KeysType.AGG_KEYS,
+                null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                // base table's refresh timestamp is before the MV's own refresh timestamp
+                return Optional.of(1_000_000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    @Test
+    public void testIsStalenessSatisfiedWithPositiveStalenessWithinBudget() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test2", columns, KeysType.AGG_KEYS,
+                null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_000_000L + 500 * 1000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
     }
 }
