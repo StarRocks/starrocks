@@ -19,12 +19,15 @@ import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -35,10 +38,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
 
 /**
  * Production {@link PreSplitPipeline} composing the FE-side sampler tiers,
@@ -88,7 +95,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private final TabletReshardJobMgr tabletReshardJobManager;
     private final Database database;
     private final OlapTable table;
-    private final long oldTabletId;
+    private final List<IndexPreSplitTarget> indexTargets;
     private final long fileTotalBytes;
     private final Duration pollInterval;
     private final Clock clock;
@@ -102,7 +109,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             TabletReshardJobMgr tabletReshardJobManager,
             Database database,
             OlapTable table,
-            long oldTabletId,
+            List<IndexPreSplitTarget> indexTargets,
             long fileTotalBytes,
             Duration pollInterval,
             Clock clock,
@@ -112,9 +119,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         this.tabletReshardJobManager = Objects.requireNonNull(tabletReshardJobManager, "tabletReshardJobManager");
         this.database = Objects.requireNonNull(database, "database");
         this.table = Objects.requireNonNull(table, "table");
-        Preconditions.checkArgument(oldTabletId > 0, "oldTabletId must be > 0, was %s", oldTabletId);
+        Preconditions.checkArgument(indexTargets != null && !indexTargets.isEmpty(),
+                "indexTargets must be non-empty");
         Preconditions.checkArgument(fileTotalBytes >= 0, "fileTotalBytes must be >= 0, was %s", fileTotalBytes);
-        this.oldTabletId = oldTabletId;
+        this.indexTargets = indexTargets;
         this.fileTotalBytes = fileTotalBytes;
         this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -148,8 +156,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * defensively. Unpartitioned tables retain the meta-tier-first routing.
      */
     public static DefaultPreSplitPipeline forLoadKind(
-            Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind,
-            ComputeResource loadComputeResource) {
+            Database database, OlapTable table, List<IndexPreSplitTarget> indexTargets, long fileTotalBytes,
+            LoadKind loadKind, ComputeResource loadComputeResource) {
         MetaTierSampler metaTierSampler;
         if (loadKind == LoadKind.INSERT_FROM_TABLE || table.getPartitionInfo().isPartitioned()) {
             // INSERT_FROM_TABLE always uses the data tier: an OLAP source table has no
@@ -173,7 +181,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         return new DefaultPreSplitPipeline(
                 metaTierSampler, dataTierSampler, tabletReshardJobManager,
-                database, table, oldTabletId, fileTotalBytes,
+                database, table, indexTargets, fileTotalBytes,
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC(), loadComputeResource);
     }
 
@@ -213,22 +221,64 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(
                 new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
 
-        TierOutcome outcome = planBoundariesWithFallback(request, requestedTabletCount, deadline);
-        if (outcome.result.isNoSplit()) {
+        Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
+        for (int i = 0; i < indexTargets.size(); i++) {
+            IndexPreSplitTarget indexTarget = indexTargets.get(i);
+            SampleRequest indexRequest = new SampleRequest(request.getScanContext(), indexTarget.sortKey(),
+                    request.getSampleByteLimit(), request.getSeed());
+            TierOutcome outcome = planBoundariesWithFallback(indexRequest, requestedTabletCount, deadline);
+            if (outcome.result().isNoSplit()) {
+                continue;
+            }
+            if (i == 0) {
+                recordTierUsed(outcome.tier());
+                recordBoundariesPlanned(outcome.result().getBoundaries().size());
+            }
+            oldTabletIdToRanges.put(indexTarget.oldTabletId(), buildTabletRanges(outcome.result().getBoundaries()));
+        }
+        if (oldTabletIdToRanges.isEmpty()) {
             return Optional.empty();
         }
-
-        recordTierUsed(outcome.tier);
-        recordBoundariesPlanned(outcome.result.getBoundaries().size());
-
-        List<TabletRange> tabletRanges = buildTabletRanges(outcome.result.getBoundaries());
-        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(
-                database, table, oldTabletId, tabletRanges);
+        // Final authoritative re-check: a rollup could have become visible (or dropped) between the target
+        // snapshot and here. Re-resolve the visible index-id set under a brief READ lock; if it no longer
+        // equals the planned set, skip pre-split (never submit a base-only partial). The factory's own READ
+        // lock + table-state check + admission CAS cover the residual micro-window; a base-only split is
+        // data-safe regardless (BE routes by true value), so this re-check is an extra safeguard on top
+        // of that, not the sole defense.
+        Set<Long> expectedIndexMetaIds = indexTargets.stream().map(IndexPreSplitTarget::indexMetaId)
+                .collect(Collectors.toSet());
+        if (!currentVisibleIndexMetaIds(database, table).equals(expectedIndexMetaIds)) {
+            return Optional.empty();
+        }
+        TabletReshardJob job;
+        if (oldTabletIdToRanges.size() == 1) {
+            Map.Entry<Long, List<TabletRange>> only = oldTabletIdToRanges.entrySet().iterator().next();
+            job = SplitTabletJobFactory.forExternalBoundaries(database, table, only.getKey(), only.getValue());
+        } else {
+            job = SplitTabletJobFactory.forExternalBoundariesMultiTablet(database, table, oldTabletIdToRanges);
+        }
         // Carry the triggering load's warehouse so the job's shard creation + publish run there.
         if (loadComputeResource != null) {
             job.setWarehouseId(loadComputeResource.getWarehouseId());
         }
         return Optional.of(new PreparedReshardJob(job));
+    }
+
+    /**
+     * Re-resolves {@code table}'s currently-visible index-meta-id set under a brief intensive READ
+     * lock. Used by {@link #preSubmit} to detect a rollup that became visible (or was dropped)
+     * between the eligibility-target snapshot and job assembly.
+     */
+    private static Set<Long> currentVisibleIndexMetaIds(Database database, OlapTable table) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        try {
+            return table.getVisibleIndexMetas().stream()
+                    .map(MaterializedIndexMeta::getIndexMetaId)
+                    .collect(Collectors.toSet());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        }
     }
 
     @Override

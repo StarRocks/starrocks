@@ -106,7 +106,7 @@ final class PreSplitFlow {
         }
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                target.database(), target.olapTable(), target.oldTabletId(), prepared.estimatedBytes(), loadKind,
+                target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,
                 prepared.computeResource());
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
                 target.database(), target.olapTable(), target.partitionId(), prepared.scanContext(),

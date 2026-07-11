@@ -200,7 +200,7 @@ public class BrokerLoadPreSplitHookTest {
             stubIndexSortKey(metaUtils, target, BASE_INDEX_META_ID, "k");
             stubIndexSortKey(metaUtils, target, ROLLUP_INDEX_META_ID, "k2");
             pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                            any(), any(), anyLong(), anyLong(), any(), any()))
+                            any(), any(), any(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
                             any(), any(), anyLong(), any(), any(), any(), anyInt()))

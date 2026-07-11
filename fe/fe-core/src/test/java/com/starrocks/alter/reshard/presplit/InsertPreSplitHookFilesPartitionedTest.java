@@ -121,8 +121,10 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
                     LoadKind.INSERT_FROM_FILES, null);
 
             // Drive the partitioned meta-tier sampler directly via reflection over the
@@ -159,8 +161,10 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
                     LoadKind.INSERT_FROM_FILES, null);
 
             java.lang.reflect.Field metaField = DefaultPreSplitPipeline.class.getDeclaredField("metaTierSampler");

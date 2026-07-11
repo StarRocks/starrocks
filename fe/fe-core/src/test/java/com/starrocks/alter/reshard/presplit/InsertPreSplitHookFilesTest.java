@@ -260,7 +260,7 @@ public class InsertPreSplitHookFilesTest {
                             List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
                                     List.of(bigintColumn("sort_col"))))));
             pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                    any(), any(), anyLong(), anyLong(), any(), any()))
+                    any(), any(), any(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
 
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);
