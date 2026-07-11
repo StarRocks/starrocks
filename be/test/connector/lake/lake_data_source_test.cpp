@@ -57,6 +57,7 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/vector_search_option.h"
@@ -419,6 +420,99 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     auto tablet_schema = ds.TEST_tablet_schema();
     ASSERT_TRUE(tablet_schema != nullptr);
     ASSERT_EQ(schema_id, tablet_schema->id());
+}
+
+TEST_F(LakeDataSourceTest, propagate_sample_options) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    TTableSampleOptions sample_options;
+    sample_options.__set_enable_sampling(true);
+    sample_options.__set_sample_method(SampleMethod::BY_BLOCK);
+    sample_options.__set_random_seed(7);
+    sample_options.__set_probability_percent_v2(0.5);
+
+    auto plan_node = create_lake_plan_node();
+    plan_node.lake_scan_node.__set_key_column_name({"c0"});
+    plan_node.lake_scan_node.__set_key_column_type({TPrimitiveType::INT});
+    plan_node.lake_scan_node.__set_is_preaggregation(true);
+    plan_node.lake_scan_node.__set_sample_options(sample_options);
+
+    auto runtime_state = create_runtime_state_for_test();
+
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(),
+                                    &desc_tbl, config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor table_descriptor;
+    table_descriptor.__set_id(0);
+    table_descriptor.__set_tableType(TTableType::OLAP_TABLE);
+    table_descriptor.__set_tableName("test_table");
+    table_descriptor.__set_dbName("test_db");
+
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(table_descriptor));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    for (auto& rowset : tablet.get_rowsets()) {
+        base_rowsets.emplace_back(rowset);
+    }
+
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    bool seen = false;
+    TTableSampleOptions propagated;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* segment_options = static_cast<SegmentReadOptions*>(arg);
+        propagated = segment_options->sample_options;
+        seen = true;
+    });
+
+    connector::LakeDataSource data_source(&provider, scan_range);
+    RuntimeProfile profile("LakeDataSourceTest");
+    data_source.set_runtime_profile(&profile);
+    data_source.set_morsel(&morsel);
+
+    DeferOp close_guard([&] { data_source.close(runtime_state.get()); });
+    ASSERT_OK(data_source.open(runtime_state.get()));
+
+    ASSERT_TRUE(seen);
+    ASSERT_TRUE(propagated.__isset.enable_sampling);
+    EXPECT_TRUE(propagated.enable_sampling);
+    ASSERT_TRUE(propagated.__isset.sample_method);
+    EXPECT_EQ(SampleMethod::BY_BLOCK, propagated.sample_method);
+    ASSERT_TRUE(propagated.__isset.random_seed);
+    EXPECT_EQ(7, propagated.random_seed);
+    ASSERT_TRUE(propagated.__isset.probability_percent_v2);
+    EXPECT_DOUBLE_EQ(0.5, propagated.probability_percent_v2);
+    EXPECT_FALSE(propagated.__isset.probability_percent);
 }
 
 // Exercise the vector-search branches of LakeDataSource::open() that were added by
