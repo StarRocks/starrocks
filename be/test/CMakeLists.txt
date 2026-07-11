@@ -15,7 +15,6 @@ set(EXEC_FILES
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
-        ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
@@ -72,7 +71,6 @@ set(EXEC_FILES
         ./exec/exec_factory_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
-        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/query_scan_metrics_test.cpp

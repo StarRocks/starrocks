@@ -24,6 +24,7 @@ ADD_BE_LIB(FormatCore
         io/async_flush_output_stream.cpp
         io/async_flush_stream_poller.cpp
         io/formatted_output_stream_file.cpp
+        paimon/paimon_delete_file_builder.cpp
         reserved_columns.h
         scan_context.cpp
         scan_context.h
@@ -157,6 +158,7 @@ target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
 
 ADD_BE_LIB(Formats
         formats_aggregate.cpp
+        iceberg/iceberg_delete_builder.cpp
         )
 
 target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)

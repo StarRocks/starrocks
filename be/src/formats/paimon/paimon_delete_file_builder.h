@@ -16,19 +16,18 @@
 
 #include <cstdint>
 
-#include "base/status.h"
-#include "formats/scan_context.h"
+#include "common/statusor.h"
+#include "formats/deletion_bitmap.h"
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 class PaimonDeleteFileBuilder {
 public:
-    PaimonDeleteFileBuilder(FileSystem* fs, SkipRowsContextPtr skip_rows_ctx)
-            : _fs(fs), _skip_rows_ctx(std::move(skip_rows_ctx)) {}
+    explicit PaimonDeleteFileBuilder(FileSystem* fs) : _fs(fs) {}
     ~PaimonDeleteFileBuilder() = default;
-    Status build(const TPaimonDeletionFile* paimon_deletion_file);
+    StatusOr<DeletionBitmapPtr> build(const TPaimonDeletionFile& paimon_deletion_file);
 
 private:
     uint32_t swap_endian32(uint32_t val) {
@@ -37,7 +36,6 @@ private:
     }
 
     FileSystem* _fs;
-    SkipRowsContextPtr _skip_rows_ctx;
 
     // Structure of a deletion file is: 1 byte version num + n * {4 bytes deletion vector length + 4 bytes magic num
     // + (length - 4) bytes bitmap + 4 bytes CRC num}, n is equal to num of data files
@@ -46,4 +44,4 @@ private:
     const int32_t BITMAP_SIZE_LENGTH = 4;
 };
 
-} // namespace starrocks
+} // namespace starrocks::formats
