@@ -598,6 +598,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
         com.starrocks.catalog.MaterializedIndexMeta baseMeta = mock(com.starrocks.catalog.MaterializedIndexMeta.class);
         when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(table.getName()).thenReturn("partitioned_t");
         when(table.supportedAutomaticPartition()).thenReturn(true);
         PartitionInfo partitionInfo = mock(PartitionInfo.class);

@@ -39,7 +39,7 @@ import java.util.Objects;
  * so each index can be split per predicted partition from the same sample.
  * They flow through to the per-row secondary-index tuples in
  * {@link SampleSet#getSecondaryIndexTuples()}. Empty when the target has no
- * rollup (no projection extension, no tuple population) — existing callers
+ * rollup (no projection extension, no tuple population) -- existing callers
  * use the shorter constructors and see no behavior change.
  */
 public final class SampleRequest {

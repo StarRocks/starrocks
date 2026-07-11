@@ -49,9 +49,11 @@ import java.util.stream.Collectors;
 
 /**
  * Production {@link PreSplitPipeline} composing the FE-side sampler tiers,
- * {@link BoundaryPlanner}, {@link SplitTabletJobFactory#forExternalBoundaries},
- * and {@link TabletReshardJobMgr}. Constructor-injected dependencies keep the
- * class testable without static mocking.
+ * {@link BoundaryPlanner}, and {@link TabletReshardJobMgr}. The job itself comes
+ * from {@link SplitTabletJobFactory#forExternalBoundaries} when a single visible
+ * index is split, or {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet}
+ * when multiple visible indexes are split together. Constructor-injected
+ * dependencies keep the class testable without static mocking.
  *
  * <p>Tier routing: meta tier ({@link ParquetMetadataSampler#tryPlan}) is invoked
  * first. {@link MetaTierUnavailableException} switches the run to data tier
@@ -99,8 +101,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private final long fileTotalBytes;
     private final Duration pollInterval;
     private final Clock clock;
-    // The triggering load's compute resource, carried into SplitTabletJobFactory.forExternalBoundaries
-    // so pre-split shards are scheduled in the load's warehouse. May be null (falls back to default).
+    // The triggering load's compute resource, carried into the SplitTabletJobFactory job (forExternalBoundaries
+    // or forExternalBoundariesMultiTablet) so pre-split shards are scheduled in the load's warehouse.
+    // May be null (falls back to default).
     private final ComputeResource loadComputeResource;
 
     public DefaultPreSplitPipeline(

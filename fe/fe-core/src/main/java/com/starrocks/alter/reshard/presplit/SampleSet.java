@@ -44,11 +44,11 @@ import java.util.Set;
  * tuple list: empty when {@code secondaryIndexMetaIds} is empty, otherwise the
  * same size as {@code tuples} (including zero), with every present row's
  * {@link IndexTuple} id-set equal to {@code secondaryIndexMetaIds} (exactly
- * one per id, no duplicates, no unknown ids) — a short or malformed row is
+ * one per id, no duplicates, no unknown ids) -- a short or malformed row is
  * rejected at construction rather than silently dropped downstream.
  *
  * <p>{@link #EMPTY} represents a successful sample of zero rows with no
- * secondary indexes — distinct from "sampler failed", which the sampler
+ * secondary indexes -- distinct from "sampler failed", which the sampler
  * signals by throwing.
  */
 public final class SampleSet {
@@ -141,7 +141,7 @@ public final class SampleSet {
     /**
      * The authoritative secondary index-id set, taken from the originating
      * {@link SampleRequest}'s specs in projection order. Present even for a
-     * zero-row sample — callers should check id-set membership against this
+     * zero-row sample -- callers should check id-set membership against this
      * list rather than inspecting rows.
      */
     public List<Long> getSecondaryIndexMetaIds() {
