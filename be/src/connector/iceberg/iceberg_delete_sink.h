@@ -26,10 +26,6 @@ namespace starrocks {
 class PriorityThreadPool;
 class RuntimeState;
 
-namespace pipeline {
-class FragmentContext;
-} // namespace pipeline
-
 namespace connector {
 struct SortOrdering;
 
@@ -56,8 +52,8 @@ struct IcebergDeleteSinkContext : public ConnectorSinkContext {
     // Cloud configuration (S3/HDFS credentials)
     starrocks::TCloudConfiguration cloud_configuration;
 
-    // Fragment context
-    pipeline::FragmentContext* fragment_context = nullptr;
+    // Runtime state supplied by the Exec-side sink composition.
+    RuntimeState* runtime_state = nullptr;
 
     // Thread pool for async IO
     PriorityThreadPool* executor = nullptr;

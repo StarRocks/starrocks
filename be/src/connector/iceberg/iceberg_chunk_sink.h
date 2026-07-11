@@ -26,10 +26,6 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 
-namespace starrocks::pipeline {
-class FragmentContext;
-} // namespace starrocks::pipeline
-
 namespace starrocks::connector {
 
 class IcebergChunkSink : public PartitionedConnectorChunkSink {
@@ -66,7 +62,7 @@ struct IcebergChunkSinkContext : public ConnectorSinkContext {
     std::vector<formats::FileColumnId> parquet_field_ids;
     PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
-    pipeline::FragmentContext* fragment_context = nullptr;
+    RuntimeState* runtime_state = nullptr;
     int tuple_desc_id = -1;
     std::shared_ptr<SortOrdering> sort_ordering;
 

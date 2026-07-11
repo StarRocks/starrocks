@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "iceberg_connector.h"
+#include "connector/iceberg/iceberg_connector.h"
 
-#include "iceberg_chunk_sink.h"
-#include "iceberg_delete_sink.h"
-#include "iceberg_row_delta_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_row_delta_sink.h"
 
 namespace starrocks::connector {
 

@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "connector/iceberg_chunk_sink.h"
-#include "connector/iceberg_delete_sink.h"
-#include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec_primitive/data_sink.h"
 

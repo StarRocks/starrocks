@@ -18,8 +18,8 @@
 
 #include "common/status.h"
 #include "connector/common/partitioned_connector_chunk_sink.h"
-#include "connector/iceberg_chunk_sink.h"
-#include "connector/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
 
 namespace starrocks::connector {
 

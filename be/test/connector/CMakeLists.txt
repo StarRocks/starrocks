@@ -99,6 +99,28 @@ add_executable(connector_hive_test
 target_link_libraries(connector_hive_test ${CONNECTOR_HIVE_TEST_LINK_LIBS} hdfs jvm)
 set_target_properties(connector_hive_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+set(CONNECTOR_ICEBERG_TEST_LINK_LIBS
+    ConnectorIceberg
+    ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_iceberg_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
+        iceberg/iceberg_test_main.cpp
+        iceberg/iceberg_chunk_sink_test.cpp
+        iceberg/iceberg_delete_sink_test.cpp
+        iceberg/iceberg_row_delta_sink_test.cpp
+)
+target_link_libraries(connector_iceberg_test ${CONNECTOR_ICEBERG_TEST_LINK_LIBS})
+set_target_properties(connector_iceberg_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
     ConnectorCacheStats
     ${STARROCKS_DEPENDENCIES}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
 
 #include <fmt/format.h>
 
@@ -26,9 +26,8 @@
 #include "common/config_exec_fwd.h"
 #include "connector/common/partition_chunk_writer.h"
 #include "connector/common/utils.h"
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/column_evaluator.h"
 #include "formats/io/async_flush_stream_poller.h"
@@ -38,8 +37,8 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "storage/chunk_helper.h"
 #include "types/datum.h"
 
 namespace starrocks::connector {
@@ -224,7 +223,8 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
     }
 
-    auto runtime_state = ctx->fragment_context->runtime_state();
+    auto* runtime_state = ctx->runtime_state;
+    DCHECK(runtime_state != nullptr);
 
     TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id);
     if (tuple_desc == nullptr) {
@@ -258,7 +258,7 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
 
     // Create location provider for delete files
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, "parquet",
+            ctx->path, print_id(runtime_state->query_id()), runtime_state->be_number(), driver_id, "parquet",
             ctx->writer_tag);
 
     std::vector<formats::FileColumnId> file_column_ids(column_names.size());
