@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
@@ -295,6 +296,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    private static boolean isIcebergV3DeletionVectorEnabled() {
+        ConnectContext context = ConnectContext.get();
+        // Default to enabled when there is no session (e.g. background metadata tasks).
+        return context == null || context.getSessionVariable().enableIcebergV3DeletionVector();
+    }
+
     private List<TScanRangeLocations> buildScanRanges(FileScanTask task, Long partitionId) throws AnalysisException {
         THdfsScanRange hdfsScanRange = buildScanRange(task, task.file(), partitionId);
 
@@ -306,9 +313,23 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
 
             if (ContentFileUtil.isDV(deleteFile)) {
-                throw new StarRocksConnectorException(
-                        "Iceberg V3 Deletion Vectors are not supported. " +
-                        "Table contains deletion vector file: " + deleteFile.path());
+                if (!isIcebergV3DeletionVectorEnabled()) {
+                    throw new StarRocksConnectorException(
+                            "Iceberg V3 Deletion Vectors are not supported when " +
+                            "enable_iceberg_v3_deletion_vector is disabled. " +
+                            "Table contains deletion vector file: " + deleteFile.path());
+                }
+
+                TIcebergDeleteFile dv = new TIcebergDeleteFile();
+                dv.setFull_path(deleteFile.path().toString());
+                dv.setFile_format(THdfsFileFormat.PUFFIN);
+                dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
+                dv.setLength(deleteFile.fileSizeInBytes());
+                dv.setReferenced_data_file(deleteFile.referencedDataFile());
+                dv.setContent_offset(deleteFile.contentOffset());
+                dv.setContent_size_in_bytes(deleteFile.contentSizeInBytes());
+                posDeleteFiles.add(dv);
+                continue;
             }
 
             TIcebergDeleteFile target = new TIcebergDeleteFile();
