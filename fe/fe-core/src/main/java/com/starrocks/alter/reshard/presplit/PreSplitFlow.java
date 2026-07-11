@@ -117,6 +117,13 @@ final class PreSplitFlow {
         if (target == null) {
             return;
         }
+        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.indexTargets().size() > 1) {
+            // Authoritative re-check on the resolved index set: a rollup that became visible after the
+            // dispatch-time descope gate must not be sampled with the base-only INSERT-from-table source
+            // mapping. Skip pre-split (load proceeds) -- INSERT-from-table with a rollup is out of scope.
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return;
+        }
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                 target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,

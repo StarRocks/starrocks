@@ -279,6 +279,42 @@ public class PreSplitFlowTest {
         }
     }
 
+    @Test
+    public void singleFlowSkipsInsertFromTableWhenResolvedIndexTargetsHaveRollup() {
+        // Race regression: the dispatch-time descope gate reads target.getVisibleIndexMetas()
+        // before findEligibleTarget resolves the authoritative indexTargets. If a rollup becomes
+        // visible in between, the RESOLVED indexTargets can have 2 entries (base + rollup) even
+        // though the table had a single visible index at dispatch time. runSinglePartitionFlow
+        // must re-check the resolved set and skip -- not sample the rollup with the base-only
+        // INSERT-from-table source mapping.
+        Database database = mock(Database.class);
+        OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            stubEligibleTargetWithRollup(targets, database, table);
+            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
+                    LoadKind.INSERT_FROM_TABLE, () -> false);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
+                    any(), any(), any(), any(), any()), never());
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "resolved rollup on INSERT-from-table must bump the has_materialized_view_or_rollup bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
     // ---------- multi-partition flow await ----------
 
     @Test
@@ -416,6 +452,23 @@ public class PreSplitFlowTest {
                         database, table, /*partitionId*/ 11L,
                         List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
                                 List.of(bigintColumn("sort_col"))))));
+    }
+
+    /**
+     * Stub PreSplitTargets.findEligibleTarget to resolve a single-partition target with a
+     * rollup (base + one rollup index target) for {@code table} -- simulates a rollup that
+     * became visible after the dispatch-time descope gate read the visible-index count.
+     */
+    private static void stubEligibleTargetWithRollup(
+            MockedStatic<PreSplitTargets> targets, Database database, OlapTable table) {
+        targets.when(() -> PreSplitTargets.findEligibleTarget(database, table))
+                .thenReturn(new PreSplitTargets.EligibleTarget(
+                        database, table, /*partitionId*/ 11L,
+                        List.of(
+                                new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
+                                        List.of(bigintColumn("sort_col"))),
+                                new IndexPreSplitTarget(/*indexMetaId*/ 2L, /*oldTabletId*/ 33L,
+                                        List.of(bigintColumn("sort_col"))))));
     }
 
     /** Stub DefaultPreSplitPipeline.forLoadKind to return a mock pipeline, returning it for verification. */
