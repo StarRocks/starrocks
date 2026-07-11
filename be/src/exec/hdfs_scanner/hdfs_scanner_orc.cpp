@@ -20,14 +20,14 @@
 #include "base/time/timezone_utils.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
-#include "exec/iceberg/iceberg_delete_builder.h"
-#include "exec/paimon/paimon_delete_file_builder.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
+#include "formats/paimon/paimon_delete_file_builder.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
@@ -325,12 +325,18 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_ctx->table_specific.iceberg_delete_files.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-    const auto iceberg_delete_builder =
-            std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, _runtime_state, *_scanner_ctx);
+    formats::IcebergDeleteBuilder iceberg_delete_builder(formats::IcebergDeleteBuilderContext{
+            .scan_context = &_scanner_ctx->format_scan_context,
+            .fs = _scanner_ctx->fs,
+            .data_file_path = _scanner_ctx->file_path,
+            .datacache_options = _scanner_ctx->datacache_options,
+            .runtime_profile = _scanner_ctx->profile.runtime_profile,
+            .chunk_size = _runtime_state->chunk_size(),
+    });
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(*delete_file));
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                delete_file->file_content);
@@ -339,6 +345,7 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
         }
     }
 
+    _skip_rows_ctx->deletion_bitmap = iceberg_delete_builder.deletion_bitmap();
     _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
     return Status::OK();
 }
@@ -347,9 +354,10 @@ Status HdfsOrcScanner::build_paimon_delete_file_builder() {
     if (_scanner_ctx->table_specific.paimon_deletion_file == nullptr) {
         return Status::OK();
     }
-    std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-            new PaimonDeleteFileBuilder(_scanner_ctx->fs, _skip_rows_ctx));
-    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_ctx->table_specific.paimon_deletion_file.get()));
+    formats::PaimonDeleteFileBuilder paimon_delete_file_builder(_scanner_ctx->fs);
+    ASSIGN_OR_RETURN(auto deletion_bitmap,
+                     paimon_delete_file_builder.build(*_scanner_ctx->table_specific.paimon_deletion_file));
+    _skip_rows_ctx->deletion_bitmap = std::move(deletion_bitmap);
     return Status::OK();
 }
 

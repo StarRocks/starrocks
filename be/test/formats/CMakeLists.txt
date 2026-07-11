@@ -70,6 +70,11 @@ set(FORMAT_ORC_TEST_FILES
     orc/utils_test.cpp
 )
 
+set(FORMAT_TABLE_DELETE_TEST_FILES
+    iceberg/iceberg_delete_builder_test.cpp
+    paimon/paimon_delete_file_builder_test.cpp
+)
+
 set(FORMAT_TEST_DEPENDENCIES ${STARROCKS_DEPENDENCIES})
 list(REMOVE_ITEM FORMAT_TEST_DEPENDENCIES arrow_testing)
 
@@ -114,6 +119,10 @@ add_library(starrocks_format_orc_test_objs OBJECT ${FORMAT_ORC_TEST_FILES})
 target_link_libraries(starrocks_format_orc_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_format_orc_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+add_library(starrocks_format_table_delete_test_objs OBJECT ${FORMAT_TABLE_DELETE_TEST_FILES})
+target_link_libraries(starrocks_format_table_delete_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_format_table_delete_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 add_executable(format_test
     format_test_main.cpp
     $<TARGET_OBJECTS:starrocks_format_core_test_objs>
@@ -121,5 +130,6 @@ add_executable(format_test
     $<TARGET_OBJECTS:starrocks_format_json_test_objs>
     $<TARGET_OBJECTS:starrocks_format_avro_test_objs>
     $<TARGET_OBJECTS:starrocks_format_orc_test_objs>
+    $<TARGET_OBJECTS:starrocks_format_table_delete_test_objs>
 )
 target_link_libraries(format_test ${FORMAT_TEST_LINK_LIBS})

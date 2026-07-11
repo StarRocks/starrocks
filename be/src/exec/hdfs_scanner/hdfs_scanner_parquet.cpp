@@ -17,9 +17,9 @@
 #include "common/runtime_profile.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exec/iceberg/iceberg_delete_builder.h"
-#include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/delta/deletion_vector.h"
+#include "formats/iceberg/iceberg_delete_builder.h"
+#include "formats/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
 #include "runtime/runtime_state.h"
 
@@ -36,11 +36,17 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        auto iceberg_delete_builder =
-                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, *_scanner_ctx);
+        formats::IcebergDeleteBuilder iceberg_delete_builder(formats::IcebergDeleteBuilderContext{
+                .scan_context = &_scanner_ctx->format_scan_context,
+                .fs = _scanner_ctx->fs,
+                .data_file_path = _scanner_ctx->file_path,
+                .datacache_options = _scanner_ctx->datacache_options,
+                .runtime_profile = _scanner_ctx->profile.runtime_profile,
+                .chunk_size = runtime_state->chunk_size(),
+        });
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
-                RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
+                RETURN_IF_ERROR(iceberg_delete_builder.build_parquet(*delete_file));
             } else {
                 const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
                                                    delete_file->file_content);
@@ -48,11 +54,13 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 return Status::InternalError(s);
             }
         }
+        _skip_rows_ctx->deletion_bitmap = iceberg_delete_builder.deletion_bitmap();
         _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
     } else if (_scanner_ctx->table_specific.paimon_deletion_file != nullptr) {
-        std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
-                new PaimonDeleteFileBuilder(_scanner_ctx->fs, _skip_rows_ctx));
-        RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_ctx->table_specific.paimon_deletion_file.get()));
+        formats::PaimonDeleteFileBuilder paimon_delete_file_builder(_scanner_ctx->fs);
+        ASSIGN_OR_RETURN(auto deletion_bitmap,
+                         paimon_delete_file_builder.build(*_scanner_ctx->table_specific.paimon_deletion_file));
+        _skip_rows_ctx->deletion_bitmap = std::move(deletion_bitmap);
     } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         formats::DeletionVector dv(formats::DeletionVectorOptions{

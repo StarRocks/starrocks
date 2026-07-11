@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paimon_delete_file_builder.h"
+#include "formats/paimon/paimon_delete_file_builder.h"
 
 #include <roaring/roaring.h>
 #include <roaring/roaring64.h>
@@ -22,12 +22,12 @@
 #include "base/container/raw_container.h"
 #include "formats/deletion_bitmap.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
-Status PaimonDeleteFileBuilder::build(const TPaimonDeletionFile* paimon_deletion_file) {
-    auto& path = paimon_deletion_file->path;
-    auto& length = paimon_deletion_file->length;
-    auto& offset = paimon_deletion_file->offset;
+StatusOr<DeletionBitmapPtr> PaimonDeleteFileBuilder::build(const TPaimonDeletionFile& paimon_deletion_file) {
+    const auto& path = paimon_deletion_file.path;
+    const auto& length = paimon_deletion_file.length;
+    const auto& offset = paimon_deletion_file.offset;
     auto serialized_bitmap_length = length - MAGIC_NUMBER_LENGTH;
 
     std::shared_ptr<RandomAccessFile> raw_deletion_vector;
@@ -59,10 +59,10 @@ Status PaimonDeleteFileBuilder::build(const TPaimonDeletionFile* paimon_deletion
     roaring_bitmap_t* bitmap =
             roaring_bitmap_portable_deserialize_safe(deletion_vector.get(), serialized_bitmap_length);
     roaring64_bitmap_t* bitmap64 = roaring64_bitmap_move_from_roaring32(bitmap);
-    _skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap64);
+    auto deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap64);
 
     roaring_bitmap_free(bitmap);
-    return Status::OK();
+    return deletion_bitmap;
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats
