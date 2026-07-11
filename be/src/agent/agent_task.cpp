@@ -28,7 +28,11 @@
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+<<<<<<< HEAD
 #include "storage/lake/external_cluster_snapshot_task.h"
+=======
+#include "storage/flat_json_config.h"
+>>>>>>> e5c22e89d0d... [Enhancement] Propagate flat_json config ALTER to BE via versioned task (backport #74747) (#76229)
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -980,6 +984,14 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 binlog_config.update(tablet_meta_info.binlog_config);
                 tablet->update_binlog_config(binlog_config);
                 break;
+            case TTabletMetaType::FLAT_JSON_CONFIG: {
+                FlatJsonConfig flat_json_config;
+                flat_json_config.update(tablet_meta_info.flat_json_config);
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " flat_json_config, version: " << flat_json_config.get_flat_json_config_version();
+                tablet->update_flat_json_config(flat_json_config);
+                break;
+            }
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;

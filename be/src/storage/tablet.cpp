@@ -53,6 +53,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
+#include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
@@ -487,6 +488,21 @@ void Tablet::update_binlog_config(const BinlogConfig& new_config) {
 
     LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
               << ", minimum version: " << _tablet_meta->get_binlog_min_lsn();
+}
+
+void Tablet::update_flat_json_config(const FlatJsonConfig& new_config) {
+    std::shared_ptr<FlatJsonConfig> old_config = _tablet_meta->get_flat_json_config();
+    int64_t new_version = new_config.get_flat_json_config_version();
+    if (old_config != nullptr) {
+        int64_t old_version = old_config->get_flat_json_config_version();
+        if (old_version >= new_version) {
+            VLOG(3) << "skip to update flat_json_config of tablet: " << tablet_id()
+                    << ", current version: " << old_version << ", new version: " << new_version;
+            return;
+        }
+    }
+    _tablet_meta->set_flat_json_config(new_config);
+    LOG(INFO) << "set flat_json_config of tablet: " << tablet_id() << ", " << new_config.to_string();
 }
 
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
@@ -1562,6 +1578,10 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
         tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
         if (_tablet_meta->get_binlog_config() != nullptr) {
             tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        }
+        if (_tablet_meta->get_flat_json_config() != nullptr) {
+            tablet_info->__set_flat_json_config_version(
+                    _tablet_meta->get_flat_json_config()->get_flat_json_config_version());
         }
         if (_updates == nullptr) {
             int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();

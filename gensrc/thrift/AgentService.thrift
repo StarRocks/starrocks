@@ -90,6 +90,7 @@ struct TFlatJsonConfig {
     2: optional double flat_json_null_factor;
     3: optional double flat_json_sparsity_factor;
     4: optional i64 flat_json_column_max;
+    5: optional i64 version;
 }
 
 // If you want to add types,

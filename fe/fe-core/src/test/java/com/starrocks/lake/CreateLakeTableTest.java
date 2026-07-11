@@ -293,6 +293,38 @@ public class CreateLakeTableTest {
     }
 
     @Test
+    public void testCreateLakeTableWithFlatJson() throws Exception {
+        // enabled: flat_json.enable and the factors are rendered
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_on (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'true', 'flat_json.null.factor' = '0.15',\n" +
+                        "'flat_json.sparsity.factor' = '0.6', 'flat_json.column.max' = '30');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_on");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("true", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        }
+
+        // disabled: only flat_json.enable is rendered, factors omitted
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_off (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'false');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_off");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("false", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        }
+    }
+
+    @Test
     public void testCreateLakeTableException() {
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
