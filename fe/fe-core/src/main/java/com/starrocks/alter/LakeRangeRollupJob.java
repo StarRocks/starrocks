@@ -33,8 +33,11 @@ import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -42,15 +45,25 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -340,6 +353,126 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
             return singleRange;
         }
         return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
+    }
+
+    /**
+     * Write each rollup shadow tablet's version-1 metadata on its compute node, carrying the ROLLUP's own
+     * schema (its ORDER BY sort key), so the reshard/pre-split boundary validation reads the rollup's
+     * sort-key arity rather than the base index's. The rollup shadow shards share the base index's
+     * per-partition storage path, so without this the compute node would lazily materialize the tablet's
+     * version-1 metadata from the base index's shared initial-metadata template and read the BASE schema.
+     *
+     * <p>Mirrors {@link LakeRollupJob}'s create-replica-and-wait: build one CreateReplicaTask per shadow
+     * tablet under a READ lock, then send and wait outside the lock. Two differences from the plain
+     * (non-range) rollup: (1) the tablet schema carries the rollup's own sort key (arity matches the
+     * rollup ORDER BY), not a null sort key; (2) tablet-creation optimization is forced off so each tablet
+     * writes its OWN per-tablet version-1 metadata instead of the shared initial-metadata template, which
+     * belongs to the base index sharing this partition storage path.
+     */
+    @Override
+    protected void createShadowTabletMetadata(List<PendingPartitionPlan> plans) throws AlterCancelException {
+        long shadowTabletCount = plans.stream()
+                .filter(plan -> plan.shadowIndex != null)
+                .mapToLong(plan -> plan.shadowIndex.getTablets().size())
+                .sum();
+        if (shadowTabletCount == 0) {
+            return;
+        }
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>((int) shadowTabletCount);
+        AgentBatchTask batchTask;
+        // Build the tasks under a READ lock (stable table metadata + compute-node resolution), then send
+        // and wait outside the lock (a network round-trip must not be held across the database lock).
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
+            batchTask = buildShadowTabletCreateTasks(table, plans, countDownLatch);
+        }
+
+        LakeRollupJob.sendAgentTaskAndWait(batchTask, countDownLatch,
+                Config.tablet_create_timeout_second * shadowTabletCount);
+    }
+
+    /**
+     * Build one {@link CreateReplicaTask} per rollup shadow tablet, each carrying the rollup's own tablet
+     * schema (its sort key) and its per-tablet range. The caller holds the database read lock. Split out
+     * so a unit test can assert the emitted tablet schema without a compute-node round-trip.
+     */
+    @VisibleForTesting
+    AgentBatchTask buildShadowTabletCreateTasks(@NotNull OlapTable table, List<PendingPartitionPlan> plans,
+                                                MarkedCountDownLatch<Long, Long> countDownLatch)
+            throws AlterCancelException {
+        AgentBatchTask batchTask = new AgentBatchTask();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        long gtid = getNextGtid();
+
+        // The rollup shadow index meta is not registered on the table until PENDING stage 3, so build the
+        // MaterializedIndexMeta from this job's rollup config -- identical to what registerShadowIndexMeta
+        // will register -- and derive the tablet schema (with the rollup's own sort key) from it.
+        MaterializedIndexMeta rollupIndexMeta = new MaterializedIndexMeta(
+                shadowIndexMetaId, rollupSchema, 0 /* schemaVersion */, 0 /* schemaHash */,
+                shadowShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, null /* defineStmt */,
+                rollupSortKeyIdxes, rollupSortKeyUniqueIds);
+        TTabletSchema tabletSchema =
+                SchemaInfo.fromMaterializedIndex(table, shadowIndexMetaId, rollupIndexMeta).toTabletSchema();
+
+        for (PendingPartitionPlan plan : plans) {
+            if (plan.shadowIndex == null) {
+                continue;
+            }
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(plan.physicalPartitionId);
+            if (physicalPartition == null) {
+                throw new AlterCancelException("partition " + plan.physicalPartitionId
+                        + " was dropped while creating rollup shadow tablets");
+            }
+            TStorageMedium storageMedium = table.getPartitionInfo()
+                    .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+
+            // The schema file is created once per partition, with the first tablet.
+            boolean createSchemaFile = true;
+            for (Tablet shadowTablet : plan.shadowIndex.getTablets()) {
+                long shadowTabletId = shadowTablet.getId();
+                ComputeNode computeNode = null;
+                try {
+                    computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, shadowTabletId);
+                } catch (ErrorReportException e) {
+                    // computeNode stays null -> handled below.
+                }
+                if (computeNode == null) {
+                    throw new AlterCancelException(
+                            "no alive compute node to create rollup shadow tablet " + shadowTabletId);
+                }
+                countDownLatch.addMark(computeNode.getId(), shadowTabletId);
+
+                CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                        .setNodeId(computeNode.getId())
+                        .setDbId(dbId)
+                        .setTableId(tableId)
+                        .setPartitionId(plan.physicalPartitionId)
+                        .setIndexId(shadowIndexMetaId)
+                        .setTabletId(shadowTabletId)
+                        .setVersion(Partition.PARTITION_INIT_VERSION)
+                        .setStorageMedium(storageMedium)
+                        .setLatch(countDownLatch)
+                        .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        .setTabletType(TTabletType.TABLET_TYPE_LAKE)
+                        .setCompressionType(table.getCompressionType())
+                        .setCreateSchemaFile(createSchemaFile)
+                        .setTabletSchema(tabletSchema)
+                        // Force per-tablet version-1 metadata: with the optimization on the compute node
+                        // would write the shared initial-metadata template, which belongs to the base index
+                        // sharing this partition storage path. Per-tablet metadata both fixes the wrong
+                        // schema read and avoids clobbering the base template.
+                        .setEnableTabletCreationOptimization(false)
+                        .setGtid(gtid)
+                        .setCompactionStrategy(table.getCompactionStrategy())
+                        .setRange(shadowTablet.getRange())
+                        .build();
+                createSchemaFile = false;
+                batchTask.addTask(task);
+            }
+        }
+        return batchTask;
     }
 
     /**
