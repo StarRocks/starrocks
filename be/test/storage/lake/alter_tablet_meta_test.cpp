@@ -669,4 +669,37 @@ TEST_F(AlterTabletMetaTest, test_compaction_strategy) {
     ASSERT_EQ(CompactionStrategyPB::REAL_TIME, new_tablet_meta.value()->compaction_strategy());
 }
 
+TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    TFlatJsonConfig flat_json_config;
+    flat_json_config.__set_flat_json_enable(true);
+    flat_json_config.__set_flat_json_null_factor(0.25);
+    flat_json_config.__set_flat_json_sparsity_factor(0.75);
+    flat_json_config.__set_flat_json_column_max(12);
+    flat_json_config.__set_version(3);
+    tablet_meta_info.__set_flat_json_config(flat_json_config);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_alter_metadata());
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_TRUE(new_tablet_meta.value()->has_flat_json_config());
+    const auto& flat_json_config_pb = new_tablet_meta.value()->flat_json_config();
+    ASSERT_TRUE(flat_json_config_pb.flat_json_enable());
+    ASSERT_DOUBLE_EQ(0.25, flat_json_config_pb.flat_json_null_factor());
+    ASSERT_DOUBLE_EQ(0.75, flat_json_config_pb.flat_json_sparsity_factor());
+    ASSERT_EQ(12, flat_json_config_pb.flat_json_max_column_max());
+    ASSERT_EQ(3, flat_json_config_pb.version());
+}
+
 } // namespace starrocks::lake
