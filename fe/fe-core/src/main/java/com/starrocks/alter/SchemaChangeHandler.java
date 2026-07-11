@@ -2609,6 +2609,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add column
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+                AlterColumnMetrics.recordColumnOp("add");
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2616,6 +2617,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+                AlterColumnMetrics.recordColumnOp("add");
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2629,6 +2631,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
+                AlterColumnMetrics.recordColumnOp("drop");
 
                 List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
@@ -2755,6 +2758,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
+                AlterColumnMetrics.recordColumnOp("modify");
                 List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
                         && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
