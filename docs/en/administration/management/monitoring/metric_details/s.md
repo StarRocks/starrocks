@@ -290,6 +290,20 @@ description: "Alphabetical s"
 - Type: Instantaneous
 - Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
 
+## `starrocks_fe_alter_job_duration_ms`
+
+- Unit: ms
+- Type: Summary
+- Labels: `type` (`fse_v1` or `fse_v2`)
+- Description: Duration of ALTER schema-change jobs, by type. The first iteration covers shared-data Fast Schema Evolution v1 (asynchronous tablet-meta update) and v2 (synchronous, metadata-only). `fse_v1` is the end-to-end async job wall-clock (includes daemon queue and all-tablet propagation); `fse_v2` is the synchronous statement-thread apply latency, so treat the comparison as an order-of-magnitude indicator rather than a like-for-like measurement. `cloud_native_fast_schema_evolution_v2` is on by default for new cloud-native tables, so a low `fse_v1` count reflects table configuration rather than a stalled rollout. Includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs.
+
+## `starrocks_fe_alter_table_column_op_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `op_type` (`add`, `drop`, or `modify`)
+- Description: Total number of ALTER TABLE column operations, counted per clause by operation type. `ADD COLUMNS (a, b, c)` counts as one `add` (per operation, not per column). Excludes `RENAME`/`REORDER`/comment-only changes.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
