@@ -31,14 +31,24 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -319,6 +329,62 @@ public class LakeRangeRollupJobTest {
         assertTrue(plan.shadowTabletCount >= 1);
         for (Tablet t : plan.shadowIndex.getTablets()) {
             assertNotNull(t.getRange());
+        }
+    }
+
+    /**
+     * The rollup shadow tablets must be created with a CreateReplicaTask carrying the ROLLUP's OWN tablet
+     * schema (its single-column sort key), NOT the base index's schema (whose sort key is (k1, k2), arity
+     * 2). Without this the compute node lazily materializes the rollup tablet's version-1 metadata from
+     * the base index's shared initial-metadata template and reads the base sort-key arity, which breaks the
+     * reshard/pre-split boundary validation.
+     */
+    @Test
+    public void testCreateShadowTabletMetadataEmitsRollupSchema() throws Exception {
+        // Resolve every rollup shadow tablet to a single alive compute node.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                ComputeNode cn = new ComputeNode(1000L, "127.0.0.1", 9050);
+                cn.setAlive(true);
+                return cn;
+            }
+        };
+
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Column colK1 = baseSchema.get(0);
+        // Rollup sort key is the single column k1 (arity 1), narrower than the base's (k1, k2) (arity 2).
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        // Empty sample -> a single full-range shadow tablet (K=1); enough to assert the emitted schema.
+        job.setSampler(stubSamplerReturning(List.of()));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        assertNotNull(plan.shadowIndex);
+        assertTrue(plan.shadowIndex.getTablets().size() >= 1);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AgentBatchTask batchTask = job.buildShadowTabletCreateTasks(table, List.of(plan), latch);
+
+        List<AgentTask> tasks = batchTask.getAllTasks();
+        assertEquals(plan.shadowIndex.getTablets().size(), tasks.size(),
+                "one CreateReplicaTask per rollup shadow tablet");
+        List<Integer> baseSortKeyIdxes = table.getIndexMetaByMetaId(baseIndexMetaId).getSortKeyIdxes();
+        assertEquals(2, baseSortKeyIdxes.size(), "base index sort key must be (k1, k2), arity 2");
+
+        for (AgentTask agentTask : tasks) {
+            assertInstanceOf(CreateReplicaTask.class, agentTask);
+            TCreateTabletReq req = ((CreateReplicaTask) agentTask).toThrift();
+            // The emitted tablet schema is the rollup's own: single-column sort key [0], NOT the base's.
+            assertEquals(List.of(0), req.getTablet_schema().getSort_key_idxes(),
+                    "rollup shadow tablet must carry the rollup's own sort-key indexes, not the base's");
+            assertEquals(job.getShadowIndexMetaId(), req.getTablet_schema().getId(),
+                    "tablet schema id must be the rollup shadow index meta id");
+            // Per-tablet version-1 metadata (optimization off) so the base's shared template is not used.
+            assertFalse(req.isEnable_tablet_creation_optimization(),
+                    "tablet-creation optimization must be off so per-tablet metadata is written");
         }
     }
 
