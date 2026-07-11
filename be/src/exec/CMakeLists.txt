@@ -320,10 +320,13 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
+<<<<<<< HEAD
     remote_scan_arrow_batch_reader.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_deletion_vector_reader.cpp
     paimon/paimon_delete_file_builder.cpp
+=======
+>>>>>>> e42a7764d90... [Refactor] Move Iceberg and Paimon delete builders to Formats (#76226)
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
     hdfs_scanner/hdfs_scanner_json.cpp
@@ -513,4 +516,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorFile ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE Formats Platform ConnectorFile ConnectorBuiltinRegistry)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/paimon/paimon_delete_file_builder.h"
+#include "formats/paimon/paimon_delete_file_builder.h"
 
 #include <gtest/gtest.h>
 
@@ -20,7 +20,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 class PaimonDeleteFileBuilderTest : public testing::Test {
 public:
@@ -28,24 +28,19 @@ public:
     ~PaimonDeleteFileBuilderTest() override = default;
 
 protected:
-    std::string _path = "./be/test/exec/test_data/paimon_data/index-41b983cd-b835-450a-ad38-6ffee8ddbebd-0";
+    std::string _path = "./be/test/formats/paimon/test_data/index-41b983cd-b835-450a-ad38-6ffee8ddbebd-0";
     int64_t _offset = 1;
     int64_t _length = 22;
-
-    SkipRowsContextPtr _skip_rows_ctx = std::make_shared<SkipRowsContext>();
 };
 
 TEST_F(PaimonDeleteFileBuilderTest, TestParquetBuilder) {
-    std::unique_ptr<PaimonDeleteFileBuilder> builder(
-            new PaimonDeleteFileBuilder(FileSystem::Default(), _skip_rows_ctx));
+    PaimonDeleteFileBuilder builder(FileSystem::Default());
     TPaimonDeletionFile paimonDeletionFile;
     paimonDeletionFile.__set_path(_path);
     paimonDeletionFile.__set_offset(_offset);
     paimonDeletionFile.__set_length(_length);
-    std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file =
-            std::make_shared<TPaimonDeletionFile>(paimonDeletionFile);
-    ASSERT_OK(builder->build(paimon_deletion_file.get()));
-    ASSERT_EQ(1, _skip_rows_ctx->deletion_bitmap->get_cardinality());
+    ASSIGN_OR_ABORT(auto deletion_bitmap, builder.build(paimonDeletionFile));
+    ASSERT_EQ(1, deletion_bitmap->get_cardinality());
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats
