@@ -164,10 +164,10 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             // Non-empty grouped list -> submitForPartitionsCombined is invoked.
             grouper.when(() -> PartitionSampleGrouper.group(
                             any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
+                            anyLong(), anyLong(), any()))
                     .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
             coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                            any(), any(), anyList(), anyInt(), any(), any()))
+                            any(), any(), anyList(), anyInt(), any(), any(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -179,7 +179,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
             // Routing proof: partitioned tables MUST take the multi-partition path...
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), times(1));
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), times(1));
             // ...and MUST NOT fall through to the single-partition entry.
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
@@ -214,7 +214,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID)).thenReturn(sortKey);
             grouper.when(() -> PartitionSampleGrouper.group(
                             any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
+                            anyLong(), anyLong(), any()))
                     .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
 
             BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -226,7 +226,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
             // The automatic-partition gate must skip before either submit path.
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
@@ -264,10 +264,10 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                 metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID)).thenReturn(sortKey);
                 grouper.when(() -> PartitionSampleGrouper.group(
                                 any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                                anyLong(), anyLong()))
+                                anyLong(), anyLong(), any()))
                         .thenReturn(List.of(Mockito.mock(PartitionSamples.class)));
                 coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                                any(), any(), anyList(), anyInt(), any(), any()))
+                                any(), any(), anyList(), anyInt(), any(), any(), any()))
                         .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -316,9 +316,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
             // Sampler failed -> no grouping, no submit.
             grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), never());
+                    any(), any(), any(), anyLong(), anyLong(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
     }
 
@@ -350,9 +350,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(ComputeResource.class), () -> false);
 
             grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), never());
+                    any(), any(), any(), anyLong(), anyLong(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
     }
 
@@ -377,7 +377,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID)).thenReturn(sortKey);
             grouper.when(() -> PartitionSampleGrouper.group(
                             any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
+                            anyLong(), anyLong(), any()))
                     .thenReturn(List.of());
 
             BrokerLoadPreSplitHook.maybeRunPreSplit(
@@ -389,9 +389,9 @@ public class BrokerLoadPreSplitHookPartitionedTest {
 
             // Grouper ran but returned empty -> no submit.
             grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(), any(), any(), anyLong(), anyLong()), times(1));
+                    any(), any(), any(), anyLong(), anyLong(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
     }
 
@@ -441,7 +441,7 @@ public class BrokerLoadPreSplitHookPartitionedTest {
                     mock(ComputeResource.class), () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }

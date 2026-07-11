@@ -25,7 +25,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -137,13 +139,19 @@ final class PreSplitFlow {
         if (samples == null) {
             return;
         }
+        // The authoritative secondary index-id set the sampler projected. The grouper drops any
+        // partition whose currently-resolved rollup set differs, and the coordinator re-checks the
+        // same set immediately before planning each partition.
+        Set<Long> sampledSecondaryIndexMetaIds = new HashSet<>(samples.getSecondaryIndexMetaIds());
         List<PartitionSamples> groups = PartitionSampleGrouper.group(
-                samples, table, context, database.getId(), prepared.estimatedBytes());
+                samples, table, context, database.getId(), prepared.estimatedBytes(),
+                sampledSecondaryIndexMetaIds);
         if (groups.isEmpty()) {
             return;
         }
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                database, table, groups, activeComputeNodeCount, context, prepared.computeResource());
+                database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
+                sampledSecondaryIndexMetaIds);
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
