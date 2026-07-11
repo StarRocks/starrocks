@@ -18,7 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks::parquet {

@@ -552,6 +552,8 @@ set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Connector
     ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry

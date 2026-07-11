@@ -43,16 +43,82 @@ target_link_libraries(ConnectorCommon PUBLIC
         StarRocksGen
 )
 
+ADD_BE_LIB(ConnectorHive
+        hive/hive_connector.cpp
+        hive/hive_chunk_sink.cpp
+        hive/scanner/cache_select_scanner.cpp
+        hive/scanner/hdfs_scanner.cpp
+        hive/scanner/hdfs_scanner_avro.cpp
+        hive/scanner/hdfs_scanner_json.cpp
+        hive/scanner/hdfs_scanner_orc.cpp
+        hive/scanner/hdfs_scanner_parquet.cpp
+        hive/scanner/hdfs_scanner_partition.cpp
+        hive/scanner/hdfs_scanner_text.cpp
+        hive/scanner/jni_scanner.cpp
+)
+
+target_link_libraries(ConnectorHive PUBLIC
+        ConnectorCommon
+        ConnectorPrimitive
+        ComputeEnv
+        Cache
+        StoragePrimitive
+        ExecPrimitive
+        Expr
+        Runtime
+        Platform
+        FormatCore
+        FormatCsv
+        FormatJson
+        FormatAvro
+        FormatOrc
+        FormatParquet
+        FileSystem
+        IO
+        ColumnSortCore
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+target_link_libraries(ConnectorHive PRIVATE Formats)
+
+ADD_BE_LIB(ConnectorIceberg
+        iceberg/iceberg_connector.cpp
+        iceberg/iceberg_chunk_sink.cpp
+        iceberg/iceberg_utils.cpp
+        iceberg/iceberg_delete_sink.cpp
+        iceberg/iceberg_row_delta_sink.cpp
+)
+
+target_link_libraries(ConnectorIceberg PUBLIC
+        ConnectorCommon
+        ConnectorPrimitive
+        FormatCore
+        FormatParquet
+        ChunkCore
+        Types
+        Common
+        StarRocksGen
+)
+
+target_link_libraries(ConnectorIceberg PRIVATE
+        Expr
+        Runtime
+        FileSystem
+        ColumnSortCore
+        ColumnCore
+        Base
+        Gutil
+)
+
 ADD_BE_LIB(Connector
         connector_registry.cpp
-        hive_connector.cpp
         lake_connector.cpp
-        iceberg_connector.cpp
-        hive_chunk_sink.cpp
-        iceberg_chunk_sink.cpp
-        iceberg_utils.cpp
-        iceberg_delete_sink.cpp
-        iceberg_row_delta_sink.cpp
 )
 
 target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)

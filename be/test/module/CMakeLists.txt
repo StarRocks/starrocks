@@ -14,5 +14,7 @@
 
 add_executable(module_bootstrap_test module_bootstrap_test.cpp)
 target_link_be_test_cxa_throw_wrap(module_bootstrap_test)
-target_link_libraries(module_bootstrap_test ModuleBootstrap ${TEST_LINK_LIBS} gtest_main)
+set(MODULE_BOOTSTRAP_TEST_LINK_LIBS ${TEST_LINK_LIBS})
+list(REMOVE_ITEM MODULE_BOOTSTRAP_TEST_LINK_LIBS arrow_testing)
+target_link_libraries(module_bootstrap_test ModuleBootstrap ${MODULE_BOOTSTRAP_TEST_LINK_LIBS} gtest_main)
 set_target_properties(module_bootstrap_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
