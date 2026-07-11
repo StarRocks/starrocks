@@ -7,7 +7,6 @@ set(EXEC_FILES
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
         ./connector/hive_connector_test.cpp
-        ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp

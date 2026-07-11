@@ -460,7 +460,6 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
 ENDIF()
 
 ADD_BE_LIB(ExecRuntime
-    runtime/query_runtime_state.cpp
     runtime/group_execution/execution_group.cpp
     runtime/group_execution/execution_group_builder.cpp
     runtime/pipeline.cpp

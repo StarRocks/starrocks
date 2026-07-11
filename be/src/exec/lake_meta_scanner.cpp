@@ -16,8 +16,8 @@
 
 #include "base/testutil/sync_point.h"
 #include "column/global_dict/config.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "exec/lake_meta_scan_node.h"
-#include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_env.h"

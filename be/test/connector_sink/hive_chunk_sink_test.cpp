@@ -110,7 +110,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state;
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -134,7 +134,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state;
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -158,7 +158,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state;
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -166,6 +166,17 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_ERROR(sink->init(&poller, nullptr, &mgr));
     }
+}
+
+TEST_F(HiveChunkSinkTest, test_factory_requires_runtime_state) {
+    auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
+    HiveChunkSinkProvider provider(sink_ctx);
+
+    auto result = provider.create_sink(0);
+
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_internal_error());
+    EXPECT_THAT(std::string(result.status().message()), ::testing::HasSubstr("requires runtime_state"));
 }
 
 } // namespace
