@@ -90,7 +90,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "connector/hive/scanner/hdfs_scanner_text.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
 #include "fs/fs_util.h"

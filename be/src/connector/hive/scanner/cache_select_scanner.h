@@ -15,7 +15,7 @@
 #pragma once
 
 #include "cache/scan/cache_select_input_stream.hpp"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/disk_range.hpp"
 
 namespace starrocks {

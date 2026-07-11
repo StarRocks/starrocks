@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hive_chunk_sink.h"
+#include "connector/hive/hive_chunk_sink.h"
 
 #include <future>
 

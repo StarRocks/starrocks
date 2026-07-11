@@ -14,27 +14,21 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 
 namespace starrocks {
-namespace parquet {
-class FileReader;
-}
 
-class HdfsParquetScanner final : public HdfsScanner {
+class HdfsPartitionScanner final : public HdfsScanner {
 public:
-    HdfsParquetScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()){};
-    ~HdfsParquetScanner() override = default;
-
+    HdfsPartitionScanner() = default;
+    ~HdfsPartitionScanner() override = default;
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
-    void do_update_counter(HdfsScannerProfile* profile) override;
+    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 
 private:
-    std::shared_ptr<parquet::FileReader> _reader = nullptr;
-    SkipRowsContextPtr _skip_rows_ctx;
+    bool _output = false;
 };
 
 } // namespace starrocks

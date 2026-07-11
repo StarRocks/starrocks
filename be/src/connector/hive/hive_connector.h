@@ -18,9 +18,9 @@
 
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
-#include "connector/hive_chunk_sink.h"
+#include "connector/hive/hive_chunk_sink.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "connector_primitive/connector.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 
 namespace starrocks {
 class HiveTableDescriptor;

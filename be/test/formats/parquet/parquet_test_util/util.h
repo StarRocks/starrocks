@@ -24,7 +24,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/global_types.h"
 #include "common/logging.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_chunk_reader.h"

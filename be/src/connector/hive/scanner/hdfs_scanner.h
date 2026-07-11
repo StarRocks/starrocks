@@ -22,7 +22,7 @@
 
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
+#include "connector/hive/scanner/hdfs_scanner_context.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state_fwd.h"
 

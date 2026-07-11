@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/hdfs_scanner_partition.h"
+#include "connector/hive/scanner/hdfs_scanner_partition.h"
 
 #include "column/column_helper.h"
 

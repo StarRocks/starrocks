@@ -19,7 +19,7 @@
 #include <boost/thread/future.hpp>
 #include <future>
 
-#include "common/status.h"
+#include "base/status.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "formats/column_evaluator.h"

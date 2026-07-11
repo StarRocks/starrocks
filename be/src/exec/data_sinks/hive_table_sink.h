@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/logging.h"
-#include "connector/hive_chunk_sink.h"
+#include "connector/hive/hive_chunk_sink.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec_primitive/data_sink.h"
 #include "formats/column_evaluator.h"

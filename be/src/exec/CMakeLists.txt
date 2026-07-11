@@ -321,15 +321,6 @@ set(EXEC_NON_PIPELINE_FILES
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
     remote_scan_arrow_batch_reader.cpp
-    hdfs_scanner/cache_select_scanner.cpp
-    hdfs_scanner/hdfs_scanner_text.cpp
-    hdfs_scanner/hdfs_scanner_json.cpp
-    hdfs_scanner/hdfs_scanner_partition.cpp
-    hdfs_scanner/hdfs_scanner_parquet.cpp
-    hdfs_scanner/hdfs_scanner_orc.cpp
-    hdfs_scanner/hdfs_scanner_avro.cpp
-    hdfs_scanner/hdfs_scanner.cpp
-    hdfs_scanner/jni_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -509,4 +500,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE Formats Platform ConnectorFile ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE Formats Platform ConnectorFile ConnectorHive ConnectorBuiltinRegistry)

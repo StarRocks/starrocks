@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive_connector.h"
+#include "connector/hive/hive_connector.h"
 
 #include <filesystem>
 
@@ -24,16 +24,16 @@
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/query_runtime_state.h"
+#include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
-#include "connector/hive_chunk_sink.h"
-#include "exec/hdfs_scanner/cache_select_scanner.h"
-#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
-#include "exec/hdfs_scanner/hdfs_scanner_json.h"
-#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
-#include "exec/hdfs_scanner/hdfs_scanner_partition.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
-#include "exec/hdfs_scanner/jni_scanner.h"
+#include "connector/hive/scanner/cache_select_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner_avro.h"
+#include "connector/hive/scanner/hdfs_scanner_json.h"
+#include "connector/hive/scanner/hdfs_scanner_orc.h"
+#include "connector/hive/scanner/hdfs_scanner_parquet.h"
+#include "connector/hive/scanner/hdfs_scanner_partition.h"
+#include "connector/hive/scanner/hdfs_scanner_text.h"
+#include "connector/hive/scanner/jni_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"

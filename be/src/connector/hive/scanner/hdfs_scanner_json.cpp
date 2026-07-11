@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/hdfs_scanner_json.h"
+#include "connector/hive/scanner/hdfs_scanner_json.h"
 
 #include "base/compression/compression_utils.h"
 #include "base/string/utf8.h"

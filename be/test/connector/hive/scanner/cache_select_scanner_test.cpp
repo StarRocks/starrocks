@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "connector/hive/scanner/cache_select_scanner.h"
 
 #include <gtest/gtest.h>
 
@@ -22,9 +22,10 @@
 #include "cache/disk_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
-#include "exec/pipeline/fragment_context.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "connector/hive/scanner/hdfs_scanner_orc.h"
+#include "connector/hive/scanner/hdfs_scanner_parquet.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
@@ -64,10 +65,10 @@ void CacheSelectScannerTest::_create_runtime_state(const std::string& timezone) 
     _runtime_state =
             _pool.add(new RuntimeState(fragment_id, query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
     _runtime_state->init_instance_mem_tracker();
-    pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
-    fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
-    _runtime_state->set_fragment_dict_state(fragment_context->dict_state());
+    auto* fragment_runtime_state = _pool.add(new pipeline::FragmentRuntimeState());
+    fragment_runtime_state->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_runtime_state(fragment_runtime_state);
+    _runtime_state->set_fragment_dict_state(_pool.add(new FragmentDictState()));
 }
 
 THdfsScanRange* CacheSelectScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length,

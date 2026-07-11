@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/hdfs_scanner_json.h"
+#include "connector/hive/scanner/hdfs_scanner_json.h"
 
 #include <google/protobuf/descriptor.pb.h>
 #include <gtest/gtest.h>
@@ -104,7 +104,7 @@ std::string HdfsScannerJsonReaderTest::gen_check_int(size_t start, size_t end) {
 }
 
 TEST_F(HdfsScannerJsonReaderTest, test_read_all_rows) {
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/2_cols_10_rows.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/2_cols_10_rows.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_tuple_descriptor();
@@ -121,7 +121,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_all_rows) {
 }
 
 TEST_F(HdfsScannerJsonReaderTest, test_read_more_rows) {
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/2_cols_10_rows.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/2_cols_10_rows.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_tuple_descriptor();
@@ -149,7 +149,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_more_rows) {
 }
 
 TEST_F(HdfsScannerJsonReaderTest, test_read_large_file) {
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/2_cols_150_rows.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/2_cols_150_rows.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_tuple_descriptor();
@@ -181,7 +181,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_file) {
 }
 
 TEST_F(HdfsScannerJsonReaderTest, test_read_large_rows) {
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/2_cols_2_rows_large.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/2_cols_2_rows_large.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_tuple_descriptor();
@@ -194,7 +194,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_read_large_rows) {
 }
 
 TEST_F(HdfsScannerJsonReaderTest, test_read_wrong_order_json) {
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/3_cols_10_rows_wrong_order.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/3_cols_10_rows_wrong_order.json";
 
     create_random_access_file(path);
     auto* tuple_desc = create_tuple_descriptor();
@@ -241,7 +241,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_one_byte_before_boundary
     const std::string zai = std::string("\xE5\x9F\xBC", 3); // 埼, only 0xE5 lands in buffer 0
     std::string c2_1;
     std::string content = build_split_content(zai, 1023, &c2_1);
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_3b_a.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/utf8_split_3b_a.json";
     write_file(path, content);
     DeferOp clean([&]() { std::remove(path.c_str()); });
 
@@ -262,7 +262,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_3byte_utf8_split_two_bytes_before_boundar
     const std::string zai = std::string("\xE5\x9F\xBC", 3); // 埼, 0xE5 0x9F land in buffer 0
     std::string c2_1;
     std::string content = build_split_content(zai, 1022, &c2_1);
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_3b_b.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/utf8_split_3b_b.json";
     write_file(path, content);
     DeferOp clean([&]() { std::remove(path.c_str()); });
 
@@ -283,7 +283,7 @@ TEST_F(HdfsScannerJsonReaderTest, test_4byte_utf8_split_across_boundary) {
     const std::string emoji = std::string("\xF0\x9F\x98\x80", 4); // 😀, 3 of 4 bytes in buffer 0
     std::string c2_1;
     std::string content = build_split_content(emoji, 1021, &c2_1);
-    std::string path = "./be/test/exec/hdfs_scanner/test_data/utf8_split_4b.json";
+    std::string path = "./be/test/connector/hive/scanner/test_data/utf8_split_4b.json";
     write_file(path, content);
     DeferOp clean([&]() { std::remove(path.c_str()); });
 

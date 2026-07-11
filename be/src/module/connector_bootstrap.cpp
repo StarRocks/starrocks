@@ -19,6 +19,7 @@
 
 #include "connector/cache_stats/cache_stats_connector.h"
 #include "connector/connector_registry.h"
+#include "connector/hive/hive_connector.h"
 #include "connector_primitive/connector.h"
 
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
@@ -54,6 +55,7 @@ void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
 Status bootstrap_builtin_connectors() {
     auto* registry = ConnectorRegistry::default_instance();
     DCHECK(registry != nullptr);
+    install_if_absent<HiveConnector>(registry, Connector::HIVE);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
     install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
