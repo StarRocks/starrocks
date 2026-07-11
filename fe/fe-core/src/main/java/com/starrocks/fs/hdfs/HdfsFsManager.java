@@ -1196,7 +1196,7 @@ public class HdfsFsManager {
             }
             return fileSystem;
         } catch (Exception e) {
-            LOG.error("errors while connect to " + path, e);
+            LOG.error("error while connecting to {}", path, e);
             throw new StarRocksException(e);
         } finally {
             fileSystem.getLock().unlock();
