@@ -2877,7 +2877,13 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (RunMode.isSharedNothingMode() ||
                 (olapTable instanceof LakeTable && ((LakeTable) olapTable).isFastSchemaEvolutionV2()) ||
                 (olapTable instanceof LakeMaterializedView && ((LakeMaterializedView) olapTable).isFastSchemaEvolutionV2())) {
+            long startMs = System.currentTimeMillis();
             updateCatalogForFastSchemaEvolution(schemaChangeData);
+            if (RunMode.isSharedDataMode()) {
+                // Within branch (b), shared-data can only be the FSE-v2 sub-case (shared-nothing FSE is
+                // synchronous too but is not timed in this iteration).
+                AlterColumnMetrics.recordJobDuration("fse_v2", System.currentTimeMillis() - startMs);
+            }
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
