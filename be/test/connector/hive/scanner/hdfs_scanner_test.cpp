@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 
 #include <gtest/gtest.h>
 
@@ -29,13 +29,12 @@
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
-#include "exec/exec_env.h"
-#include "exec/hdfs_scanner/hdfs_scanner_avro.h"
-#include "exec/hdfs_scanner/hdfs_scanner_orc.h"
-#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
-#include "exec/hdfs_scanner/hdfs_scanner_text.h"
-#include "exec/hdfs_scanner/jni_scanner.h"
-#include "exec/pipeline/fragment_context.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "connector/hive/scanner/hdfs_scanner_avro.h"
+#include "connector/hive/scanner/hdfs_scanner_orc.h"
+#include "connector/hive/scanner/hdfs_scanner_parquet.h"
+#include "connector/hive/scanner/hdfs_scanner_text.h"
+#include "connector/hive/scanner/jni_scanner.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/csv_defaults.h"
@@ -100,9 +99,9 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();
-    pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
-    fragment_context->set_pred_tree_params({true, true});
-    _runtime_state->set_fragment_ctx(fragment_context, &fragment_context->fragment_runtime_state());
+    auto* fragment_runtime_state = _pool.add(new pipeline::FragmentRuntimeState());
+    fragment_runtime_state->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_runtime_state(fragment_runtime_state);
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
 }
 

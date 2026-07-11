@@ -12,22 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive_connector.h"
+#include "connector/hive/hive_connector.h"
 
 #include <gtest/gtest.h>
 
-#include "exec/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
-class HiveConnectorTest : public ::testing::Test {
-public:
-    void SetUp() override { _exec_env = ExecEnv::GetInstance(); }
-
-protected:
-    ExecEnv* _exec_env = nullptr;
-};
+class HiveConnectorTest : public ::testing::Test {};
 
 // Test HiveConnector type
 TEST_F(HiveConnectorTest, test_connector_type) {
@@ -59,13 +52,7 @@ TEST_F(HiveConnectorTest, test_open_no_data) {
 
     auto data_source = std::make_unique<HiveDataSource>(&provider, hdfs_scan_range);
 
-    TUniqueId fragment_id;
-    TQueryOptions query_options;
-    TQueryGlobals query_globals;
-    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
-                                                        &_exec_env->query_execution_services(), _exec_env);
-    TUniqueId id;
-    runtime_state->init_mem_trackers(id);
+    auto runtime_state = std::make_shared<RuntimeState>();
 
     auto status = data_source->open(runtime_state.get());
     EXPECT_TRUE(status.ok());

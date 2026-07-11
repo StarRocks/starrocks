@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive_chunk_sink.h"
+#include "connector/hive/hive_chunk_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -26,11 +26,10 @@
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/common/utils.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 namespace {
@@ -42,20 +41,8 @@ using ::testing::_;
 
 class HiveChunkSinkTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
-    }
-
-    void TearDown() override {}
-
-    ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
-    RuntimeState* _runtime_state;
+    RuntimeState _runtime_state_storage;
+    RuntimeState* _runtime_state = &_runtime_state_storage;
 };
 
 class MockFileWriterFactory : public formats::FileWriterFactory {

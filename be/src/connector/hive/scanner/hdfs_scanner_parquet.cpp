@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
+#include "connector/hive/scanner/hdfs_scanner_parquet.h"
 
 #include "common/runtime_profile.h"
 #include "compute_env/query/fragment_runtime_state.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/delta/deletion_vector.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/paimon/paimon_delete_file_builder.h"

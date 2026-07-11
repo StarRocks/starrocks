@@ -21,7 +21,7 @@
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/parquet/column_chunk_reader.h"

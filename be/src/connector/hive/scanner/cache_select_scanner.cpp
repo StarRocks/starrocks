@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "connector/hive/scanner/cache_select_scanner.h"
 
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"

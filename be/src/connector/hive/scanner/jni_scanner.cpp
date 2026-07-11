@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/hdfs_scanner/jni_scanner.h"
+#include "connector/hive/scanner/jni_scanner.h"
 
 #include <type_traits>
 #include <utility>

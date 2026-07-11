@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
 

@@ -16,7 +16,7 @@
 
 #include <orc/OrcFile.hh>
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/disk_range.hpp"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"

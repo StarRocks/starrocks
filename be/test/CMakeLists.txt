@@ -6,8 +6,6 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector/hive_connector_test.cpp
-        ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
@@ -82,10 +80,6 @@ set(EXEC_FILES
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/olap_scan_keys_test.cpp
-        ./exec/hdfs_scanner/cache_select_scanner_test.cpp
-        ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
-        ./exec/hdfs_scanner/hdfs_scanner_test.cpp
-        ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp

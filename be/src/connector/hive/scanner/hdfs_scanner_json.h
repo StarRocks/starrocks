@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/json/json_parser.h"
 #include "runtime/byte_buffer.h"
 
