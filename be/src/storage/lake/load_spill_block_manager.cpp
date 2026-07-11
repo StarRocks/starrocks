@@ -93,6 +93,11 @@ Status LoadSpillBlockManager::clear_parent_path() {
     if (!_used_remote_block.load(std::memory_order_relaxed)) {
         return Status::OK();
     }
+    // Release all spill blocks first. Their backing files are removed synchronously by
+    // ~FileBlockContainer() (which was created with skip_parent_path_deletion=true, so it only
+    // deletes the block file, not the parent dir). Without this, delete_dir() below runs while the
+    // block files still exist, sees a non-empty directory, and leaves an orphaned <load_id>/ dir marker.
+    _block_container.reset();
     // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
     Status status = Status::OK();
     if (_remote_dir_manager != nullptr) {

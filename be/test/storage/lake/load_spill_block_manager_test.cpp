@@ -115,6 +115,41 @@ TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
     ASSERT_TRUE(status.ok()) << "Expected parent path to still exist after destroy, but got: " << status;
 }
 
+// Regression test: clear_parent_path() must delete the parent directory even when the spill blocks
+// are still held by the manager's block container (the real DeltaWriter flow, where blocks are
+// appended to block_container() and only released when the manager is torn down). Previously
+// clear_parent_path() called delete_dir() while the block files still existed, so delete_dir() saw a
+// non-empty directory and left an orphaned <load_id>/ dir marker behind.
+TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_with_blocks_in_container) {
+    TUniqueId load_id;
+    load_id.hi = 23456;
+    load_id.lo = 78901;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, 1, 1, kTestDir);
+    ASSERT_OK(block_manager->init());
+
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_OK(block->append({Slice("test_data")}));
+    ASSERT_OK(block->flush());
+
+    // Mirror the production flow (SpillMemTableSink): a block group is created, the block is released
+    // and then handed to the manager's block container, and the caller drops its own reference. The
+    // block file therefore survives until the container is reset.
+    block_manager->block_container()->create_block_group();
+    ASSERT_OK(block_manager->release_block(block));
+    block_manager->block_container()->append_block(block);
+    block.reset();
+
+    std::string parent_path = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+    auto status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
+    ASSERT_OK(status);
+
+    // clear_parent_path() must release the container (deleting the block files) before delete_dir().
+    ASSERT_OK(block_manager->clear_parent_path());
+
+    status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(status.is_not_found()) << "Expected parent path to be deleted, but got: " << status;
+}
+
 // Test that clear_parent_path() is a no-op when only local blocks were acquired.
 // A purely local spill never creates the remote parent directory, so clear_parent_path()
 // must skip the remote acquire_dir + delete_dir work and must not create anything.
