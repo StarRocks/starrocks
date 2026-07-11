@@ -93,6 +93,16 @@ TEST(QueryRuntimeStateTest, StoresQueryScopedServiceReferences) {
     EXPECT_EQ(1024, state.static_query_mem_limit());
 }
 
+TEST(QueryRuntimeStateTest, TracksReadStats) {
+    QueryRuntimeState state;
+
+    state.incr_read_stats(3, 5);
+    state.incr_read_stats(7, 11);
+
+    EXPECT_EQ(10, state.get_read_local_cnt());
+    EXPECT_EQ(16, state.get_read_remote_cnt());
+}
+
 TEST(QueryRuntimeStateTest, ProfileControlsDefaultToDisabledMergeProfile) {
     QueryRuntimeState state;
 

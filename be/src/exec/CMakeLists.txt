@@ -255,7 +255,6 @@ set(EXEC_NON_PIPELINE_FILES
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
-    query_scan_metrics.cpp
     capture_version_node.cpp
     empty_set_node.cpp
     exec_factory.cpp
@@ -284,7 +283,6 @@ set(EXEC_NON_PIPELINE_FILES
     analytor.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
-    olap_scan_prepare.cpp
     meta_scan_node.cpp
     olap_meta_scanner.cpp
     olap_meta_scan_node.cpp

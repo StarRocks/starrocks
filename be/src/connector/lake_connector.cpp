@@ -29,13 +29,13 @@
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/query/partition_scan_range_pruner.h"
+#include "compute_env/query/query_runtime_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exec/connector_scan_node.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/query_scan_metrics.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -1272,8 +1272,9 @@ void LakeDataSource::update_counter(RuntimeState* state) {
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
         FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
     }
-    if (state && state->query_ctx()) {
-        state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
+    if (state != nullptr && state->query_runtime_state() != nullptr) {
+        state->query_runtime_state()->incr_read_stats(_reader->stats().io_count_local_disk,
+                                                      _reader->stats().io_count_remote);
     }
 }
 
