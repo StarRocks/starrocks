@@ -24,6 +24,8 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
+#include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "types/simple_json_path.h"
 #ifdef __cplusplus
@@ -38,6 +40,8 @@ extern "C" {
 namespace starrocks {
 
 using AvroPath = SimpleJsonPath;
+
+class StreamMessageMeta;
 
 class AvroScanner final : public FileScanner {
 public:
@@ -73,7 +77,7 @@ private:
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFile>& file);
     void _report_error(const std::string& line, const std::string& err_msg);
-    Status _construct_row(const avro_value_t& avro_value, Chunk* chunk);
+    Status _construct_row(const avro_value_t& avro_value, Chunk* chunk, const StreamMessageMeta* meta);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
                              std::string_view col_name);
@@ -82,7 +86,7 @@ private:
     Status _handle_union(const avro_value_t* input_value, avro_value_t* branch);
     Status _get_array_element(const avro_value_t* cur_value, size_t idx, avro_value_t* element);
     std::string _preprocess_jsonpaths(std::string jsonpath);
-    Status _construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk);
+    Status _construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk, const StreamMessageMeta* meta);
 
     const TBrokerScanRange& _scan_range;
     serdes_t* _serdes;
@@ -99,13 +103,26 @@ private:
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
     // Maps each source slot id to its intermediate avro load type (see AvroScanner::_construct_avro_types).
     std::unordered_map<SlotId, TypeDescriptor> _slot_id_to_avro_type;
+    // Hidden source-metadata slots (routine load), filled from the message's ByteBuffer meta rather than
+    // the avro payload. _meta_col_by_slot_id keys by source slot id (the jsonpath path iterates slots);
+    // _meta_col_by_index keys by chunk column index for the by-name null-fill path. Both empty otherwise.
+    StreamSourceMetaColumns _meta_col_by_slot_id;
+    std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
     std::vector<bool> _found_columns;
     std::vector<SlotInfo> _data_idx_to_slot;
     std::vector<std::string> _data_idx_to_fieldname;
     bool _init_data_idx_to_slot_once;
 
 #if BE_TEST
+public:
+    // Test-only: inject the per-message source metadata that production reads from the pipe buffer.
+    // BE_TEST reads avro from a file rather than the Kafka/Pulsar pipe, so the metadata-column fill path
+    // is otherwise unreachable from a test; this lets AvroScannerTest exercise it.
+    void set_test_stream_meta(const StreamMessageMeta* meta) { _test_meta = meta; }
+
+private:
     avro_file_reader_t _dbreader;
+    const StreamMessageMeta* _test_meta = nullptr;
 #endif
 };
 

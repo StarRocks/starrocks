@@ -33,6 +33,9 @@
 // under the License.
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 
+#include <limits>
+#include <sstream>
+
 #include "base/utility/defer_op.h"
 #include "compute_env/load/stream_load_context.h"
 #include "data_workflows/load/routine_load/data_consumer.h"
@@ -41,6 +44,117 @@
 #include "librdkafka/rdkafkacpp.h"
 
 namespace starrocks {
+
+int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic) {
+    static const std::string kSuffix = "-partition-";
+    auto pos = message_topic.rfind(kSuffix);
+    if (pos == std::string::npos) {
+        return -1;
+    }
+    const size_t digits_start = pos + kSuffix.size();
+    if (digits_start >= message_topic.size()) {
+        return -1;
+    }
+    // Accumulate in int64 and bail past INT32_MAX so a pathological suffix can't overflow (signed
+    // overflow is UB). Real Pulsar partition indices are small, so this only guards malformed names.
+    int64_t value = 0;
+    for (size_t i = digits_start; i < message_topic.size(); ++i) {
+        char c = message_topic[i];
+        if (c < '0' || c > '9') {
+            return -1;
+        }
+        value = value * 10 + (c - '0');
+        if (value > std::numeric_limits<int32_t>::max()) {
+            return -1;
+        }
+    }
+    // The suffix is a real partition only if what precedes it is the configured logical topic; this is
+    // what keeps a standalone topic literally named "<x>-partition-<n>" from being mistaken for a
+    // partition. Accept either an exact match (configured topic already fully qualified) or a match at
+    // the leading "/" boundary (configured topic given in short form against the canonical name).
+    const std::string prefix = message_topic.substr(0, pos);
+    if (prefix == logical_topic) {
+        return static_cast<int32_t>(value);
+    }
+    if (prefix.size() > logical_topic.size() &&
+        prefix.compare(prefix.size() - logical_topic.size(), logical_topic.size(), logical_topic) == 0 &&
+        prefix[prefix.size() - logical_topic.size() - 1] == '/') {
+        return static_cast<int32_t>(value);
+    }
+    return -1;
+}
+
+namespace {
+
+// Render a Pulsar MessageId as a stable string for the __message_id__ column. operator<< is what the
+// BE already uses to log MessageId, so the format is consistent across the codebase.
+std::string pulsar_message_id_to_string(const pulsar::MessageId& id) {
+    std::ostringstream oss;
+    oss << id;
+    return oss.str();
+}
+
+} // namespace
+
+void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, bool need_meta, bool need_key,
+                              bool need_headers, StreamMessageMeta* meta) {
+    // Always set: the scanner stamps partition/offset into error logs so rejected rows stay locatable
+    // even when the job selects no metadata column.
+    meta->set_partition(msg.partition());
+    meta->set_offset(msg.offset());
+    if (!need_meta) {
+        return;
+    }
+    meta->set_topic(topic);
+    // Leave the timestamp at its -1 sentinel when the broker reports none, so the column renders as
+    // NULL instead of a bogus epoch value.
+    auto timestamp = msg.timestamp();
+    if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
+        meta->set_timestamp(timestamp.timestamp);
+    }
+    if (need_key && msg.key_pointer() != nullptr) {
+        meta->set_key(std::string(static_cast<const char*>(msg.key_pointer()), msg.key_len()));
+    }
+    if (need_headers) {
+        // The Headers wrapper is owned by the message (its lifetime is the same as the Message, per
+        // RdKafka::Message::headers() docs); do NOT delete it here.
+        RdKafka::Headers* headers = msg.headers();
+        if (headers != nullptr) {
+            for (const auto& h : headers->get_all()) {
+                meta->add_header(h.key(), h.value() != nullptr
+                                                  ? std::string(static_cast<const char*>(h.value()), h.value_size())
+                                                  : std::string());
+            }
+        }
+    }
+}
+
+#ifndef __APPLE__
+void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
+                               bool need_key, bool need_headers, StreamMessageMeta* meta) {
+    // The TOPIC metadata exposes the configured logical topic; PARTITION surfaces the index parsed out
+    // of the per-message "<topic>-partition-N" name (message_topic). The full per-partition name stays
+    // the ack key.
+    meta->set_topic(topic);
+    int32_t partition_index = parse_pulsar_partition_index(topic, message_topic);
+    if (partition_index >= 0) {
+        meta->set_partition(partition_index);
+    }
+    meta->set_message_id(pulsar_message_id_to_string(msg.getMessageId()));
+    meta->set_timestamp(static_cast<int64_t>(msg.getPublishTimestamp()));
+    // Pulsar uses 0 for an unset event time; map it to -1 so the column renders as NULL.
+    int64_t event_ts = static_cast<int64_t>(msg.getEventTimestamp());
+    meta->set_event_timestamp(event_ts > 0 ? event_ts : -1);
+    if (need_key && msg.hasPartitionKey()) {
+        meta->set_key(msg.getPartitionKey());
+    }
+    if (need_headers) {
+        for (const auto& kv : msg.getProperties()) {
+            meta->add_header(kv.first, kv.second);
+        }
+    }
+}
+#endif
 
 Status KafkaDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->kafka_info);
@@ -119,14 +233,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     std::map<int32_t, int64_t> cmt_offset = ctx->kafka_info->cmt_offset;
     std::map<int32_t, int64_t> cmt_offset_timestamp;
 
-    //improve performance
-    Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter, int32_t partition,
-                                             int64_t offset);
+    // JSON/Avro: one message per buffer (with source metadata). CSV: rows separated by row_delimiter.
+    const bool append_as_message =
+            ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO;
     char row_delimiter = '\n';
-    if (ctx->format == TFileFormatType::FORMAT_JSON || ctx->format == TFileFormatType::FORMAT_AVRO) {
-        append_data = &KafkaConsumerPipe::append_json;
-    } else {
-        append_data = &KafkaConsumerPipe::append_with_row_delimiter;
+    if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
 
         if (!per_node_scan_ranges.empty()) {
@@ -137,6 +248,12 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             row_delimiter = static_cast<char>(params.row_delimiter);
         }
     }
+    // Attach the extended metadata (topic/timestamp/key/headers) only when the INCLUDE METADATA clause
+    // declares a source-metadata column.
+    const bool need_meta = ctx->kafka_info->need_source_metadata;
+    // Only copy the (potentially large) key/headers when the clause declares a KEY / HEADERS column.
+    const bool need_key = ctx->kafka_info->need_message_key;
+    const bool need_headers = ctx->kafka_info->need_message_headers;
 
     MonotonicStopWatch watch;
     watch.start();
@@ -219,18 +336,26 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             } else {
-                Status st = Status::OK();
-                st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                                      static_cast<size_t>(msg->len()), row_delimiter, msg->partition(),
-                                                      msg->offset());
+                auto timestamp = msg->timestamp();
+                Status st;
+                if (append_as_message) {
+                    StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
+                    // The Headers wrapper the builder reads is owned by the message and freed when `msg`
+                    // is deleted below via msgDeleter; the builder does not take ownership of it.
+                    build_kafka_message_meta(*msg, ctx->kafka_info->topic, need_meta, need_key, need_headers, &meta);
+                    st = kafka_pipe->append_json(static_cast<const char*>(msg->payload()),
+                                                 static_cast<size_t>(msg->len()), &meta);
+                } else {
+                    st = kafka_pipe->append_with_row_delimiter(static_cast<const char*>(msg->payload()),
+                                                               static_cast<size_t>(msg->len()), row_delimiter);
+                }
                 if (st.ok()) {
                     received_rows++;
                     left_bytes -= msg->len();
                     cmt_offset[msg->partition()] = msg->offset();
 
-                    auto timestamp = msg->timestamp();
                     if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
-                        cmt_offset_timestamp[msg->partition()] = msg->timestamp().timestamp;
+                        cmt_offset_timestamp[msg->partition()] = timestamp.timestamp;
                     }
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
@@ -339,13 +464,12 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     // copy one
     std::map<std::string, pulsar::MessageId> ack_offset = ctx->pulsar_info->ack_offset;
 
-    //improve performance
-    Status (PulsarConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter);
+    // JSON: one message per buffer, carrying source metadata. CSV: rows separated by row_delimiter.
+    // The Pulsar path only ever sees JSON or CSV: PulsarTaskInfo maps every non-json format (including
+    // avro) to CSV_PLAIN, so the avro scanner never runs for Pulsar.
+    const bool append_as_message = ctx->format == TFileFormatType::FORMAT_JSON;
     char row_delimiter = '\n';
-    if (ctx->format == TFileFormatType::FORMAT_JSON) {
-        append_data = &PulsarConsumerPipe::append_json;
-    } else {
-        append_data = &PulsarConsumerPipe::append_with_row_delimiter;
+    if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
 
         if (!per_node_scan_ranges.empty()) {
@@ -356,6 +480,12 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             row_delimiter = static_cast<char>(params.row_delimiter);
         }
     }
+    // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
+    // otherwise the buffer stays metadata-free and the scanner reads every field from the payload.
+    const bool need_meta = ctx->pulsar_info->need_source_metadata;
+    // Only copy the (potentially large) partition key/properties when the clause declares a KEY / HEADERS column.
+    const bool need_key = ctx->pulsar_info->need_message_key;
+    const bool need_headers = ctx->pulsar_info->need_message_headers;
 
     MonotonicStopWatch watch;
     watch.start();
@@ -410,8 +540,22 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             VLOG(3) << "get pulsar message"
                     << ", partition: " << partition << ", message id: " << msg_id << ", len: " << len;
 
-            Status st = (pulsar_pipe.get()->*append_data)(static_cast<const char*>(msg->getData()),
-                                                          static_cast<size_t>(len), row_delimiter);
+            Status st;
+            if (append_as_message) {
+                StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
+                const StreamMessageMeta* meta_ptr = nullptr;
+                if (need_meta) {
+                    // `partition` is msg->getTopicName(), read once above (unsafe to re-read inside the
+                    // builder in tests); it carries the "<topic>-partition-N" name for the index parse.
+                    build_pulsar_message_meta(*msg, ctx->pulsar_info->topic, partition, need_key, need_headers, &meta);
+                    meta_ptr = &meta;
+                }
+                st = pulsar_pipe->append_json(static_cast<const char*>(msg->getData()), static_cast<size_t>(len),
+                                              meta_ptr);
+            } else {
+                st = pulsar_pipe->append_with_row_delimiter(static_cast<const char*>(msg->getData()),
+                                                            static_cast<size_t>(len), row_delimiter);
+            }
 
             if (st.ok()) {
                 received_rows++;
