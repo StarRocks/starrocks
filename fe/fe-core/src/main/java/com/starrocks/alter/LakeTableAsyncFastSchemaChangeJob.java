@@ -240,6 +240,17 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
+    protected void runFinishedRewritingJob() throws AlterCancelException {
+        super.runFinishedRewritingJob();
+        // Record fse_v1 duration only when the job actually reached FINISHED (early returns inside the
+        // base method leave it in FINISHED_REWRITING), and exclude the disable-v2 property toggle jobs
+        // which reuse this class but are not user column operations.
+        if (jobState == JobState.FINISHED && !isDisableFastSchemaEvolutionV2()) {
+            AlterColumnMetrics.recordJobDuration("fse_v1", finishedTimeMs - createTimeMs);
+        }
+    }
+
+    @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
         boolean expiredByHistorySchema = true;
