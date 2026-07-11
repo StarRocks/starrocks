@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -26,16 +26,17 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/common/utils.h"
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 namespace {
@@ -49,20 +50,12 @@ using ::testing::_;
 
 class IcebergChunkSinkTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
-    }
+    void SetUp() override { _runtime_state = std::make_unique<RuntimeState>(); }
 
     void TearDown() override {}
 
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
-    RuntimeState* _runtime_state;
+    std::unique_ptr<RuntimeState> _runtime_state;
 };
 
 class MockFileWriterFactory : public formats::FileWriterFactory {
@@ -119,7 +112,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
         auto sink = std::make_unique<connector::IcebergChunkSink>(
                 partition_column_names, transform, std::move(partition_column_evaluators),
-                std::move(partition_chunk_writer_factory), _runtime_state);
+                std::move(partition_chunk_writer_factory), _runtime_state.get());
         auto poller = MockPoller();
         SinkMemoryManager mgr(nullptr, nullptr);
         EXPECT_OK(sink->init(&poller, nullptr, &mgr));
@@ -177,7 +170,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state.get();
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -199,7 +192,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state.get();
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -207,6 +200,15 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         EXPECT_EQ(sink->op_mem_mgr(), nullptr);
         EXPECT_ERROR(sink->init(&poller, nullptr, &mgr)); // format is not supported
     }
+}
+
+TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {
+    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    IcebergChunkSinkProvider provider(sink_ctx);
+
+    auto result = provider.create_sink(0);
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("requires runtime_state"));
 }
 
 TEST_F(IcebergChunkSinkTest, test_utils) {

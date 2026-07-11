@@ -6,10 +6,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
-        ./connector_sink/iceberg_delete_sink_test.cpp
-        ./connector_sink/iceberg_row_delta_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp

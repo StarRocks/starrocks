@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -29,8 +29,6 @@
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/column_evaluator.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -38,6 +36,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "testutil/column_test_helper.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
@@ -53,11 +52,10 @@ protected:
         TUniqueId fragment_id;
         fragment_id.hi = 0;
         fragment_id.lo = 0;
-        _runtime_state =
-                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                        static_cast<ExecEnv*>(nullptr));
+        _query_execution_services.runtime = &_runtime_services;
+        _runtime_state->set_query_execution_services(&_query_execution_services);
         // Initialize mem trackers for the runtime state
         _runtime_state->init_instance_mem_tracker();
 
@@ -77,11 +75,6 @@ protected:
                             .ok());
         _runtime_state->set_desc_tbl(desc_tbl);
 
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::move(_runtime_state));
-        // Get the runtime state back from fragment context after moving
-        _runtime_state = _fragment_context->runtime_state_ptr();
-        _fragment_context->set_fragment_instance_id(fragment_id);
         _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergDeleteSinkTest");
         _test_path = std::filesystem::temp_directory_path() / "iceberg_delete_sink_test";
         std::filesystem::remove_all(_test_path);
@@ -94,7 +87,7 @@ protected:
         auto context = std::make_shared<IcebergDeleteSinkContext>();
         context->path = _test_path.string() + "/";
         context->tuple_desc_id = 0;
-        context->fragment_context = _fragment_context.get();
+        context->runtime_state = _runtime_state.get();
         context->max_file_size = 128 * 1024 * 1024;
 
         // Set up output expressions to match the tuple descriptor (2 slots: file_path and pos)
@@ -129,8 +122,9 @@ protected:
     }
 
     std::unique_ptr<ObjectPool> _pool;
+    RuntimeServices _runtime_services;
+    QueryExecutionServices _query_execution_services;
     std::shared_ptr<RuntimeState> _runtime_state;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::filesystem::path _test_path;
 };
@@ -248,7 +242,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
     result_obj.file_result.location = "/test/path/delete_file.parquet";
 
     // Get the runtime state before the callback to check sink commit info
-    auto runtime_state = _fragment_context->runtime_state_ptr();
+    auto runtime_state = _runtime_state;
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     delete_sink->callback_on_commit(result_obj);
@@ -294,7 +288,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     result_obj.file_result.file_statistics.upper_bounds = {{1, "max_val"}, {2, "max_val2"}};
 
     // Get the runtime state before the callback to check sink commit info
-    auto runtime_state = _fragment_context->runtime_state_ptr();
+    auto runtime_state = _runtime_state;
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     // Call the callback function
@@ -334,7 +328,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
     result_obj.file_result.location = "/test/path/delete_file.parquet";
 
     // Get the runtime state before the callback to check sink commit info
-    auto runtime_state = _fragment_context->runtime_state_ptr();
+    auto runtime_state = _runtime_state;
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     // Call the callback function - it should handle the failure gracefully
@@ -369,7 +363,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
     // Lower and upper bounds not set
 
     // Get the runtime state before the callback to check sink commit info
-    auto runtime_state = _fragment_context->runtime_state_ptr();
+    auto runtime_state = _runtime_state;
     size_t initial_sink_commit_info_count = runtime_state->sink_commit_infos().size();
 
     // Call the callback function
@@ -425,7 +419,7 @@ TEST_F(IcebergDeleteSinkTest, finish_function) {
 TEST_F(IcebergDeleteSinkTest, missing_file_column) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
-    context->fragment_context = _fragment_context.get();
+    context->runtime_state = _runtime_state.get();
 
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
@@ -450,7 +444,7 @@ TEST_F(IcebergDeleteSinkTest, missing_file_column) {
 TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
-    context->fragment_context = _fragment_context.get();
+    context->runtime_state = _runtime_state.get();
 
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
@@ -475,7 +469,7 @@ TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
 TEST_F(IcebergDeleteSinkTest, not_enough_evaluators) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 0;
-    context->fragment_context = _fragment_context.get();
+    context->runtime_state = _runtime_state.get();
 
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;
@@ -509,7 +503,7 @@ TEST_F(IcebergDeleteSinkTest, not_enough_evaluators) {
 TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
     auto context = std::make_shared<IcebergDeleteSinkContext>();
     context->tuple_desc_id = 999; // Invalid ID
-    context->fragment_context = _fragment_context.get();
+    context->runtime_state = _runtime_state.get();
 
     // Setup output expressions to match tuple descriptor (2 slots)
     TExpr file_expr, pos_expr;

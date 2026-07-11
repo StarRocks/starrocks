@@ -29,6 +29,7 @@ target_link_libraries(ModuleBootstrap PRIVATE
         ComputeEnv
         Connector
         ConnectorHive
+        ConnectorIceberg
         ConnectorCacheStats
         Base
         Gutil

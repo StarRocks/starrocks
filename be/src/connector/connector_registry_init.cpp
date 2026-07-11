@@ -18,9 +18,6 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/file/file_connector.h"
-#ifndef __APPLE__
-#include "connector/iceberg_connector.h"
-#endif
 #include "connector/lake_connector.h"
 
 namespace starrocks::connector {
@@ -40,9 +37,6 @@ Status install_builtin_connectors(ConnectorRegistry* registry) {
     DCHECK(registry != nullptr);
     install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);
-#ifndef __APPLE__
-    install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
-#endif
     return Status::OK();
 }
 

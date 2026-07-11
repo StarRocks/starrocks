@@ -31,11 +31,19 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdemp
     const auto* hive = registry->get(Connector::HIVE);
     ASSERT_NE(nullptr, hive);
     EXPECT_EQ(ConnectorType::HIVE, hive->connector_type());
+#ifndef __APPLE__
+    const auto* iceberg = registry->get(Connector::ICEBERG);
+    ASSERT_NE(nullptr, iceberg);
+    EXPECT_EQ(ConnectorType::ICEBERG, iceberg->connector_type());
+#endif
 
     status = bootstrap_builtin_connectors();
     ASSERT_TRUE(status.ok()) << status;
     EXPECT_EQ(cache_stats, registry->get(Connector::CACHE_STATS));
     EXPECT_EQ(hive, registry->get(Connector::HIVE));
+#ifndef __APPLE__
+    EXPECT_EQ(iceberg, registry->get(Connector::ICEBERG));
+#endif
 }
 
 } // namespace starrocks::connector

@@ -553,6 +553,7 @@ set(STARROCKS_LINK_LIBS
     Connector
     ConnectorFile
     ConnectorHive
+    ConnectorIceberg
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry

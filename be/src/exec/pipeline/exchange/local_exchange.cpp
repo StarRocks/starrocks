@@ -22,7 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/common/hive_partition_utils.h"
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"

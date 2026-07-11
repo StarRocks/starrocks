@@ -87,14 +87,38 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
+ADD_BE_LIB(ConnectorIceberg
+        iceberg/iceberg_connector.cpp
+        iceberg/iceberg_chunk_sink.cpp
+        iceberg/iceberg_utils.cpp
+        iceberg/iceberg_delete_sink.cpp
+        iceberg/iceberg_row_delta_sink.cpp
+)
+
+target_link_libraries(ConnectorIceberg PUBLIC
+        ConnectorCommon
+        ConnectorPrimitive
+        FormatCore
+        FormatParquet
+        ChunkCore
+        Types
+        Common
+        StarRocksGen
+)
+
+target_link_libraries(ConnectorIceberg PRIVATE
+        Expr
+        Runtime
+        FileSystem
+        ColumnSortCore
+        ColumnCore
+        Base
+        Gutil
+)
+
 ADD_BE_LIB(Connector
         connector_registry.cpp
         lake_connector.cpp
-        iceberg_connector.cpp
-        iceberg_chunk_sink.cpp
-        iceberg_utils.cpp
-        iceberg_delete_sink.cpp
-        iceberg_row_delta_sink.cpp
 )
 
 target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)
