@@ -110,9 +110,6 @@ public final class TabletPreSplitCoordinator {
         if (table.getState() != OlapTable.OlapTableState.NORMAL) {
             return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
         }
-        if (table.getVisibleIndexMetas().size() != 1) {
-            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
-        }
         if (!areSortKeyColumnsSupported(table)) {
             return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
         }
@@ -130,6 +127,9 @@ public final class TabletPreSplitCoordinator {
         }
         if (baseIndex.getRowCount() > 0) {
             return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
+        }
+        if (PreSplitTargets.resolveVisibleIndexTargets(table, partition) == null) {
+            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
         }
 
         return new PreSplitOutcome.Eligible();

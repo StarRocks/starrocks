@@ -40,7 +40,9 @@ import java.util.function.BooleanSupplier;
  *   <li>{@link #dispatch} — partitioned-vs-unpartitioned routing, including the
  *       automatic-partition gate that conservatively skips manually
  *       list/range-partitioned targets (those cannot pre-create partitions from
- *       sampled values).</li>
+ *       sampled values), and the INSERT-from-table rollup descope (a rollup's sort
+ *       key cannot be remapped to source columns, so a multi-index target skips
+ *       before sampling for that load kind only).</li>
  *   <li>{@link #runSinglePartitionFlow} — resolve the unique partition + base
  *       tablet, build a {@link DefaultPreSplitPipeline}, submit via
  *       {@link TabletPreSplitCoordinator#submitAsynchronously}, then sync-await
@@ -79,6 +81,11 @@ final class PreSplitFlow {
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
+        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.getVisibleIndexMetas().size() > 1) {
+            // INSERT-from-table cannot remap a divergent rollup sort key to source columns (descoped).
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return;
+        }
         if (target.getPartitionInfo().isPartitioned()) {
             // Manually list/range-partitioned targets do not support pre-creating partitions
             // from sampled values; skip conservatively, let the load proceed.

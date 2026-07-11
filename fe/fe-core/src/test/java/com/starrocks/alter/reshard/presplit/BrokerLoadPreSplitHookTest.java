@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -36,23 +37,31 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
  * Detection-side coverage for {@link BrokerLoadPreSplitHook}: each early-return
  * branch is exercised and asserted via {@code MockedStatic} to never reach
- * {@link TabletPreSplitCoordinator#submitAsynchronously}. The eligible-
- * delegation path needs a full FE fixture (catalog, tablet inverted index,
- * compute-resource warehouse) and is left to integration coverage.
+ * {@link TabletPreSplitCoordinator#submitAsynchronously}. The full eligible-
+ * delegation path (sampling through an admitted reshard job) needs a full FE
+ * fixture (catalog, tablet inverted index, compute-resource warehouse) and is
+ * left to integration coverage; the relaxed per-index gate (base + rollup)
+ * is covered here with {@link TabletPreSplitCoordinator} itself mocked out.
  */
 public class BrokerLoadPreSplitHookTest {
 
     private static final long BASE_INDEX_META_ID = 200L;
+    private static final long ROLLUP_INDEX_META_ID = 210L;
 
     private boolean savedConfigBrokerLoad;
 
@@ -170,6 +179,75 @@ public class BrokerLoadPreSplitHookTest {
         assertSinglePartitionResolveRecordsSkip(target, SkipReason.METADATA_NOT_RESOLVED);
     }
 
+    // ---- relaxed per-index gate: base + rollup ----
+
+    @Test
+    public void testEligibleRollupDelegatesToCoordinator() throws Exception {
+        // A base index plus a single eligible rollup (single-tablet, scalar sort key) must NOT
+        // be skipped for has_materialized_view_or_rollup and must reach the coordinator's
+        // submitAsynchronously -- the relaxed per-index gate (PreSplitTargets#resolveVisibleIndexTargets)
+        // lets it through where the old getVisibleIndexMetas().size() != 1 gate would have skipped.
+        OlapTable target = tableWithBaseAndRollup();
+        installBaseAndRollup(target, /*rollupTabletCount*/ 1);
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic = Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+            stubIndexSortKey(metaUtils, target, BASE_INDEX_META_ID, "k");
+            stubIndexSortKey(metaUtils, target, ROLLUP_INDEX_META_ID, "k2");
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                            any(), any(), anyLong(), anyLong(), any(), any()))
+                    .thenReturn(mock(DefaultPreSplitPipeline.class));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of(List.<TBrokerFileStatus>of()));
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+            Assertions.assertEquals(baseline,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "eligible base+rollup must not bump the has_materialized_view_or_rollup bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void testIneligibleRollupRecordsSkip() throws Exception {
+        // A rollup that fails per-index resolution (here: more than one tablet) must skip the
+        // whole target under has_materialized_view_or_rollup and never delegate.
+        OlapTable target = tableWithBaseAndRollup();
+        installBaseAndRollup(target, /*rollupTabletCount*/ 2);
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            stubIndexSortKey(metaUtils, target, BASE_INDEX_META_ID, "k");
+            stubIndexSortKey(metaUtils, target, ROLLUP_INDEX_META_ID, "k2");
+
+            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            assertHookDoesNotDelegate(() ->
+                    invokeHook(target, List.of(mock(BrokerFileGroup.class)), List.of(List.<TBrokerFileStatus>of())));
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "ineligible rollup must bump the has_materialized_view_or_rollup bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
     @Test
     public void testInternalThrowIsSwallowed() throws Exception {
         // Drive the outer try/catch by passing an OlapTable whose accessor
@@ -240,6 +318,62 @@ public class BrokerLoadPreSplitHookTest {
         when(partitionInfo.isPartitioned()).thenReturn(false);
         when(table.getPartitionInfo()).thenReturn(partitionInfo);
         return table;
+    }
+
+    /**
+     * Variant of {@link #tablePassingTableLevelGate} with a second visible index (a rollup)
+     * alongside the base, so {@link PreSplitTargets#findEligibleTable}'s per-index sort-key
+     * check runs against both. Per-partition shape (physical partitions, tablets per index) is
+     * left to {@link #installBaseAndRollup}.
+     */
+    private static OlapTable tableWithBaseAndRollup() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(table.isRangeDistribution()).thenReturn(true);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+        return table;
+    }
+
+    /**
+     * Installs {@code target}'s single physical partition with a single-tablet base index and a
+     * rollup index carrying {@code rollupTabletCount} tablets, both visible to
+     * {@link PreSplitTargets#resolveVisibleIndexTargets}.
+     */
+    private static void installBaseAndRollup(OlapTable target, int rollupTabletCount) {
+        MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
+        when(baseIndex.getRowCount()).thenReturn(0L);
+
+        MaterializedIndex rollupIndex = mock(MaterializedIndex.class);
+        when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        List<Tablet> rollupTablets = new ArrayList<>(rollupTabletCount);
+        for (int i = 0; i < rollupTabletCount; i++) {
+            rollupTablets.add(mock(Tablet.class));
+        }
+        when(rollupIndex.getTablets()).thenReturn(rollupTablets);
+
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
+        when(target.getPhysicalPartitions()).thenReturn(List.of(partition));
+    }
+
+    /** Stub {@code MetaUtils.getRangeDistributionColumns(target, indexMetaId)} to a single scalar column. */
+    private static void stubIndexSortKey(
+            MockedStatic<MetaUtils> metaUtils, OlapTable target, long indexMetaId, String columnName) {
+        metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, indexMetaId))
+                .thenReturn(List.of(PresplitTestSupport.bigintColumn(columnName)));
     }
 
     /**

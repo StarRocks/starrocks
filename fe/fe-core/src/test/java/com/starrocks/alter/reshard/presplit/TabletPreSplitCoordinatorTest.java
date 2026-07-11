@@ -52,6 +52,7 @@ public class TabletPreSplitCoordinatorTest {
 
     private static final long PARTITION_ID = 10001L;
     private static final long BASE_INDEX_META_ID = 200L;
+    private static final long ROLLUP_INDEX_META_ID = 201L;
 
     private Database database;
     private OlapTable table;
@@ -90,11 +91,16 @@ public class TabletPreSplitCoordinatorTest {
 
         database = mock(Database.class);
         baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
         when(baseIndex.getRowCount()).thenReturn(0L);
 
         partition = mock(PhysicalPartition.class);
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        // Default: base index only, visible to resolveVisibleIndexTargets. Tests that add a
+        // rollup override this via stubRollupIndex(...).
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
 
         table = mock(OlapTable.class);
         when(table.isRangeDistribution()).thenReturn(true);
@@ -127,6 +133,34 @@ public class TabletPreSplitCoordinatorTest {
         when(indexMeta.getSchema()).thenReturn(List.of(columns));
         when(indexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
         when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
+    }
+
+    /**
+     * Add a visible rollup index (alongside the default base index) with {@code tabletCount}
+     * tablets and {@code sortKeyColumns} as its sort key, mirroring {@link #stubSortKeyColumns}
+     * for the base index. Overrides the default {@code partition.getLatestMaterializedIndices}
+     * stub so both indices are visible to {@link PreSplitTargets#resolveVisibleIndexTargets}.
+     */
+    private void stubRollupIndex(int tabletCount, Column... sortKeyColumns) {
+        List<Integer> sortKeyIdxes = new java.util.ArrayList<>(sortKeyColumns.length);
+        for (int columnIndex = 0; columnIndex < sortKeyColumns.length; columnIndex++) {
+            sortKeyIdxes.add(columnIndex);
+        }
+        MaterializedIndexMeta rollupIndexMeta = mock(MaterializedIndexMeta.class);
+        when(rollupIndexMeta.getSchema()).thenReturn(List.of(sortKeyColumns));
+        when(rollupIndexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
+        when(table.getIndexMetaByMetaId(ROLLUP_INDEX_META_ID)).thenReturn(rollupIndexMeta);
+
+        MaterializedIndex rollupIndex = mock(MaterializedIndex.class);
+        when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        List<Tablet> tablets = new java.util.ArrayList<>(tabletCount);
+        for (int tabletIndex = 0; tabletIndex < tabletCount; tabletIndex++) {
+            tablets.add(mock(Tablet.class));
+        }
+        when(rollupIndex.getTablets()).thenReturn(tablets);
+
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
     }
 
     @AfterEach
@@ -216,12 +250,32 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
-    public void testMaterializedViewOrRollupSkipped() {
-        // visibleIndexMetas.size() > 1 means at least one MV or rollup is attached.
-        when(table.getVisibleIndexMetas()).thenReturn(
-                List.of(mock(MaterializedIndexMeta.class), mock(MaterializedIndexMeta.class)));
+    public void maybeAct_baseAndEligibleRollup_eligible() {
+        // A visible rollup with its own single tablet and scalar sort key no longer
+        // disqualifies the table -- the getVisibleIndexMetas().size() != 1 gate is gone;
+        // resolveVisibleIndexTargets checks every visible index independently instead.
+        stubRollupIndex(/*tabletCount*/ 1, PresplitTestSupport.bigintColumn("k2"));
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, invokeMaybeAct());
+    }
+
+    @Test
+    public void maybeAct_ineligibleRollup_skips() {
+        // A rollup that fails per-index resolution (here: more than one tablet) must
+        // still skip the whole target under HAS_MATERIALIZED_VIEW_OR_ROLLUP.
+        stubRollupIndex(/*tabletCount*/ 2, PresplitTestSupport.bigintColumn("k2"));
 
         assertSkipped(invokeMaybeAct(), SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+    }
+
+    @Test
+    public void maybeAct_baseNonEmptyWithRollup_partitionNotEmpty() {
+        // The base-index row-count check must still gate ahead of the per-index rollup
+        // resolution, even when an otherwise-eligible rollup is present.
+        when(baseIndex.getRowCount()).thenReturn(42L);
+        stubRollupIndex(/*tabletCount*/ 1, PresplitTestSupport.bigintColumn("k2"));
+
+        assertSkipped(invokeMaybeAct(), SkipReason.PARTITION_NOT_EMPTY);
     }
 
     @Test
