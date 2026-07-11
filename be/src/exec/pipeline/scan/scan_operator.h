@@ -280,8 +280,15 @@ protected:
     std::atomic<int> _num_running_io_tasks = 0;
     // Footer warm tasks (connector scans) run on their own counter so they fill spare io-task slots
     // (data + warm <= the per-instance cap) without perturbing the adaptive governor or the data
-    // re-submit gate, which read _num_running_io_tasks (data only). is_finished() waits on both.
+    // re-submit gate, which read _num_running_io_tasks (data only). pending_finish() waits on it.
     std::atomic<int> _num_running_warm_tasks = 0;
+    // Set once in set_finishing() to reject any warm reservation that races operator teardown. A warm
+    // submit can be triggered from a data io-task completion (_finish_chunk_source_task) that runs on
+    // an executor thread after the driver already observed _num_running_warm_tasks == 0 via
+    // pending_finish(); without this the operator could re-arm warm after teardown began. try_submit
+    // increments the warm counter then rejects if this flag is set, so either the driver sees the
+    // increment (waits) or the submit rolls back -- never both zero-and-proceeding.
+    std::atomic<bool> _warm_disabled = false;
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;

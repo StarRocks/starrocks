@@ -528,7 +528,7 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     // Warm fills the io-task slots the data scan leaves spare so footers are read ahead of the scan
     // cursor. They run on _num_running_warm_tasks, separate from data's _num_running_io_tasks: the
     // adaptive governor and the data re-submit gate read data only and so are not perturbed by warm,
-    // while is_finished() waits on both counters (keeping `this` alive for the task body).
+    // while pending_finish() waits on _num_running_warm_tasks (keeping `this` alive until they drain).
     // Reserve within two bounds: at most connector_footer_prefetch_max_inflight concurrent warm tasks
     // per instance, and data + warm <= the per-instance cap (data side bounded by max(current data,
     // target) so in-flight data from before a throttle-down still cannot be exceeded). fetch_add then
@@ -536,6 +536,14 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     const int max_warm_inflight = config::connector_footer_prefetch_max_inflight;
     while (true) {
         int prev_warm = _num_running_warm_tasks.fetch_add(1);
+        // Reject if teardown began (set_finishing set _warm_disabled). Checked AFTER the fetch_add so
+        // it linearizes with pending_finish()'s warm-count read: a data io-task completion on an
+        // executor thread can reach here after the driver observed a zero warm count, and this makes
+        // sure such a late reservation either is seen by the driver (count > 0 -> wait) or rolls back.
+        if (_warm_disabled.load()) {
+            _num_running_warm_tasks.fetch_sub(1);
+            break;
+        }
         int data_reserved = std::max<int>(_num_running_io_tasks.load(), current_io_task_target());
         if (prev_warm + 1 > max_warm_inflight || data_reserved + prev_warm + 1 > _io_tasks_per_scan_operator) {
             _num_running_warm_tasks.fetch_sub(1);
@@ -551,7 +559,13 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
                 // Wake parked scan observers when this warm task finishes (event scheduler): a driver
                 // with no buffered chunks must re-check progress after warm drains, same as data tasks.
                 auto notify = scan_defer_notify(this);
-                if (!fp->cancelled()) {
+                // Skip the actual footer read if the operator is winding down: an already-queued task
+                // must not spend a remote footer read once the scan will no longer consume it, so
+                // pending_finish() drains promptly instead of waiting on wasted reads. Three signals,
+                // cheapest/promptest first: fragment cancel/finish (state->is_cancelled()), operator-
+                // local finish (_warm_disabled, set by set_finishing() even without a fragment cancel),
+                // and factory close (fp->cancelled(), the latest).
+                if (!state->is_cancelled() && !_warm_disabled.load() && !fp->cancelled()) {
                     connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
                     fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
                 }

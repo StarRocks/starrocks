@@ -322,15 +322,16 @@ bool ScanOperator::has_output() const {
 
 bool ScanOperator::pending_finish() const {
     DCHECK(is_finished());
-    return false;
+    // Footer warm tasks (connector scans) capture `this` and must keep the operator alive until they
+    // drain. Express that here, NOT in is_finished(): warm tasks produce no output, so they must not
+    // affect output-completion semantics, and gating is_finished() would (a) fire this DCHECK on the
+    // forced set_finished of the cancel path and (b) still not defer close() there. pending_finish()
+    // is the designed post-set_finished async-work gate and holds the driver in PENDING_FINISH (both
+    // normal and cancel) until warm drains. 0 for non-connector scans, so their behavior is unchanged.
+    return _num_running_warm_tasks > 0;
 }
 
 bool ScanOperator::is_finished() const {
-    // Footer warm tasks capture `this`; never report finished -- which would let the operator be
-    // destroyed -- while any is in flight, even after set_finishing() has set _is_finished.
-    if (_num_running_warm_tasks > 0) {
-        return false;
-    }
     if (_is_finished) {
         return true;
     }
@@ -391,6 +392,10 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
+    // Reject any warm reservation from here on (paired with the post-increment check in
+    // try_submit_metadata_prefetch) so a warm task cannot re-arm after the driver observes a zero
+    // warm count via pending_finish(). Store before reading the warm count downstream.
+    _warm_disabled.store(true);
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
     set_buffer_finished();
