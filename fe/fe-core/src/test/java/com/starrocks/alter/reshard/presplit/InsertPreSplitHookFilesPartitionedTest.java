@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableFunctionTable;
@@ -31,6 +32,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -243,6 +245,45 @@ public class InsertPreSplitHookFilesPartitionedTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
+    }
+
+    // ---------- Secondary index spec construction ----------
+
+    @Test
+    public void buildSecondaryIndexSpecsIncludesEveryRollupExceptBase() {
+        // A target with a base index (id 1) and one rollup (id 2) must produce exactly
+        // one SecondaryIndexSpec for the rollup, carrying its own (divergent) sort key.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(2L);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+
+        List<Column> rollupSortKey = List.of(bigintColumn("r"));
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, 2L)).thenReturn(rollupSortKey);
+
+            List<SecondaryIndexSpec> specs = FilesPreSplitSource.buildSecondaryIndexSpecs(table);
+
+            Assertions.assertEquals(1, specs.size(), "exactly one rollup spec expected");
+            Assertions.assertEquals(2L, specs.get(0).indexMetaId());
+            Assertions.assertEquals(rollupSortKey, specs.get(0).sortKey());
+        }
+    }
+
+    @Test
+    public void buildSecondaryIndexSpecsEmptyForSingleIndexTarget() {
+        // A single-index (base only) target must produce no secondary specs.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(1L);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+
+        Assertions.assertTrue(FilesPreSplitSource.buildSecondaryIndexSpecs(table).isEmpty(),
+                "a single-index target must produce no secondary index specs");
     }
 
     /**

@@ -18,6 +18,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -39,6 +40,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -164,9 +166,10 @@ public final class InsertPreSplitHook {
      *       value (has a default, is nullable, auto-increment, or generated) —
      *       mirrors InsertAnalyzer's "must be explicitly mentioned" rule, so a list
      *       missing a required column is skipped rather than resharded;</li>
-     *   <li>every range-distribution (sort) key column is present — an omitted key
-     *       is defaulted for every row, collapsing the data on that key and making
-     *       split boundaries degenerate.</li>
+     *   <li>every range-distribution (sort) key column of EVERY visible index (base
+     *       plus any rollup) is present -- an omitted key is defaulted for every row,
+     *       collapsing the data on that key and making split boundaries degenerate
+     *       for whichever index the omitted column belongs to.</li>
      * </ul>
      *
      * <p>Source-specific column/source alignment is still checked later in each
@@ -205,12 +208,30 @@ public final class InsertPreSplitHook {
                 return false;   // a required column is missing from the list
             }
         }
-        for (Column sortKey : sortKeyColumns) {
+        for (Column sortKey : unionOfVisibleIndexSortKeyColumns(target, sortKeyColumns)) {
             if (!listed.contains(sortKey.getName().toLowerCase())) {
                 return false;   // a sort-key column is missing -> degenerate split
             }
         }
         return true;
+    }
+
+    /**
+     * Union of {@code baseSortKeyColumns} with every OTHER visible index's (rollup)
+     * sort-key columns. A target column list must cover every visible index's sort
+     * key, not just the base one -- an omitted rollup key still collapses that
+     * index's data on split, even when the base split is fine.
+     */
+    private static List<Column> unionOfVisibleIndexSortKeyColumns(
+            OlapTable target, List<Column> baseSortKeyColumns) {
+        List<Column> union = new ArrayList<>(baseSortKeyColumns);
+        for (MaterializedIndexMeta meta : target.getVisibleIndexMetas()) {
+            if (meta.getIndexMetaId() == target.getBaseIndexMetaId()) {
+                continue;
+            }
+            union.addAll(MetaUtils.getRangeDistributionColumns(target, meta.getIndexMetaId()));
+        }
+        return union;
     }
 
     /**

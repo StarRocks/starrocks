@@ -72,11 +72,22 @@ final class PreSplitFlow {
      * Source-resolved inputs the flow needs. sortKeyColumns / partitionColumns are TARGET
      * columns (boundary planning + per-row partition projection); estimatedBytes sizes the
      * requested tablet count; computeResource sizes the active CN count; scanContext carries
-     * the source-specific scan inputs.
+     * the source-specific scan inputs; secondaryIndexSpecs names every OTHER visible index
+     * (rollup) whose sort key the multi-partition data-tier sampler should project alongside
+     * the base sort key -- empty for single-index targets and for INSERT-from-table (descoped).
      */
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
-                    ComputeResource computeResource) {
+                    ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
+
+        /**
+         * Backward-compatible constructor for callers with no rollup to project;
+         * defaults secondaryIndexSpecs to empty.
+         */
+        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
+                List<Column> partitionColumns, long estimatedBytes, ComputeResource computeResource) {
+            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource, List.of());
+        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
@@ -144,8 +155,8 @@ final class PreSplitFlow {
     static SampleSet runDataTierSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
         try {
             SampleRequest request = new SampleRequest(
-                    prepared.scanContext(), prepared.sortKeyColumns(), prepared.partitionColumns(),
-                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    prepared.scanContext(), prepared.sortKeyColumns(), prepared.secondaryIndexSpecs(),
+                    prepared.partitionColumns(), Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(DefaultPreSplitPipeline.sampleSubqueryExecutorFor(loadKind));
             return sampler.sample(request);
