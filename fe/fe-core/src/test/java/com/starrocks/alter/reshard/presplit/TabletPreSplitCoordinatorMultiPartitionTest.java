@@ -134,13 +134,14 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));
 
         Column sortKey = new Column("k", IntegerType.BIGINT);
         MaterializedIndexMeta indexMeta = mock(MaterializedIndexMeta.class);
+        when(indexMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(indexMeta.getSchema()).thenReturn(List.of(sortKey));
         when(indexMeta.getSortKeyIdxes()).thenReturn(List.of(0));
         when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(indexMeta));
     }
 
     @AfterEach

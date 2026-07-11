@@ -232,7 +232,9 @@ public class BrokerLoadPreSplitHookTest {
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
         when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         PartitionInfo partitionInfo = mock(PartitionInfo.class);
         when(partitionInfo.isPartitioned()).thenReturn(false);
@@ -253,7 +255,7 @@ public class BrokerLoadPreSplitHookTest {
         boolean savedHasInit = MetricRepo.hasInit;
         MetricRepo.hasInit = true;
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target))
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, BASE_INDEX_META_ID))
                     .thenReturn(List.of(PresplitTestSupport.bigintColumn("k")));
             String label = expectedReason.name().toLowerCase();
             long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED

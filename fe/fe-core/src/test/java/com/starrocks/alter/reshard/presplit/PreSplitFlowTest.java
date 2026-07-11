@@ -370,7 +370,9 @@ public class PreSplitFlowTest {
             MockedStatic<PreSplitTargets> targets, Database database, OlapTable table) {
         targets.when(() -> PreSplitTargets.findEligibleTarget(database, table))
                 .thenReturn(new PreSplitTargets.EligibleTarget(
-                        database, table, /*partitionId*/ 11L, /*oldTabletId*/ 22L));
+                        database, table, /*partitionId*/ 11L,
+                        List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
+                                List.of(bigintColumn("sort_col"))))));
     }
 
     /** Stub DefaultPreSplitPipeline.forLoadKind to return a mock pipeline, returning it for verification. */
