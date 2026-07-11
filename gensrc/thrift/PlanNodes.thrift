@@ -359,6 +359,14 @@ struct TIcebergDeleteFile {
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
+    // The following fields are only set for Iceberg v3 deletion vectors, whose blob is
+    // embedded inside a Puffin file (file_format = PUFFIN, file_content = POSITION_DELETES).
+    // The data file this deletion vector applies to.
+    5: optional string referenced_data_file
+    // Byte offset of the deletion-vector-v1 blob inside the Puffin file.
+    6: optional i64 content_offset
+    // Byte length of the deletion-vector-v1 blob inside the Puffin file.
+    7: optional i64 content_size_in_bytes
 }
 
 struct TPaimonDeletionFile {
