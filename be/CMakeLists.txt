@@ -551,11 +551,12 @@ set(STARROCKS_LINK_LIBS
     DataWorkflows
     ${WL_START_GROUP}
     Connector
+    ConnectorLake
     ConnectorFile
     ConnectorHive
     ConnectorIceberg
-    # Legacy connector registration pulls concrete connector objects that
-    # depend on Exec symbols, so keep it in the static library group.
+    # Keep legacy connector registration in the static library group so its
+    # concrete file connector registration is retained by static linking.
     ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}

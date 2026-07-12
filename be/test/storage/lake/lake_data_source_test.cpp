@@ -30,7 +30,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
-#include "connector/lake_connector.h"
+#include "connector/lake/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
