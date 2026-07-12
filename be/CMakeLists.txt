@@ -876,6 +876,17 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
+# Broad test and benchmark executables directly exercise concrete connector implementations.
+# Keep these explicit: PRIVATE dependencies of shared BE modules are intentionally not propagated
+# when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
+set (DIRECT_CONNECTOR_LINK_LIBS
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+)
+
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
@@ -884,20 +895,18 @@ set (TEST_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     TestUtil
     ${WL_START_GROUP}
-    # Broad test object libraries directly exercise concrete connector implementations.
-    # Keep these as explicit test dependencies: PRIVATE dependencies of shared BE modules
-    # are intentionally not propagated when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
-    Connector
-    ConnectorLake
-    ConnectorFile
-    ConnectorHive
-    ConnectorIceberg
+    ${DIRECT_CONNECTOR_LINK_LIBS}
     gmock
     gtest
     ${WL_END_GROUP}
 )
 
-set (BENCH_LINK_LIBS ${STARROCKS_LINK_LIBS})
+set (BENCH_LINK_LIBS
+    ${STARROCKS_LINK_LIBS}
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
+)
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
