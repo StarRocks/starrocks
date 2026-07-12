@@ -34,7 +34,6 @@
 #include "connector/hive/iceberg_global_late_materialization_context.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/chunk_accumulator.h"

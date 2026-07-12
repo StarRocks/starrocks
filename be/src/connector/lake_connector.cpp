@@ -34,7 +34,7 @@
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "exec/pipeline/scan/glm_manager.h"
+#include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
