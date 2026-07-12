@@ -29,8 +29,8 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/test_util.h"
 #include "storage/tablet_schema.h"
-#include "test_util.h"
 
 namespace starrocks::lake {
 

@@ -135,9 +135,11 @@ set(CONNECTOR_LAKE_TEST_LINK_LIBS
 add_executable(connector_lake_test
         ${BE_TEST_MACOS_LINK_STUBS}
         ${BE_TEST_JNI_ENV_STUB}
+        lake/lake_test_main.cpp
+        lake/lake_data_source_test.cpp
         lake/lake_global_late_materialization_context_test.cpp
 )
-target_link_libraries(connector_lake_test ${CONNECTOR_LAKE_TEST_LINK_LIBS} gtest_main)
+target_link_libraries(connector_lake_test ${CONNECTOR_LAKE_TEST_LINK_LIBS})
 set_target_properties(connector_lake_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS

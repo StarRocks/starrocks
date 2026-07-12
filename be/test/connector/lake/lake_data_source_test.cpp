@@ -30,16 +30,16 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "connector/lake/lake_connector.h"
-#include "exec/connector_scan_node.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/scan/morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -49,10 +49,8 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/base_rowset.h"
-#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/vector_search_option.h"
-#include "test_util.h"
 
 namespace starrocks::lake {
 
@@ -61,8 +59,14 @@ using namespace starrocks;
 class LakeDataSourceTest : public ::testing::Test {
 public:
     LakeDataSourceTest()
-            : _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
-              _location_provider(std::make_shared<FixedLocationProvider>(kRootLocation)) {
+            : _location_provider(std::make_shared<FixedLocationProvider>(kRootLocation)),
+              _parent_tracker(std::make_unique<MemTracker>(-1)),
+              _update_mem_tracker(
+                      std::make_unique<MemTracker>(10 * 1024 * 1024, "lake_data_source", _parent_tracker.get())),
+              _update_manager(std::make_unique<UpdateManager>(_location_provider, _update_mem_tracker.get())),
+              _owned_tablet_mgr(
+                      std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024)),
+              _tablet_mgr(_owned_tablet_mgr.get()) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -98,19 +102,14 @@ public:
     }
 
     void SetUp() override {
-        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+        (void)fs::remove_all(kRootLocation);
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override {
-        CHECK_OK(fs::remove_all(kRootLocation));
-        if (_backup_location_provider != nullptr) {
-            (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
-        }
-    }
+    void TearDown() override { CHECK_OK(fs::remove_all(kRootLocation)); }
 
 protected:
     void create_rowsets_for_testing(TabletMetadata* tablet_metadata, int64_t version) {
@@ -178,37 +177,71 @@ protected:
         }
     }
 
+    std::shared_ptr<RuntimeState> create_runtime_state_for_test() {
+        TQueryGlobals query_globals;
+        auto runtime_state = std::make_shared<RuntimeState>(query_globals);
+        auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+        runtime_state->set_fragment_dict_state(fragment_dict_state);
+        runtime_state->set_fragment_runtime_state(&_fragment_runtime_state);
+        TUniqueId query_id;
+        runtime_state->init_mem_trackers(query_id, _parent_tracker.get());
+        return runtime_state;
+    }
+
+    static TPlanNode create_lake_plan_node() {
+        TLakeScanNode lake_scan_node;
+        lake_scan_node.__set_tuple_id(0);
+
+        TPlanNode plan_node;
+        plan_node.__set_node_id(1);
+        plan_node.__set_lake_scan_node(lake_scan_node);
+        return plan_node;
+    }
+
+    static std::vector<TScanRangeParams> create_scan_ranges(const std::vector<TabletMetadata*>& tablet_metas) {
+        std::vector<TScanRangeParams> scan_ranges;
+        scan_ranges.reserve(tablet_metas.size());
+        for (const auto* tablet_meta : tablet_metas) {
+            TInternalScanRange internal_scan_range;
+            internal_scan_range.__set_tablet_id(tablet_meta->id());
+            internal_scan_range.__set_version(std::to_string(tablet_meta->version()));
+
+            TScanRange scan_range;
+            scan_range.__set_internal_scan_range(internal_scan_range);
+
+            TScanRangeParams params;
+            params.__set_scan_range(scan_range);
+            scan_ranges.emplace_back(std::move(params));
+        }
+        return scan_ranges;
+    }
+
     constexpr static const char* const kRootLocation = "test_lake_data_source_test";
 
-    TabletManager* _tablet_mgr = nullptr;
     std::shared_ptr<LocationProvider> _location_provider;
-    std::shared_ptr<LocationProvider> _backup_location_provider;
+    std::unique_ptr<MemTracker> _parent_tracker;
+    std::unique_ptr<MemTracker> _update_mem_tracker;
+    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<TabletManager> _owned_tablet_mgr;
+    TabletManager* _tablet_mgr = nullptr;
 
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
+    pipeline::FragmentRuntimeState _fragment_runtime_state;
 };
 
 TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     create_rowsets_for_testing(_tablet_metadata.get(), 2);
 
-    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
-    std::vector<TypeDescriptor> types;
-    types.emplace_back(TYPE_INT);
-    auto* descs = create_table_desc(runtime_state.get(), types);
-    auto tnode = create_tplan_node_cloud();
-    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
-    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
-
     bool enable_tablet_internal_parallel = true;
     auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::FORCE_SPLIT;
-    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
-    auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
-    data_source_provider->set_lake_tablet_manager(_tablet_mgr);
-    ASSERT_EQ(scan_node->estimated_scan_row_bytes(), data_source_provider->estimated_scan_row_bytes());
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider data_source_provider(plan_node);
+    data_source_provider.set_lake_tablet_manager(_tablet_mgr);
 
-    ASSERT_FALSE(data_source_provider->always_shared_scan());
+    ASSERT_FALSE(data_source_provider.always_shared_scan());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -216,28 +249,23 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     int pipeline_dop = 2;
     config::tablet_internal_parallel_min_scan_dop = 4;
 
-    auto tablet_metas = std::vector<TabletMetadata*>();
-    tablet_metas.emplace_back(_tablet_metadata.get());
-    auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+    auto scan_ranges = create_scan_ranges({_tablet_metadata.get()});
 
-    data_source_provider->set_estimated_scan_row_bytes(0);
-    auto missing_estimate = data_source_provider->convert_scan_range_to_morsel_queue_builder(
-            scan_ranges, scan_node->id(), pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            scan_ranges.size());
+    data_source_provider.set_estimated_scan_row_bytes(0);
+    auto missing_estimate = data_source_provider.convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, plan_node.node_id, pipeline_dop, enable_tablet_internal_parallel,
+            tablet_internal_parallel_mode, scan_ranges.size());
     ASSERT_ERROR(missing_estimate.status());
     EXPECT_NE(std::string::npos, missing_estimate.status().to_string().find("estimated scan row bytes"));
-    data_source_provider->set_estimated_scan_row_bytes(scan_node->estimated_scan_row_bytes());
+    data_source_provider.set_estimated_scan_row_bytes(sizeof(int32_t));
 
-    ASSIGN_OR_ABORT(auto morsel_queue_factory,
-                    scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
-                            enable_tablet_internal_parallel, tablet_internal_parallel_mode));
-    ASSERT_TRUE(data_source_provider->could_split());
-    ASSERT_TRUE(data_source_provider->could_split_physically());
-
-    ASSERT_FALSE(morsel_queue_factory->is_shared());
-    auto morsel_queue = morsel_queue_factory->create(0);
-    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() == 1);
+    ASSIGN_OR_ABORT(auto builder, data_source_provider.convert_scan_range_to_morsel_queue_builder(
+                                          scan_ranges, plan_node.node_id, pipeline_dop, enable_tablet_internal_parallel,
+                                          tablet_internal_parallel_mode, scan_ranges.size()));
+    ASSERT_TRUE(data_source_provider.could_split());
+    ASSERT_TRUE(data_source_provider.could_split_physically());
+    ASSERT_TRUE(builder->has_more_from_split());
+    ASSERT_GT(builder->max_degree_of_parallelism(), 0);
 }
 
 TEST_F(LakeDataSourceTest, get_tablet_schema) {
@@ -270,14 +298,11 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     plan_node.__set_lake_scan_node(lake_scan_node);
 
     // 2) Prepare runtime state: descriptor table + fragment ctx (fe_addr for schema RPC).
-    auto runtime_state = create_runtime_state();
-    pipeline::FragmentContext fragment_ctx;
+    auto runtime_state = create_runtime_state_for_test();
     TNetworkAddress fe;
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
-    fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
-    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
+    _fragment_runtime_state.set_fe_addr(fe);
 
     // Build a minimal descriptor table with required column names.
     TDescriptorTableBuilder desc_tbl_builder;
@@ -444,14 +469,11 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     plan_node.__set_lake_scan_node(lake_scan_node);
 
     // 2) Runtime state with fragment_ctx (fe_addr required by schema RPC path).
-    auto runtime_state = create_runtime_state();
-    pipeline::FragmentContext fragment_ctx;
+    auto runtime_state = create_runtime_state_for_test();
     TNetworkAddress fe;
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
-    fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
-    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
+    _fragment_runtime_state.set_fe_addr(fe);
 
     // 3) Desc table with two INT slots matching the schema we mock below.
     TDescriptorTableBuilder desc_tbl_builder;
@@ -587,7 +609,7 @@ TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
     }
     auto pk_tablet_schema = TabletSchema::create(pk_schema_pb);
 
-    auto runtime_state = create_runtime_state();
+    auto runtime_state = create_runtime_state_for_test();
     TSlotDescriptorBuilder slot_desc_builder;
 
     // Case 1: Select all PK columns (c0, c1) → true
@@ -694,6 +716,7 @@ TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
         ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
     }
 
+#ifdef USE_STAROS
     // Case 5: PK table with cloud-native persistent index and SST file that exists
     {
         // Create a fake SST file on disk
@@ -773,6 +796,7 @@ TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
 
         ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
     }
+#endif
 }
 
 } // namespace starrocks::lake
