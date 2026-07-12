@@ -1400,8 +1400,13 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson4) {
     JsonPathDeriver deriver;
     test_compact_path(jsons, &deriver);
 
-    EXPECT_EQ(2, deriver.flat_paths().size());
-    EXPECT_EQ(R"([a(BIGINT), b1.b2(BIGINT)])",
+    // A path stored as a concrete leaf in one segment and as an object in another has
+    // no per-path read plan known to cover both layouts (planning it as JSON was
+    // observed to lose the leaf segments' scalars on a live cluster). Reader-mode
+    // derivation detects the conflict and returns no paths, so compaction falls back
+    // to the full JSON merge, which re-derives the merged layout from actual values.
+    EXPECT_EQ(0, deriver.flat_paths().size());
+    EXPECT_EQ(R"([])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
@@ -1495,8 +1500,13 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain3) {
     JsonPathDeriver deriver;
     test_compact_path(jsons, &deriver);
 
-    EXPECT_EQ(2, deriver.flat_paths().size());
-    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+    // A path stored as a concrete leaf in one segment and as an object in another has
+    // no per-path read plan known to cover both layouts (planning it as JSON was
+    // observed to lose the leaf segments' scalars on a live cluster). Reader-mode
+    // derivation detects the conflict and returns no paths, so compaction falls back
+    // to the full JSON merge, which re-derives the merged layout from actual values.
+    EXPECT_EQ(0, deriver.flat_paths().size());
+    EXPECT_EQ(R"([])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
@@ -1590,8 +1600,13 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemainReadPaths)
     // clang-format on
     JsonPathDeriver deriver;
     test_compact_path(jsons, &deriver);
-    EXPECT_EQ(2, deriver.flat_paths().size());
-    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+    // A path stored as a concrete leaf in one segment and as an object in another has
+    // no per-path read plan known to cover both layouts (planning it as JSON was
+    // observed to lose the leaf segments' scalars on a live cluster). Reader-mode
+    // derivation detects the conflict and returns no paths, so compaction falls back
+    // to the full JSON merge, which re-derives the merged layout from actual values.
+    EXPECT_EQ(0, deriver.flat_paths().size());
+    EXPECT_EQ(R"([])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
@@ -1718,8 +1733,13 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths2) {
     JsonPathDeriver deriver;
     test_compact_path(jsons, &deriver);
 
-    EXPECT_EQ(2, deriver.flat_paths().size());
-    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+    // A path stored as a concrete leaf in one segment and as an object in another has
+    // no per-path read plan known to cover both layouts (planning it as JSON was
+    // observed to lose the leaf segments' scalars on a live cluster). Reader-mode
+    // derivation detects the conflict and returns no paths, so compaction falls back
+    // to the full JSON merge, which re-derives the merged layout from actual values.
+    EXPECT_EQ(0, deriver.flat_paths().size());
+    EXPECT_EQ(R"([])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
@@ -1760,8 +1780,13 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactPaths3) {
     JsonPathDeriver deriver;
     test_compact_path(jsons, &deriver);
 
-    EXPECT_EQ(2, deriver.flat_paths().size());
-    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+    // A path stored as a concrete leaf in one segment and as an object in another has
+    // no per-path read plan known to cover both layouts (planning it as JSON was
+    // observed to lose the leaf segments' scalars on a live cluster). Reader-mode
+    // derivation detects the conflict and returns no paths, so compaction falls back
+    // to the full JSON merge, which re-derives the merged layout from actual values.
+    EXPECT_EQ(0, deriver.flat_paths().size());
+    EXPECT_EQ(R"([])",
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
@@ -2073,5 +2098,71 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWit
         ASSERT_FALSE(st.ok()) << "mode=" << static_cast<int>(mode);
         EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
     }
+}
+
+// The fixture enables enable_json_flat_complex_type to exercise wider shapes, but
+// production defaults to false, where the base-type gate in _finalize() is the only
+// way a leaf survives. Reader-based derivation (compaction read planning) never fed
+// base_type_count, so under the default config it dropped every leaf and
+// init_compaction_column_paths always produced zero paths. This test pins the
+// default-config behavior.
+TEST_F(FlatJsonColumnCompactTest, testCompactPathsBaseTypeGateDefaultConfig) {
+    config::enable_json_flat_complex_type = false; // production default
+
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+        more_flat_json({
+            R"({"a": 11, "b": "abc1"})",
+            R"({"a": 12, "b": "abc2"})",
+        }, true),
+        more_flat_json({
+            R"({"a": 21, "b": "efg1"})",
+            R"({"a": 22, "b": "efg2"})",
+        }, true),
+    });
+    // clang-format on
+
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
+
+    EXPECT_EQ(2, deriver.flat_paths().size());
+    EXPECT_FALSE(deriver.has_remain_json());
+    // note: debug_flat_json closes with '}' when there is no remain, ']' when there is
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)})",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+}
+
+// Same default-config pinning for the write side: _derived_on_flat_json (data-mode
+// derive over already-flat inputs, which only direct-read compaction produces) fed
+// no base_type_count either, so the compactor fell back to _merge_columns and wrote
+// the flat inputs back as raw JSON, silently dropping the columnar layout.
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToFlatJsonDefaultConfig) {
+    config::enable_json_flat_complex_type = false; // production default
+
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "b": 21})", false),
+            flat_json(R"({"a": 2, "b": 22})", false),
+            flat_json(R"({"a": 3, "b": 23, "c": 33})", false),
+            flat_json(R"({"a": 4, "b": 24, "c": 34})", false),
+            flat_json(R"({"a": 5, "b": 25, "c": 35})", false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_TRUE(_meta->json_meta().has_remain());
+    EXPECT_EQ(3, _meta->children_columns_size());
+
+    auto* read_json = get_json_column(read_col);
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23, "c": 33})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "b": 24, "c": 34})", read_col->debug_item(3));
+    EXPECT_EQ(R"({"a": 5, "b": 25, "c": 35})", read_col->debug_item(4));
 }
 } // namespace starrocks
