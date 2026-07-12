@@ -118,10 +118,11 @@ target_link_libraries(ConnectorIceberg PRIVATE
 
 ADD_BE_LIB(Connector
         connector_registry.cpp
+        lake/lake_global_late_materialization_context.cpp
         lake_connector.cpp
 )
 
-target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)
+target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache Storage)
 target_link_libraries(Connector PRIVATE Platform)
 
 ADD_BE_LIB(ConnectorFile

@@ -23,7 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "common/statusor.h"
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/expr_context.h"
