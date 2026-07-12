@@ -351,6 +351,9 @@ public class LakeRangeRollupJobTest {
             }
         };
 
+        // Configure a non-default compression level so the create task must carry it through, not level 0.
+        table.setCompressionLevel(7);
+
         List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         Column colK1 = baseSchema.get(0);
         // Rollup sort key is the single column k1 (arity 1), narrower than the base's (k1, k2) (arity 2).
@@ -385,6 +388,10 @@ public class LakeRangeRollupJobTest {
             // Per-tablet version-1 metadata (optimization off) so the base's shared template is not used.
             assertFalse(req.isEnable_tablet_creation_optimization(),
                     "tablet-creation optimization must be off so per-tablet metadata is written");
+            // The compute node overwrites the schema's compression level with this request field, so it must
+            // carry the table's configured level (7), not the builder default (0).
+            assertEquals(7, req.getCompression_level(),
+                    "create task must carry the table's configured compression level, not the default");
         }
     }
 

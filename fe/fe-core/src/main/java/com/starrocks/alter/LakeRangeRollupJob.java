@@ -457,6 +457,10 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                         .setCompressionType(table.getCompressionType())
+                        // The compute node overwrites the tablet schema's compression level with this
+                        // request field (defaults to 0), so set it explicitly to preserve a table's
+                        // configured non-default compression level -- as every other create-replica path does.
+                        .setCompressionLevel(table.getCompressionLevel())
                         .setCreateSchemaFile(createSchemaFile)
                         .setTabletSchema(tabletSchema)
                         // Force per-tablet version-1 metadata: with the optimization on the compute node
