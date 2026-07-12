@@ -214,7 +214,7 @@ std::shared_ptr<connector::HiveChunkSinkContext> make_hive_sink_context(Fragment
     sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
     sink_ctx->options = {};
     sink_ctx->max_file_size = 1 << 30;
-    sink_ctx->fragment_context = fragment_context;
+    sink_ctx->runtime_state = fragment_context->runtime_state();
     return sink_ctx;
 }
 
