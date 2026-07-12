@@ -1962,7 +1962,11 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // json flat flag
 CONF_mBool(enable_json_flat, "true");
 
-// enable compaction is base on flat json, not whole json
+// Whether compaction reads flat JSON sub-columns directly (skipping the
+// reassemble-whole-JSON and re-parse round trip) when every input segment
+// stores the column flattened. This only affects how compaction reads its
+// input; the merged output is flattened (or not) according to the flat_json
+// config regardless of this flag.
 CONF_mBool(enable_compaction_flat_json, "true");
 
 // direct read flat json
