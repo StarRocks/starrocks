@@ -69,6 +69,8 @@ public:
 
     size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
 
+    void set_filtered_above_iterator(bool value) override;
+
     int io_tasks_per_scan_operator() const override;
     bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
     bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }

@@ -239,7 +239,7 @@ private:
 class LakeDataSourceProvider final : public DataSourceProvider {
 public:
     friend class LakeDataSource;
-    LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    explicit LakeDataSourceProvider(const TPlanNode& plan_node);
     ~LakeDataSourceProvider() override;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
@@ -288,7 +288,7 @@ public:
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
-    ConnectorScanNode* _scan_node;
+    const int32_t _plan_node_id;
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
@@ -308,8 +308,7 @@ private:
     // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the
     // inherited `_partition_exprs` in DataSourceProvider which stores bucket expressions.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
-    // RuntimeState captured during init(); used by the destructor to close
-    // _partition_conjunct_ctxs without reaching back through _scan_node.
+    // RuntimeState captured during init() for partition-conjunct evaluation.
     RuntimeState* _runtime_state = nullptr;
 };
 

@@ -29,12 +29,11 @@
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/partition_scan_range_pruner.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "exec/connector_scan_node.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -46,6 +45,7 @@
 #include "platform/key_cache.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
@@ -443,12 +443,10 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
     // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
     // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
-    // operator placed ABOVE this scan in the execution tree (FragmentExecutor's tree walk sets it on the
-    // ConnectorScanNode). See design doc §7 (lake twin). The provider's scan node is null when the data
-    // source is built without one (UT path); no scan node means nothing sits above the iterator.
-    const auto* scan_node = _provider->_scan_node;
+    // operator placed ABOVE this scan in the execution tree. ConnectorScanNode forwards the latter signal
+    // to the provider during setup; providers constructed directly keep the default false value.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
-                                           (scan_node != nullptr && scan_node->is_filtered_above_iterator());
+                                           _provider->is_filtered_above_iterator();
 
     // Range
     for (const auto& key_range : key_ranges) {
@@ -480,14 +478,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                       thrift_lake_scan_node.enable_global_late_materialization;
     if (enable_glm) {
-        int32_t scan_node_id = _provider->_scan_node->id();
         auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
         auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
         auto creator = [&]() {
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;
         };
-        auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
+        auto* glm_ctx =
+                (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
         int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
         glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
@@ -1280,8 +1278,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
 // ================================
 
-LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
+LakeDataSourceProvider::LakeDataSourceProvider(const TPlanNode& plan_node)
+        : _plan_node_id(plan_node.node_id), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
 // _partition_conjunct_ctxs share this provider's ObjectPool and self-close in their destructor.
 LakeDataSourceProvider::~LakeDataSourceProvider() = default;
@@ -1325,9 +1323,9 @@ const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* st
 
 // ================================
 
-DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNode* /*scan_node*/,
                                                                  const TPlanNode& plan_node) const {
-    return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
+    return std::make_unique<LakeDataSourceProvider>(plan_node);
 }
 
 StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue_builder(
@@ -1397,8 +1395,9 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     }
 
     // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
-    *splitted_scan_rows =
-            config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
+    const size_t scan_row_bytes = estimated_scan_row_bytes();
+    RETURN_IF(scan_row_bytes == 0, Status::InternalError("estimated scan row bytes is not initialized"));
+    *splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_bytes / scan_row_bytes;
     *splitted_scan_rows =
             std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
