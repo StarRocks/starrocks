@@ -29,6 +29,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -63,7 +65,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LakeRangeRollupJobTest {
@@ -393,6 +397,46 @@ public class LakeRangeRollupJobTest {
             assertEquals(7, req.getCompression_level(),
                     "create task must carry the table's configured compression level, not the default");
         }
+    }
+
+    @Test
+    public void testCreateShadowTabletMetadataSkipsWhenNoShadowTablets() {
+        Column colK1 = table.getSchemaByIndexMetaId(baseIndexMetaId).get(0);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        // A plan whose shadow index was never built contributes no tablets, so the method returns early
+        // without acquiring the database lock or sending any create task.
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        assertNull(plan.shadowIndex);
+        assertDoesNotThrow(() -> job.createShadowTabletMetadata(List.of(plan)));
+    }
+
+    @Test
+    public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
+        // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+            }
+        };
+
+        Column colK1 = table.getSchemaByIndexMetaId(baseIndexMetaId).get(0);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK1));
+        // Empty sample -> a single full-range shadow tablet; planning does not resolve per-tablet nodes.
+        job.setSampler(stubSamplerReturning(List.of()));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        assertNotNull(plan.shadowIndex);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AlterCancelException ex = assertThrows(AlterCancelException.class,
+                () -> job.buildShadowTabletCreateTasks(table, List.of(plan), latch));
+        assertTrue(ex.getMessage().contains("no alive compute node"),
+                "abort message must name the missing compute node, was: " + ex.getMessage());
     }
 
     /**
