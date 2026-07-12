@@ -14,14 +14,10 @@
 
 #pragma once
 
-<<<<<<< HEAD:be/src/exec/paimon/paimon_delete_file_builder.h
-#include "exec/hdfs_scanner/hdfs_scanner.h"
-=======
 #include <cstdint>
 
 #include "common/statusor.h"
 #include "formats/deletion_bitmap.h"
->>>>>>> e42a7764d90... [Refactor] Move Iceberg and Paimon delete builders to Formats (#76226):be/src/formats/paimon/paimon_delete_file_builder.h
 #include "fs/fs.h"
 #include "gen_cpp/PlanNodes_types.h"
 

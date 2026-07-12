@@ -17,16 +17,10 @@
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-<<<<<<< HEAD
-#include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/iceberg/iceberg_deletion_vector_reader.h"
-#include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
-=======
-#include "formats/delta/deletion_vector.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/paimon/paimon_delete_file_builder.h"
->>>>>>> e42a7764d90... [Refactor] Move Iceberg and Paimon delete builders to Formats (#76226)
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks {
