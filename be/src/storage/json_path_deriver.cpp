@@ -161,6 +161,18 @@ JsonFlatPath* JsonPathDeriver::_normalize_exists_path(const std::string_view& pa
     return _normalize_exists_path(next, iter->second.get(), hits);
 }
 
+bool JsonPathDeriver::_has_leaf_object_conflict(const JsonFlatPath* node) {
+    for (const auto& [key, child] : node->children) {
+        if (child->base_type_count > 0 && !child->children.empty()) {
+            return true;
+        }
+        if (_has_leaf_object_conflict(child.get())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_readers) {
     DCHECK(_paths.empty());
     DCHECK(_types.empty());
@@ -197,6 +209,17 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
                 leaf->base_type_count += reader->num_rows();
             }
         }
+    }
+
+    // Segments may disagree structurally: a path stored as a concrete leaf in one
+    // segment and as an object (children paths) in another. There is no per-path read
+    // plan that is known to cover both layouts - planning the node as JSON was observed
+    // to lose the leaf segments' scalar values on a live cluster. Bail out and let
+    // compaction take the full JSON merge path, which reassembles each segment from
+    // its own layout and re-derives the merged layout from the actual values.
+    if (_has_leaf_object_conflict(_path_root.get())) {
+        _path_root.reset();
+        return;
     }
 
     _min_json_sparsity_factory = 1; // only extract common schema
