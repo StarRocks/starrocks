@@ -47,12 +47,7 @@ ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
         lake_connector.cpp
-<<<<<<< HEAD
-        file_connector.cpp
-        file_scan_metrics.cpp
         changes_connector.cpp
-=======
->>>>>>> 9957d40104b... [Refactor] Move file connector scanner and sink into ConnectorFile mo… (#76143)
         iceberg_connector.cpp
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp

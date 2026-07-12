@@ -6,12 +6,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-<<<<<<< HEAD
-        ./connector/file_scan_metrics_test.cpp
-        ./connector/file_connector_rejected_record_test.cpp
         ./connector/changes_connector_test.cpp
-=======
->>>>>>> 9957d40104b... [Refactor] Move file connector scanner and sink into ConnectorFile mo… (#76143)
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./exec/iceberg/iceberg_deletion_vector_reader_test.cpp
