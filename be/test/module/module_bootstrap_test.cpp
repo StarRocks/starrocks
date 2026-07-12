@@ -19,7 +19,7 @@
 
 namespace starrocks::connector {
 
-TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdempotently) {
+TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsConnectorsIdempotently) {
     auto* registry = ConnectorRegistry::default_instance();
     ASSERT_NE(nullptr, registry);
 
@@ -31,6 +31,9 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdemp
     const auto* hive = registry->get(Connector::HIVE);
     ASSERT_NE(nullptr, hive);
     EXPECT_EQ(ConnectorType::HIVE, hive->connector_type());
+    const auto* file = registry->get(Connector::FILE);
+    ASSERT_NE(nullptr, file);
+    EXPECT_EQ(ConnectorType::FILE, file->connector_type());
     const auto* lake = registry->get(Connector::LAKE);
     ASSERT_NE(nullptr, lake);
     EXPECT_EQ(ConnectorType::LAKE, lake->connector_type());
@@ -44,6 +47,7 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdemp
     ASSERT_TRUE(status.ok()) << status;
     EXPECT_EQ(cache_stats, registry->get(Connector::CACHE_STATS));
     EXPECT_EQ(hive, registry->get(Connector::HIVE));
+    EXPECT_EQ(file, registry->get(Connector::FILE));
     EXPECT_EQ(lake, registry->get(Connector::LAKE));
 #ifndef __APPLE__
     EXPECT_EQ(iceberg, registry->get(Connector::ICEBERG));

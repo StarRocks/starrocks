@@ -550,14 +550,6 @@ set(STARROCKS_LINK_LIBS
     Orchestration
     DataWorkflows
     ${WL_START_GROUP}
-    Connector
-    ConnectorLake
-    ConnectorFile
-    ConnectorHive
-    ConnectorIceberg
-    # Keep legacy connector registration in the static library group so its
-    # concrete file connector registration is retained by static linking.
-    ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
@@ -890,7 +882,6 @@ endif()
 set (TEST_LINK_LIBS
     Orchestration
     ${STARROCKS_LINK_LIBS}
-    ConnectorBuiltinRegistry
     TestUtil
     ${WL_START_GROUP}
     gmock

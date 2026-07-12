@@ -319,16 +319,3 @@ if (WITH_CONNECTOR_JDBC)
             libxml2
     )
 endif()
-
-ADD_BE_LIB(ConnectorBuiltinRegistry
-        connector_registry_init.cpp
-)
-
-target_link_libraries(ConnectorBuiltinRegistry PUBLIC
-        Connector
-        ConnectorFile
-        Common
-        Base
-        Gutil
-        StarRocksGen
-)
