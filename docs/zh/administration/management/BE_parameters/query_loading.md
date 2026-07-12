@@ -101,7 +101,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Bool
 - 单位：
 - 是否动态：是
-- 描述：控制是否为 Flat Json 数据进行 Compaction。
+- 描述：当所有输入 Segment 中的 JSON 列均已扁平化存储时，Compaction 是否直接读取扁平化的子列，从而跳过“重组完整 JSON 再重新解析”的往返开销。该配置仅影响 Compaction 读取输入的方式：Compaction 本身始终会执行，合并结果是否扁平化由 Flat JSON 配置决定，与该配置无关。
 - 引入版本：v3.3.3
 
 ### enable_json_flat
