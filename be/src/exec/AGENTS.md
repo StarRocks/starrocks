@@ -13,7 +13,9 @@ Local guide for work under `be/src/exec`.
 ## Current Direction
 
 - Keep `Exec` as the temporary compatibility umbrella while extracted modules move out of it.
-- Treat existing targets such as `ExecPrimitive`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecJoinCore`, and the sorting/spill slices now owned by `ComputeEnv` as the model for future extractions.
+- Keep `Exec` linked only to the `SchemaScannerCore` contract. Compose `SchemaScannerLocal`, `SchemaScannerFrontend`, `SchemaScannerStorage`, `SchemaScannerCache`, and `SchemaScannerBuiltin` above Exec rather than introducing reverse dependencies.
+- Schema scanner files remain under `be/src/exec/` temporarily; move them to their final package only after the layered targets and boundary checks are stable.
+- Treat existing targets such as `ExecPrimitive`, `SchemaScannerCore`, `ExecJoinCore`, and the sorting/spill slices now owned by `ComputeEnv` as the model for future extractions.
 - Keep local or checkout-specific roadmap notes outside the committed guide unless they become shared repository policy.
 
 ## Validation

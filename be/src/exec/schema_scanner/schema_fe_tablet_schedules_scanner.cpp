@@ -17,7 +17,6 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "storage/tablet.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

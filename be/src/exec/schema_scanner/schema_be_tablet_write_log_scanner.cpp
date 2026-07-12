@@ -15,7 +15,7 @@
 #include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 
 #include "column/column_helper.h"
-#include "exec/schema_scanner/schema_helper.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state.h"
 #include "types/datetime_value.h"

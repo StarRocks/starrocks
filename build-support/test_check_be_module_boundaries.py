@@ -316,6 +316,71 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 cmake_state.target_links["ColumnCore"],
             )
 
+    def test_load_manifest_parses_target_dependency_guards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "module_boundary_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "modules": [],
+                        "target_dependency_guards": [
+                            {
+                                "id": "execschemascannerdependencyguard",
+                                "target": "Exec",
+                                "forbidden_dependency_prefixes": ["SchemaScanner"],
+                                "allowed_dependencies": ["SchemaScannerCore"],
+                                "remediation": "Compose concrete schema scanners above Exec.",
+                            }
+                        ],
+                    }
+                )
+            )
+
+            manifest = MODULE.load_manifest(manifest_path)
+
+            self.assertEqual(
+                [
+                    MODULE.TargetDependencyGuard(
+                        id="execschemascannerdependencyguard",
+                        target="Exec",
+                        forbidden_dependency_prefixes=("SchemaScanner",),
+                        allowed_dependencies=("SchemaScannerCore",),
+                        remediation="Compose concrete schema scanners above Exec.",
+                    )
+                ],
+                manifest["target_dependency_guards"],
+            )
+
+    def test_target_dependency_guard_allows_core_and_rejects_concrete_scanner_layer(self) -> None:
+        guard = MODULE.TargetDependencyGuard(
+            id="execschemascannerdependencyguard",
+            target="Exec",
+            forbidden_dependency_prefixes=("SchemaScanner",),
+            allowed_dependencies=("SchemaScannerCore",),
+            remediation="Compose concrete schema scanners above Exec.",
+        )
+        cmake_state = MODULE.CMakeState(
+            target_sources={},
+            target_definition_paths={},
+            target_links={"Exec": ["SchemaScannerCore", "SchemaScannerFrontend"]},
+            test_target_links={},
+        )
+
+        violations = MODULE.collect_violations(
+            repo_root=Path("."),
+            manifest={"modules": [], "target_dependency_guards": [guard]},
+            cmake_state=cmake_state,
+            selected_modules={"unrelated-changed-module"},
+        )
+
+        self.assertEqual([], violations.include_violations)
+        self.assertEqual([], violations.test_link_violations)
+        self.assertEqual(1, len(violations.target_link_violations))
+        violation = violations.target_link_violations[0]
+        self.assertEqual("execschemascannerdependencyguard", violation.module)
+        self.assertEqual("target:Exec", violation.path)
+        self.assertEqual("SchemaScannerFrontend", violation.edge)
+
     def test_changed_paths_limit_checked_modules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)

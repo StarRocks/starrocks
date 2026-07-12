@@ -108,6 +108,15 @@ class ModuleSpec:
     summary: str = ""
 
 
+@dataclass(frozen=True)
+class TargetDependencyGuard:
+    id: str
+    target: str
+    forbidden_dependency_prefixes: tuple[str, ...]
+    allowed_dependencies: tuple[str, ...]
+    remediation: str
+
+
 @dataclass
 class CMakeState:
     target_sources: dict[str, list[str]]
@@ -161,7 +170,21 @@ def load_manifest(path: Path) -> dict:
                 summary=raw.get("summary", ""),
             )
         )
-    return {"modules": modules}
+    target_dependency_guards = []
+    for raw in payload.get("target_dependency_guards", []):
+        target_dependency_guards.append(
+            TargetDependencyGuard(
+                id=raw.get("id", f"{raw['target'].lower()}targetdependencyguard"),
+                target=raw["target"],
+                forbidden_dependency_prefixes=tuple(raw.get("forbidden_dependency_prefixes", [])),
+                allowed_dependencies=tuple(raw.get("allowed_dependencies", [])),
+                remediation=raw.get(
+                    "remediation",
+                    "Remove the forbidden direct target dependency or move composition to an allowed layer.",
+                ),
+            )
+        )
+    return {"modules": modules, "target_dependency_guards": target_dependency_guards}
 
 
 def load_baseline(path: Path) -> dict[str, set[tuple[str, str, str]]]:
@@ -299,6 +322,10 @@ def collect_violations(
         include_violations.extend(check_includes_for_module(repo_root, module, owned_files, target_file_owners))
         target_link_violations.extend(check_target_links_for_module(module, cmake_state))
         test_link_violations.extend(check_test_links_for_module(module, cmake_state))
+
+    target_link_violations.extend(
+        check_target_dependency_guards(manifest.get("target_dependency_guards", []), cmake_state)
+    )
 
     return Violations(
         include_violations=sorted(include_violations, key=lambda item: (item.module, item.path, item.edge)),
@@ -452,6 +479,29 @@ def check_target_links_for_module(module: ModuleSpec, cmake_state: CMakeState) -
                         remediation=module.remediation,
                     )
                 )
+    return violations
+
+
+def check_target_dependency_guards(
+    guards: Iterable[TargetDependencyGuard], cmake_state: CMakeState
+) -> list[Violation]:
+    violations: list[Violation] = []
+    for guard in guards:
+        allowed_dependencies = set(guard.allowed_dependencies)
+        for dep in cmake_state.target_links.get(guard.target, []):
+            if dep in allowed_dependencies:
+                continue
+            if not _matches_any_prefix(dep, guard.forbidden_dependency_prefixes):
+                continue
+            violations.append(
+                Violation(
+                    module=guard.id,
+                    path=f"target:{guard.target}",
+                    edge=dep,
+                    detail=f"direct target dependency is forbidden by the guard for {guard.target}",
+                    remediation=guard.remediation,
+                )
+            )
     return violations
 
 

@@ -55,6 +55,8 @@ public:
     // The caller needs to handle other legitimate negative values.
     // If parsing mem_spec_str fails, it will return an error.
     static StatusOr<int64_t> parse_mem_spec(const std::string& mem_spec_str, const int64_t memory_limit);
+
+    static int64_t parse_data_size(const std::string& value_str);
 };
 
 } // namespace starrocks

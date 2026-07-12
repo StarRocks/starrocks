@@ -20,16 +20,16 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
-set(EXEC_SCHEMA_SCANNER_CORE_FILES
+set(SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
     schema_scanner_factory.cpp
 )
 
-ADD_BE_LIB(ExecSchemaScannerCore
-    ${EXEC_SCHEMA_SCANNER_CORE_FILES}
+ADD_BE_LIB(SchemaScannerCore
+    ${SCHEMA_SCANNER_CORE_FILES}
 )
 
-target_link_libraries(ExecSchemaScannerCore PUBLIC
+target_link_libraries(SchemaScannerCore PUBLIC
     Expr
     Runtime
     ChunkCore
@@ -41,9 +41,11 @@ target_link_libraries(ExecSchemaScannerCore PUBLIC
     StarRocksGen
 )
 
-set(EXEC_SCHEMA_SCANNER_FILES
+set(SCHEMA_SCANNER_LOCAL_FILES
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collation_character_set_applicability_scanner.cpp
@@ -54,12 +56,131 @@ set(EXEC_SCHEMA_SCANNER_FILES
     schema_scanner/schema_triggers_scanner.cpp
 )
 
-ADD_BE_LIB(ExecSchemaScanners
-    ${EXEC_SCHEMA_SCANNER_FILES}
+ADD_BE_LIB(SchemaScannerLocal
+    ${SCHEMA_SCANNER_LOCAL_FILES}
 )
 
-target_link_libraries(ExecSchemaScanners PUBLIC
-    ExecSchemaScannerCore
+target_link_libraries(SchemaScannerLocal PUBLIC
+    SchemaScannerCore
+)
+
+target_link_libraries(SchemaScannerLocal PRIVATE
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+set(SCHEMA_SCANNER_FRONTEND_FILES
+    schema_scanner/schema_analyze_status.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
+    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_cluster_snapshots_scanner.cpp
+    schema_scanner/schema_column_stats_usage_scanner.cpp
+    schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_fe_metrics_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
+    schema_scanner/schema_fe_threads_scanner.cpp
+    schema_scanner/schema_helper.cpp
+    schema_scanner/schema_keywords_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
+    schema_scanner/schema_materialized_views_scanner.cpp
+    schema_scanner/schema_partitions_meta_scanner.cpp
+    schema_scanner/schema_pipe_files.cpp
+    schema_scanner/schema_pipes.cpp
+    schema_scanner/schema_recyclebin_catalogs.cpp
+    schema_scanner/schema_routine_load_jobs_scanner.cpp
+    schema_scanner/schema_schema_privileges_scanner.cpp
+    schema_scanner/schema_schemata_scanner.cpp
+    schema_scanner/schema_stream_loads_scanner.cpp
+    schema_scanner/schema_table_privileges_scanner.cpp
+    schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_tables_scanner.cpp
+    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
+    schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_tasks_scanner.cpp
+    schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_user_privileges_scanner.cpp
+    schema_scanner/schema_variables_scanner.cpp
+    schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_warehouse_metrics.cpp
+    schema_scanner/schema_warehouse_queries.cpp
+    schema_scanner/starrocks_grants_to_scanner.cpp
+    schema_scanner/starrocks_role_edges_scanner.cpp
+    schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
+    schema_scanner/sys_object_dependencies.cpp
+)
+
+ADD_BE_LIB(SchemaScannerFrontend
+    ${SCHEMA_SCANNER_FRONTEND_FILES}
+)
+
+target_link_libraries(SchemaScannerFrontend PUBLIC
+    SchemaScannerCore
+)
+
+target_link_libraries(SchemaScannerFrontend PRIVATE
+    SchemaScannerLocal
+    Platform
+    Expr
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+set(SCHEMA_SCANNER_STORAGE_FILES
+    schema_scanner/schema_be_tablets_scanner.cpp
+    schema_scanner/schema_be_txns_scanner.cpp
+    schema_scanner/schema_be_compactions_scanner.cpp
+    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_be_tablet_write_log_scanner.cpp
+)
+
+ADD_BE_LIB(SchemaScannerStorage
+    ${SCHEMA_SCANNER_STORAGE_FILES}
+)
+
+target_link_libraries(SchemaScannerStorage PUBLIC
+    SchemaScannerCore
+)
+
+target_link_libraries(SchemaScannerStorage PRIVATE
+    SchemaScannerFrontend
+    SchemaScannerLocal
+    Storage
+    StoragePrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+ADD_BE_LIB(SchemaScannerCache
+    schema_scanner/schema_be_datacache_metrics_scanner.cpp
+)
+
+target_link_libraries(SchemaScannerCache PUBLIC
+    SchemaScannerCore
+)
+
+target_link_libraries(SchemaScannerCache PRIVATE
+    Cache
     Runtime
     ChunkCore
     ColumnCore
@@ -317,54 +438,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    schema_scanner/schema_analyze_status.cpp
-    schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_schemata_scanner.cpp
-    schema_scanner/schema_variables_scanner.cpp
-    schema_scanner/schema_columns_scanner.cpp
-    schema_scanner/schema_column_stats_usage_scanner.cpp
-    schema_scanner/schema_views_scanner.cpp
-    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
-    schema_scanner/schema_materialized_views_scanner.cpp
-    schema_scanner/schema_tasks_scanner.cpp
-    schema_scanner/schema_task_runs_scanner.cpp
-    schema_scanner/schema_loads_scanner.cpp
-    schema_scanner/schema_load_tracking_logs_scanner.cpp
-    schema_scanner/schema_partitions_meta_scanner.cpp
-    schema_scanner/schema_user_privileges_scanner.cpp
-    schema_scanner/schema_schema_privileges_scanner.cpp
-    schema_scanner/schema_table_privileges_scanner.cpp
-    schema_scanner/schema_tables_config_scanner.cpp
-    schema_scanner/schema_be_tablets_scanner.cpp
-    schema_scanner/schema_be_txns_scanner.cpp
-    schema_scanner/schema_be_logs_scanner.cpp
-    schema_scanner/schema_be_metrics_scanner.cpp
-    schema_scanner/schema_fe_metrics_scanner.cpp
-    schema_scanner/schema_fe_threads_scanner.cpp
-    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
-    schema_scanner/schema_be_compactions_scanner.cpp
-    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
-    schema_scanner/schema_be_tablet_write_log_scanner.cpp
-    schema_scanner/schema_pipe_files.cpp
-    schema_scanner/schema_pipes.cpp
-    schema_scanner/schema_recyclebin_catalogs.cpp
-    schema_scanner/starrocks_role_edges_scanner.cpp
-    schema_scanner/starrocks_grants_to_scanner.cpp
-    schema_scanner/schema_helper.cpp
-    schema_scanner/schema_routine_load_jobs_scanner.cpp
-    schema_scanner/schema_stream_loads_scanner.cpp
-    schema_scanner/schema_be_datacache_metrics_scanner.cpp
-    schema_scanner/sys_object_dependencies.cpp
-    schema_scanner/sys_fe_locks.cpp
-    schema_scanner/sys_fe_memory_usage.cpp
-    schema_scanner/schema_temp_tables_scanner.cpp
-    schema_scanner/schema_warehouse_metrics.cpp
-    schema_scanner/schema_warehouse_queries.cpp
-    schema_scanner/schema_cluster_snapshots_scanner.cpp
-    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
-    schema_scanner/schema_applicable_roles_scanner.cpp
-    schema_scanner/schema_keywords_scanner.cpp
-    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     connector_scan_node.cpp
 )
 
@@ -488,7 +561,7 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive SchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
 
 ADD_BE_LIB(SchemaScannerBuiltin
@@ -496,12 +569,12 @@ ADD_BE_LIB(SchemaScannerBuiltin
 )
 
 target_link_libraries(SchemaScannerBuiltin PUBLIC
-    ExecSchemaScannerCore
+    SchemaScannerCore
 )
 
-# Temporary PR1 dependency: concrete schema scanners are still compiled into
-# Exec and ExecSchemaScanners. PR2 will replace these with layered scanner targets.
 target_link_libraries(SchemaScannerBuiltin PRIVATE
-    Exec
-    ExecSchemaScanners
+    SchemaScannerLocal
+    SchemaScannerFrontend
+    SchemaScannerStorage
+    SchemaScannerCache
 )

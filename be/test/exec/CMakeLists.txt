@@ -17,6 +17,9 @@ if (APPLE)
     list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
 endif()
 
+set(SCHEMA_SCANNER_TEST_DEPENDENCIES ${STARROCKS_DEPENDENCIES})
+list(REMOVE_ITEM SCHEMA_SCANNER_TEST_DEPENDENCIES arrow_testing)
+
 set(EXEC_RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
@@ -67,7 +70,7 @@ set(SCHEMA_SCANNER_CORE_TEST_FILES
 )
 
 set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
-    ExecSchemaScannerCore
+    SchemaScannerCore
     Expr
     Runtime
     ChunkCore
@@ -77,7 +80,7 @@ set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
@@ -85,23 +88,21 @@ set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     gtest
     ${WL_END_GROUP}
 )
-list(REMOVE_ITEM SCHEMA_SCANNER_CORE_TEST_LINK_LIBS arrow_testing)
-
 add_library(starrocks_schema_scanner_core_test_objs OBJECT ${SCHEMA_SCANNER_CORE_TEST_FILES})
 target_link_libraries(starrocks_schema_scanner_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_schema_scanner_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(schema_scanner_core_test $<TARGET_OBJECTS:starrocks_schema_scanner_core_test_objs>)
 target_link_libraries(schema_scanner_core_test ${SCHEMA_SCANNER_CORE_TEST_LINK_LIBS} gtest_main)
 
-set(EXEC_SCHEMA_SCANNERS_TEST_FILES
+set(SCHEMA_SCANNER_LOCAL_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
     schema_scanner/exec_schema_scanners_test.cpp
 )
 
-set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
-    ExecSchemaScanners
-    ExecSchemaScannerCore
+set(SCHEMA_SCANNER_LOCAL_TEST_LINK_LIBS
+    SchemaScannerLocal
+    SchemaScannerCore
     Runtime
     ChunkCore
     ColumnCore
@@ -110,7 +111,7 @@ set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
@@ -119,11 +120,161 @@ set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_exec_schema_scanners_test_objs OBJECT ${EXEC_SCHEMA_SCANNERS_TEST_FILES})
-target_link_libraries(starrocks_exec_schema_scanners_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_exec_schema_scanners_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(exec_schema_scanners_test $<TARGET_OBJECTS:starrocks_exec_schema_scanners_test_objs>)
-target_link_libraries(exec_schema_scanners_test ${EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_schema_scanner_local_test_objs OBJECT ${SCHEMA_SCANNER_LOCAL_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_local_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_local_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_local_test $<TARGET_OBJECTS:starrocks_schema_scanner_local_test_objs>)
+target_link_libraries(schema_scanner_local_test ${SCHEMA_SCANNER_LOCAL_TEST_LINK_LIBS} gtest_main)
+
+set(SCHEMA_SCANNER_FRONTEND_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    schema_scanner/schema_scanner_frontend_test_main.cpp
+    schema_columns_scanner_test.cpp
+    schema_fe_tablet_schedules_scanner_test.cpp
+    schema_loads_scanner_test.cpp
+    schema_materialized_view_refresh_jobs_scanner_test.cpp
+    schema_materialized_views_scanner_test.cpp
+    schema_task_runs_scanner_test.cpp
+    schema_scanner/schema_fe_metrics_scanner_test.cpp
+    schema_scanner/schema_partitions_meta_scanner_test.cpp
+)
+
+set(SCHEMA_SCANNER_FRONTEND_TEST_LINK_LIBS
+    SchemaScannerFrontend
+    SchemaScannerLocal
+    SchemaScannerCore
+    Platform
+    Expr
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+add_library(starrocks_schema_scanner_frontend_test_objs OBJECT ${SCHEMA_SCANNER_FRONTEND_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_frontend_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_frontend_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_frontend_test $<TARGET_OBJECTS:starrocks_schema_scanner_frontend_test_objs>)
+target_link_libraries(schema_scanner_frontend_test ${SCHEMA_SCANNER_FRONTEND_TEST_LINK_LIBS})
+
+set(SCHEMA_SCANNER_STORAGE_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
+    schema_scanner/schema_scanner_storage_test.cpp
+)
+
+set(SCHEMA_SCANNER_STORAGE_TEST_LINK_LIBS
+    SchemaScannerStorage
+    SchemaScannerFrontend
+    SchemaScannerLocal
+    SchemaScannerCore
+    Storage
+    StoragePrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+add_library(starrocks_schema_scanner_storage_test_objs OBJECT ${SCHEMA_SCANNER_STORAGE_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_storage_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_storage_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_storage_test $<TARGET_OBJECTS:starrocks_schema_scanner_storage_test_objs>)
+target_link_libraries(schema_scanner_storage_test ${SCHEMA_SCANNER_STORAGE_TEST_LINK_LIBS} gtest_main)
+
+set(SCHEMA_SCANNER_CACHE_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    schema_scanner/schema_scanner_cache_test.cpp
+)
+
+set(SCHEMA_SCANNER_CACHE_TEST_LINK_LIBS
+    SchemaScannerCache
+    SchemaScannerCore
+    Cache
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+add_library(starrocks_schema_scanner_cache_test_objs OBJECT ${SCHEMA_SCANNER_CACHE_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_cache_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_cache_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_cache_test $<TARGET_OBJECTS:starrocks_schema_scanner_cache_test_objs>)
+target_link_libraries(schema_scanner_cache_test ${SCHEMA_SCANNER_CACHE_TEST_LINK_LIBS} gtest_main)
+
+set(SCHEMA_SCANNER_BUILTIN_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    schema_scanner/schema_scanner_test.cpp
+)
+
+set(SCHEMA_SCANNER_BUILTIN_TEST_LINK_LIBS
+    SchemaScannerBuiltin
+    SchemaScannerStorage
+    SchemaScannerCache
+    SchemaScannerFrontend
+    SchemaScannerLocal
+    SchemaScannerCore
+    Storage
+    StoragePrimitive
+    Cache
+    Platform
+    Expr
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${SCHEMA_SCANNER_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+add_library(starrocks_schema_scanner_builtin_test_objs OBJECT ${SCHEMA_SCANNER_BUILTIN_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_builtin_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_builtin_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_builtin_test $<TARGET_OBJECTS:starrocks_schema_scanner_builtin_test_objs>)
+target_link_libraries(schema_scanner_builtin_test ${SCHEMA_SCANNER_BUILTIN_TEST_LINK_LIBS} gtest_main)
 
 set(JOIN_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}

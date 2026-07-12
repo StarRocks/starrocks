@@ -19,7 +19,6 @@
 #include "base/network/network_util.h"
 #include "common/runtime_profile.h"
 #include "common/util/thrift_client_cache.h"
-#include "exec/exec_env.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
 
@@ -290,11 +289,6 @@ Status SchemaHelper::get_tablet_reshard_jobs_info(const SchemaScannerState& stat
                                                   TTabletReshardJobsResponse* res) {
     return _call_rpc(state,
                      [&req, &res](FrontendServiceConnection& client) { client->getTabletReshardJobsInfo(*res, req); });
-}
-
-void fill_data_column_with_null(Column* data_column) {
-    auto* nullable_column = down_cast<NullableColumn*>(data_column);
-    nullable_column->append_nulls(1);
 }
 
 } // namespace starrocks

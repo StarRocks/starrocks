@@ -17,7 +17,7 @@
 #include <simdjson.h>
 
 #include "base/metrics.h"
-#include "exec/schema_scanner/schema_helper.h"
+#include "exec/schema_scanner/schema_column_filler.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/strings/substitute.h"
 #include "platform/thrift_rpc_helper.h"

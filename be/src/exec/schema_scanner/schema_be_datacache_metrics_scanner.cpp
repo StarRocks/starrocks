@@ -16,7 +16,6 @@
 
 #include "cache/datacache.h"
 #include "common/system/master_info.h"
-#include "exec/exec_env.h"
 #include "gutil/strings/substitute.h"
 #include "types/datum.h"
 

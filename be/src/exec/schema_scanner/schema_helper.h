@@ -149,6 +149,4 @@ private:
                             const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback);
 };
 
-void fill_data_column_with_null(Column* data_column);
-
 } // namespace starrocks

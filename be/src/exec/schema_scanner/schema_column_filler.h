@@ -58,4 +58,9 @@ void fill_column_with_slot(Column* result, void* slot) {
     }
 }
 
+inline void fill_data_column_with_null(Column* data_column) {
+    auto* nullable_column = down_cast<NullableColumn*>(data_column);
+    nullable_column->append_nulls(1);
+}
+
 } // namespace starrocks
