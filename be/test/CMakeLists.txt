@@ -6,7 +6,6 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector/lake/lake_global_late_materialization_context_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
@@ -289,14 +288,13 @@ SET(DW_TEST_FILES
     ./storage/lake/segment_pk_iterator_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/filenames_test.cpp
-    ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/shared_data_vector_index_test.cpp
     ./storage/lake/vector_index_build_task_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
-    ./storage/lake/lake_scan_node_test.cpp
+    ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp

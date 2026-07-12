@@ -30,6 +30,7 @@ target_link_libraries(ModuleBootstrap PRIVATE
         Connector
         ConnectorHive
         ConnectorIceberg
+        ConnectorLake
         ConnectorCacheStats
         Base
         Gutil

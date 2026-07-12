@@ -942,6 +942,42 @@
       "remediation": "Keep ConnectorFile limited to concrete file connector scanner and connector-native sink behavior over connector contracts, compute/runtime helpers, formats, and FS/IO; move registry wiring and pipeline/export orchestration upward."
     },
     {
+      "id": "connectorlake",
+      "doc_label": "ConnectorLake",
+      "summary": "Concrete shared-data lake connector and lake late-materialization context above Storage, without registry composition, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/lake/AGENTS.md",
+      "owned_targets": ["ConnectorLake"],
+      "owned_roots": ["be/src/connector/lake"],
+      "allowed_include_prefixes": [
+        "connector/lake/",
+        "connector_primitive/",
+        "storage/",
+        "storage_primitive/",
+        "compute_env/",
+        "exec_primitive/",
+        "exprs/",
+        "runtime/",
+        "platform/",
+        "fs/",
+        "io/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["connector/", "exec/", "service/", "http/", "agent/", "script/", "tools/", "formats/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "Storage", "ComputeEnv", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FileSystem", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_lake_test"],
+      "allowed_test_link_deps": ["ConnectorLake", "ConnectorPrimitive", "Storage", "ComputeEnv", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FileSystem", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorLake limited to shared-data lake scans and lake late-materialization state over Storage and lower compute/runtime contracts; keep registration in ModuleBootstrap and avoid registry, service, or full Exec coupling."
+    },
+    {
       "id": "connectorbenchmark",
       "doc_label": "ConnectorBenchmark",
       "summary": "Benchgen-backed benchmark connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
@@ -1113,6 +1149,7 @@
         "connector/cache_stats/",
         "connector/hive/",
         "connector/iceberg/",
+        "connector/lake/",
         "connector/jdbc/",
         "connector/elasticsearch/",
         "connector/mysql/",
@@ -1127,7 +1164,7 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
-      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorHive", "ConnectorIceberg", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorHive", "ConnectorIceberg", "ConnectorLake", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["module_bootstrap_test"],
       "allowed_test_link_deps": ["ModuleBootstrap"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."
