@@ -18,9 +18,11 @@
 
 #include "column/column_helper.h"
 #include "common/runtime_profile.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "exec/schema_scanner_factory.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -116,12 +118,10 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     _scanner_param._fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunk");
     _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
 
-    // new one scanner
-    _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
-
-    if (nullptr == _schema_scanner) {
-        return Status::InternalError("schema scanner get nullptr pointer.");
-    }
+    ASSIGN_OR_RETURN(
+            _schema_scanner,
+            create_schema_scanner(state->exec_env() == nullptr ? nullptr : state->exec_env()->schema_scanner_factory(),
+                                  schema_table->schema_table_type()));
 
     RETURN_IF_ERROR(_schema_scanner->init(&_scanner_param, _pool));
 

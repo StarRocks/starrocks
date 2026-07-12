@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner_factory.h"
+#pragma once
+
+#include <memory>
+
+#include "common/statusor.h"
+#include "exec/schema_scanner.h"
 
 namespace starrocks {
 
+class SchemaScannerFactory {
+public:
+    virtual ~SchemaScannerFactory() = default;
+
+    virtual std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const = 0;
+};
+
 StatusOr<std::unique_ptr<SchemaScanner>> create_schema_scanner(const SchemaScannerFactory* factory,
-                                                               TSchemaTableType::type type) {
-    if (factory == nullptr) {
-        return Status::InternalError("schema scanner factory is not installed");
-    }
-    auto scanner = factory->create(type);
-    if (scanner == nullptr) {
-        return Status::InternalError("schema scanner factory returned nullptr");
-    }
-    return scanner;
-}
+                                                               TSchemaTableType::type type);
 
 } // namespace starrocks

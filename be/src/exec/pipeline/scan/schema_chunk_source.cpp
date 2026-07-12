@@ -18,7 +18,9 @@
 #include <mutex>
 
 #include "compute_env/workgroup/work_group.h"
+#include "exec/exec_env.h"
 #include "exec/schema_scanner.h"
+#include "exec/schema_scanner_factory.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -48,10 +50,10 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
 
     _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
 
-    _schema_scanner = SchemaScanner::create(schema_table->schema_table_type());
-    if (_schema_scanner == nullptr) {
-        return Status::InternalError("schema scanner get null pointer");
-    }
+    ASSIGN_OR_RETURN(
+            _schema_scanner,
+            create_schema_scanner(state->exec_env() == nullptr ? nullptr : state->exec_env()->schema_scanner_factory(),
+                                  schema_table->schema_table_type()));
 
     RETURN_IF_ERROR(_schema_scanner->init(param, _ctx->object_pool()));
 
