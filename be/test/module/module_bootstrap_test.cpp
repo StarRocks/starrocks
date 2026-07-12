@@ -19,7 +19,7 @@
 
 namespace starrocks::connector {
 
-TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsCacheStatsIdempotently) {
+TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdempotently) {
     auto* registry = ConnectorRegistry::default_instance();
     ASSERT_NE(nullptr, registry);
 
@@ -28,10 +28,22 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsCacheStatsIdempotent
     const auto* cache_stats = registry->get(Connector::CACHE_STATS);
     ASSERT_NE(nullptr, cache_stats);
     EXPECT_EQ(ConnectorType::CACHE_STATS, cache_stats->connector_type());
+    const auto* hive = registry->get(Connector::HIVE);
+    ASSERT_NE(nullptr, hive);
+    EXPECT_EQ(ConnectorType::HIVE, hive->connector_type());
+#ifndef __APPLE__
+    const auto* iceberg = registry->get(Connector::ICEBERG);
+    ASSERT_NE(nullptr, iceberg);
+    EXPECT_EQ(ConnectorType::ICEBERG, iceberg->connector_type());
+#endif
 
     status = bootstrap_builtin_connectors();
     ASSERT_TRUE(status.ok()) << status;
     EXPECT_EQ(cache_stats, registry->get(Connector::CACHE_STATS));
+    EXPECT_EQ(hive, registry->get(Connector::HIVE));
+#ifndef __APPLE__
+    EXPECT_EQ(iceberg, registry->get(Connector::ICEBERG));
+#endif
 }
 
 } // namespace starrocks::connector

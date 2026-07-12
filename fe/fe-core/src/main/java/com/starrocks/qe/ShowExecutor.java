@@ -1560,15 +1560,26 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
 
-            boolean hasLoadDesc = false;
+            // The first load property is emitted without a leading comma; the grammar is
+            // `ON table (loadProperty (',' loadProperty)*)`, so a comma before the first clause is a
+            // syntax error. JSON/Avro jobs have no COLUMNS TERMINATED BY, so the first clause is often
+            // INCLUDE METADATA or COLUMNS.
+            boolean hasLoadProperty = false;
             if (routineLoadJob.getColumnSeparator() != null) {
                 createRoutineLoadSql.append("\n COLUMNS TERMINATED BY ")
                         .append(routineLoadJob.getColumnSeparator().toSql(true));
-                hasLoadDesc = true;
+                hasLoadProperty = true;
+            }
+
+            if (routineLoadJob.getMetadata() != null && routineLoadJob.getMetadata().getItems() != null
+                    && !routineLoadJob.getMetadata().getItems().isEmpty()) {
+                createRoutineLoadSql.append(hasLoadProperty ? ",\n" : "\n").append(routineLoadJob.getMetadata().toSql());
+                hasLoadProperty = true;
             }
 
             if (routineLoadJob.getColumnDescs() != null) {
-                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n").append("COLUMNS (");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\nCOLUMNS (" : "\nCOLUMNS (");
+                hasLoadProperty = true;
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
@@ -1583,16 +1594,17 @@ public class ShowExecutor {
                         createRoutineLoadSql.append(", ");
                     }
                 }
-                hasLoadDesc = true;
+                hasLoadProperty = true;
             }
             if (routineLoadJob.getPartitions() != null) {
-                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\n" : "\n");
                 createRoutineLoadSql.append(routineLoadJob.getPartitions().toString());
-                hasLoadDesc = true;
+                hasLoadProperty = true;
             }
             if (routineLoadJob.getWhereExpr() != null) {
-                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n").append("WHERE ");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\nWHERE " : "\nWHERE ");
                 createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
+                hasLoadProperty = true;
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());

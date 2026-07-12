@@ -62,6 +62,13 @@ ConnectorScanNode::~ConnectorScanNode() {
     }
 }
 
+void ConnectorScanNode::set_filtered_above_iterator(bool value) {
+    ScanNode::set_filtered_above_iterator(value);
+    if (_data_source_provider != nullptr) {
+        _data_source_provider->set_filtered_above_iterator(value);
+    }
+}
+
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(_connector_status);
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
@@ -117,6 +124,7 @@ void ConnectorScanNode::_estimate_scan_row_bytes() {
         field_bytes += type_estimated_overhead_bytes(slot->type().type);
         _estimated_scan_row_bytes += field_bytes;
     }
+    _data_source_provider->set_estimated_scan_row_bytes(_estimated_scan_row_bytes);
 }
 
 void ConnectorScanNode::_estimate_data_source_mem_bytes() {

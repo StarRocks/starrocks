@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "connector/iceberg_chunk_sink.h"
-#include "connector/iceberg_delete_sink.h"
-#include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec_primitive/data_sink.h"
 
@@ -59,19 +59,19 @@ private:
     Status create_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
                                       pipeline::PipelineBuilderContext* context,
                                       IcebergTableDescriptor* iceberg_table_desc,
-                                      std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+                                      std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
                                       std::vector<TExpr>& partition_expr) const;
 
     Status create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
                                     pipeline::PipelineBuilderContext* context,
                                     IcebergTableDescriptor* iceberg_table_desc,
-                                    std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+                                    std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
                                     std::vector<TExpr>& partition_expr) const;
 
     Status create_row_delta_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
                                          pipeline::PipelineBuilderContext* context,
                                          IcebergTableDescriptor* iceberg_table_desc,
-                                         std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+                                         std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
                                          std::vector<TExpr>& partition_expr) const;
 
     ObjectPool* _pool;

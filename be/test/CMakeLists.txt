@@ -6,22 +6,11 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector/file_scan_metrics_test.cpp
-        ./connector/file_connector_rejected_record_test.cpp
-        ./connector/hive_connector_test.cpp
-        ./connector/deletion_vector/deletion_vector_test.cpp
-        ./connector_sink/hive_chunk_sink_test.cpp
-        ./connector_sink/iceberg_chunk_sink_test.cpp
-        ./connector_sink/file_chunk_sink_test.cpp
-        ./connector_sink/partition_chunk_writer_test.cpp
+        ./connector/lake/lake_global_late_materialization_context_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
-        ./connector_sink/iceberg_delete_sink_test.cpp
-        ./connector_sink/iceberg_row_delta_sink_test.cpp
-        ./connector_sink/sink_memory_manager_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
-        ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
@@ -76,13 +65,10 @@ set(EXEC_FILES
         ./exec/connector_scan_node_test.cpp
         ./exec/catalog_scan_metrics_test.cpp
         ./exec/exec_factory_test.cpp
-        ./exec/file_scan_node_rejected_record_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
-        ./exec/parquet_schema_builder_test.cpp
-        ./exec/query_scan_metrics_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/data_sinks/tablet_sink_index_channel_test.cpp
@@ -91,18 +77,6 @@ set(EXEC_FILES
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/olap_scan_keys_test.cpp
-        ./exec/file_scanner/avro_cpp_scanner_test.cpp
-        ./exec/file_scanner/avro_scanner_test.cpp
-        ./exec/file_scanner/csv_scanner_test.cpp
-        ./exec/file_scanner/file_scanner_test.cpp
-        ./exec/file_scanner/json_scanner_test.cpp
-        ./exec/file_scanner/orc_scanner_test.cpp
-        ./exec/file_scanner/parquet_scanner_test.cpp
-        ./exec/file_scanner/arrow_scanner_test.cpp
-        ./exec/hdfs_scanner/cache_select_scanner_test.cpp
-        ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
-        ./exec/hdfs_scanner/hdfs_scanner_test.cpp
-        ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
@@ -264,7 +238,9 @@ else()
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
-TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
+set(STARROCKS_TEST_LINK_LIBS ${TEST_LINK_LIBS})
+list(REMOVE_ITEM STARROCKS_TEST_LINK_LIBS arrow_testing)
+TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${STARROCKS_TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
 

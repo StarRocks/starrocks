@@ -26,9 +26,9 @@
 #include "base/utility/defer_op.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/connector_chunk_sink.h"
-#include "connector/hive_chunk_sink.h"
-#include "connector/partition_chunk_writer_memory_manager.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
+#include "connector/hive/hive_chunk_sink.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
@@ -99,10 +99,11 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
 };
 
-class TestConnectorChunkSink final : public connector::ConnectorChunkSink {
+class TestConnectorSink final : public connector::PartitionedConnectorChunkSink {
 public:
-    explicit TestConnectorChunkSink(RuntimeState* state)
-            : ConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {}
+    explicit TestConnectorSink(RuntimeState* state)
+            : PartitionedConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {
+    }
 
     void callback_on_commit(const connector::CommitResult& result) override {}
 
@@ -115,7 +116,7 @@ public:
         if (_op_mem_mgr != nullptr) {
             return Status::OK();
         }
-        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+        return PartitionedConnectorChunkSink::init(poller, profile, sink_mem_mgr);
     }
 
     Status finish() override {
@@ -232,7 +233,7 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->fragment_context = _fragment_context;
+        sink_ctx->runtime_state = _runtime_state;
         auto provider = std::make_unique<connector::HiveChunkSinkProvider>(sink_ctx);
         auto op_factory = std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), _fragment_context);
         auto op = op_factory->create(1, 0);
@@ -261,12 +262,12 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_EQ(sink_mem_mgr->register_child_manager(std::move(op_mem_mgr_impl)), op_mem_mgr);
     ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
-    auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
+    auto connector_sink = std::make_unique<TestConnectorSink>(_runtime_state);
+    connector_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     std::atomic<int32_t> num_sinkers{0};
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      std::move(connector_sink), sink_mem_mgr, _fragment_context,
                                                       num_sinkers);
     ASSERT_OK(op->prepare(_runtime_state));
 
@@ -302,16 +303,16 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     formats::AsyncFlushStreamPoller empty_poller;
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
 
-    auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
-    chunk_sink->set_finished(true);
-    chunk_sink->set_stream_to_enqueue_for_test(stream);
+    auto connector_sink = std::make_unique<TestConnectorSink>(_runtime_state);
+    connector_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
+    connector_sink->set_finished(true);
+    connector_sink->set_stream_to_enqueue_for_test(stream);
     // num_sinkers stays at 0, so set_finishing decrements to -1, skips the last-sinker
     // audit report path, and only exercises the memory-tracker behavior under test.
     std::atomic<int32_t> num_sinkers{0};
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      std::move(connector_sink), sink_mem_mgr, _fragment_context,
                                                       num_sinkers);
     ASSERT_OK(op->prepare(_runtime_state));
     stream.reset();
@@ -441,8 +442,8 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_claim_audit_marker_on_f
     // Single sinker so num_sinkers starts at 1 and this op IS the "last" sinker.
     std::atomic<int32_t> num_sinkers{1};
 
-    auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    chunk_sink->set_finish_status(Status::InternalError("simulated iceberg commit failure"));
+    auto connector_sink = std::make_unique<TestConnectorSink>(_runtime_state);
+    connector_sink->set_finish_status(Status::InternalError("simulated iceberg commit failure"));
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
     auto op_mem_mgr_impl = std::make_unique<connector::PartitionChunkWriterMemoryManager>();
@@ -451,11 +452,11 @@ TEST_F(ConnectorSinkOperatorTest, set_finishing_does_not_claim_audit_marker_on_f
     std::vector<connector::PartitionChunkWriterPtr> writers;
     formats::AsyncFlushStreamPoller empty_poller;
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
-    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
+    connector_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
 
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context,
+                                                      std::move(connector_sink), sink_mem_mgr, _fragment_context,
                                                       num_sinkers);
 
     Status finishing_status = op->set_finishing(_runtime_state);

@@ -201,8 +201,8 @@ Format module for core format primitives and concrete CSV, JSON, Avro, ORC, and 
 ### StoragePrimitive (`storageprimitive`)
 Shared storage-access primitives, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
 - Targets: `StoragePrimitive`
-- Allowed internal include prefixes: `storage_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Expr`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `storage_primitive_test`
 - Remediation: Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward.
 
@@ -239,8 +239,8 @@ FE-agent task orchestration, heartbeat handling, agent metrics, and agent worker
 ### DataWorkflows (`dataworkflows`)
 Data-plane workflow orchestration above concrete Storage and Exec for load, delete, schema-change, and tablet-write workflows without service/bootstrap ownership.
 - Targets: `DataWorkflows`
-- Allowed internal include prefixes: `data_workflows/`, `storage/`, `storage_primitive/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Storage`, `Exec`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Runtime`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `data_workflows/`, `connector/file/`, `storage/`, `storage_primitive/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Storage`, `Exec`, `ConnectorFile`, `Runtime`, `StorageBase`, `StoragePrimitive`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `Runtime`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `data_workflows_test`
 - Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
 
@@ -269,25 +269,33 @@ Operator-tree execution framework for query and fragment contexts, driver lifecy
 - Remediation: Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
 
 ### ConnectorPrimitive (`connectorprimitive`)
-Connector contracts, DataSource, DataSourceProvider default mechanics, primitive connector sink commit/profile types, and generic connector sink memory management without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+Connector contracts, DataSource, DataSourceProvider default mechanics, and generic connector sink memory management interfaces without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorPrimitive`
-- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `formats/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `FormatCore`, `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_primitive_test`
-- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, primitive sink commit/profile types, and generic sink memory policies expressed through lower-level interfaces; move concrete connectors, concrete sinks, registry wiring, storage, service, and full Exec integration upward.
+- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and generic sink memory policies expressed through lower-level interfaces; move concrete connectors, reusable sink/file-writer helpers, registry wiring, storage, service, and full Exec integration upward.
+
+### ConnectorCommon (`connectorcommon`)
+Reusable connector sink/file-writer helpers above connector contracts, including sink commit/profile types and shared writer-side utilities, without concrete connector registry composition, service, HTTP, or full Exec coupling.
+- Targets: `ConnectorCommon`
+- Allowed internal include prefixes: `connector/common/`, `connector_primitive/`, `compute_env/`, `cache/`, `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `platform/`, `formats/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ConnectorPrimitive`, `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FormatCore`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_common_test`
+- Remediation: Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward.
 
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
 Top-level built-in connector registration composition above connector contracts and concrete connector libraries.
 - Targets: `ConnectorBuiltinRegistry`
 - Allowed internal include prefixes: `connector/builtin_connector_registry.h`, `connector/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Connector`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Connector`, `ConnectorFile`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ModuleBootstrap instead of depending back on this target.
 
 ### ModuleBootstrap (`modulebootstrap`)
 Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and split connector registration.
 - Targets: `ModuleBootstrap`
-- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/hive/`, `connector/iceberg/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorHive`, `ConnectorIceberg`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `module_bootstrap_test`
 - Remediation: Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly.
 
@@ -335,7 +343,7 @@ Diagnostic script execution and command dispatch layer below Service, HttpServic
 Shared service-layer target above Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
 - Targets: `Service`
 - Allowed internal include prefixes: `service/`, `script/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exec_primitive/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `storage/`, `storage_primitive/`, `types/`
-- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBuiltinRegistry`, `Exec`, `Formats`, `ChunkCore`, `ColumnCore`, `Types`
+- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorFile`, `ConnectorPrimitive`, `ConnectorBuiltinRegistry`, `Exec`, `Formats`, `ChunkCore`, `ColumnCore`, `Types`
 - Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 

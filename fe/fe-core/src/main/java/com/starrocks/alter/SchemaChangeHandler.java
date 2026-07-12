@@ -2711,6 +2711,7 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             String compactionStrategy = "";
+            FlatJsonConfig flatJsonConfig = null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -2811,16 +2812,43 @@ public class SchemaChangeHandler extends AlterHandler {
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                FlatJsonConfig newConfig = olapTable.containsFlatJsonConfig()
+                        ? new FlatJsonConfig(olapTable.getFlatJsonConfig())
+                        : new FlatJsonConfig();
+                newConfig.buildFromProperties(properties);
+                // The analyzer's enabled-check ran without the table lock, so a concurrent ALTER
+                // may have disabled flat_json since; re-validate against the locked state so a
+                // factor change cannot land on a disabled config (mirrors updateFlatJsonConfigMeta).
+                if (!newConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+                newConfig.incVersion();
+                metaType = TTabletMetaType.FLAT_JSON_CONFIG;
+                flatJsonConfig = newConfig;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
-            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(),
-                    olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        flatJsonConfig);
+            } else {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            }
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2971,6 +2999,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             return false;
         }
+        List<Partition> partitions = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2980,6 +3009,7 @@ public class SchemaChangeHandler extends AlterHandler {
             } else {
                 newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
             }
+            partitions.addAll(olapTable.getPartitions());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
@@ -3028,6 +3058,25 @@ public class SchemaChangeHandler extends AlterHandler {
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            // check for concurrent modifications by version
+            if (olapTable.containsFlatJsonConfig()
+                    && olapTable.getFlatJsonConfig().getVersion() != newFlatJsonConfig.getVersion()) {
+                Map<String, String> newProperties = olapTable.getFlatJsonConfig().toProperties();
+                newProperties.putAll(properties);
+                newFlatJsonConfig.buildFromProperties(newProperties);
+                newFlatJsonConfig.setVersion(olapTable.getFlatJsonConfig().getVersion());
+                // Re-validate after rebasing onto the (possibly concurrently-modified) current
+                // config: a factor change must not be silently merged onto a now-disabled config,
+                // which would persist an invalid disabled-with-factor state (the factor is dropped
+                // by toProperties() while disabled, diverging in-memory vs replay/failover).
+                if (!newFlatJsonConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+            }
+            newFlatJsonConfig.incVersion();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
         } catch (Exception e) {
             isModifiedSuccess = false;
@@ -3035,7 +3084,111 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
+        if (isModifiedSuccess) {
+            try {
+                for (Partition partition : partitions) {
+                    updateFlatJsonPartitionTabletMeta(db, olapTable.getName(), partition.getName(),
+                            olapTable.getFlatJsonConfig());
+                }
+            } catch (DdlException e) {
+                LOG.warn("Failed to execute updateFlatJsonPartitionTabletMeta", e);
+            }
+        }
+
         return isModifiedSuccess;
+    }
+
+    /**
+     * Update one specified partition's flat_json_config by partition name of table
+     */
+    public void updateFlatJsonPartitionTabletMeta(Database db,
+                                                  String tableName,
+                                                  String partitionName,
+                                                  FlatJsonConfig flatJsonConfig) throws DdlException {
+        // be id -> Set<tablet id>
+        Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        if (olapTable == null) {
+            throw new DdlException("Table[" + tableName + "] does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                        tabletSet.add(tablet.getId());
+                    }
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+
+        int totalTaskNum = beIdToTabletId.keySet().size();
+        if (totalTaskNum == 0) {
+            return;
+        }
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        AgentBatchTask batchTask = new AgentBatchTask();
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletId.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createFlatJsonConfigUpdateTask(kv.getKey(), kv.getValue(), flatJsonConfig);
+            task.setLatch(countDownLatch);
+            batchTask.addTask(task);
+        }
+        if (!FeConstants.runningUnitTest) {
+            AgentTaskQueue.addBatchTask(batchTask);
+            AgentTaskExecutor.submit(batchTask);
+            LOG.info("send update flat_json_config tablet meta task for table {}, partition {}, number: {}",
+                    tableName, partitionName, batchTask.getTaskNum());
+            waitForTabletMetaBatchTask(batchTask, countDownLatch, totalTaskNum,
+                    "Failed to update partition[" + partitionName + "] flat_json_config tablet meta.");
+        }
+    }
+
+    // Wait for a dispatched tablet-meta batch task and turn a timeout/error into a DdlException.
+    private static void waitForTabletMetaBatchTask(AgentBatchTask batchTask,
+                                                   MarkedCountDownLatch<Long, Set<Long>> countDownLatch,
+                                                   int totalTaskNum, String errMsgPrefix) throws DdlException {
+        long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+        timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = errMsgPrefix;
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                }
+            }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
+        }
     }
 
     // return true means that the modification of FEMeta is successful,
@@ -3298,6 +3451,7 @@ public class SchemaChangeHandler extends AlterHandler {
             try {
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 LOG.warn("InterruptedException: ", e);
             }
 

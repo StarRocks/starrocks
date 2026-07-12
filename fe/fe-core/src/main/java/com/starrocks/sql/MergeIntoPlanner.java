@@ -43,7 +43,6 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -451,21 +450,12 @@ public class MergeIntoPlanner {
         if (outputExprs == null || outputExprs.size() < 2) {
             return null;
         }
-        SlotId fileSlotId = tryExtractSlotId(outputExprs.get(0));
-        SlotId posSlotId = tryExtractSlotId(outputExprs.get(1));
+        SlotId fileSlotId = IcebergPlannerUtils.tryExtractSlotId(outputExprs.get(0));
+        SlotId posSlotId = IcebergPlannerUtils.tryExtractSlotId(outputExprs.get(1));
         if (fileSlotId == null || posSlotId == null) {
             return null;
         }
         return new RowLocatorSlotIds(fileSlotId, posSlotId);
-    }
-
-    private static SlotId tryExtractSlotId(Expr expr) {
-        if (expr instanceof SlotRef slotRef) {
-            return slotRef.getSlotId();
-        }
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        expr.collect(SlotRef.class, slotRefs);
-        return slotRefs.size() == 1 ? slotRefs.get(0).getSlotId() : null;
     }
 
     /**

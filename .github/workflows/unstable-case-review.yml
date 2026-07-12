@@ -22,6 +22,11 @@ on:
         required: false
         default: 'main'
         type: string
+      runs:
+        description: 'Consecutive runs per case for the stability check (default 3; set 1 for a quick debug run)'
+        required: false
+        default: '3'
+        type: string
 
 permissions:
   checks: write
@@ -32,6 +37,9 @@ permissions:
 env:
   IS_INSPECTION: 'true'
   SHARE_PATH: /var/local/env
+  # Consecutive-run count for the stability check, consumed by ci-tool
+  # run-sql-tester.sh / elastic-ut-review.sh (default 3; 1 = quick debug).
+  REVIEW_RUNS: ${{ inputs.runs || '3' }}
 
 jobs:
   # ─── Info / gate ─────────────────────────────────────────────────────────
@@ -66,6 +74,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py prepare \
             --json files/unstable_case.json \
+            --repo "${{ github.repository }}" \
             --branch "${BRANCH}" \
             --case-types "${CASE_TYPES}"
 
@@ -253,6 +262,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py report \
             --json     files/unstable_case.json \
+            --repo     "${{ github.repository }}" \
             --branch   "${BRANCH}" \
             --commit   "${COMMIT_SHA}" \
             --case-types "${CASE_TYPES}" \

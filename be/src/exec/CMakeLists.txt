@@ -73,6 +73,7 @@ set(EXEC_JOIN_CORE_FILES
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
     join/join_hash_table.cpp
+    join/join_hash_map_factory.cpp
     join/join_hash_map_mapping_inst.cpp
     join/join_hash_map_linear_chained_inst.cpp
     join/join_hash_map_linear_chained_set_inst.cpp
@@ -254,7 +255,6 @@ set(EXEC_NON_PIPELINE_FILES
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
-    query_scan_metrics.cpp
     capture_version_node.cpp
     empty_set_node.cpp
     exec_factory.cpp
@@ -264,7 +264,6 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    olap_common.cpp
     write_combined_txn_log.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
@@ -284,7 +283,6 @@ set(EXEC_NON_PIPELINE_FILES
     analytor.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
-    olap_scan_prepare.cpp
     meta_scan_node.cpp
     olap_meta_scanner.cpp
     olap_meta_scan_node.cpp
@@ -304,8 +302,6 @@ set(EXEC_NON_PIPELINE_FILES
     raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    parquet_schema_builder.cpp
-    parquet_reader.cpp
     parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
@@ -321,25 +317,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    iceberg/iceberg_delete_builder.cpp    
-    paimon/paimon_delete_file_builder.cpp
-    hdfs_scanner/cache_select_scanner.cpp
-    hdfs_scanner/hdfs_scanner_text.cpp
-    hdfs_scanner/hdfs_scanner_json.cpp
-    hdfs_scanner/hdfs_scanner_partition.cpp
-    hdfs_scanner/hdfs_scanner_parquet.cpp
-    hdfs_scanner/hdfs_scanner_orc.cpp
-    hdfs_scanner/hdfs_scanner_avro.cpp
-    hdfs_scanner/hdfs_scanner.cpp
-    hdfs_scanner/jni_scanner.cpp
-    file_scanner/avro_cpp_scanner.cpp
-    file_scanner/avro_scanner.cpp
-    file_scanner/csv_scanner.cpp
-    file_scanner/file_scanner.cpp
-    file_scanner/json_scanner.cpp
-    file_scanner/orc_scanner.cpp
-    file_scanner/parquet_scanner.cpp
-    file_scanner/arrow_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -470,7 +447,6 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
 ENDIF()
 
 ADD_BE_LIB(ExecRuntime
-    runtime/query_runtime_state.cpp
     runtime/group_execution/execution_group.cpp
     runtime/group_execution/execution_group_builder.cpp
     runtime/pipeline.cpp
@@ -513,4 +489,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorFile ConnectorHive ConnectorIceberg ConnectorBuiltinRegistry)

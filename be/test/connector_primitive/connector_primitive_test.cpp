@@ -14,14 +14,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector_primitive/connector.h"
-#include "connector_primitive/connector_sink_commit.h"
 #include "connector_primitive/data_source_provider.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "formats/file_writer.h"
-#include "formats/utils.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::connector {
@@ -37,6 +35,33 @@ class TestDataSourceProvider final : public DataSourceProvider {
 public:
     DataSourcePtr create_data_source(const TScanRange&) override { return nullptr; }
     const TupleDescriptor* tuple_descriptor(RuntimeState*) const override { return nullptr; }
+};
+
+class TestConnectorSink final : public ConnectorSink {
+public:
+    Status init(formats::AsyncFlushStreamPoller*, RuntimeProfile*, SinkMemoryManager*) override { return Status::OK(); }
+    Status add(const ChunkPtr&) override { return Status::OK(); }
+    Status finish() override { return Status::OK(); }
+    void rollback() override { rollback_calls++; }
+    bool is_finished() override { return finished; }
+    Status status() override { return status_value; }
+    SinkOperatorMemoryManager* op_mem_mgr() const override { return op_mem_mgr_value; }
+    void register_memory_candidates(SinkOperatorMemoryManager* op_mem_mgr) override { registered_mem_mgr = op_mem_mgr; }
+
+    bool finished = true;
+    int rollback_calls = 0;
+    Status status_value = Status::OK();
+    SinkOperatorMemoryManager* op_mem_mgr_value = nullptr;
+    SinkOperatorMemoryManager* registered_mem_mgr = nullptr;
+};
+
+struct TestConnectorSinkContext final : public ConnectorSinkContext {};
+
+class TestConnectorSinkProvider final : public ConnectorSinkProvider {
+public:
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t) override {
+        return std::make_unique<TestConnectorSink>();
+    }
 };
 
 class TestSinkOperatorMemoryManager final : public SinkOperatorMemoryManager {
@@ -82,34 +107,6 @@ TEST(ConnectorPrimitiveTest, ConnectorKeepsReadSideTypeContract) {
     ASSERT_EQ("benchmark", Connector::BENCHMARK);
 }
 
-TEST(ConnectorPrimitiveTest, CommitResultWrapsFileResultWithConnectorMetadata) {
-    CommitResult result{
-            .file_result =
-                    {
-                            .io_status = Status::OK(),
-                            .format = formats::PARQUET,
-                            .file_statistics =
-                                    {
-                                            .record_count = 10,
-                                            .file_size = 128,
-                                    },
-                            .location = "s3://bucket/table/data.parquet",
-                    },
-    };
-
-    auto& fingerprint_ref = result.set_partition_null_fingerprint("01");
-    auto& referenced_file_ref = result.set_referenced_data_file("s3://bucket/table/original.parquet");
-
-    ASSERT_EQ(&result, &fingerprint_ref);
-    ASSERT_EQ(&result, &referenced_file_ref);
-    ASSERT_TRUE(result.file_result.io_status.ok());
-    ASSERT_EQ(formats::PARQUET, result.file_result.format);
-    ASSERT_EQ(10, result.file_result.file_statistics.record_count);
-    ASSERT_EQ(128, result.file_result.file_statistics.file_size);
-    ASSERT_EQ("01", result.partition_null_fingerprint);
-    ASSERT_EQ("s3://bucket/table/original.parquet", result.referenced_data_file);
-}
-
 TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue) {
     TestDataSourceProvider provider;
     TScanRangeParams scan_range;
@@ -128,6 +125,34 @@ TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue)
     auto queue = std::move(queue_or).value();
     ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
     ASSERT_EQ(1, queue->num_original_morsels());
+}
+
+TEST(ConnectorPrimitiveTest, DataSourceProviderStoresScanNodeHints) {
+    TestDataSourceProvider provider;
+
+    ASSERT_EQ(0, provider.estimated_scan_row_bytes());
+    ASSERT_FALSE(provider.is_filtered_above_iterator());
+
+    provider.set_estimated_scan_row_bytes(128);
+    provider.set_filtered_above_iterator(true);
+
+    ASSERT_EQ(128, provider.estimated_scan_row_bytes());
+    ASSERT_TRUE(provider.is_filtered_above_iterator());
+}
+
+TEST(ConnectorPrimitiveTest, ConnectorSinkContractLivesInPrimitiveLayer) {
+    TestConnectorSinkProvider provider;
+
+    auto sink_or = provider.create_sink(7);
+    ASSERT_TRUE(sink_or.ok()) << sink_or.status().to_string();
+    auto sink = std::move(sink_or).value();
+
+    ASSERT_OK(sink->init(nullptr, nullptr, nullptr));
+    ASSERT_OK(sink->add(nullptr));
+    ASSERT_OK(sink->finish());
+    ASSERT_TRUE(sink->is_finished());
+    ASSERT_OK(sink->status());
+    ASSERT_EQ(nullptr, sink->op_mem_mgr());
 }
 
 TEST(ConnectorPrimitiveTest, SinkMemoryManagerRegistersAbstractOperatorManagers) {

@@ -16,12 +16,15 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
         column_evaluator.cpp
+        delta/deletion_vector.cpp
         deletion_bitmap.cpp
         disk_range.hpp
+        file_input_stream.cpp
         file_writer.cpp
         io/async_flush_output_stream.cpp
         io/async_flush_stream_poller.cpp
         io/formatted_output_stream_file.cpp
+        paimon/paimon_delete_file_builder.cpp
         reserved_columns.h
         scan_context.cpp
         scan_context.h
@@ -29,6 +32,7 @@ ADD_BE_LIB(FormatCore
         )
 
 target_link_libraries(FormatCore PUBLIC
+        Cache
         ComputeEnv
         ExecPrimitive
         Expr
@@ -154,6 +158,7 @@ target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
 
 ADD_BE_LIB(Formats
         formats_aggregate.cpp
+        iceberg/iceberg_delete_builder.cpp
         )
 
 target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)
