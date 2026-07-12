@@ -31,6 +31,9 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdemp
     const auto* hive = registry->get(Connector::HIVE);
     ASSERT_NE(nullptr, hive);
     EXPECT_EQ(ConnectorType::HIVE, hive->connector_type());
+    const auto* lake = registry->get(Connector::LAKE);
+    ASSERT_NE(nullptr, lake);
+    EXPECT_EQ(ConnectorType::LAKE, lake->connector_type());
 #ifndef __APPLE__
     const auto* iceberg = registry->get(Connector::ICEBERG);
     ASSERT_NE(nullptr, iceberg);
@@ -41,6 +44,7 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsSplitConnectorsIdemp
     ASSERT_TRUE(status.ok()) << status;
     EXPECT_EQ(cache_stats, registry->get(Connector::CACHE_STATS));
     EXPECT_EQ(hive, registry->get(Connector::HIVE));
+    EXPECT_EQ(lake, registry->get(Connector::LAKE));
 #ifndef __APPLE__
     EXPECT_EQ(iceberg, registry->get(Connector::ICEBERG));
 #endif

@@ -118,13 +118,45 @@ target_link_libraries(ConnectorIceberg PRIVATE
 
 ADD_BE_LIB(Connector
         connector_registry.cpp
-        lake/lake_global_late_materialization_context.cpp
-        lake_connector.cpp
-        changes_connector.cpp
 )
 
-target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache Storage)
-target_link_libraries(Connector PRIVATE Platform)
+target_link_libraries(Connector PUBLIC
+        ConnectorPrimitive
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+ADD_BE_LIB(ConnectorLake
+        lake/lake_connector.cpp
+        lake/lake_global_late_materialization_context.cpp
+<<<<<<< HEAD
+        lake_connector.cpp
+        changes_connector.cpp
+=======
+>>>>>>> 5b1957251b9... [Refactor] Extract lake connector into a clean module (#76237)
+)
+
+target_link_libraries(ConnectorLake PUBLIC
+        ConnectorPrimitive
+        Storage
+        ComputeEnv
+        StoragePrimitive
+        ExecPrimitive
+        Expr
+        Runtime
+        Platform
+        FileSystem
+        IO
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
 
 ADD_BE_LIB(ConnectorFile
         file/file_connector.cpp

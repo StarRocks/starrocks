@@ -16,7 +16,6 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/parser.h"
-#include "connector/lake_connector.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
 #include "exec/exec_env.h"
