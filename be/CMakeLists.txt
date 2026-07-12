@@ -884,6 +884,14 @@ set (TEST_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     TestUtil
     ${WL_START_GROUP}
+    # Broad test object libraries directly exercise concrete connector implementations.
+    # Keep these as explicit test dependencies: PRIVATE dependencies of shared BE modules
+    # are intentionally not propagated when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
     gmock
     gtest
     ${WL_END_GROUP}
