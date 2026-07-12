@@ -206,6 +206,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
 
     auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
     data_source_provider->set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_EQ(scan_node->estimated_scan_row_bytes(), data_source_provider->estimated_scan_row_bytes());
 
     ASSERT_FALSE(data_source_provider->always_shared_scan());
 
@@ -218,6 +219,14 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     auto tablet_metas = std::vector<TabletMetadata*>();
     tablet_metas.emplace_back(_tablet_metadata.get());
     auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
+
+    data_source_provider->set_estimated_scan_row_bytes(0);
+    auto missing_estimate = data_source_provider->convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, scan_node->id(), pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            scan_ranges.size());
+    ASSERT_ERROR(missing_estimate.status());
+    EXPECT_NE(std::string::npos, missing_estimate.status().to_string().find("estimated scan row bytes"));
+    data_source_provider->set_estimated_scan_row_bytes(scan_node->estimated_scan_row_bytes());
 
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
@@ -343,7 +352,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     });
 
     // 5) Explicitly construct a LakeDataSource and call open().
-    starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    starrocks::connector::LakeDataSourceProvider provider(plan_node);
     provider.set_lake_tablet_manager(_tablet_mgr);
 
     TInternalScanRange internal_scan_range;
@@ -505,8 +514,9 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
         resp.__set_schema(t_schema);
     });
 
-    starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    starrocks::connector::LakeDataSourceProvider provider(plan_node);
     provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_filtered_above_iterator(true);
 
     TInternalScanRange internal_scan_range;
     internal_scan_range.__set_tablet_id(_tablet_metadata->id());
@@ -536,6 +546,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     const auto& params = ds.TEST_params();
     EXPECT_TRUE(params.use_vector_index);
+    EXPECT_TRUE(params.has_predicate_above_iterator);
     ASSERT_NE(params.vector_search_option, nullptr);
     EXPECT_EQ(params.vector_search_option->k, 10);
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");

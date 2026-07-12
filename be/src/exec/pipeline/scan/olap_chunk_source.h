@@ -18,7 +18,6 @@
 
 #include "common/runtime_profile.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

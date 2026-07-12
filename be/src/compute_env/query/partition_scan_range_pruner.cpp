@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/partition_scan_range_pruner.h"
 
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
@@ -21,7 +21,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
@@ -136,7 +135,6 @@ Status prune_scan_ranges_by_partition_conjuncts(RuntimeState* state, const Tuple
                 ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(&partition_cols_chunk, filter.data()));
                 size_t true_count = ColumnHelper::count_true_with_notnull(column);
                 if (true_count == column->size()) {
-                    // all hit, skip
                     continue;
                 } else if (0 == true_count) {
                     is_pruned = true;

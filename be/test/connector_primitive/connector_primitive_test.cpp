@@ -127,6 +127,19 @@ TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue)
     ASSERT_EQ(1, queue->num_original_morsels());
 }
 
+TEST(ConnectorPrimitiveTest, DataSourceProviderStoresScanNodeHints) {
+    TestDataSourceProvider provider;
+
+    ASSERT_EQ(0, provider.estimated_scan_row_bytes());
+    ASSERT_FALSE(provider.is_filtered_above_iterator());
+
+    provider.set_estimated_scan_row_bytes(128);
+    provider.set_filtered_above_iterator(true);
+
+    ASSERT_EQ(128, provider.estimated_scan_row_bytes());
+    ASSERT_TRUE(provider.is_filtered_above_iterator());
+}
+
 TEST(ConnectorPrimitiveTest, ConnectorSinkContractLivesInPrimitiveLayer) {
     TestConnectorSinkProvider provider;
 

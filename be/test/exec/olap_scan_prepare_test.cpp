@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/olap_scan_prepare.h"
-
 #include <gtest/gtest.h>
 
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"

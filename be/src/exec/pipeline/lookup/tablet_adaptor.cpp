@@ -22,6 +22,7 @@
 #include "base/statusor.h"
 #include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"

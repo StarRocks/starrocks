@@ -16,15 +16,13 @@
 
 #include "base/status.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/query/scan_conjuncts_manager.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 
-class TKeyRange;
-class TScanRangeParams;
 class RuntimeState;
 
 // Materialize partition column candidate values described by `column_range` into a Column.
