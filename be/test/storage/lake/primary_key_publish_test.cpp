@@ -1338,6 +1338,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     config::enable_primary_key_recover = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, true, false);
@@ -1958,6 +1963,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     std::vector<std::pair<ChunkPtr, std::vector<uint32_t>>> chunks;
     // upsert + delete
     chunks.push_back(gen_data_and_index(kChunkSize, 0, true, true));
@@ -2105,6 +2115,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     std::vector<std::pair<ChunkPtr, std::vector<uint32_t>>> chunks;
     // upsert + delete
     chunks.push_back(gen_data_and_index(kChunkSize, 0, true, true));
