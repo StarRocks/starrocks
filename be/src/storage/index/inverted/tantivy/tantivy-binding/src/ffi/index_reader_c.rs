@@ -47,6 +47,7 @@ use crate::error::Result;
 use crate::ffi::catch::catch_ffi;
 use crate::ffi::handle::{as_ref, create_binding, free_binding};
 use crate::ffi::result::{FFISlice, RustF32Array, RustResult, RustU32Array, raw_to_str};
+use crate::safe::index_reader::{BitmapSink, SetBitmapFn};
 use crate::safe::pull_directory::PullDirectory;
 use crate::safe::IndexReaderWrapper;
 
@@ -402,6 +403,129 @@ pub unsafe extern "C" fn tantivy_wildcard_query(
                 *out = RustU32Array::from_vec(ids);
                 RustResult::ok_none()
             }
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
+}
+
+// ---- Direct-to-bitmap query variants ------------------------
+// These stream matched BE row ids straight into the caller's bitmap via the
+// `append` callback (`ctx` = the bitmap pointer, e.g. a roaring::Roaring*),
+// instead of returning a `RustU32Array` the caller must `addMany`. This removes
+// the per-query Vec<u32> materialization + sort + one-shot addMany that
+// dominates CPU/memory for high-frequency terms.
+
+/// Shared boilerplate for the terms-based bitmap variants (MATCH_ANY / MATCH_ALL
+/// / PHRASE): decode the term slice and run `query_fn` with a `BitmapSink`.
+unsafe fn with_bitmap_terms<F>(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+    query_fn: F,
+) -> RustResult
+where
+    F: FnOnce(&IndexReaderWrapper, &[&str], BitmapSink) -> Result<()>,
+{
+    let r: &IndexReaderWrapper = match as_ref(reader) {
+        Some(r) => r,
+        None => return RustResult::err("reader is NULL"),
+    };
+    let owned = match read_terms(terms, count) {
+        Ok(v) => v,
+        Err(e) => return RustResult::err(e),
+    };
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    match query_fn(r, &refs, BitmapSink { ctx, append }) {
+        Ok(()) => RustResult::ok_none(),
+        Err(e) => RustResult::err(e.to_string()),
+    }
+}
+
+/// EQUAL / single-term → bitmap. SAFETY: as `tantivy_term_query`; `ctx`/`append`
+/// must be valid for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_term_query_bitmap(
+    reader: *const c_void,
+    term_ptr: *const u8,
+    term_len: usize,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+) -> RustResult {
+    catch_ffi(|| {
+        let r: &IndexReaderWrapper = match as_ref(reader) {
+            Some(r) => r,
+            None => return RustResult::err("reader is NULL"),
+        };
+        let term = match raw_to_str(term_ptr, term_len) {
+            Ok(s) => s,
+            Err(e) => return RustResult::err(format!("term: {e}")),
+        };
+        match r.term_query_bitmap(term, BitmapSink { ctx, append }) {
+            Ok(()) => RustResult::ok_none(),
+            Err(e) => RustResult::err(e.to_string()),
+        }
+    })
+}
+
+/// MATCH_ANY → bitmap. SAFETY: as `tantivy_match_query`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_match_query_bitmap(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+) -> RustResult {
+    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_any_query_bitmap(t, s)))
+}
+
+/// MATCH_ALL → bitmap. SAFETY: as `tantivy_match_query`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_match_all_query_bitmap(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+) -> RustResult {
+    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_all_query_bitmap(t, s)))
+}
+
+/// MATCH_PHRASE → bitmap. SAFETY: as `tantivy_phrase_match_query`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_phrase_match_query_bitmap(
+    reader: *const c_void,
+    terms: *const FFISlice,
+    count: usize,
+    slop: u32,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+) -> RustResult {
+    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.phrase_query_bitmap(t, slop, s)))
+}
+
+/// MATCH_WILDCARD → bitmap. SAFETY: as `tantivy_wildcard_query`.
+#[no_mangle]
+pub unsafe extern "C" fn tantivy_wildcard_query_bitmap(
+    reader: *const c_void,
+    pattern_ptr: *const u8,
+    pattern_len: usize,
+    ctx: *mut c_void,
+    append: SetBitmapFn,
+) -> RustResult {
+    catch_ffi(|| {
+        let r: &IndexReaderWrapper = match as_ref(reader) {
+            Some(r) => r,
+            None => return RustResult::err("reader is NULL"),
+        };
+        let pattern = match raw_to_str(pattern_ptr, pattern_len) {
+            Ok(s) => s,
+            Err(e) => return RustResult::err(format!("pattern: {e}")),
+        };
+        match r.wildcard_query_bitmap(pattern, BitmapSink { ctx, append }) {
+            Ok(()) => RustResult::ok_none(),
             Err(e) => RustResult::err(e.to_string()),
         }
     })

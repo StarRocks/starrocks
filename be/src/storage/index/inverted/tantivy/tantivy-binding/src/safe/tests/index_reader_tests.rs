@@ -17,6 +17,7 @@ use tantivy::schema::{FAST, IndexRecordOption, Schema, TextFieldIndexing, TextOp
 use tantivy::{Index, ReloadPolicy, TantivyDocument};
 use tempfile::TempDir;
 
+use crate::safe::index_reader::BitmapSink;
 use crate::safe::{IndexReaderWrapper, IndexWriterWrapper};
 
 fn build(values: &[&str]) -> TempDir {
@@ -26,6 +27,28 @@ fn build(values: &[&str]) -> TempDir {
     w.commit().expect("commit");
     drop(w);
     tmp
+}
+
+// Test sink: the direct-bitmap collector streams row ids here; we record them in
+// a thread-local so a test can compare against the Vec-returning query.
+thread_local! {
+    static SINK_IDS: std::cell::RefCell<Vec<u32>> = std::cell::RefCell::new(Vec::new());
+}
+extern "C" fn test_sink(_ctx: *mut std::ffi::c_void, ids: *const u32, len: usize) {
+    let s = unsafe { std::slice::from_raw_parts(ids, len) };
+    SINK_IDS.with(|b| b.borrow_mut().extend_from_slice(s));
+}
+fn drain_sink() -> Vec<u32> {
+    SINK_IDS.with(|b| {
+        let mut v = b.borrow_mut();
+        let mut out = std::mem::take(&mut *v);
+        out.sort_unstable();
+        out
+    })
+}
+fn test_bitmap_sink() -> BitmapSink {
+    SINK_IDS.with(|b| b.borrow_mut().clear());
+    BitmapSink { ctx: std::ptr::null_mut(), append: test_sink }
 }
 
 #[test]
@@ -43,6 +66,34 @@ fn match_all() {
     let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
     let hits = r.match_all_query(&["alpha", "beta"]).expect("query");
     assert_eq!(hits, vec![0u32, 2u32]);
+}
+
+#[test]
+fn bitmap_variants_match_vec_variants() {
+    let tmp = build(&["alpha beta gamma", "alpha gamma", "alpha beta", "beta delta"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+
+    // MATCH_ALL
+    let mut want = r.match_all_query(&["alpha", "beta"]).expect("all");
+    want.sort_unstable();
+    r.match_all_query_bitmap(&["alpha", "beta"], test_bitmap_sink()).expect("all bitmap");
+    assert_eq!(drain_sink(), want, "match_all bitmap == vec");
+
+    // MATCH_ANY
+    let mut want = r.match_any_query(&["beta", "delta"]).expect("any");
+    want.sort_unstable();
+    r.match_any_query_bitmap(&["beta", "delta"], test_bitmap_sink()).expect("any bitmap");
+    assert_eq!(drain_sink(), want, "match_any bitmap == vec");
+
+    // EQUAL / term
+    let mut want = r.term_query("gamma").expect("term");
+    want.sort_unstable();
+    r.term_query_bitmap("gamma", test_bitmap_sink()).expect("term bitmap");
+    assert_eq!(drain_sink(), want, "term bitmap == vec");
+
+    // absent term → empty
+    r.term_query_bitmap("zzz", test_bitmap_sink()).expect("absent bitmap");
+    assert_eq!(drain_sink(), Vec::<u32>::new(), "absent term → empty bitmap");
 }
 
 #[test]

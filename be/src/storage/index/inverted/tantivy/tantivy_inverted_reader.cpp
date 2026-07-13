@@ -28,6 +28,13 @@
 #include "storage/rowset/options.h"
 #include "util/slice.h"
 
+// FFI callback for the direct-to-bitmap query variants: Rust streams matched BE
+// row ids here in blocks and we add them straight into the roaring result,
+// avoiding a Vec<u32> round-trip. `ctx` is the target `roaring::Roaring*`.
+extern "C" void sr_tantivy_append_rowids(void* ctx, const uint32_t* ids, size_t len) {
+    reinterpret_cast<roaring::Roaring*>(ctx)->addMany(len, ids);
+}
+
 namespace starrocks {
 
 namespace tb = ::starrocks::tantivy_binding;
@@ -213,61 +220,52 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        tb::RustU32Array out{};
-        TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r =
-                tb::tantivy_term_query(reader_handle, reinterpret_cast<const uint8_t*>(slice->data), slice->size, &out);
+        tb::RustResult r = tb::tantivy_term_query_bitmap(reader_handle,
+                                                         reinterpret_cast<const uint8_t*>(slice->data),
+                                                         slice->size, bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
-        bit_map->addMany(out.len, out.ptr);
         return Status::OK();
     }
     case InvertedIndexQueryType::MATCH_ANY_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustU32Array out{};
-        TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_match_query(reader_handle, terms.slices.data(), terms.slices.size(), &out);
+        tb::RustResult r = tb::tantivy_match_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
+                                                          bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
-        bit_map->addMany(out.len, out.ptr);
         return Status::OK();
     }
     case InvertedIndexQueryType::MATCH_ALL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustU32Array out{};
-        TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_match_all_query(reader_handle, terms.slices.data(), terms.slices.size(), &out);
+        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(),
+                                                              terms.slices.size(), bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
-        bit_map->addMany(out.len, out.ptr);
         return Status::OK();
     }
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY: {
         const auto* pqv = reinterpret_cast<const PhraseQueryValue*>(query_value);
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(pqv->text.data, pqv->text.size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustU32Array out{};
-        TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_phrase_match_query(reader_handle, terms.slices.data(), terms.slices.size(),
-                                                          static_cast<uint32_t>(pqv->slop), &out);
+        tb::RustResult r = tb::tantivy_phrase_match_query_bitmap(reader_handle, terms.slices.data(),
+                                                                 terms.slices.size(),
+                                                                 static_cast<uint32_t>(pqv->slop), bit_map,
+                                                                 sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
-        bit_map->addMany(out.len, out.ptr);
         return Status::OK();
     }
     case InvertedIndexQueryType::MATCH_WILDCARD_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        tb::RustU32Array out{};
-        TantivyU32ArrayGuard arr_guard(out);
-        tb::RustResult r = tb::tantivy_wildcard_query(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
-                                                      slice->size, &out);
+        tb::RustResult r = tb::tantivy_wildcard_query_bitmap(reader_handle,
+                                                             reinterpret_cast<const uint8_t*>(slice->data),
+                                                             slice->size, bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
-        bit_map->addMany(out.len, out.ptr);
         *bit_map -= _null_bitmap;
         return Status::OK();
     }

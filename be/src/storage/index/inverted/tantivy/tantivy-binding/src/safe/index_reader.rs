@@ -29,6 +29,7 @@
 //!     (keeps tantivy from spinning a background reload thread that would
 //!     issue spurious reads against the RA file / BlockCache.)
 
+use std::ffi::c_void;
 use std::path::Path;
 
 use tantivy::collector::{Collector, SegmentCollector, TopDocs};
@@ -39,6 +40,37 @@ use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader, Term};
 
 use crate::error::{Result, TantivyBindingError};
+
+/// Block size for flushing collected row ids into the caller's bitmap.
+const BITMAP_FLUSH_BLOCK: usize = 4096;
+
+/// C callback that appends a block of BE row ids into the caller-owned bitmap
+/// (the C++ side does `roaring::Roaring::addMany`). 
+/// `set_bitset` callback so tantivy hits stream straight into the result bitmap
+/// without a `Vec<u32>` round-trip.
+pub type SetBitmapFn = extern "C" fn(ctx: *mut c_void, ids: *const u32, len: usize);
+
+/// Opaque bitmap pointer + append callback handed to the direct-bitmap
+/// collector. Holds raw pointers, but the reader uses tantivy's single-threaded
+/// query executor so the callback is only ever invoked serially — hence the
+/// `Send`/`Sync` impls are sound.
+#[derive(Clone, Copy)]
+pub struct BitmapSink {
+    pub ctx: *mut c_void,
+    pub append: SetBitmapFn,
+}
+
+unsafe impl Send for BitmapSink {}
+unsafe impl Sync for BitmapSink {}
+
+impl BitmapSink {
+    #[inline]
+    fn flush(&self, ids: &[u32]) {
+        if !ids.is_empty() {
+            (self.append)(self.ctx, ids.as_ptr(), ids.len());
+        }
+    }
+}
 
 pub struct IndexReaderWrapper {
     pub(crate) _index: Index,
@@ -197,6 +229,79 @@ impl IndexReaderWrapper {
         self.collect_doc_ids(&pq)
     }
 
+    // ---- Direct-to-bitmap variants --------------------------
+    // Instead of returning a Vec<u32> of matched row ids (which the C++ side
+    // then sorts + addMany-s into a roaring — the dominant CPU/memory cost for
+    // high-frequency terms), these stream matched BE row ids straight into the
+    // caller's bitmap via `sink`, block by block, through one generic collector
+    // that works for any tantivy Query (EQUAL/ANY/ALL/PHRASE/WILDCARD).
+
+    fn collect_to_bitmap(&self, query: &dyn Query, sink: BitmapSink) -> Result<()> {
+        let searcher = self.reader.searcher();
+        searcher.search(query, &BitmapCollector { sink })?;
+        Ok(())
+    }
+
+    /// EQUAL / single-term, streamed into `sink`.
+    pub fn term_query_bitmap(&self, term_text: &str, sink: BitmapSink) -> Result<()> {
+        let term = Term::from_field_text(self.text_field, term_text);
+        self.collect_to_bitmap(&TermQuery::new(term, IndexRecordOption::Basic), sink)
+    }
+
+    /// MATCH_ANY (BooleanQuery SHOULD), streamed into `sink`.
+    pub fn match_any_query_bitmap(&self, terms: &[&str], sink: BitmapSink) -> Result<()> {
+        let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
+            .iter()
+            .map(|t| {
+                let term = Term::from_field_text(self.text_field, t);
+                let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+                (Occur::Should, q)
+            })
+            .collect();
+        self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink)
+    }
+
+    /// MATCH_ALL (BooleanQuery MUST), streamed into `sink`.
+    pub fn match_all_query_bitmap(&self, terms: &[&str], sink: BitmapSink) -> Result<()> {
+        let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
+            .iter()
+            .map(|t| {
+                let term = Term::from_field_text(self.text_field, t);
+                let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+                (Occur::Must, q)
+            })
+            .collect();
+        self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink)
+    }
+
+    /// MATCH_PHRASE, streamed into `sink`.
+    pub fn phrase_query_bitmap(&self, terms: &[&str], slop: u32, sink: BitmapSink) -> Result<()> {
+        if terms.is_empty() {
+            return Ok(());
+        }
+        if terms.len() == 1 {
+            return self.term_query_bitmap(terms[0], sink);
+        }
+        let tantivy_terms: Vec<Term> = terms
+            .iter()
+            .map(|t| Term::from_field_text(self.text_field, t))
+            .collect();
+        let mut pq = PhraseQuery::new(tantivy_terms);
+        pq.set_slop(slop);
+        self.collect_to_bitmap(&pq, sink)
+    }
+
+    /// MATCH_WILDCARD, streamed into `sink`.
+    pub fn wildcard_query_bitmap(&self, pattern: &str, sink: BitmapSink) -> Result<()> {
+        let regex = match like_pattern_to_regex(pattern) {
+            Some(r) => r,
+            None => return Ok(()),
+        };
+        let query = RegexQuery::from_pattern(&regex, self.text_field)
+            .map_err(|err| TantivyBindingError::Internal(format!("RegexQueryError: {err}")))?;
+        self.collect_to_bitmap(&query, sink)
+    }
+
     fn collect_doc_ids(&self, query: &dyn Query) -> Result<Vec<u32>> {
         let searcher = self.reader.searcher();
         Ok(searcher.search(query, &RowIdCollector)?)
@@ -249,6 +354,102 @@ impl IndexReaderWrapper {
             }
         }
         Ok(out)
+    }
+}
+
+// direct-to-bitmap collector: stream matched BE row ids straight
+// into the caller's bitmap in blocks, instead of materializing/sorting a
+// Vec<u32> and adding it in one shot. Generic over any tantivy Query, so one
+// collector serves EQUAL/MATCH_ANY/MATCH_ALL/PHRASE/WILDCARD. Deleted docs are
+// already filtered by tantivy's scorer before `collect`, so no alive-bitset
+// handling is needed here.
+struct BitmapCollector {
+    sink: BitmapSink,
+}
+
+struct BitmapSegmentCollector {
+    sink: BitmapSink,
+    row_id: Column<u64>,
+    // When this segment's tantivy doc ids map to a contiguous BE row-id range
+    // [base, base+max_doc) (the single-threaded writer's usual layout, verified
+    // by endpoints), row_id = base + doc with no per-doc fast-field lookup.
+    // Otherwise fall back to `row_id.values_for_doc(doc)`.
+    base: u32,
+    contiguous: bool,
+    buf: Vec<u32>,
+}
+
+impl Collector for BitmapCollector {
+    type Fruit = ();
+    type Child = BitmapSegmentCollector;
+
+    fn for_segment(
+        &self,
+        _ord: SegmentOrdinal,
+        seg: &SegmentReader,
+    ) -> tantivy::Result<BitmapSegmentCollector> {
+        let row_id = seg.fast_fields().u64("row_id")?;
+        let max_doc = seg.max_doc();
+        let base = row_id.values_for_doc(0).next();
+        let last = if max_doc > 0 { row_id.values_for_doc(max_doc - 1).next() } else { None };
+        let contiguous =
+            max_doc > 0 && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
+        Ok(BitmapSegmentCollector {
+            sink: self.sink,
+            row_id,
+            base: base.unwrap_or(0) as u32,
+            contiguous,
+            buf: Vec::with_capacity(BITMAP_FLUSH_BLOCK),
+        })
+    }
+
+    fn requires_scoring(&self) -> bool {
+        false
+    }
+
+    fn merge_fruits(&self, _segs: Vec<()>) -> tantivy::Result<()> {
+        Ok(())
+    }
+}
+
+impl BitmapSegmentCollector {
+    #[inline]
+    fn flush_if_full(&mut self) {
+        if self.buf.len() >= BITMAP_FLUSH_BLOCK {
+            self.sink.flush(&self.buf);
+            self.buf.clear();
+        }
+    }
+}
+
+impl SegmentCollector for BitmapSegmentCollector {
+    type Fruit = ();
+
+    fn collect(&mut self, doc: u32, _score: Score) {
+        if self.contiguous {
+            self.buf.push(self.base + doc);
+        } else if let Some(rid) = self.row_id.values_for_doc(doc).next() {
+            self.buf.push(rid as u32);
+        }
+        self.flush_if_full();
+    }
+
+    fn collect_block(&mut self, docs: &[u32]) {
+        if self.contiguous {
+            let base = self.base;
+            self.buf.extend(docs.iter().map(|&d| base + d));
+        } else {
+            for &d in docs {
+                if let Some(rid) = self.row_id.values_for_doc(d).next() {
+                    self.buf.push(rid as u32);
+                }
+            }
+        }
+        self.flush_if_full();
+    }
+
+    fn harvest(self) -> () {
+        self.sink.flush(&self.buf);
     }
 }
 
