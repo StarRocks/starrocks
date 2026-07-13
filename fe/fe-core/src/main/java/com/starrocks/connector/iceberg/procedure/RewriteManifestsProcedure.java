@@ -35,6 +35,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.PartitionUtil;
 import org.apache.iceberg.util.PropertyUtil;
 
@@ -47,6 +48,7 @@ import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutorService;
 
 import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES;
 import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
@@ -126,7 +128,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         NavigableMap<Object, Integer> partitionValueToCluster;
         if (icebergTable.spec().isPartitioned() && targetManifestClusters > 1) {
             partitionValueToCluster = buildClusteredPartitionValues(
-                    icebergTable, currentSnapshot, (int) targetManifestClusters);
+                    icebergTable, currentSnapshot, (int) targetManifestClusters, null);
         } else {
             partitionValueToCluster = Collections.emptyNavigableMap();
         }
@@ -176,7 +178,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
     // into the same bucket. Clustering is limited to the top-level partition field because it is
     // usually the most selective for read-time filters and keeps the distinct-value set small.
     private static NavigableMap<Object, Integer> buildClusteredPartitionValues(
-            Table table, Snapshot snapshot, int targetClusters) {
+            Table table, Snapshot snapshot, int targetClusters, ExecutorService scanExecutor) {
         PartitionSpec spec = table.spec();
         Type.PrimitiveType firstFieldType =
                 spec.partitionType().fields().get(0).type().asPrimitiveType();
@@ -190,9 +192,14 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                 manifest -> (CloseableIterable<DataFile>)
                         ManifestFiles.read(manifest, io, specsById).select(ImmutableList.of("partition")));
 
-        // Comparator-based dedup mirrors Iceberg's own equality for partition value types.
+        // Read manifests in parallel when an executor is available. ParallelIterable produces items
+        // concurrently but is consumed single-threaded, so the TreeSet need not be thread-safe;
+        // without an executor, fall back to a sequential concatenation. Comparator-based dedup
+        // mirrors Iceberg's own equality for partition value types.
         NavigableSet<Object> uniqueValues = new TreeSet<>(comparator);
-        try (CloseableIterable<DataFile> dataFiles = CloseableIterable.concat(perManifest)) {
+        try (CloseableIterable<DataFile> dataFiles = scanExecutor != null
+                ? new ParallelIterable<>(perManifest, scanExecutor)
+                : CloseableIterable.concat(perManifest)) {
             for (DataFile file : dataFiles) {
                 StructLike partition = PartitionUtil.coercePartition(
                         partitionType, specsById.get(file.specId()), file.partition());
