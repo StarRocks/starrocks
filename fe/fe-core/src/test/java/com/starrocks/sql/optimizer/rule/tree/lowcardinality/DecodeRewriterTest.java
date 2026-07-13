@@ -42,7 +42,7 @@ public class DecodeRewriterTest {
                 1,
                 SortPhase.FINAL,
                 TopNType.ROW_NUMBER,
-                false, false,
+                false, false, false,
                 null, null, null);
     }
 
