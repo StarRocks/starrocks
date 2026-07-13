@@ -423,7 +423,10 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.INTERSECT_COUNT)
-                || fnName.getFunction().equals(FunctionSet.ORTHOGONAL_BITMAP_INTERSECT)) {
+                || fnName.getFunction().equals(FunctionSet.ORTHOGONAL_BITMAP_INTERSECT)
+                || fnName.getFunction().equals(FunctionSet.ORTHOGONAL_BITMAP_DIFFERENCE)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_INTERSECT_COUNT_EACH_COLUMN)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_DIFFERENCE_COUNT_EACH_COLUMN)) {
             if (functionCallExpr.getChildren().size() <= 2) {
                 throw new SemanticException(fnName.getFunction() + "(bitmap_column, column_to_filter, filter_values) " +
                         "function requires at least three parameters", functionCallExpr.getPos());

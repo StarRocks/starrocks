@@ -212,10 +212,12 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
         DCHECK_GE(arg_types.size(), 1);
         TypeDescriptor arg_type = arg_types[0];
         TypeDescriptor ret_type = return_type;
-        // Because intersect_count have two input types.
-        // And intersect_count's first argument's type is alwasy Bitmap,
-        // so we use its second arguments type as input.
-        if (agg_func_name == "intersect_count") {
+        // These functions have two input families. The first argument is always Bitmap, while the registry is
+        // specialized by the filter key type from the second argument.
+        if (agg_func_name == "intersect_count" || agg_func_name == "orthogonal_bitmap_intersect" ||
+            agg_func_name == "orthogonal_bitmap_difference" ||
+            agg_func_name == "bitmap_intersect_count_each_column" ||
+            agg_func_name == "bitmap_difference_count_each_column") {
             arg_type = arg_types[1];
         }
 

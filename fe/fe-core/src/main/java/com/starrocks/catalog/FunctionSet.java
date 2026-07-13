@@ -409,6 +409,9 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String ORTHOGONAL_BITMAP_INTERSECT = "orthogonal_bitmap_intersect";
+    public static final String ORTHOGONAL_BITMAP_DIFFERENCE = "orthogonal_bitmap_difference";
+    public static final String BITMAP_INTERSECT_COUNT_EACH_COLUMN = "bitmap_intersect_count_each_column";
+    public static final String BITMAP_DIFFERENCE_COUNT_EACH_COLUMN = "bitmap_difference_count_each_column";
 
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
@@ -956,6 +959,9 @@ public class FunctionSet {
                     .add(APPROX_TOP_K)
                     .add(INTERSECT_COUNT)
                     .add(ORTHOGONAL_BITMAP_INTERSECT)
+                    .add(ORTHOGONAL_BITMAP_DIFFERENCE)
+                    .add(BITMAP_INTERSECT_COUNT_EACH_COLUMN)
+                    .add(BITMAP_DIFFERENCE_COUNT_EACH_COLUMN)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
                     .add(SUM_MAP)
@@ -1435,6 +1441,18 @@ public class FunctionSet {
             // INTERSECT
             addBuiltin(AggregateFunction.createBuiltin(ORTHOGONAL_BITMAP_INTERSECT,
                     Lists.newArrayList(BitmapType.BITMAP, t, t), BitmapType.BITMAP, VarcharType.VARCHAR, true,
+                    true, false, true));
+            // ORTHOGONAL_BITMAP_DIFFERENCE
+            addBuiltin(AggregateFunction.createBuiltin(ORTHOGONAL_BITMAP_DIFFERENCE,
+                    Lists.newArrayList(BitmapType.BITMAP, t, t), BitmapType.BITMAP, VarcharType.VARCHAR, true,
+                    true, false, true));
+            // BITMAP_INTERSECT_COUNT_EACH_COLUMN
+            addBuiltin(AggregateFunction.createBuiltin(BITMAP_INTERSECT_COUNT_EACH_COLUMN,
+                    Lists.newArrayList(BitmapType.BITMAP, t, t), ArrayType.ARRAY_BIGINT, VarcharType.VARCHAR, true,
+                    true, false, true));
+            // BITMAP_DIFFERENCE_COUNT_EACH_COLUMN
+            addBuiltin(AggregateFunction.createBuiltin(BITMAP_DIFFERENCE_COUNT_EACH_COLUMN,
+                    Lists.newArrayList(BitmapType.BITMAP, t, t), ArrayType.ARRAY_BIGINT, VarcharType.VARCHAR, true,
                     true, false, true));
 
         }

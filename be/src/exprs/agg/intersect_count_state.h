@@ -158,6 +158,14 @@ public:
         return result;
     }
 
+    BitmapValue get_bitmap(const T& key) const {
+        auto it = _bitmaps.find(key);
+        if (it == _bitmaps.end()) {
+            return BitmapValue();
+        }
+        return it->second;
+    }
+
     // the serialize size
     size_t size() {
         size_t size = 4;
