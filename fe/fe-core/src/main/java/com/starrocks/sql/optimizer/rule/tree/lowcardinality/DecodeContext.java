@@ -19,11 +19,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -34,18 +36,22 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_STRUCT_FUNCTIONS;
@@ -303,6 +309,37 @@ class DecodeContext {
         }
     }
 
+    private static final String DICT_ENCODE = "dict_encode";
+    private static final Function DICT_ENCODE_FN = new Function(
+            30700, new FunctionName(DICT_ENCODE), List.of(VarcharType.VARCHAR, IntegerType.INT), IntegerType.INT, false);
+    static {
+        DICT_ENCODE_FN.setBinaryType(TFunctionBinaryType.BUILTIN);
+    }
+
+    private static ScalarOperator dictEncodeConstant(ScalarOperator constant, int dictId) {
+        if (!constant.getType().isStringType() && !constant.getType().isStringArrayType()) {
+            return constant;
+        }
+        ConstantOperator dictSlotConstant = ConstantOperator.createInt(dictId);
+        if (constant instanceof ConstantOperator constantOp) {
+            if (constantOp.getType().isStringType()) {
+                return new CallOperator(
+                        DICT_ENCODE, IntegerType.INT, List.of(constant, dictSlotConstant), DICT_ENCODE_FN);
+            }
+            Preconditions.checkState(constantOp.isNull());
+            return ConstantOperator.createNull(ArrayType.ARRAY_INT);
+        }
+        if (constant instanceof ArrayOperator arrayOp) {
+            Preconditions.checkState(arrayOp.getChildren().stream().allMatch(ScalarOperator::isConstantRef));
+            return new ArrayOperator(ArrayType.ARRAY_INT, arrayOp.isNullable(),
+                    arrayOp.getChildren().stream().map(k -> (ScalarOperator) new CallOperator(
+                                    DICT_ENCODE, IntegerType.INT, List.of(k, dictSlotConstant), DICT_ENCODE_FN))
+                            .collect(Collectors.toCollection(ArrayList::new)));
+        }
+        throw new IllegalArgumentException("Invalid constant argument for array function: " + constant);
+
+    }
+
     private static Function buildFunction(String fnName, List<ScalarOperator> args) {
         if (fnName.equals(FunctionSet.NAMED_STRUCT)) {
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
@@ -440,6 +477,13 @@ class DecodeContext {
                 return call;
             }
 
+            if (isSupportedArrayFunction(call)) {
+                ColumnRefOperator stringRef = getUseStringRef(call);
+                ColumnRefOperator dictRef = stringRefToDictRefMap.get(stringRef);
+                Preconditions.checkNotNull(dictRef);
+                newChildren = newChildren.stream().map(op -> op.isConstant() ?
+                        dictEncodeConstant(op, dictRef.getId()) : op).collect(Collectors.toCollection(ArrayList::new));
+            }
             Function fn = buildFunction(call.getFnName(), newChildren);
             ScalarOperator result = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn);
 
