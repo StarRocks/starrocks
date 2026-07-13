@@ -490,6 +490,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 触发存算分离集群中数据摄取减速的 Compaction Score 阈值。此配置仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。
 - 引入版本: v3.2.0
 
+### `lake_orphan_shard_group_retention_grace_seconds`
+
+- 默认值: 1800
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 在存算分离集群中,shard 组自首次成为孤儿(离开 FE live set)起,到其 tablet 元数据从对象存储中被物理删除之前的保留宽限期。与 `shard_group_clean_threshold_sec`(以 shard 组的创建时间为基准,因此对于长期存在的 index,在其被取代的那一刻该阈值就已过期)不同,此宽限期用于保护针对已被取代的 index(tablet split 的父 index、tablet merge 的子 index,或 schema change/rollup 的原始 index)规划的在途查询,避免在该 index 的 shard 被回收时查询失败。设置为 `0` 表示禁用。该值应大于预期的最大查询时间。
+- 引入版本: v4.1
+
 ### `lake_publish_version_max_threads`
 
 - 默认值: 512

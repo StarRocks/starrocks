@@ -490,6 +490,15 @@ This topic introduces the following types of FE configurations:
 - Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
+### `lake_orphan_shard_group_retention_grace_seconds`
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The retention grace period, measured from when a shard group first becomes orphaned (leaves the FE live set), before its tablet metadata is physically deleted from object storage in a shared-data cluster. Unlike `shard_group_clean_threshold_sec` (which is keyed on the shard group's create time and is therefore already expired for a long-lived index the moment it is superseded), this grace protects in-flight queries planned against a now-superseded index (a tablet-split parent, a tablet-merge child, or a schema-change/rollup origin index) from failing when that index's shards are reclaimed. Set to `0` to disable. This value should exceed the maximum expected query time.
+- Introduced in: v4.1
+
 ### `lake_publish_version_max_threads`
 
 - Default: 512

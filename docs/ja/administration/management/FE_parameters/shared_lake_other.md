@@ -490,6 +490,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでデータ取り込みの減速をトリガーするコンパクションスコアのしきい値。この設定は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効になります。
 - 導入時期：v3.2.0
 
+### `lake_orphan_shard_group_retention_grace_seconds`
+
+- デフォルト：1800
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：共有データクラスターで、シャードグループが最初にオーファン化した(FE の live set から外れた)時点から、その tablet メタデータがオブジェクトストレージから物理的に削除されるまでの保持猶予期間。`shard_group_clean_threshold_sec`(シャードグループの作成時刻を基準とするため、長命な index では取り替えられた瞬間にすでに期限切れとなる)とは異なり、この猶予期間は、取り替え済みの index(tablet split の親 index、tablet merge の子 index、または schema change/rollup の元 index)に対して計画された実行中のクエリが、その index のシャードが回収される際に失敗するのを防ぎます。`0` に設定すると無効になります。この値は想定される最大クエリ時間を超えるべきです。
+- 導入時期：v4.1
+
 ### `lake_publish_version_max_threads`
 
 - デフォルト：512
