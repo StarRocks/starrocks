@@ -18,9 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.PartitionSpec;
@@ -81,8 +83,21 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
             return null;
         }
 
-        List<ManifestFile> dataManifests = currentSnapshot.dataManifests(icebergTable.io());
-        if (dataManifests.isEmpty()) {
+        long manifestCount = 0;
+        long totalManifestsSize = 0;
+        try (CloseableIterable<ManifestFile> manifests =
+                IcebergUtil.readManifests(currentSnapshot, icebergTable.io())) {
+            for (ManifestFile manifest : manifests) {
+                if (manifest.content() == ManifestContent.DATA) {
+                    manifestCount++;
+                    totalManifestsSize += manifest.length();
+                }
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(
+                    "Unable to read manifests for snapshot " + currentSnapshot.snapshotId(), e);
+        }
+        if (manifestCount == 0) {
             return null;
         }
 
@@ -92,11 +107,10 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
             manifestTargetSizeBytes = MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
         }
 
-        if (dataManifests.size() == 1 && dataManifests.get(0).length() < manifestTargetSizeBytes) {
+        if (manifestCount == 1 && totalManifestsSize < manifestTargetSizeBytes) {
             return null;
         }
 
-        long totalManifestsSize = dataManifests.stream().mapToLong(ManifestFile::length).sum();
         // Having too many open manifest writers can potentially cause OOM on the coordinator
         long targetManifestClusters = Math.min(
                 ((totalManifestsSize + manifestTargetSizeBytes - 1) / manifestTargetSizeBytes),

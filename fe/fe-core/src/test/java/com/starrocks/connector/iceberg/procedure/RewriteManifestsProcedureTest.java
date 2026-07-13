@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RewriteManifests;
@@ -120,7 +121,7 @@ public class RewriteManifestsProcedureTest {
     void testExecuteWithEmptyManifests() {
         RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
         Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.dataManifests(any())).thenReturn(Collections.emptyList());
+        when(snapshot.allManifests(any())).thenReturn(Collections.emptyList());
 
         Table table = Mockito.mock(Table.class);
         when(table.currentSnapshot()).thenReturn(snapshot);
@@ -137,9 +138,10 @@ public class RewriteManifestsProcedureTest {
         RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
         ManifestFile smallManifest = Mockito.mock(ManifestFile.class);
         when(smallManifest.length()).thenReturn(100L);
+        when(smallManifest.content()).thenReturn(ManifestContent.DATA);
 
         Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.dataManifests(any())).thenReturn(List.of(smallManifest));
+        when(snapshot.allManifests(any())).thenReturn(List.of(smallManifest));
 
         Table table = Mockito.mock(Table.class);
         when(table.currentSnapshot()).thenReturn(snapshot);
@@ -161,9 +163,11 @@ public class RewriteManifestsProcedureTest {
         ManifestFile m2 = Mockito.mock(ManifestFile.class);
         when(m1.length()).thenReturn(10 * 1024 * 1024L);
         when(m2.length()).thenReturn(10 * 1024 * 1024L);
+        when(m1.content()).thenReturn(ManifestContent.DATA);
+        when(m2.content()).thenReturn(ManifestContent.DATA);
 
         Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.dataManifests(any())).thenReturn(List.of(m1, m2));
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
 
         Table table = Mockito.mock(Table.class);
         when(table.currentSnapshot()).thenReturn(snapshot);
@@ -192,9 +196,10 @@ public class RewriteManifestsProcedureTest {
         // One manifest larger than default target (8MB) still triggers rewrite
         ManifestFile largeManifest = Mockito.mock(ManifestFile.class);
         when(largeManifest.length()).thenReturn(10 * 1024 * 1024L);
+        when(largeManifest.content()).thenReturn(ManifestContent.DATA);
 
         Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.dataManifests(any())).thenReturn(List.of(largeManifest));
+        when(snapshot.allManifests(any())).thenReturn(List.of(largeManifest));
 
         Table table = Mockito.mock(Table.class);
         when(table.currentSnapshot()).thenReturn(snapshot);
