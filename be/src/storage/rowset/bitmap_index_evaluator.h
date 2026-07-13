@@ -45,6 +45,10 @@ struct BitmapContext {
     /// and therefore do not modify the related PredicateTree, which may cause the address to change.
 
     std::unordered_map<const PredicateBaseNode*, bool> is_node_support_bitmap;
+    // A node is "fully covered" iff every leaf predicate in its subtree can use a bitmap index. Only a
+    // fully-covered subtree has an exact (not merely superset) bitmap, which is the precondition for
+    // erasing predicates that sit under an OR node. See BitmapIndexSeeker for how this gates erasure.
+    std::unordered_map<const PredicateBaseNode*, bool> is_node_fully_covered;
     // It ensures that `compound_node_to_context[node]` can be accessed after `is_node_support_bitmap[node]` is true.
     std::unordered_map<const PredicateBaseNode*, CompoundNodeContext> compound_node_to_context;
 
