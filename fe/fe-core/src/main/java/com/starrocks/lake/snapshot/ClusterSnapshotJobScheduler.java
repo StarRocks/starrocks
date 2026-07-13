@@ -131,8 +131,8 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
      * Interrupt-unsafe: the worker calls BDBJE/JE directly (getJournal().getMaxJournalId()) and
      * drives a full checkpoint (journal maintenance + image push) inline, where an interrupt can
      * invalidate the BDB environment. It stops cooperatively instead - the driven checkpoint polls
-     * isStopped() between phases, backed by the stopGracefully() join-timeout -> onJoinTimeout()
-     * process-exit backstop.
+     * isStopRequested() between phases; a cycle that outlives demotion keeps the daemon non-quiesced,
+     * so the re-activation cleanliness gate restarts the process as the backstop.
      */
     @Override
     protected boolean interruptOnStop() {

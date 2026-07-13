@@ -1194,7 +1194,7 @@ public class ClusterSnapshotTest {
     }
 
     @Test
-    public void testStopGracefullyNullsOutSchedulerSoStartRebuilds() {
+    public void testStopBestEffortNullsOutSchedulerSoStartRebuilds() {
         // After demotion the inner ClusterSnapshotJobScheduler must be nulled out so that the
         // next start() rebuilds it with fresh CheckpointController references; otherwise the
         // re-elected leader silently never restarts snapshot scheduling.
@@ -1203,18 +1203,18 @@ public class ClusterSnapshotTest {
         Deencapsulation.setField(mgr, "clusterSnapshotJobScheduler", injected);
         Assertions.assertNotNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"));
 
-        mgr.stopGracefully(1000L);
+        mgr.stopBestEffort();
 
         Assertions.assertNull(Deencapsulation.getField(mgr, "clusterSnapshotJobScheduler"),
                 "scheduler reference must be cleared so start() rebuilds it on re-election");
     }
 
     @Test
-    public void testStopGracefullyIsNoOpWhenSchedulerNeverStarted() {
-        // Followers / non-shared-data clusters never instantiate the scheduler. stopGracefully
+    public void testStopBestEffortIsNoOpWhenSchedulerNeverStarted() {
+        // Followers / non-shared-data clusters never instantiate the scheduler. stopBestEffort
         // must tolerate that and not throw.
         ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
-        Assertions.assertDoesNotThrow(() -> mgr.stopGracefully(1000L));
+        Assertions.assertDoesNotThrow(() -> mgr.stopBestEffort());
     }
 
     @Test
@@ -1222,7 +1222,7 @@ public class ClusterSnapshotTest {
         // The scheduler's worker drives checkpoints inline (BDBJE getMaxJournalId /
         // deleteJournals + image I/O), where an interrupt can invalidate the environment -
         // it must opt out of the default interrupt-based stop and rely on cooperative
-        // isStopped() polling.
+        // isStopRequested() polling.
         ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
         Assertions.assertFalse(scheduler.interruptOnStop());
     }

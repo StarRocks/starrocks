@@ -36,18 +36,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * Differences from {@link Daemon}:
  * 1. Composition over inheritance: holds an internal {@link Thread} instead of being one,
- *    so the same instance can be {@link #start() started} again after {@link #stopGracefully(long)}.
- *    Required for safe leader demotion: when this FE later becomes leader again the existing
- *    Mgr singletons must be reusable.
+ *    so the same instance can be {@link #start() started} again after it stops. Required for
+ *    safe leader demotion: when this FE later becomes leader again the existing Mgr singletons
+ *    must be reusable.
  * 2. Built-in lease check: each iteration captures and revalidates a {@link LeaderLease}
  *    obtained from {@link GlobalStateMgr}. Once the lease is invalidated by a demotion the
  *    daemon stops itself - subclasses do not need to add their own check.
- * 3. Cleanup hook: {@link #onStopped()} runs after the worker has actually exited, so
- *    subclasses can release leader-session-only state without racing the loop. Follower state
- *    should not retain that data, both to free memory and to avoid leaking stale leader state
- *    into replay paths. If the worker does not exit within the stop timeout the JVM is
- *    terminated via {@link #onJoinTimeout()} because a concurrent second worker (after a
- *    subsequent re-election) would be strictly more dangerous than a process restart.
+ * 3. Cleanup hook: {@link #onStopped()} runs on the worker thread as its last act, after the run
+ *    loop has exited, so subclasses can release leader-session-only state without racing the loop.
+ *    Follower state should not retain that data, both to free memory and to avoid leaking stale
+ *    leader state into replay paths.
+ *
+ * Demotion is fire-and-forget: {@link #stopBestEffort()} only requests the worker to stop and
+ * returns without joining it. The worker exits on its own, runs {@link #onStopped()}, and clears
+ * {@link #isRunning} at the tail of {@link #loop()}. A straggler that never finishes keeps
+ * {@code isRunning == true}; the re-activation cleanliness gate
+ * ({@code GlobalStateMgr.assertLeaderSessionQuiescedOrExit}) then terminates the process when this
+ * node is re-elected, because a concurrent second worker would be strictly more dangerous than a
+ * process restart.
  */
 public abstract class LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
@@ -108,7 +114,7 @@ public abstract class LeaderDaemon {
 
     private final String name;
     private volatile long intervalMs;
-    private final AtomicBoolean isStopped = new AtomicBoolean(false);
+    private final AtomicBoolean isStopRequested = new AtomicBoolean(false);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final Object stopSignal = new Object();
     private volatile Thread worker;
@@ -143,8 +149,9 @@ public abstract class LeaderDaemon {
         this.intervalMs = intervalMs;
     }
 
-    public final boolean isStopped() {
-        return isStopped.get();
+    /** Whether a stop has been requested (via {@link #setStop()} or {@link #stopBestEffort()}). */
+    public final boolean isStopRequested() {
+        return isStopRequested.get();
     }
 
     public final boolean isRunning() {
@@ -152,14 +159,13 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Idempotent. Safe to call after {@link #stopGracefully(long)} - a fresh worker thread
-     * will be created.
+     * Idempotent. Safe to call after the daemon has stopped - a fresh worker thread will be created.
      */
     public synchronized void start() {
         if (!isRunning.compareAndSet(false, true)) {
             return;
         }
-        isStopped.set(false);
+        isStopRequested.set(false);
         capturedLease = LeaderLease.INVALID;
         RUNNING_INSTANCES.add(this);
         Thread t = new Thread(this::loop, name);
@@ -169,8 +175,10 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Mark stopped and wake the worker. Does not wait for the worker to exit.
-     * Prefer {@link #stopGracefully(long)} during demotion so cleanup hooks run.
+     * Mark stop requested and wake the worker (interrupting it). Does not wait for the worker to
+     * exit; the worker still runs {@link #onStopped()} on its way out. Used for cooperative
+     * self-stop from within the loop (e.g. once the lease is lost); demotion uses
+     * {@link #stopBestEffort()}.
      */
     public void setStop() {
         requestStop(true);
@@ -189,7 +197,7 @@ public abstract class LeaderDaemon {
     }
 
     private void requestStop(boolean interruptWorker) {
-        if (!isStopped.compareAndSet(false, true)) {
+        if (!isStopRequested.compareAndSet(false, true)) {
             return;
         }
         synchronized (stopSignal) {
@@ -206,62 +214,27 @@ public abstract class LeaderDaemon {
         }
     }
 
-    /**
-     * Coordinated stop for leader demotion:
-     *   1. mark stopped, wake interval waits, and (unless {@link #interruptOnStop()} is overridden
-     *      to {@code false}) interrupt the worker so it breaks out of any blocking primitive
-     *      (queue poll, latch/future await, sleep, interruptible lock) at once;
-     *   2. join up to {@code timeoutMs};
-     *   3. on timeout, invoke {@link #onJoinTimeout()} (default: terminate the JVM) and return
-     *      without clearing {@code worker}/{@code isRunning} - a subsequent {@link #start()}
-     *      must not spin up a second worker while the first is still alive;
-     *   4. on clean exit, run {@link #onStopped()} so subclasses release leader-session state.
-     * Idempotent.
-     */
-    public final void stopGracefully(long timeoutMs) {
-        requestStop(interruptOnStop());
-        Thread t = worker;
-        if (t != null) {
-            try {
-                t.join(Math.max(1L, timeoutMs));
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-            if (t.isAlive()) {
-                onJoinTimeout();
-                // The worker did not exit in time. It stays registered and isRunning stays true, so the
-                // re-activation cleanliness gate will observe the straggler and refuse (exit) the next
-                // leader session rather than run two workers against the same singleton state.
-                return;
-            }
-        }
-        // The worker (if any) has exited and already ran onStopped() + cleared isRunning at the tail of
-        // loop(); nothing more to clean here.
-        capturedLease = LeaderLease.INVALID;
-        worker = null;
-    }
-
     private void loop() {
-        while (!isStopped.get()) {
+        while (!isStopRequested.get()) {
             try {
                 runOneCycle();
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                if (isStopped.get()) {
+                if (isStopRequested.get()) {
                     break;
                 }
             } catch (Throwable e) {
                 LOG.error("{} got exception", name, e);
             }
-            if (isStopped.get()) {
+            if (isStopRequested.get()) {
                 break;
             }
             // intervalMs <= 0 means "tight drain loop with no inter-cycle delay" (e.g. report-handler,
             // resource-report-handler, routine-load-task-scheduler, whose runAfterLeaseValid() self-paces
             // via a blocking poll/sleep). Object.wait(0) would block the worker forever - it would run
             // exactly one cycle per leader activation and then never drain its queue again - so only wait
-            // for a strictly positive interval. setStop()/stopGracefully() still wake the loop promptly via
-            // the isStopped checks (and the daemon's own bounded blocking call).
+            // for a strictly positive interval. setStop()/stopBestEffort() still wake the loop promptly via
+            // the isStopRequested checks (and the daemon's own bounded blocking call).
             if (intervalMs > 0) {
                 try {
                     synchronized (stopSignal) {
@@ -269,7 +242,7 @@ public abstract class LeaderDaemon {
                     }
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    if (isStopped.get()) {
+                    if (isStopRequested.get()) {
                         break;
                     }
                 }
@@ -294,7 +267,7 @@ public abstract class LeaderDaemon {
         GlobalStateMgr gsm = getGlobalStateMgr();
         while (!gsm.isReady()) {
             Thread.sleep(100);
-            if (isStopped.get()) {
+            if (isStopRequested.get()) {
                 return;
             }
         }
@@ -315,17 +288,18 @@ public abstract class LeaderDaemon {
      * The body of each iteration. Runs only after FE is ready and the captured leader lease
      * is still valid. Subclasses must not block indefinitely.
      *
-     * By default leader demotion INTERRUPTS the worker (see {@link #stopGracefully(long)}), so
+     * By default leader demotion INTERRUPTS the worker (see {@link #stopBestEffort()}), so
      * subclasses should block only in interruptible primitives and must let an
-     * {@link InterruptedException} propagate (or re-check {@link #isStopped()} and return) - they
-     * MUST NOT map it to a business outcome (e.g. cancel a healthy job as "timeout"). If the cycle
-     * cannot finish within {@code leader_demotion_drain_timeout_sec} the process is terminated via
-     * {@link #onJoinTimeout()} as a last resort.
+     * {@link InterruptedException} propagate (or re-check {@link #isStopRequested()} and return) - they
+     * MUST NOT map it to a business outcome (e.g. cancel a healthy job as "timeout"). A cycle that
+     * never finishes keeps the worker (and thus the daemon's {@code isRunning}) alive past demotion,
+     * so the re-activation cleanliness gate restarts the process on re-election rather than run two
+     * workers against the same singleton state.
      *
      * A subclass that runs interrupt-unsafe work on its own thread - a direct BDBJE/JE call
      * (interrupting it can invalidate the environment) or an uninterruptible native/socket read -
      * must override {@link #interruptOnStop()} to return {@code false} and cooperatively bail out
-     * by polling {@link #isStopped()} and/or waking its wait in {@link #onStopRequested()}.
+     * by polling {@link #isStopRequested()} and/or waking its wait in {@link #onStopRequested()}.
      */
     protected abstract void runAfterLeaseValid() throws InterruptedException;
 
@@ -349,47 +323,36 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Hook called from {@link #stopGracefully(long)} after the worker thread has actually exited.
-     * Subclasses MUST clear all leader-session-only state here (queues, pending maps, executors)
-     * so memory is reclaimed promptly and follower state does not retain it. Not called when the
-     * join times out - {@link #onJoinTimeout()} fires instead.
+     * Hook called on the worker thread as its last act, after the run loop has exited (whether the
+     * daemon self-stopped on a lost lease or was stopped for demotion). Subclasses MUST clear all
+     * leader-session-only state here (queues, pending maps, executors) so memory is reclaimed promptly
+     * and follower state does not retain it. A subclass that owns pools should drain them here via
+     * {@link #shutdownNowAndAwaitTermination(String, ExecutorService)} so that {@code isRunning}, once
+     * cleared, implies the owned pools are terminated too.
      */
     protected void onStopped() {
     }
 
     /**
-     * Optional hook called immediately after a stop request is accepted and before
-     * {@link #stopGracefully(long)} waits for the worker thread. Most daemons do not need it:
-     * the default stop interrupts the worker, which already breaks any interruptible wait.
-     * It matters only for daemons that override {@link #interruptOnStop()} to {@code false} and
-     * therefore need to cooperatively wake their own uninterruptible wait (e.g. offer a sentinel
-     * to a result queue, or disconnect an in-flight HTTP connection).
+     * Optional hook called immediately after a stop request is accepted, from the thread that
+     * requested the stop. Most daemons do not need it: the default stop interrupts the worker, which
+     * already breaks any interruptible wait. It matters only for daemons that override
+     * {@link #interruptOnStop()} to {@code false} and therefore need to cooperatively wake their own
+     * uninterruptible wait (e.g. offer a sentinel to a result queue, or disconnect an in-flight HTTP
+     * connection).
      */
     protected void onStopRequested() {
     }
 
     /**
-     * Whether {@link #stopGracefully(long)} may interrupt the worker thread. Default {@code true}:
-     * interrupt is the fast, standard way to cancel a blocked cycle. Override to return
-     * {@code false} ONLY for daemons whose worker executes interrupt-unsafe work directly on its
-     * own thread - a raw BDBJE/JE operation (an interrupt can invalidate the environment) or an
-     * uninterruptible native/socket read - and instead bail out cooperatively via
-     * {@link #isStopped()} polling and {@link #onStopRequested()}.
+     * Whether a stop request may interrupt the worker thread. Default {@code true}: interrupt is the
+     * fast, standard way to cancel a blocked cycle. Override to return {@code false} ONLY for daemons
+     * whose worker executes interrupt-unsafe work directly on its own thread - a raw BDBJE/JE operation
+     * (an interrupt can invalidate the environment) or an uninterruptible native/socket read - and
+     * instead bail out cooperatively via {@link #isStopRequested()} polling and {@link #onStopRequested()}.
      */
     protected boolean interruptOnStop() {
         return true;
-    }
-
-    /**
-     * Invoked when a {@link #stopGracefully(long)} caller's bounded join elapses before the worker
-     * exits. Does NOT terminate the JVM: leader demotion no longer joins here (it fires
-     * {@link #setStop()} and moves on), and the surviving worker stays registered with
-     * {@code isRunning == true}, so the re-activation cleanliness gate
-     * ({@code GlobalStateMgr.assertLeaderSessionQuiescedOrExit}) is the single authority that exits
-     * the process if a straggler is still alive when this node is re-elected. Overridable for tests.
-     */
-    protected void onJoinTimeout() {
-        LOG.warn("{} did not exit within stop timeout; left running, the re-activation gate will handle it", name);
     }
 
     /**

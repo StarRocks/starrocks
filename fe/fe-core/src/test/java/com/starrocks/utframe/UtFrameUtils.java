@@ -1676,9 +1676,7 @@ public class UtFrameUtils {
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         // This UT helper only stops the background schema-change loop so tests can drive
-        // schema-change jobs manually. Do not call stopGracefully() here: it runs the
-        // demotion cleanup hook and shuts down AlterHandler's executor, which prevents
-        // subsequent manual job progress in schema-change tests.
+        // schema-change jobs manually via setStop(), then waits for the worker to exit.
         schemaChangeHandler.setStop();
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {

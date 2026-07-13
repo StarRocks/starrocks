@@ -174,20 +174,20 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
-     * Coordinated stop for leader demotion. TaskManager owns two ScheduledExecutorService
-     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with
-     * an embedded leader check), so it cannot follow the standard {@code stopGracefully}
-     * contract; this method is the equivalent.
+     * Fire-and-forget stop for leader demotion. TaskManager owns two ScheduledExecutorService
+     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with an
+     * embedded leader check), so it has no worker to self-clean; demotion calls {@code stop(0)}
+     * as the equivalent of a daemon's {@link LeaderDaemon#stopBestEffort()}.
      *
-     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked
-     * in metadata locks. When {@code timeoutMs > 0}, this method also blocks up to that budget
-     * waiting for both pools to actually terminate so a subsequent {@link #start()} does not
-     * spin up a fresh scheduler against the same TaskRunManager / periodFutureMap as the still-
-     * running old generation. If termination times out, the next {@link #start()} will refuse
-     * to restart (IllegalStateException) rather than overlap pools.
+     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked in
+     * metadata locks. Demotion does not wait for the pools to drain; if a straggler dispatch
+     * iteration outlives demotion, {@link #schedulersStoppedButNotTerminated()} reports it to the
+     * re-activation cleanliness gate, which restarts the process on re-election rather than let a
+     * fresh scheduler from the next {@link #start()} overlap the still-running old generation. The
+     * {@code timeoutMs > 0} path performs a bounded synchronous drain for callers that want one.
      *
      * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
-     *                  or negative means do not wait (legacy behaviour). The budget is split
+     *                  or negative means do not wait (the demotion path). The budget is split
      *                  across the two pools.
      */
     public void stop(long timeoutMs) {

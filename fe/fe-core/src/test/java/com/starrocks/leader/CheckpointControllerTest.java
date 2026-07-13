@@ -168,7 +168,7 @@ public class CheckpointControllerTest {
     public void testInterruptOnStopOptedOut() {
         // The controller's worker calls BDBJE directly (getFinalizedJournalId / deleteJournals),
         // where an interrupt can invalidate the environment - it must opt out of the default
-        // interrupt-based stop and rely on cooperative isStopped()/onStopRequested().
+        // interrupt-based stop and rely on cooperative isStopRequested()/onStopRequested().
         Assertions.assertFalse(controller.interruptOnStop());
     }
 

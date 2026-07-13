@@ -737,7 +737,7 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testStopOneSwallowsThrowable() throws Exception {
-        // stopOne wraps each daemon's stopGracefully so that a single misbehaving daemon
+        // stopOne wraps each daemon's stopBestEffort so that a single misbehaving daemon
         // does not abort the demotion drain mid-way and leave later daemons running.
         GlobalStateMgr mgr = new MyGlobalStateMgr(false);
         AtomicBoolean ran = new AtomicBoolean(false);
@@ -757,7 +757,7 @@ public class GlobalStateMgrTest {
     @Test
     public void testStopLeaderOnlyDaemonThreadsDrivesEveryWiredDaemon() throws Exception {
         // Sanity test for the demotion drain wiring: every daemon listed in
-        // stopLeaderOnlyDaemonThreads must be reachable and its stopGracefully invocation must
+        // stopLeaderOnlyDaemonThreads must be reachable and its stopBestEffort invocation must
         // be shielded by stopOne, so a misbehaving daemon cannot abort the drain. The lazily
         // initialized timePrinter / txnTimeoutChecker fields are still null here, exercising the
         // null-skip branches.
@@ -765,7 +765,7 @@ public class GlobalStateMgrTest {
 
         Method stop = GlobalStateMgr.class.getDeclaredMethod("stopLeaderOnlyDaemonThreads");
         stop.setAccessible(true);
-        // None of the daemons are running; every stopGracefully is effectively a state reset.
+        // None of the daemons are running; every stopBestEffort is effectively a no-op stop request.
         // Any throwable from a daemon's onStopped is contained by stopOne, so the call must
         // complete without propagating.
         stop.invoke(mgr);

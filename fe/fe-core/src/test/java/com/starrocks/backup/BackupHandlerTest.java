@@ -186,31 +186,31 @@ public class BackupHandlerTest {
         TestBackupHandler handler = new TestBackupHandler(GlobalStateMgr.getCurrentState());
         RepositoryMgr repoMgr = handler.getRepoMgr();
 
-        Assertions.assertFalse(repoMgr.isStopped());
+        Assertions.assertFalse(repoMgr.isStopRequested());
 
         handler.callOnStopped();
 
-        Assertions.assertTrue(repoMgr.isStopped(), "repository ping loop must stop on leader demotion");
+        Assertions.assertTrue(repoMgr.isStopRequested(), "repository ping loop must stop on leader demotion");
     }
 
     @Test
     public void testOnStoppedSwallowsRepoMgrStopFailure() throws Exception {
-        // The per-handler try/catch around repoMgr.stopGracefully must absorb any failure so
+        // The per-handler try/catch around repoMgr.stopBestEffort() must absorb any failure so
         // a misbehaving RepositoryMgr cannot abort the leader-demotion drain (which would
-        // leave the FE in a half-demoted state). stopGracefully is final on LeaderDaemon;
-        // observe the safety net by making setStop() throw - stopGracefully calls setStop()
-        // before its own try/catch, so the exception bubbles up into BackupHandler's catch.
+        // leave the FE in a half-demoted state). stopBestEffort is final on LeaderDaemon; observe
+        // the safety net by making interruptOnStop() throw - stopBestEffort evaluates it, so the
+        // exception bubbles up into BackupHandler's catch.
         TestBackupHandler handler = new TestBackupHandler(GlobalStateMgr.getCurrentState());
         RepositoryMgr throwingRepoMgr = new RepositoryMgr() {
             @Override
-            public void setStop() {
+            protected boolean interruptOnStop() {
                 throw new RuntimeException("simulated repo stop failure");
             }
         };
         org.apache.commons.lang3.reflect.FieldUtils.writeField(handler, "repoMgr", throwingRepoMgr, true);
 
         Assertions.assertDoesNotThrow(handler::callOnStopped,
-                "onStopped must absorb a throwing repoMgr.stopGracefully");
+                "onStopped must absorb a throwing repoMgr.stopBestEffort");
     }
 
     @Test

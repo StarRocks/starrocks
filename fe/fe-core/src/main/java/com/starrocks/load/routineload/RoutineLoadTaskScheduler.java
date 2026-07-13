@@ -196,7 +196,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         if (msg != null) {
             routineLoadTaskInfo.setMsg(msg, true);
         }
-        if (isStopped() || scheduledExecutorService.isShutdown()) {
+        if (isStopRequested() || scheduledExecutorService.isShutdown()) {
             LOG.info("RoutineLoadTaskScheduler is stopped, skip delayPutToQueue for task {}",
                     routineLoadTaskInfo.getId());
             return;
@@ -219,7 +219,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     private void submitToSchedule(RoutineLoadTaskInfo routineLoadTaskInfo) {
-        if (isStopped() || threadPool.isShutdown()) {
+        if (isStopRequested() || threadPool.isShutdown()) {
             LOG.info("RoutineLoadTaskScheduler is stopped, skip submitToSchedule for task {}",
                     routineLoadTaskInfo.getId());
             return;

@@ -189,7 +189,7 @@ public class CheckpointController extends LeaderDaemon {
      * Interrupt-unsafe: the worker calls BDBJE/JE directly (getFinalizedJournalId /
      * deleteJournals -> removeDatabase) where an interrupt can invalidate the environment, and
      * blocks in uninterruptible HttpURLConnection reads. It stops cooperatively instead: the
-     * isStopped() polling between phases + onStopRequested() (waking the result queue and
+     * isStopRequested() polling between phases + onStopRequested() (waking the result queue and
      * disconnecting the in-flight HTTP connection).
      */
     @Override
@@ -232,7 +232,7 @@ public class CheckpointController extends LeaderDaemon {
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
-                if (isStopped()) {
+                if (isStopRequested()) {
                     return createImageRet;
                 }
                 // do not push to the worker node
@@ -249,7 +249,7 @@ public class CheckpointController extends LeaderDaemon {
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
-            if (isStopped()) {
+            if (isStopRequested()) {
                 return createImageRet;
             }
             pushImage(newImageVersion);
@@ -262,7 +262,7 @@ public class CheckpointController extends LeaderDaemon {
         //                we must make sure all the other nodes have got the new image and then delete old journals.
         if ((createImageRet.first && needToPushCnt == 0)
                 || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
-            if (isStopped()) {
+            if (isStopRequested()) {
                 return createImageRet;
             }
             deleteOldJournals(newImageVersion);
@@ -294,11 +294,11 @@ public class CheckpointController extends LeaderDaemon {
             long startNs = System.nanoTime();
             CheckpointCompletionStatus ret = null;
             while (ret == null
-                    && !isStopped()
+                    && !isStopRequested()
                     && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
                 ret = result.poll(1, TimeUnit.SECONDS);
             }
-            if (isStopped()) {
+            if (isStopRequested()) {
                 LOG.info("stop waiting checkpoint on node: {} because leader checkpoint controller is stopping",
                         workerNodeName);
                 return Pair.create(false, workerNodeName);
@@ -416,7 +416,7 @@ public class CheckpointController extends LeaderDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
-        if (isStopped()) {
+        if (isStopRequested()) {
             return false;
         }
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
@@ -485,7 +485,7 @@ public class CheckpointController extends LeaderDaemon {
         int needToPushCnt = nodesToPushImage.size();
         int successPushedCnt = 0;
         while (iterator.hasNext()) {
-            if (isStopped()) {
+            if (isStopRequested()) {
                 break;
             }
             String nodeName = iterator.next();
