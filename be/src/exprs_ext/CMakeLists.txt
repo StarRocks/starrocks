@@ -24,6 +24,7 @@ set(EXPR_DICT_FILES
   dict/dictmapping_expr.cpp
   dict/dict_query_expr.cpp
   dict/dictionary_get_expr.cpp
+  dict/dict_functions.cpp
 )
 
 ADD_BE_LIB(ExprDict ${EXPR_DICT_FILES})
