@@ -30,6 +30,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -64,6 +65,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
@@ -81,6 +85,9 @@ public class LakePublishBatchTest {
     private static final String TABLE_AGG_ON = "table_for_test_agg_on";
     private static final String TABLE_AGG_OFF = "table_for_test_agg_off";
     private static final String TABLE_SCHEMA_CHANGE = "table_for_test_schema_change";
+    // Dedicated table for the sticky-retry tests so they are immune to version-gap fixture pollution left by
+    // other tests in this class (e.g. testPublishDbDroped aborts txns and leaves nextVersion ahead of visibleVersion).
+    private static final String TABLE_STICKY = "table_for_test_sticky_retry";
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
@@ -212,6 +219,19 @@ public class LakePublishBatchTest {
                 " (pk int NOT NULL, v0 int not null) primary KEY (pk) " +
                 "DISTRIBUTED BY HASH(pk) BUCKETS 1;";
         starRocksAssert.withTable(sql3);
+
+        String sql4 = "create table " + TABLE_STICKY +
+                " (dt date NOT NULL, pk bigint NOT NULL, v0 string not null) primary KEY (dt, pk) " +
+                "PARTITION BY RANGE(`dt`) (\n" +
+                "    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),\n" +
+                "    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),\n" +
+                "    PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),\n" +
+                "    PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))\n" +
+                ")" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
+                " PROPERTIES(\"replication_num\" = \"" + 3 +
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"false\")";
+        starRocksAssert.withTable(sql4);
     }
 
     @AfterAll
@@ -906,5 +926,135 @@ public class LakePublishBatchTest {
             commitInfos.add(tabletCommitInfo);
         }
         return commitInfos;
+    }
+
+    // Begins + commits `count` transactions on TABLE_AGG_OFF (alternating the two tablet halves so a >1 batch
+    // forms across all partitions), returning their visibility waiters.
+    private List<VisibleStateWaiter> beginAndCommitBatch(Database db, Table table, int count,
+            List<TabletCommitInfo> transTablets1, List<TabletCommitInfo> transTablets2, String labelPrefix)
+            throws Exception {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<VisibleStateWaiter> waiters = Lists.newArrayList();
+        for (int i = 0; i < count; i++) {
+            long txnId = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                    labelPrefix + "_" + i + "_" + UUIDUtil.genUUID().toString(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            List<TabletCommitInfo> tablets = (i % 2 == 0) ? transTablets1 : transTablets2;
+            waiters.add(globalTransactionMgr.commitTransaction(db.getId(), txnId, tablets, Lists.newArrayList(), null));
+        }
+        return waiters;
+    }
+
+    // SR-38350: with incremental sticky retry, a batch where one partition fails to publish on the first attempt
+    // must still converge, and the retry must re-issue the BE publish RPC ONLY for the failed partition; partitions
+    // that already published are skipped.
+    @Test
+    public void testStickyRetryOnlyRepublishesFailedPartition() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_STICKY);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        long savedInterval = Config.lake_publish_version_retry_interval_ms;
+        // No backoff delay so the failed partition is retried on the very next cycle (keeps the test fast/stable).
+        Config.lake_publish_version_retry_interval_ms = 0;
+
+        final long failPartitionId = table.getPartitions().iterator().next().getDefaultPhysicalPartition().getId();
+        Map<Long, Integer> callCounts = new ConcurrentHashMap<>();
+        Set<Long> alreadyFailed = ConcurrentHashMap.newKeySet();
+
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public boolean publishPartitionBatch(Database d, long tableId, PartitionPublishVersionData data,
+                                                 TransactionStateBatch stateBatch) {
+                long pid = data.getPartitionId();
+                callCounts.merge(pid, 1, Integer::sum);
+                // Fail the designated partition on its first attempt only.
+                return !(pid == failPartitionId && alreadyFailed.add(pid));
+            }
+        };
+
+        try {
+            List<VisibleStateWaiter> waiters = beginAndCommitBatch(db, table, 4, transTablets1, transTablets2, "sticky");
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
+
+            // The failed partition was published more than once (initial failure + at least one retry).
+            Assertions.assertTrue(callCounts.get(failPartitionId) >= 2,
+                    "failed partition should have been retried, calls=" + callCounts.get(failPartitionId));
+            // Every other partition was published exactly once and then skipped on subsequent attempts.
+            for (Map.Entry<Long, Integer> entry : callCounts.entrySet()) {
+                if (entry.getKey() != failPartitionId) {
+                    Assertions.assertEquals(1, entry.getValue(),
+                            "partition " + entry.getKey() + " should not be re-published once successful");
+                }
+            }
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = savedInterval;
+        }
+    }
+
+    // SR-38350 / Codex module-risk R4: the skip/backoff pre-check reads PartitionCommitInfo.versionTime on the
+    // daemon thread while the async publish futures write it on executor threads. This asserts the per-table guard
+    // (publishingLakeTransactionsBatchTableId) serializes attempts: while a batch is in-flight, a second daemon
+    // cycle must NOT start a concurrent batch for the same table, and no versionTime is written yet.
+    @Test
+    public void testStickyRetrySerializationGuard() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_STICKY);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        int numPartitions = table.getPartitions().size();
+        CountDownLatch entered = new CountDownLatch(numPartitions);
+        CountDownLatch release = new CountDownLatch(1);
+        Map<Long, Integer> callCounts = new ConcurrentHashMap<>();
+
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public boolean publishPartitionBatch(Database d, long tableId, PartitionPublishVersionData data,
+                                                 TransactionStateBatch stateBatch) {
+                callCounts.merge(data.getPartitionId(), 1, Integer::sum);
+                entered.countDown();
+                try {
+                    // Block so the writer future stays in-flight while the test drives a second daemon cycle.
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return true;
+            }
+        };
+
+        long tableId = table.getId();
+        try {
+            List<VisibleStateWaiter> waiters = beginAndCommitBatch(db, table, 4, transTablets1, transTablets2, "guard");
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+
+            // Cycle 1: schedules the (blocked) per-partition publishes; returns before they complete.
+            daemon.runAfterLeaseValid();
+            Assertions.assertTrue(entered.await(30, TimeUnit.SECONDS), "all partition publishes should be in-flight");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.contains(tableId),
+                    "table should be marked in-flight while its batch is publishing");
+            int callsAfterCycle1 = callCounts.values().stream().mapToInt(Integer::intValue).sum();
+
+            // Cycle 2: must NOT start a concurrent batch for the same table (guard still holds), so no new
+            // publishPartitionBatch calls are issued while the previous attempt's writers are in-flight. This is
+            // the serialization that guarantees the pre-check's versionTime read never races an in-flight writer.
+            daemon.runAfterLeaseValid();
+            Assertions.assertEquals(callsAfterCycle1,
+                    callCounts.values().stream().mapToInt(Integer::intValue).sum(),
+                    "no concurrent re-publish should be issued while the batch is in-flight");
+            Assertions.assertTrue(daemon.publishingLakeTransactionsBatchTableId.contains(tableId),
+                    "table should still be marked in-flight during cycle 2");
+
+            // Release the in-flight publishes and let the batch converge.
+            release.countDown();
+            awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
+        } finally {
+            release.countDown();
+        }
     }
 }

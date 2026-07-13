@@ -102,7 +102,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
-    private static final long RETRY_INTERVAL_MS = 1000;
     private static final int PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
     public static final int PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE = 4096;
     // about 16 (2 * PUBLISH_MAX_QUEUE_SIZE/PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE ) tasks pending for
@@ -984,7 +983,55 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
+        // Sticky per-partition retry (see partitionPublished / partitionInBackoff): reuse the same versionTime
+        // sentinel that the single-transaction path (publishLakePartitionAsync) uses, so a partial-failure retry
+        // re-issues the expensive BE publish RPC only for partitions that have not published yet. Transaction
+        // visibility stays atomic per batch because the finish below is still gated on allMatch(). The size==1
+        // fast path is not handled here; it routes to publishLakeTransactionAsync (already sticky) and this method
+        // asserts size() > 1 above.
+        //
+        // CONCURRENCY INVARIANT: versionTime is read here on the daemon thread and written on executor threads
+        // inside the supplyAsync bodies below. Correctness relies on publishingLakeTransactionsBatchTableId
+        // serializing publish attempts per table: the tableId is added before this method runs and removed only in
+        // the .thenRun that fires after the whole future chain (allOf of every per-partition writer) completes, so
+        // attempt N+1's read happens-after every attempt-N write. Two load-bearing preconditions must be preserved
+        // by future refactors: (1) keep the terminal .exceptionally on this chain (it guarantees the guard-set
+        // removal in .thenRun runs even on failure); (2) do not introduce a synchronous throw between the guard-set
+        // add and the .thenRun registration (it would leak the tableId and freeze the table's publish).
+        int skippedPublished = 0;
+        int inBackoff = 0;
+        int publishing = 0;
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
+            List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
+            // A partition is already published only when every one of its per-transaction commit infos has a
+            // positive versionTime. A freshly appended transaction joins with versionTime == 0, which correctly
+            // forces the partition to re-publish the widened version range (idempotent on the BE side).
+            if (!commitInfos.isEmpty()
+                    && commitInfos.stream().allMatch(ci -> partitionPublished(ci.getVersionTime()))) {
+                // Skip the BE publish RPC. Note: a skipped partition is not re-added to
+                // txnStateBatch.putBeTablets() this round, so its txn logs are reclaimed by vacuum rather than
+                // eagerly deleted by submitDeleteTxnLogJob (best-effort; the BE deliberately retains txn logs for
+                // batch publishes).
+                skippedPublished++;
+                futureList.add(CompletableFuture.completedFuture(true));
+                continue;
+            }
+            // Most recent failure across this partition's commit infos (0 if none failed) = the most negative
+            // versionTime.
+            long lastFailVersionTime = 0;
+            for (PartitionCommitInfo ci : commitInfos) {
+                if (ci.getVersionTime() < 0) {
+                    lastFailVersionTime = Math.min(lastFailVersionTime, ci.getVersionTime());
+                }
+            }
+            if (partitionInBackoff(lastFailVersionTime, System.currentTimeMillis(),
+                    Config.lake_publish_version_retry_interval_ms)) {
+                // Recently failed; back off this partition for this round without issuing a publish RPC.
+                inBackoff++;
+                futureList.add(CompletableFuture.completedFuture(false));
+                continue;
+            }
+            publishing++;
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
                 boolean success = publishPartitionBatch(db, tableId, publishVersionData, txnStateBatch);
                 long versionTime = success ? System.currentTimeMillis() : -System.currentTimeMillis();
@@ -1001,6 +1048,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return false;
             });
             futureList.add(future);
+        }
+        // Log at INFO only when the sticky retry actually skipped or backed off a partition, to avoid doubling
+        // per-batch log volume on healthy clusters where every partition publishes on the first attempt.
+        if (skippedPublished > 0 || inBackoff > 0) {
+            LOG.info("publish lake batch db:{} table:{} partitions={} skipped_published={} in_backoff={} publishing={}",
+                    dbId, tableId, publishVersionDataMap.size(), skippedPublished, inBackoff, publishing);
         }
 
         CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
@@ -1047,15 +1100,32 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
+    // A partition's per-transaction commit info is "published" once its versionTime is positive: the last publish
+    // attempt for that (transaction, partition) succeeded. Shared by the single-transaction and batch publish
+    // paths so both apply identical sticky-retry semantics. See PartitionCommitInfo.versionTime for the sentinel.
+    @VisibleForTesting
+    static boolean partitionPublished(long versionTime) {
+        return versionTime > 0;
+    }
+
+    // A partition that failed to publish (versionTime < 0) is backed off until retryIntervalMs has elapsed since
+    // that failure. A partition that never ran (0) or already published (> 0) is never in backoff. Shared by the
+    // single-transaction and batch publish paths.
+    @VisibleForTesting
+    static boolean partitionInBackoff(long versionTime, long now, long retryIntervalMs) {
+        return versionTime < 0 && now < Math.abs(versionTime) + retryIntervalMs;
+    }
+
     private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,
                                                                  @NotNull TableCommitInfo tableCommitInfo,
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
                                                                  @NotNull TransactionState txnState) {
         long versionTime = partitionCommitInfo.getVersionTime();
-        if (versionTime > 0) {
+        if (partitionPublished(versionTime)) {
             return CompletableFuture.completedFuture(true);
         }
-        if (versionTime < 0 && System.currentTimeMillis() < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+        if (partitionInBackoff(versionTime, System.currentTimeMillis(),
+                Config.lake_publish_version_retry_interval_ms)) {
             return CompletableFuture.completedFuture(false);
         }
 
