@@ -22,7 +22,7 @@ storage_volume_create
 -- !result
 DESC STORAGE VOLUME 'storage_volume_create';
 -- result:
-storage_volume_create	S3	false	s3://xxx	{"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"endpoint","aws.s3.region":"us-west-2","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}	false	comment
+storage_volume_create	S3	false	s3://xxx	{"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"endpoint","aws.s3.region":"us-west-2","aws.s3.use_instance_profile":"false","aws.s3.use_web_identity_token_file":"false","aws.s3.use_aws_sdk_default_behavior":"false"}	false	comment
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_create;
 -- result:

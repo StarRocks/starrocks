@@ -163,14 +163,14 @@ select * from tab1 order by k;
 -- Happy path: column-mode PCU + merge_condition on ver. Only (k, ver, v1) are in the
 -- partial column set; rows where new ver > old ver should update, others should stay.
 -- Inline rows: (1,5,999) → rejected (5 < 10);  (2,30,888) → applied (30 > 20).
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
 sync;
 select * from tab1 order by k;
 
 -- Error path: merge_condition references v2 which is NOT in the partial column set (k, ver, v1).
 -- Stream load is rejected during FE-side validation (Load.checkMergeCondition) with a
 -- "Merge condition column ... does not exist" message; BE never gets to run its matching check here.
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
 sync;
 select * from tab1 order by k;
 
@@ -208,7 +208,7 @@ select * from tab1 order by k;
 -- Stream load: partial cols (k, ver, v3), merge_condition=ver.
 -- (1, 5, 777)  → ver=5 < current 10  → reject; row 1 keeps (1, 1, 1, 10, 1).
 -- (2, 30, 888) → ver=30 > current 20 → apply; row 2 becomes (2, 2, 888, 30, 2).
-shell: curl --location-trusted -u root: -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
 sync;
 select * from tab1 order by k;
 
@@ -245,7 +245,7 @@ select * from tab1 order by k;
 --   (1, 5, 777)  → ver=5 < 10  → reject; row 1 stays unchanged.
 --   (2, 30, 888) → ver=30 > 20 → apply; row 2 v1=888, ver=30; v2 untouched (still default 999).
 --   (3, 50, 555) → new PK     → insert via UPSERT path; v2 takes the column default 999.
-shell: curl --location-trusted -u root: -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
 sync;
 select * from tab1 order by k;
 
@@ -281,7 +281,7 @@ select * from tab1 order by k;
 -- Expect BE to reject with the pre-existing sort-key conflict error.
 -- Filter the message through grep so the BE/CN IP prefix (which varies between runs) is
 -- stripped from the recorded result.
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | LC_ALL=C sort -u
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | LC_ALL=C sort -u
 sync;
 -- Data must be unchanged.
 select * from tab1 order by k;

@@ -305,7 +305,7 @@ select * from tab1 order by k;
 1	10	100	1000
 2	20	200	2000
 -- !result
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
 -- result:
 0
 {
@@ -321,7 +321,7 @@ select * from tab1 order by k;
 1	10	100	1000
 2	30	888	2000
 -- !result
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
 -- result:
 0
 {
@@ -385,7 +385,7 @@ select * from tab1 order by k;
 1	1	1	10	1
 2	2	2	20	2
 -- !result
-shell: curl --location-trusted -u root: -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
 -- result:
 0
 {
@@ -448,7 +448,7 @@ select * from tab1 order by k;
 1	10	100	999
 2	20	200	999
 -- !result
-shell: curl --location-trusted -u root: -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
 -- result:
 0
 {
@@ -497,7 +497,7 @@ select * from tab1 order by k;
 1	10	100	1000
 2	20	200	2000
 -- !result
-shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | LC_ALL=C sort -u
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H "row_delimiter:|" -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | LC_ALL=C sort -u
 -- result:
 0
 "Status": "Fail"

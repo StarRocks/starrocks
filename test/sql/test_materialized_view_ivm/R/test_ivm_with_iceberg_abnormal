@@ -97,6 +97,9 @@ ALTER MATERIALIZED VIEW test_mv1 SET("refresh_mode" = "auto");
 E: (1064, 'Invalid refresh_mode: auto. Only INCREMENTAL, PCT are supported.')
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+E: (1064, "Cannot incrementally refresh materialized view test_mv1")
+-- !result
 function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
 False
@@ -108,8 +111,9 @@ new_b	3	2023-12-02
 -- !result
 SELECT col_str, col_int, dt FROM test_mv1 WHERE dt <= '2023-12-02' ORDER BY col_str, col_int, dt limit 3;
 -- result:
-new_a	3	2023-12-01
-new_b	3	2023-12-02
+	4	2023-12-02
+a	1	2023-12-01
+a	2	2023-12-01
 -- !result
 drop materialized view test_mv1;
 -- result:

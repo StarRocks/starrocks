@@ -100,7 +100,7 @@ show create table partition_str2date;
   `total_amount` decimal\(10, 0\) NULL COMMENT "",
   `id` int\(11\) NULL COMMENT ""
 \) ENGINE=OLAP \n?(COMMENT "OLAP"\n)?DUPLICATE KEY\(`create_time`\)
-PARTITION BY RANGE\(str2date\(create_time, '%Y-%m-%d'\)\)
+(COMMENT "OLAP"\n)?PARTITION BY RANGE\(str2date\(create_time, '%Y-%m-%d'\)\)
 \(PARTITION p20210101 VALUES \[\("2021-01-01"\), \("2021-01-02"\)\),
 PARTITION p20210102 VALUES \[\("2021-01-02"\), \("2021-01-03"\)\),
 PARTITION p20210103 VALUES \[\("2021-01-03"\), \("2021-01-04"\)\),
