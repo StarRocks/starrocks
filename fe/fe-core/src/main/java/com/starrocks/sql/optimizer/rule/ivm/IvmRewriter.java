@@ -178,6 +178,11 @@ public class IvmRewriter {
     private static OptExpression appendPkLoadOpColumn(OptExpression root, TaskContext rootTaskContext,
                                                       ColumnRefSet requiredColumns,
                                                       ColumnRefOperator actionColumn) {
+        OptExpression netCollapsed =
+                IvmNetCollapse.applyIfRetractable(root, rootTaskContext, requiredColumns, actionColumn);
+        if (netCollapsed != null) {
+            return netCollapsed;
+        }
         OptimizerContext optimizerContext = rootTaskContext.getOptimizerContext();
         List<ColumnRefOperator> rootOutputColumns = root.getOutputColumns()
                 .getColumnRefOperators(optimizerContext.getColumnRefFactory());

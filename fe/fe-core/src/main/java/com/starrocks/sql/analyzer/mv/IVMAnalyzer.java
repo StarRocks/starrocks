@@ -326,9 +326,15 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
                     groupByClause.getGroupingType());
         }
-        boolean hasComputedRowId = rewriteAggregate(selectRelation);
+        boolean isAggregate = rewriteAggregate(selectRelation);
+        // Does THIS block's own output carry __ROW_ID__ (from the aggregate above or a retractable PK
+        // projection)? The PK-base gate below keys on this, not on nested inputs.
+        boolean rowIdOnOutput = IvmRetractableAdmission.admitRowIdOnOutput(statement, selectRelation, isAggregate);
         Relation innerRelation = selectRelation.getRelation();
-        hasComputedRowId |= rewriteRelation(innerRelation);
+        // | not ||: rewriteRelation must run to recurse into and reject the nested relation even when this
+        // block already has a row id. A nested input can also make the query row-id-computed.
+        boolean hasComputedRowId = rowIdOnOutput | rewriteRelation(innerRelation);
+        IvmRetractableAdmission.requirePkBaseHasRowId(selectRelation, rowIdOnOutput);
         return hasComputedRowId;
     }
 

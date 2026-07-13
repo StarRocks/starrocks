@@ -156,15 +156,6 @@ AS SELECT k, v FROM vb_view;
 -- result:
 [REGEX].*IVMAnalyzer does not support inner relation type: ViewRelation.*
 -- !result
--- name: test_ivm_pk_base_rejected @cloud
-CREATE TABLE pk_b (k INT, v BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
--- result:
--- !result
-CREATE MATERIALIZED VIEW mv_pk DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
-AS SELECT k, v FROM pk_b;
--- result:
-[REGEX].*IVM on cloud-native PRIMARY_KEYS base 'pk_b' is not supported: the CDC delta stream is append-only and cannot maintain replace/upsert semantics, so the MV would retain stale rows after a key update.*
--- !result
 -- name: test_ivm_unique_base_rejected @cloud
 CREATE TABLE uk_b (k INT, v BIGINT) UNIQUE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:

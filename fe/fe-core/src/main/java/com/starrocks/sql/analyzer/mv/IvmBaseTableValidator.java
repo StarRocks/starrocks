@@ -85,20 +85,30 @@ public final class IvmBaseTableValidator {
             ImmutableSet.copyOf(COMPATIBLE_MV_AGG_BY_BASE_AGG_TYPE.values());
 
     private static final Predicate<OlapTable> IS_AGG_KEYS = t -> t.getKeysType() == KeysType.AGG_KEYS;
-    private static final Predicate<OlapTable> IS_REPLACE_FAMILY =
-            t -> t.getKeysType() == KeysType.PRIMARY_KEYS || t.getKeysType() == KeysType.UNIQUE_KEYS;
+    private static final Predicate<OlapTable> IS_UNIQUE_KEYS = t -> t.getKeysType() == KeysType.UNIQUE_KEYS;
+    private static final Predicate<OlapTable> IS_PRIMARY_KEYS = t -> t.getKeysType() == KeysType.PRIMARY_KEYS;
+
+    /**
+     * True if a cloud-native PRIMARY KEY base appears anywhere in the relation tree. The analyzer's
+     * per-MV-shape retraction gate uses it to reject a PK base in a shape whose output can't carry a
+     * {@code __ROW_ID__} -- its delete/update CDC would then have no row identity to target and corrupt the MV.
+     */
+    public static boolean hasCloudNativePrimaryKeyBase(SelectRelation selectRelation) {
+        return findAnyCloudNativeBase(selectRelation.getRelation(), IS_PRIMARY_KEYS) != null;
+    }
 
     public static void validate(SelectRelation selectRelation) {
         Relation inner = selectRelation.getRelation();
 
-        // Reject anywhere in the relation tree: a PK/UNIQUE join input is as unmaintainable as a sole base.
-        OlapTable replaceBase = findAnyCloudNativeBase(inner, IS_REPLACE_FAMILY);
-        if (replaceBase != null) {
+        // UNIQUE KEY stays unsupported anywhere in the tree (this retraction path targets PRIMARY KEY only);
+        // a PRIMARY KEY base is now admitted here and gated per MV shape by the analyzer's retraction check.
+        OlapTable uniqueBase = findAnyCloudNativeBase(inner, IS_UNIQUE_KEYS);
+        if (uniqueBase != null) {
             throw new SemanticException(
                     "IVM on cloud-native %s base '%s' is not supported: the CDC delta stream is " +
                             "append-only and cannot maintain replace/upsert semantics, so the MV " +
                             "would retain stale rows after a key update",
-                    replaceBase.getKeysType(), replaceBase.getName());
+                    uniqueBase.getKeysType(), uniqueBase.getName());
         }
 
         OlapTable aggBase = findDirectCloudNativeAggBase(inner);
