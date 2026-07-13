@@ -29,15 +29,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AlterMetricRegistry {
 
-    /** Column operation type; the label value tags {@code alter_column_operation_total{type=...}}. */
-    public enum AlterColumnOperationType {
-        ADD("add"),
-        DROP("drop"),
-        MODIFY("modify");
+    /** Alter operation type; the label value tags {@code alter_operation_total{type=...}}. */
+    public enum AlterOperationType {
+        ADD_COLUMN("add_column"),
+        DROP_COLUMN("drop_column"),
+        MODIFY_COLUMN("modify_column");
 
         private final String labelValue;
 
-        AlterColumnOperationType(String labelValue) {
+        AlterOperationType(String labelValue) {
             this.labelValue = labelValue;
         }
 
@@ -46,16 +46,18 @@ public final class AlterMetricRegistry {
         }
     }
 
-    /** Column-change execution mode; the label value tags {@code alter_column_duration_ms{execution_mode=...}}. */
-    public enum AlterColumnExecutionMode {
+    /** Alter execution mode; the label value tags {@code alter_duration_ms{execution_mode=...}}. */
+    public enum AlterExecutionMode {
+        // Synchronous, metadata-only fast schema evolution (shared-nothing, or shared-data FSE v2).
+        FAST_SCHEMA_EVOLUTION("fse"),
         // Asynchronous lake schema-change job (LakeTableAsyncFastSchemaChangeJob); shared-data only.
         LEGACY_FAST_SCHEMA_EVOLUTION("legacy_fse"),
-        // Synchronous, metadata-only fast schema evolution (shared-nothing, or shared-data FSE v2).
-        FAST_SCHEMA_EVOLUTION("fse");
+        // The change was applied by physically rewriting data (SchemaChangeJobV2 / LakeTableSchemaChangeJob).
+        REWRITE("rewrite");
 
         private final String labelValue;
 
-        AlterColumnExecutionMode(String labelValue) {
+        AlterExecutionMode(String labelValue) {
             this.labelValue = labelValue;
         }
 
@@ -66,12 +68,11 @@ public final class AlterMetricRegistry {
 
     private static volatile AlterMetricRegistry instance;
 
-    // One counter per column operation type, created on first use and emitted via report().
-    private final Map<AlterColumnOperationType, LeaderAwareCounterMetricLong> alterColumnCounters = new ConcurrentHashMap<>();
+    // One counter per alter operation type, created on first use and emitted via report().
+    private final Map<AlterOperationType, LeaderAwareCounterMetricLong> operationCounters = new ConcurrentHashMap<>();
 
     // One duration histogram per execution mode, created on first use and emitted via report().
-    private final Map<AlterColumnExecutionMode, LeaderAwareHistogramMetric> alterColumnDurationHistograms =
-            new ConcurrentHashMap<>();
+    private final Map<AlterExecutionMode, LeaderAwareHistogramMetric> durationHistograms = new ConcurrentHashMap<>();
 
     private AlterMetricRegistry() {
     }
@@ -89,43 +90,43 @@ public final class AlterMetricRegistry {
         return inst;
     }
 
-    /** Increment the ALTER column operation counter for {@code type}. */
-    public void updateAlterColumnCounter(AlterColumnOperationType type) {
-        alterColumnCounters.computeIfAbsent(type, t -> {
-            LeaderAwareCounterMetricLong counter = new LeaderAwareCounterMetricLong("alter_column_operation_total",
-                    MetricUnit.OPERATIONS, "Total number of ALTER TABLE column operations, by type.");
+    /** Increment the alter operation counter for {@code type}. */
+    public void updateAlterOperation(AlterOperationType type) {
+        operationCounters.computeIfAbsent(type, t -> {
+            LeaderAwareCounterMetricLong counter = new LeaderAwareCounterMetricLong("alter_operation_total",
+                    MetricUnit.OPERATIONS, "Total number of ALTER TABLE operations, by type.");
             counter.addLabel(new MetricLabel("type", t.getLabelValue()));
             return counter;
         }).increase(1L);
     }
 
-    /** Observe an ALTER column-change duration (ms) for {@code executionMode}. */
-    public void updateAlterColumnDuration(AlterColumnExecutionMode executionMode, long durationMs) {
-        alterColumnDurationHistograms.computeIfAbsent(executionMode, mode -> {
-            LeaderAwareHistogramMetric histogram = new LeaderAwareHistogramMetric("alter_column_duration_ms");
+    /** Observe an alter duration (ms) for {@code executionMode}. */
+    public void updateAlterDuration(AlterExecutionMode executionMode, long durationMs) {
+        durationHistograms.computeIfAbsent(executionMode, mode -> {
+            LeaderAwareHistogramMetric histogram = new LeaderAwareHistogramMetric("alter_duration_ms");
             histogram.addLabel(new MetricLabel("execution_mode", mode.getLabelValue()));
             return histogram;
         }).update(durationMs);
     }
 
     @VisibleForTesting
-    public long getAlterColumnCount(AlterColumnOperationType type) {
-        LeaderAwareCounterMetricLong counter = alterColumnCounters.get(type);
+    public long getAlterOperationCount(AlterOperationType type) {
+        LeaderAwareCounterMetricLong counter = operationCounters.get(type);
         return counter == null ? 0L : counter.getValue();
     }
 
     @VisibleForTesting
-    public long getAlterColumnDurationCount(AlterColumnExecutionMode executionMode) {
-        LeaderAwareHistogramMetric histogram = alterColumnDurationHistograms.get(executionMode);
+    public long getAlterDurationCount(AlterExecutionMode executionMode) {
+        LeaderAwareHistogramMetric histogram = durationHistograms.get(executionMode);
         return histogram == null ? 0L : histogram.getCount();
     }
 
     /** Emit the counters and duration histograms to the visitor. */
     public void report(MetricVisitor visitor) {
-        for (LeaderAwareCounterMetricLong counter : alterColumnCounters.values()) {
+        for (LeaderAwareCounterMetricLong counter : operationCounters.values()) {
             visitor.visit(counter);
         }
-        for (LeaderAwareHistogramMetric histogram : alterColumnDurationHistograms.values()) {
+        for (LeaderAwareHistogramMetric histogram : durationHistograms.values()) {
             visitor.visitHistogram(histogram);
         }
     }

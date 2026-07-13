@@ -2609,7 +2609,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add column
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
-                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.ADD);
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2617,7 +2617,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
-                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.ADD);
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2631,7 +2631,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
-                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.DROP);
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.DROP_COLUMN);
 
                 List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
@@ -2758,7 +2758,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
-                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.MODIFY);
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.MODIFY_COLUMN);
                 List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
                         && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
@@ -4449,8 +4449,8 @@ public class SchemaChangeHandler extends AlterHandler {
         applyFastSchemaEvolutionMetaChange(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
                 schemaChangeData.getNewIndexMetaIdToSchema(),
                 schemaChangeData.getIndexes(), jobId, indexMetaIdToNewSchemaId);
-        AlterMetricRegistry.getInstance().updateAlterColumnDuration(
-                AlterMetricRegistry.AlterColumnExecutionMode.FAST_SCHEMA_EVOLUTION,
+        AlterMetricRegistry.getInstance().updateAlterDuration(
+                AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION,
                 System.currentTimeMillis() - startMs);
     }
 

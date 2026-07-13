@@ -310,18 +310,21 @@ description: "Alphabetical s"
 - 类型：瞬时值
 - 描述：仅存算分离模式。当前分配给该 BE 的 StarOSWorker 的 shard 数量（即 worker 本地 shard 表的大小）。该值在 `StarOSWorker::add_shard` 与 `StarOSWorker::remove_shard` 内同步写入（mutation 时推送），不是在指标采集时重新计算；因此采集到的值反映的是最近一次 shard 表的变更结果。BE 关闭时该 gauge 不会被清零，会保留到下一次发生 mutation 为止。可用于观测各 BE 之间的 shard 分布均衡情况，并发现与 FE 端调度结果的偏差。
 
-## `starrocks_fe_alter_column_duration_ms`
+## `starrocks_fe_alter_duration_ms`
 
 - 单位：毫秒
 - 类型：摘要
-- 标签：`execution_mode`（`legacy_fse` 或 `fse`）、`is_leader`
-- 描述：应用一次 ALTER TABLE 列变更的耗时（毫秒），按语句统计。`execution_mode` 标签表示变更的应用方式：`fse` 为当前的 Fast Schema Evolution（FSE），在语句执行期间立即完成；`legacy_fse` 为旧版 FSE 路径，在后台执行，通常慢得多。`legacy_fse` 仅出现在存算分离集群且表未开启 `cloud_native_fast_schema_evolution_v2` 时（默认开启，此时走 `fse`）。仅由 Leader FE 上报（`is_leader="true"`）。包含 0.75、0.95、0.98、0.99、0.999 分位数及 `_sum`、`_count`。
+- 标签：`execution_mode`（`fse`、`legacy_fse` 或 `rewrite`）、`is_leader`
+- 描述：应用一次 ALTER TABLE 变更的耗时（毫秒），按语句统计。仅由 Leader FE 上报（`is_leader="true"`）。包含 0.75、0.95、0.98、0.99、0.999 分位数及 `_sum`、`_count`。`execution_mode` 标签表示变更的应用方式：
+  - `fse`：当前的 Fast Schema Evolution（FSE），在语句执行期间立即完成。
+  - `legacy_fse`：旧版 FSE 路径，在后台执行，通常慢得多。仅出现在存算分离集群且表未开启 `cloud_native_fast_schema_evolution_v2` 时（默认开启，此时走 `fse`）。
+  - `rewrite`：该变更需要物理重写表数据（例如修改列类型），同样在后台执行。
 
-## `starrocks_fe_alter_column_operation_total`
+## `starrocks_fe_alter_operation_total`
 
 - 单位：计数
 - 类型：累积
-- 标签：`type`（`add`、`drop` 或 `modify`）、`is_leader`
+- 标签：`type`（`add_column`、`drop_column` 或 `modify_column`）、`is_leader`
 - 描述：ALTER TABLE 列操作的次数，按类型统计。一条语句可以包含多个操作——例如 `ADD COLUMN a, DROP COLUMN b`——每个操作按其类型分别计数。重命名、调整列顺序以及仅修改注释不计入。仅由 Leader FE 上报（`is_leader="true"`）。
 
 ## `starrocks_fe_clone_task_copy_bytes`

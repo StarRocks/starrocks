@@ -14,8 +14,8 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.alter.AlterMetricRegistry.AlterColumnExecutionMode;
-import com.starrocks.alter.AlterMetricRegistry.AlterColumnOperationType;
+import com.starrocks.alter.AlterMetricRegistry.AlterExecutionMode;
+import com.starrocks.alter.AlterMetricRegistry.AlterOperationType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.PrometheusMetricVisitor;
@@ -31,7 +31,8 @@ import java.util.List;
  * cluster runs as leader (both metrics are leader-aware and report real values only on the leader).
  * {@code isFastSchemaEvolutionV2()} returns {@code true}, so the inherited tests and
  * {@link #executeAlterAndWaitFinish} exercise the synchronous FSE-v2 path; the asynchronous legacy
- * path is driven manually in {@link #asyncLegacyJobRecordsLegacyFseDuration}.
+ * path is driven manually in {@link #asyncLegacyJobRecordsLegacyFseDuration}, and the data-rewrite path
+ * in {@link #dataRewriteJobRecordsRewriteDuration}.
  *
  * <p>The registry singleton and its series are process-global, so assertions use before/after deltas,
  * resilient to shared state across tests.
@@ -46,13 +47,13 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
     // ---- counter ----
 
     @Test
-    public void updateAlterColumnCounterBumpsPerType() {
+    public void updateAlterOperationBumpsPerType() {
         AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
-        for (AlterColumnOperationType type : AlterColumnOperationType.values()) {
-            long before = registry.getAlterColumnCount(type);
-            registry.updateAlterColumnCounter(type);
-            Assertions.assertEquals(before + 1L, registry.getAlterColumnCount(type),
-                    "updateAlterColumnCounter must bump " + type + " exactly once");
+        for (AlterOperationType type : AlterOperationType.values()) {
+            long before = registry.getAlterOperationCount(type);
+            registry.updateAlterOperation(type);
+            Assertions.assertEquals(before + 1L, registry.getAlterOperationCount(type),
+                    "updateAlterOperation must bump " + type + " exactly once");
         }
     }
 
@@ -63,23 +64,23 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
                 "CREATE TABLE t_op (c0 INT, v0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
                         + "PROPERTIES('cloud_native_fast_schema_evolution_v2'='true');");
 
-        long add0 = registry.getAlterColumnCount(AlterColumnOperationType.ADD);
+        long add0 = registry.getAlterOperationCount(AlterOperationType.ADD_COLUMN);
         alterTable(connectContext, "ALTER TABLE t_op ADD COLUMN c1 BIGINT");
-        Assertions.assertEquals(add0 + 1, registry.getAlterColumnCount(AlterColumnOperationType.ADD),
-                "ADD COLUMN must bump type=add");
+        Assertions.assertEquals(add0 + 1, registry.getAlterOperationCount(AlterOperationType.ADD_COLUMN),
+                "ADD COLUMN must bump type=add_column");
 
-        long drop0 = registry.getAlterColumnCount(AlterColumnOperationType.DROP);
+        long drop0 = registry.getAlterOperationCount(AlterOperationType.DROP_COLUMN);
         alterTable(connectContext, "ALTER TABLE t_op DROP COLUMN c1");
-        Assertions.assertEquals(drop0 + 1, registry.getAlterColumnCount(AlterColumnOperationType.DROP),
-                "DROP COLUMN must bump type=drop");
+        Assertions.assertEquals(drop0 + 1, registry.getAlterOperationCount(AlterOperationType.DROP_COLUMN),
+                "DROP COLUMN must bump type=drop_column");
 
         // The counter fires during analysis (in SchemaChangeHandler's per-clause loop), independent of the
         // execution path the clause takes. On this shared-data v2 table an INT->BIGINT widening on a value
         // column is fast-schema-evolution-eligible and applies synchronously, leaving the table NORMAL.
-        long mod0 = registry.getAlterColumnCount(AlterColumnOperationType.MODIFY);
+        long mod0 = registry.getAlterOperationCount(AlterOperationType.MODIFY_COLUMN);
         alterTable(connectContext, "ALTER TABLE t_op MODIFY COLUMN v0 BIGINT");
-        Assertions.assertEquals(mod0 + 1, registry.getAlterColumnCount(AlterColumnOperationType.MODIFY),
-                "MODIFY COLUMN must bump type=modify");
+        Assertions.assertEquals(mod0 + 1, registry.getAlterOperationCount(AlterOperationType.MODIFY_COLUMN),
+                "MODIFY COLUMN must bump type=modify_column");
     }
 
     // ---- emission (report -> MetricVisitor) ----
@@ -88,11 +89,12 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
     public void reportEmitsCounterAndHistogramSeries() {
         AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
         // Ensure at least one series exists for each label value.
-        registry.updateAlterColumnCounter(AlterColumnOperationType.ADD);
-        registry.updateAlterColumnCounter(AlterColumnOperationType.DROP);
-        registry.updateAlterColumnCounter(AlterColumnOperationType.MODIFY);
-        registry.updateAlterColumnDuration(AlterColumnExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
-        registry.updateAlterColumnDuration(AlterColumnExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION, 7L);
+        registry.updateAlterOperation(AlterOperationType.ADD_COLUMN);
+        registry.updateAlterOperation(AlterOperationType.DROP_COLUMN);
+        registry.updateAlterOperation(AlterOperationType.MODIFY_COLUMN);
+        registry.updateAlterDuration(AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+        registry.updateAlterDuration(AlterExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION, 7L);
+        registry.updateAlterDuration(AlterExecutionMode.REWRITE, 9L);
 
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
         registry.report(visitor);
@@ -100,22 +102,23 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
 
         // Counter: one series per type, emitted by report() via visit(Metric). The counter is leader-aware,
         // so it also carries an is_leader label; assert label-order-independently.
-        Assertions.assertTrue(out.contains("starrocks_fe_alter_column_operation_total{"), out);
-        Assertions.assertTrue(out.contains("type=\"add\""), out);
-        Assertions.assertTrue(out.contains("type=\"drop\""), out);
-        Assertions.assertTrue(out.contains("type=\"modify\""), out);
+        Assertions.assertTrue(out.contains("starrocks_fe_alter_operation_total{"), out);
+        Assertions.assertTrue(out.contains("type=\"add_column\""), out);
+        Assertions.assertTrue(out.contains("type=\"drop_column\""), out);
+        Assertions.assertTrue(out.contains("type=\"modify_column\""), out);
         // The three counter series share a single HELP/TYPE header (deduped by metric name).
-        Assertions.assertEquals(1, countOccurrences(out, "# TYPE starrocks_fe_alter_column_operation_total"), out);
+        Assertions.assertEquals(1, countOccurrences(out, "# TYPE starrocks_fe_alter_operation_total"), out);
 
         // Histogram: one set of quantile/_sum/_count lines per execution_mode, emitted via visitHistogram().
-        Assertions.assertTrue(out.contains("starrocks_fe_alter_column_duration_ms{quantile=\"0.75\""), out);
-        Assertions.assertTrue(out.contains("starrocks_fe_alter_column_duration_ms_count{"), out);
+        Assertions.assertTrue(out.contains("starrocks_fe_alter_duration_ms{quantile=\"0.75\""), out);
+        Assertions.assertTrue(out.contains("starrocks_fe_alter_duration_ms_count{"), out);
         Assertions.assertTrue(out.contains("execution_mode=\"fse\""), out);
         Assertions.assertTrue(out.contains("execution_mode=\"legacy_fse\""), out);
+        Assertions.assertTrue(out.contains("execution_mode=\"rewrite\""), out);
         // The cluster runs as leader; assert is_leader="true" is bound to each family's series (not a single
         // global match that one family could satisfy for both).
-        Assertions.assertTrue(anyLineContains(out, "starrocks_fe_alter_column_operation_total{", "is_leader=\"true\""), out);
-        Assertions.assertTrue(anyLineContains(out, "starrocks_fe_alter_column_duration_ms", "is_leader=\"true\""), out);
+        Assertions.assertTrue(anyLineContains(out, "starrocks_fe_alter_operation_total{", "is_leader=\"true\""), out);
+        Assertions.assertTrue(anyLineContains(out, "starrocks_fe_alter_duration_ms", "is_leader=\"true\""), out);
     }
 
     private static int countOccurrences(String haystack, String needle) {
@@ -144,10 +147,10 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
         LakeTable table = createTable(connectContext,
                 "CREATE TABLE t_sync (c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
                         + "PROPERTIES('cloud_native_fast_schema_evolution_v2'='true');");
-        long before = registry.getAlterColumnDurationCount(AlterColumnExecutionMode.FAST_SCHEMA_EVOLUTION);
+        long before = registry.getAlterDurationCount(AlterExecutionMode.FAST_SCHEMA_EVOLUTION);
         executeAlterAndWaitFinish(table, "ALTER TABLE t_sync ADD COLUMN c1 BIGINT", true);
         Assertions.assertEquals(before + 1L,
-                registry.getAlterColumnDurationCount(AlterColumnExecutionMode.FAST_SCHEMA_EVOLUTION),
+                registry.getAlterDurationCount(AlterExecutionMode.FAST_SCHEMA_EVOLUTION),
                 "synchronous FSE add-column must record one fse duration observation");
     }
 
@@ -157,12 +160,26 @@ public class AlterMetricRegistryTest extends LakeFastSchemaChangeTestBase {
         LakeTable table = createTable(connectContext,
                 "CREATE TABLE t_legacy (c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
                         + "PROPERTIES('cloud_native_fast_schema_evolution_v2'='false');");
-        long before = registry.getAlterColumnDurationCount(AlterColumnExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION);
+        long before = registry.getAlterDurationCount(AlterExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION);
         alterTable(connectContext, "ALTER TABLE t_legacy ADD COLUMN c1 BIGINT");
         runAsyncAlterToFinish(table);
         Assertions.assertEquals(before + 1L,
-                registry.getAlterColumnDurationCount(AlterColumnExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION),
+                registry.getAlterDurationCount(AlterExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION),
                 "async legacy FSE add-column must record one legacy_fse duration observation on FINISHED");
+    }
+
+    @Test
+    public void dataRewriteJobRecordsRewriteDuration() throws Exception {
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        LakeTable table = createTable(connectContext,
+                "CREATE TABLE t_rewrite (c0 INT, c1 VARCHAR(10)) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 "
+                        + "PROPERTIES('cloud_native_fast_schema_evolution_v2'='true');");
+        long before = registry.getAlterDurationCount(AlterExecutionMode.REWRITE);
+        // VARCHAR -> INT is not fast-schema-evolution eligible, so the change is applied by a data-rewrite
+        // schema-change job (LakeTableSchemaChangeJob), which records one rewrite observation on FINISHED.
+        executeAlterAndWaitFinish(table, "ALTER TABLE t_rewrite MODIFY COLUMN c1 INT", false);
+        Assertions.assertEquals(before + 1L, registry.getAlterDurationCount(AlterExecutionMode.REWRITE),
+                "data-rewrite schema change must record one rewrite duration observation on FINISHED");
     }
 
     /** Drive the single unfinished async schema-change job for {@code table} to FINISHED. */
