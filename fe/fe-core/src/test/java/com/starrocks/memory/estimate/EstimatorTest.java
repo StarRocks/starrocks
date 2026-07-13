@@ -312,6 +312,22 @@ class EstimatorTest {
                 "HashSet estimate " + est + " not within 10% of retained " + real);
     }
 
+    @Test
+    void testConcurrentKeySetViewCountsBackingOverhead() {
+        Set<IntBox> keySet = ConcurrentHashMap.newKeySet();
+        Set<IntBox> hashSet = new HashSet<>();
+        for (int i = 0; i < 1000; i++) {
+            keySet.add(new IntBox(i));
+            hashSet.add(new IntBox(i));
+        }
+        // Before the fix the KeySetView got zero backing overhead and weighed far less than an
+        // equivalent HashSet; it is now charged the same node + table overhead.
+        long keySetEst = Estimator.estimate(keySet);
+        long hashSetEst = Estimator.estimate(hashSet);
+        assertTrue(keySetEst >= hashSetEst * 0.9,
+                "KeySetView estimate " + keySetEst + " should be comparable to HashSet " + hashSetEst);
+    }
+
     // Mirrors Iceberg's SerializableMap/SerializableByteBufferMap: a non-JDK Map that wraps its real
     // storage in a field. The estimator must field-walk such wrappers so the inner HashMap's node and
     // table overhead is counted — element sampling alone would skip it entirely.
