@@ -55,7 +55,6 @@
 namespace starrocks {
 
 class MetricRegistry;
-class BrpcStubCacheTest;
 
 constexpr int TIMER_TASK_RUNNING = 1;
 
@@ -125,8 +124,6 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    friend class starrocks::BrpcStubCacheTest;
-
     void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
 
@@ -170,8 +167,6 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    friend class starrocks::BrpcStubCacheTest;
-
     void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task);
 
@@ -208,8 +203,6 @@ private:
 
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
-
-    friend class starrocks::BrpcStubCacheTest;
 
     void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task);

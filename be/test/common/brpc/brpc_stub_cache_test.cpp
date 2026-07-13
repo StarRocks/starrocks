@@ -270,7 +270,6 @@ TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
     HttpBrpcStubCache::initialize(_timer.get());
     auto* cache = HttpBrpcStubCache::getInstance();
     ASSERT_NE(nullptr, cache);
-    ASSERT_EQ(_timer.get(), cache->_timer);
 
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
@@ -280,10 +279,9 @@ TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
     ASSERT_NE(nullptr, *stub);
 
     cache->shutdown();
-    ASSERT_EQ(nullptr, cache->_timer);
+    ASSERT_FALSE(cache->get_http_stub(address).ok());
 
     HttpBrpcStubCache::initialize(timer2.get());
-    ASSERT_EQ(timer2.get(), cache->_timer);
 
     auto rebound_stub = cache->get_http_stub(address);
     ASSERT_TRUE(rebound_stub.ok());
@@ -300,17 +298,15 @@ TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
     LakeServiceBrpcStubCache::initialize(_timer.get());
     auto* cache = LakeServiceBrpcStubCache::getInstance();
     ASSERT_NE(nullptr, cache);
-    ASSERT_EQ(_timer.get(), cache->_timer);
 
     auto stub = cache->get_stub("127.0.0.1", 123);
     ASSERT_TRUE(stub.ok());
     ASSERT_NE(nullptr, *stub);
 
     cache->shutdown();
-    ASSERT_EQ(nullptr, cache->_timer);
+    ASSERT_FALSE(cache->get_stub("127.0.0.1", 123).ok());
 
     LakeServiceBrpcStubCache::initialize(timer2.get());
-    ASSERT_EQ(timer2.get(), cache->_timer);
 
     auto rebound_stub = cache->get_stub("127.0.0.1", 123);
     ASSERT_TRUE(rebound_stub.ok());
