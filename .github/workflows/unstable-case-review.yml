@@ -27,6 +27,11 @@ on:
         required: false
         default: '3'
         type: string
+      grant_probation:
+        description: 'Open a PR moving now-passing blacklisted cases into PROBATION (default false; needs SYNC_PAT, i.e. CelerData)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   checks: write
@@ -309,13 +314,13 @@ jobs:
           retention-days: 14
 
       - name: Open PR granting probation eligibility
-        # Temporarily disabled: secrets.SYNC_PAT is not configured on
-        # this repo (the `SYNC_PAT` name lives in celerdata-enterprise),
-        # so `gh pr create` runs with an empty GH_TOKEN and fails. Also
-        # /var/lib/ci-tool is a shared dirty working tree on the runner.
-        # Re-enable after a working PAT is wired in and a clean-checkout
-        # safeguard is added to the step.
-        if: false
+        # Opt-in via the grant_probation input (default false = off, same as
+        # before). Needs SYNC_PAT (configured on CelerData) and the ubuntu/ai
+        # runners (CelerData only), so in practice this only fires on CelerData.
+        # The earlier blockers are resolved: SYNC_PAT is now set, and the
+        # runner's /var/lib/ci-tool is a bind-mount real dir so the per-job
+        # `cp` is a true isolated copy.
+        if: ${{ inputs.grant_probation == 'true' }}
         id: open_pr
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
