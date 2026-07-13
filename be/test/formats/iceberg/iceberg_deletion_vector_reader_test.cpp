@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/iceberg/iceberg_deletion_vector_reader.h"
+#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 
 #include <gtest/gtest.h>
 #include <zlib.h>
@@ -25,7 +25,7 @@
 #include "fs/fs.h"
 #include "gutil/endian.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 // Wrap an arbitrary body in the Iceberg DV framing (length | magic | body | crc) with a valid
 // length prefix, magic and crc, so only the roaring body itself is (in)valid.
@@ -183,17 +183,20 @@ protected:
         return path;
     }
 
-    // Point the (non-copyable) context's descriptor at [offset, offset+size) of the given puffin file.
-    static void fill_ctx(HdfsScannerContext& ctx, const std::string& path, int64_t offset, int64_t size,
-                         int64_t record_count) {
-        ctx.fs = FileSystem::Default();
-        auto desc = std::make_shared<TIcebergDeletionVectorDescriptor>();
-        desc->puffin_file_path = path;
-        desc->content_offset = offset;
-        desc->content_size_in_bytes = size;
-        desc->record_count = record_count;
-        desc->referenced_data_file = "data.parquet";
-        ctx.table_specific.iceberg_deletion_vector_descriptor = desc;
+    static IcebergDeletionVectorReaderOptions make_options(const std::string& path, int64_t offset, int64_t size,
+                                                           int64_t record_count,
+                                                           RuntimeProfile* runtime_profile = nullptr) {
+        TIcebergDeletionVectorDescriptor descriptor;
+        descriptor.puffin_file_path = path;
+        descriptor.content_offset = offset;
+        descriptor.content_size_in_bytes = size;
+        descriptor.record_count = record_count;
+        descriptor.referenced_data_file = "data.parquet";
+        return IcebergDeletionVectorReaderOptions{
+                .descriptor = std::move(descriptor),
+                .fs = FileSystem::Default(),
+                .runtime_profile = runtime_profile,
+        };
     }
 
     std::string _test_dir;
@@ -203,9 +206,7 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesSuccess) {
     auto blob = make_blob({3, 7, 42});
     std::string path = write_file("dv.puffin", blob);
 
-    HdfsScannerContext ctx;
-    fill_ctx(ctx, path, 0, static_cast<int64_t>(blob.size()), 3);
-    IcebergDeletionVectorReader reader(ctx);
+    IcebergDeletionVectorReader reader(make_options(path, 0, static_cast<int64_t>(blob.size()), 3));
     auto skip_ctx = std::make_shared<SkipRowsContext>();
     ASSERT_OK(reader.fill_row_indexes(skip_ctx));
     ASSERT_NE(nullptr, skip_ctx->deletion_bitmap);
@@ -217,12 +218,8 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesUpdatesProfile) {
     auto blob = make_blob({1, 2, 3, 4});
     std::string path = write_file("dv_profile.puffin", blob);
 
-    HdfsScannerContext ctx;
-    fill_ctx(ctx, path, 0, static_cast<int64_t>(blob.size()), 4);
     RuntimeProfile profile("IcebergDVTest");
-    ctx.profile.runtime_profile = &profile;
-
-    IcebergDeletionVectorReader reader(ctx);
+    IcebergDeletionVectorReader reader(make_options(path, 0, static_cast<int64_t>(blob.size()), 4, &profile));
     auto skip_ctx = std::make_shared<SkipRowsContext>();
     ASSERT_OK(reader.fill_row_indexes(skip_ctx));
 
@@ -243,9 +240,8 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesRespectsOffset) {
     file.insert(file.end(), blob1.begin(), blob1.end());
     std::string path = write_file("dv_multi.puffin", file);
 
-    HdfsScannerContext ctx;
-    fill_ctx(ctx, path, static_cast<int64_t>(blob0.size()), static_cast<int64_t>(blob1.size()), 3);
-    IcebergDeletionVectorReader reader(ctx);
+    IcebergDeletionVectorReader reader(
+            make_options(path, static_cast<int64_t>(blob0.size()), static_cast<int64_t>(blob1.size()), 3));
     auto skip_ctx = std::make_shared<SkipRowsContext>();
     ASSERT_OK(reader.fill_row_indexes(skip_ctx));
     EXPECT_EQ(3, skip_ctx->deletion_bitmap->get_cardinality());
@@ -256,9 +252,7 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesCorruptBlob) {
     auto blob = make_blob({1, 2}, /*corrupt_magic=*/true);
     std::string path = write_file("dv_bad.puffin", blob);
 
-    HdfsScannerContext ctx;
-    fill_ctx(ctx, path, 0, static_cast<int64_t>(blob.size()), 2);
-    IcebergDeletionVectorReader reader(ctx);
+    IcebergDeletionVectorReader reader(make_options(path, 0, static_cast<int64_t>(blob.size()), 2));
     auto skip_ctx = std::make_shared<SkipRowsContext>();
     auto st = reader.fill_row_indexes(skip_ctx);
     EXPECT_TRUE(st.is_corruption());
@@ -268,13 +262,11 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesCorruptBlob) {
 
 // A missing puffin file makes the range read fail before parsing.
 TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesReadError) {
-    HdfsScannerContext ctx;
-    fill_ctx(ctx, _test_dir + "/does_not_exist.puffin", 0, 32, 1);
-    IcebergDeletionVectorReader reader(ctx);
+    IcebergDeletionVectorReader reader(make_options(_test_dir + "/does_not_exist.puffin", 0, 32, 1));
     auto skip_ctx = std::make_shared<SkipRowsContext>();
     auto st = reader.fill_row_indexes(skip_ctx);
     EXPECT_FALSE(st.ok());
     EXPECT_EQ(nullptr, skip_ctx->deletion_bitmap);
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats

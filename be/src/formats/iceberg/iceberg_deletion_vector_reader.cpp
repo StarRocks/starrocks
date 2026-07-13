@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/iceberg/iceberg_deletion_vector_reader.h"
+#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 
 #include <zlib.h>
 
@@ -25,7 +25,7 @@
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 const uint8_t IcebergDeletionVectorReader::MAGIC[4] = {0xD1, 0xD3, 0x39, 0x64};
 
@@ -101,27 +101,28 @@ StatusOr<roaring64_bitmap_t*> IcebergDeletionVectorReader::parse_dv_blob(const u
 }
 
 Status IcebergDeletionVectorReader::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx) {
-    const std::string& path = _descriptor->puffin_file_path;
-    int64_t offset = _descriptor->content_offset;
-    int64_t size = _descriptor->content_size_in_bytes;
+    const auto& descriptor = _options.descriptor;
+    const std::string& path = descriptor.puffin_file_path;
+    int64_t offset = descriptor.content_offset;
+    int64_t size = descriptor.content_size_in_bytes;
 
     std::vector<uint8_t> buffer(size);
     {
         SCOPED_RAW_TIMER(&_build_stats.read_ns);
-        ASSIGN_OR_RETURN(auto file, _ctx.fs->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto file, _options.fs->new_random_access_file(path));
         RETURN_IF_ERROR(file->read_at_fully(offset, buffer.data(), size));
         _build_stats.read_bytes += size;
     }
 
-    auto res = parse_dv_blob(buffer.data(), size, _descriptor->record_count, &_build_stats);
+    auto res = parse_dv_blob(buffer.data(), size, descriptor.record_count, &_build_stats);
     if (!res.ok()) {
         return Status::Corruption(strings::Substitute("$0 [puffin=$1 offset=$2 size=$3 referenced_data_file=$4]",
                                                       std::string(res.status().message()), path, offset, size,
-                                                      _descriptor->referenced_data_file));
+                                                      descriptor.referenced_data_file));
     }
     skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(res.value());
-    if (_ctx.profile.runtime_profile != nullptr) {
-        update_counter(_ctx.profile.runtime_profile);
+    if (_options.runtime_profile != nullptr) {
+        update_counter(_options.runtime_profile);
     }
     return Status::OK();
 }
@@ -146,4 +147,4 @@ void IcebergDeletionVectorReader::update_counter(RuntimeProfile* parent_profile)
     COUNTER_UPDATE(cardinality, _build_stats.cardinality);
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats

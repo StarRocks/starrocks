@@ -17,9 +17,9 @@
 #include "common/runtime_profile.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exec/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/delta/deletion_vector.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
+#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
 #include "runtime/runtime_state.h"
@@ -80,8 +80,12 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         _app_stats.deletion_vector_build_count += 1;
     } else if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
-        auto dv = std::make_unique<IcebergDeletionVectorReader>(*_scanner_ctx);
-        RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
+        formats::IcebergDeletionVectorReader dv(formats::IcebergDeletionVectorReaderOptions{
+                .descriptor = *_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor,
+                .fs = _scanner_ctx->fs,
+                .runtime_profile = _scanner_ctx->profile.runtime_profile,
+        });
+        RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;
     }
     return Status::OK();

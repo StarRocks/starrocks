@@ -18,13 +18,18 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 
-#include "common/status.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/scan_context.h"
+#include "fs/fs.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
+
+class RuntimeProfile;
+
+namespace formats {
 
 struct IcebergDVBuildStats {
     int64_t read_bytes = 0;
@@ -35,13 +40,18 @@ struct IcebergDVBuildStats {
     int64_t cardinality = 0;
 };
 
+struct IcebergDeletionVectorReaderOptions {
+    TIcebergDeletionVectorDescriptor descriptor;
+    FileSystem* fs = nullptr;
+    RuntimeProfile* runtime_profile = nullptr;
+};
+
 // Reads an Iceberg V3 Puffin deletion-vector blob and produces a Roaring64 skip bitmap.
 // Blob layout: length(4B BE) | magic D1 D3 39 64 | roaring64 portable body | crc32(4B BE over magic+body).
 // content_size_in_bytes is the FULL blob length (all four sections).
 class IcebergDeletionVectorReader {
 public:
-    explicit IcebergDeletionVectorReader(const HdfsScannerContext& ctx)
-            : _descriptor(ctx.table_specific.iceberg_deletion_vector_descriptor), _ctx(ctx) {}
+    explicit IcebergDeletionVectorReader(IcebergDeletionVectorReaderOptions options) : _options(std::move(options)) {}
 
     // Range-read the blob per descriptor, validate, deserialize, and fill skip_rows_ctx->deletion_bitmap.
     Status fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx);
@@ -59,9 +69,9 @@ public:
 private:
     void update_counter(RuntimeProfile* parent_profile);
 
-    const std::shared_ptr<TIcebergDeletionVectorDescriptor> _descriptor;
-    const HdfsScannerContext& _ctx;
+    const IcebergDeletionVectorReaderOptions _options;
     IcebergDVBuildStats _build_stats;
 };
 
+} // namespace formats
 } // namespace starrocks

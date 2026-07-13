@@ -321,7 +321,6 @@ set(EXEC_NON_PIPELINE_FILES
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
     remote_scan_arrow_batch_reader.cpp
-    iceberg/iceberg_deletion_vector_reader.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
     hdfs_scanner/hdfs_scanner_json.cpp
