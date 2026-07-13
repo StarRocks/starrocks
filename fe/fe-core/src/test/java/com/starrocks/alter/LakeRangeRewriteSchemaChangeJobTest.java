@@ -574,6 +574,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * shadow-rewrite carrier: {@code isShadowRewrite()} with a matching watershed txn id and alter version.
      */
     private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion) {
+        mockShadowRewriteTransaction(watershedTxnId, alterVersion, 0L);
+    }
+
+    private static void mockShadowRewriteTransaction(long watershedTxnId, long alterVersion, long loadedRows) {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -582,7 +586,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                         new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
                         0L, 60_000L);
                 state.setTransactionStatus(TransactionStatus.VISIBLE);
-                InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment();
+                InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(loadedRows);
                 attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
                 attachment.setShadowRewriteAlterVersion(alterVersion);
                 state.setTxnCommitAttachment(attachment);
@@ -742,14 +746,36 @@ public class LakeRangeRewriteSchemaChangeJobTest {
      * FINISHED_REWRITING.
      */
     private LakeRangeRewriteSchemaChangeJob jobInFinishedRewriting() throws Exception {
+        return jobInFinishedRewriting(0L);
+    }
+
+    private LakeRangeRewriteSchemaChangeJob jobInFinishedRewriting(long rewriteLoadedRows) throws Exception {
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
         job.setRewriteTxnIdForTest(physicalPartitionId, 123456L);
-        mockShadowRewriteTransaction(job.getTransactionId().get(), job.getWatershedVersion(physicalPartitionId));
+        mockShadowRewriteTransaction(job.getTransactionId().get(), job.getWatershedVersion(physicalPartitionId),
+                rewriteLoadedRows);
         job.setRewriteExecutor((context, insertStmt) -> { });
         job.runRunningJob();
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         return job;
+    }
+
+    @Test
+    public void testSourceEmptyFlagReflectsRewriteLoadedRows() throws Exception {
+        // The RUNNING -> FINISHED_REWRITING transition records whether each partition's rewrite loaded zero
+        // rows (partition empty at the watershed). This drives the flip's shadow_rewrite_source_empty so BE
+        // synthesizes an empty op_schema_change@W for ANY W -- fixing the flip 404 wedge on a repeat online
+        // rewrite of an empty range partition (W > 1). loadedRows > 0 leaves the flag false (normal path).
+        long pid = table.getPhysicalPartitions().iterator().next().getId();
+
+        LakeRangeRewriteSchemaChangeJob emptyJob = jobInFinishedRewriting(0L);
+        Assertions.assertEquals(Boolean.TRUE, emptyJob.getSourceEmpty(pid),
+                "an empty rewrite (loadedRows == 0) must flag the source empty");
+
+        LakeRangeRewriteSchemaChangeJob nonEmptyJob = jobInFinishedRewriting(42L);
+        Assertions.assertEquals(Boolean.FALSE, nonEmptyJob.getSourceEmpty(pid),
+                "a non-empty rewrite (loadedRows > 0) must not flag the source empty");
     }
 
     @Test

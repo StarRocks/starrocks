@@ -134,17 +134,18 @@ public class RangeRewriteRoutingTest {
         }
     }
 
-    // (c) ADD COLUMN ... KEY on a range table stays rejected (column-set change, out of scope).
+    // (c) ADD COLUMN ... KEY on a range table whose sort key is key-derived (here KEY(k1,k2) ==
+    // ORDER BY(k1,k2)) now routes to the range rewrite job (see RangeKeyColumnRoutingTest for the full
+    // DUP/AGG/UNIQUE/PK routing matrix).
     @Test
-    public void testAddKeyColumnStillRejected() throws Exception {
+    public void testAddKeyColumnRoutesToRangeRewriteJob() throws Exception {
         starRocksAssert.withTable("create table t_route_addkey (k1 int, k2 int, v1 int)\n"
                 + "duplicate key(k1, k2)\n"
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        DdlException e = assertThrowsDdlException(() ->
-                createJob("t_route_addkey", "alter table t_route_addkey add column k_new int key default '0'"));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                e.getMessage().toLowerCase().contains("range distribution"), e.getMessage());
+        AlterJobV2 job =
+                createJob("t_route_addkey", "alter table t_route_addkey add column k_new int key default '0'");
+        assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class, job);
     }
 
     // (d) OPTIMIZE on a range table stays rejected.
