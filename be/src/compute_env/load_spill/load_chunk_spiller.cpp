@@ -147,39 +147,39 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
 }
 
 Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
-    // Fast path: already fully initialized. The acquire load pairs with the release store
-    // below, so a thread that observes `true` is guaranteed to see the fully-constructed
-    // `_spiller` and its prepared serde.
-    if (_prepared.load(std::memory_order_acquire)) {
-        return Status::OK();
-    }
-    // Slow path: serialize the one-time initialization. Multiple memtable-flush threads may
-    // reach here concurrently on the first spill of this LoadChunkSpiller.
-    std::lock_guard<std::mutex> l(_init_lock);
-    if (_prepared.load(std::memory_order_relaxed)) {
-        return Status::OK();
-    }
-    // Build everything on a local first, so a half-initialized spiller is never published
-    // through `_spiller`. The previous code assigned `_spiller` before preparing its serde,
-    // which let a racing thread observe a non-null spiller whose serde encode context was
-    // still null and crash in ColumnarSerde::serialize().
-    spill::SpilledOptions options;
-    options.encode_level = 7;
-    // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
-    // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
-    auto spiller = _spiller_factory->create(options);
-    RETURN_IF_ERROR(spiller->prepare(_runtime_state.get()));
-    DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-    spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
-    spiller->set_metrics(metrics);
-    // Prepare serde (creates the encode context) BEFORE publishing the spiller.
-    if (const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->empty()) {
-        const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
-        RETURN_IF_ERROR(spiller->serde()->prepare());
-    }
-    _spiller = std::move(spiller);
-    _prepared.store(true, std::memory_order_release);
-    return Status::OK();
+    // Multiple memtable-flush threads share this LoadChunkSpiller and reach here concurrently
+    // on the first spill. std::call_once runs the init body exactly once: the winning thread
+    // builds the spiller while the others block until it returns, then every thread observes
+    // the fully-constructed `_spiller`. call_once establishes the happens-before edge, so the
+    // spiller and its prepared serde are visible without any manual atomics. `_prepare_status`
+    // caches the outcome; a failed init is reported to all callers instead of leaving a
+    // half-built spiller reachable (the crash this fix addresses).
+    std::call_once(_prepare_once, [&] {
+        // Build everything on a local first, so a half-initialized spiller is never published
+        // through `_spiller`. The previous code assigned `_spiller` before preparing its serde,
+        // which let a racing thread observe a non-null spiller whose serde encode context was
+        // still null and crash in ColumnarSerde::serialize().
+        spill::SpilledOptions options;
+        options.encode_level = 7;
+        // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
+        // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
+        auto spiller = _spiller_factory->create(options);
+        if (_prepare_status = spiller->prepare(_runtime_state.get()); !_prepare_status.ok()) {
+            return;
+        }
+        DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
+        spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
+        spiller->set_metrics(metrics);
+        // Prepare serde (creates the encode context) BEFORE publishing the spiller.
+        if (const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->empty()) {
+            const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
+            if (_prepare_status = spiller->serde()->prepare(); !_prepare_status.ok()) {
+                return;
+            }
+        }
+        _spiller = std::move(spiller);
+    });
+    return _prepare_status;
 }
 
 Status LoadChunkSpiller::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {

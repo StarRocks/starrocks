@@ -131,14 +131,18 @@ private:
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
-    // Guards the one-time initialization of `_spiller` (and its serde) in _prepare().
-    // The load spill path is entered concurrently by multiple memtable-flush threads
-    // that share the same LoadChunkSpiller, so this initialization must be serialized.
-    std::mutex _init_lock;
-    // Set to true only after `_spiller` AND its serde (including the encode context) are
-    // fully initialized. Readers gate on this flag rather than on `_spiller != nullptr`,
-    // because the pointer becomes visible before the serde's encode context is created.
-    std::atomic<bool> _prepared{false};
+    // Drives the one-time initialization of `_spiller` (and its serde) in _prepare().
+    // The load spill path is entered concurrently by multiple memtable-flush threads that
+    // share the same LoadChunkSpiller, so std::call_once serializes the first spill: the
+    // winning thread runs the init body while the others block until it finishes and then
+    // observe the fully-constructed `_spiller`. Readiness is no longer inferred from
+    // `_spiller != nullptr`, which used to become visible before the serde's encode context
+    // was created and let a racing thread crash in ColumnarSerde::serialize().
+    std::once_flag _prepare_once;
+    // Result of the one-time initialization, published by the call_once body and read by
+    // every caller. A failed init is cached here (call_once will not re-run on a normal
+    // return), so all threads see the same error instead of using a half-built spiller.
+    Status _prepare_status;
     SchemaPtr _schema;
 };
 
