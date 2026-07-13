@@ -1,0 +1,29 @@
+-- name: test_files_path_patterns
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/path_patterns/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+-- '*' matches any run of characters within a path segment
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- literal prefix followed by '*' (prefix is pushed down as the S3 ListObjectsV2 prefix)
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- '*' as a suffix match
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/*.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- '?' matches exactly one character
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic?.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv', 'basic2.csv')
+-- exact single file, no wildcard (resolved via an efficient HEAD, not a listing)
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic1.csv", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'basic1.csv')
+-- prefix glob with no match -> no files found
+function: assert_query_error_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/basic9*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', 'No files were found matching the pattern')
+
+-- ':' in a directory segment (e.g. a time-of-day prefix) plus a literal date prefix + '*'
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13-a.csv | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-14-b.csv | grep -Pv "(average|elapsed)"
+-- the date prefix matches only the 2026-06-24-13 file
+function: assert_query_contains('select path, size, is_dir from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', '2026-06-24-13-a.csv')
+-- and excludes the 2026-06-24-14 file (exactly one match)
+function: assert_query_contains('select count(*) from files("path"="oss://${oss_bucket}/test_files/path_patterns/${uuid0}/06:00:00/2026-06-24-13*", "list_files_only"="true", "list_recursively"="false", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}")', '1')
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/path_patterns/${uuid0}/ > /dev/null
