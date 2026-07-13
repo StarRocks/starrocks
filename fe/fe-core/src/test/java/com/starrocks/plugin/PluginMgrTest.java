@@ -150,4 +150,16 @@ public class PluginMgrTest {
         assertFalse(pluginMgr.getAllDynamicPluginInfo()
                 .stream().anyMatch(p -> p.getName().equals(pluginName)));
     }
+
+    @Test
+    public void testBuiltinAuditLoaderRegistered() throws Exception {
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.init();
+        assertTrue(pluginMgr.getActivePlugin(PluginMgr.BUILTIN_PLUGIN_PREFIX + "AuditLoader",
+                PluginType.AUDIT) != null);
+        assertTrue(pluginMgr.getActivePluginList(PluginType.AUDIT).size() >= 2);
+        // A second init hits the already-registered branch of every builtin plugin.
+        pluginMgr.init();
+        assertTrue(pluginMgr.getActivePluginList(PluginType.AUDIT).size() >= 2);
+    }
 }
