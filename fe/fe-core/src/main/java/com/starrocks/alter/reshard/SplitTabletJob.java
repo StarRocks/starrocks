@@ -49,7 +49,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -103,6 +102,7 @@ public class SplitTabletJob extends TabletReshardJob {
         return dbId;
     }
 
+    @Override
     public long getTableId() {
         return tableId;
     }
@@ -219,8 +219,7 @@ public class SplitTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -619,10 +618,15 @@ public class SplitTabletJob extends TabletReshardJob {
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
         boolean nonCanonicalCrossing = false;
+        // New child ranges captured during the walk below, reused after the splice for the best-effort
+        // immediate PACK reassignment. sortKeyColumns is hoisted out of the lock so that same reassign
+        // can reuse it (it is immutable schema, always assigned inside the lock before the walk).
+        Map<Long, Range<Tuple>> newChildRanges = new HashMap<>();
+        List<Column> sortKeyColumns = null;
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
-            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+            sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
 
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
@@ -653,6 +657,7 @@ public class SplitTabletJob extends TabletReshardJob {
                                 continue;
                             }
                             Range<Tuple> newRange = newTablet.getRange().getRange();
+                            newChildRanges.put(newTabletId, newRange);
                             boolean canonicalLow = ColocateRangeUtils.hasCanonicalLowerBound(
                                     newRange, sortKeyColumns, colocateColumnCount);
                             if (canonicalLow) {
@@ -683,6 +688,31 @@ public class SplitTabletJob extends TabletReshardJob {
         } catch (DdlException e) {
             throw new TabletReshardException(
                     "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+        }
+
+        // Best-effort: immediately move this split's originating-partition children that now belong in a
+        // newly-created PACK shard group, removing the cross-tick delay before the colocate checker
+        // backstop would reconcile them. Correctness does not depend on this — the backstop reaches the
+        // same terminal state — so a failure here must never abort the split (already published). The
+        // outer catch is what guarantees best-effort: the shared helper catches expected StarOS checked
+        // failures but is intentionally not blanket-wrapped, so an unexpected bug still surfaces here.
+        try {
+            List<ColocateRange> updatedRanges = colocateTableIndex.getColocateRanges(grpId);
+            // Only reconcile children that map cleanly into exactly one post-split ColocateRange. A child
+            // whose range straddles a boundary (legacy/mismatched BE, or a multi-way split with a
+            // non-canonical crossing) has no single well-defined PACK group; leave it to the backstop.
+            Map<Long, Range<Tuple>> containedChildRanges = new HashMap<>();
+            for (Map.Entry<Long, Range<Tuple>> entry : newChildRanges.entrySet()) {
+                if (ColocateRangeUtils.isContainedInOwningColocateRange(
+                        entry.getValue(), updatedRanges, sortKeyColumns, colocateColumnCount)) {
+                    containedChildRanges.put(entry.getKey(), entry.getValue());
+                }
+            }
+            ColocateChecker.reconcileTabletPackPlacement(containedChildRanges, updatedRanges,
+                    colocateColumnCount, "split of table " + tableId);
+        } catch (Exception e) {
+            LOG.warn("best-effort immediate PACK reassignment after split of table {} failed; "
+                    + "leaving convergence to the colocate checker: {}", tableId, e.getMessage());
         }
     }
 
@@ -897,12 +927,22 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        // Pre-split splits a freshly created EMPTY tablet — there is no warm cache to preserve, so
+        // spread the new shards (drop the WITH_SHARD pin) so the following load is not funneled onto
+        // the source tablet's single worker. An online split (non-empty source) keeps the WITH_SHARD
+        // pin to reuse the source worker's warm cache. Emptiness is the same signal the pre-split
+        // eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
+        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise the background warehouse (online split) — unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
-                shardProperties, WarehouseManager.DEFAULT_RESOURCE);
+                shardProperties, computeResource,
+                spreadNewShards);
     }
 
     private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,

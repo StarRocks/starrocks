@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "exec/pipeline/scan/morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
 
 namespace starrocks::pipeline {
 

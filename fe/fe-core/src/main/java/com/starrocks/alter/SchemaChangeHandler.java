@@ -56,6 +56,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -93,6 +94,8 @@ import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -269,7 +272,7 @@ public class SchemaChangeHandler extends AlterHandler {
         return buildColumnInternal(columnDef, table);
     }
 
-    private Column buildColumnInternal(ColumnDef columnDef, Table table) {
+    private static Column buildColumnInternal(ColumnDef columnDef, Table table) {
         if (columnDef.isGeneratedColumn()) {
             return ColumnBuilder.buildGeneratedColumn(table, columnDef);
         }
@@ -619,7 +622,6 @@ public class SchemaChangeHandler extends AlterHandler {
         ColumnPosition fieldPos = alterClause.getFieldPos();
         ArrayList<StructField> oriFields = oriFieldType.getFields();
         int posIndex = -1;
-        boolean hasPos = (fieldPos != null);
         if (fieldPos != null) {
             if (fieldPos.isFirst()) {
                 posIndex = 0;
@@ -727,6 +729,51 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void fillKeyAndAggregationTypeForModColumn(OlapTable olapTable, Column modColumn) {
+        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null) {
+                if (baseColumn.isKey()) {
+                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
+                    // we will keep it as a key column which is the same as before.
+                    modColumn.setIsKey(baseColumn.isKey());
+                }
+                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
+            }
+        } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
+            if (null == modColumn.getAggregationType()) {
+                // in aggregate key table, no aggregation method indicate key column
+                modColumn.setIsKey(true);
+            }
+        } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.REPLACE, true);
+            }
+        } else {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.NONE, true);
+            }
+        }
+    }
+
+    // Returns true when the MODIFY COLUMN clause changes nothing but the column comment, so it can take the
+    // lightweight ModifyColumnComment path instead of spawning a schema change job.
+    private boolean isCommentOnlyModification(ModifyColumnClause alterClause, OlapTable olapTable) {
+        // Repositioning the column, targeting a rollup, or carrying column properties is a real change.
+        if (alterClause.getColPos() != null || alterClause.getRollupName() != null
+                || (alterClause.getProperties() != null && !alterClause.getProperties().isEmpty())) {
+            return false;
+        }
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
+        Column oriColumn = olapTable.getBaseColumn(modColumn.getName());
+        if (oriColumn == null) {
+            // Leave the "column does not exist" error to processModifyColumn.
+            return false;
+        }
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
+        return oriColumn.equalsIgnoreComment(modColumn) && !Objects.equals(oriColumn.getComment(), modColumn.getComment());
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexMetaIdToSchema,
@@ -738,20 +785,14 @@ public class SchemaChangeHandler extends AlterHandler {
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
-            if (baseColumn != null) {
-                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
-                if (baseColumn.isKey()) {
-                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
-                    // we will keep it as a key column which is the same as before.
-                    modColumn.setIsKey(baseColumn.isKey());
-                    if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
-                        throw new DdlException(
-                            "Can not modify key column: " + modColumn.getName() +
-                                " for primary key table except for increasing varchar length");
-                    }
-                    if (modColumn.isAllowNull()) {
-                        throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
-                    }
+            if (baseColumn != null && baseColumn.isKey()) {
+                if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
+                    throw new DdlException(
+                        "Can not modify key column: " + modColumn.getName() +
+                            " for primary key table except for increasing varchar length");
+                }
+                if (modColumn.isAllowNull()) {
+                    throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
                 }
             }
 
@@ -771,26 +812,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
             } else if (null == modColumn.getAggregationType()) {
                 Preconditions.checkArgument(modColumn.getType().isScalarType());
-                // in aggregate key table, no aggregation method indicate key column
-                modColumn.setIsKey(true);
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.REPLACE, true);
-            }
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.NONE, true);
-            }
         }
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
 
         if (!modColumn.isGeneratedColumn() && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
@@ -1032,7 +1066,11 @@ public class SchemaChangeHandler extends AlterHandler {
             // A keyness flip (value <-> key) changes the key column set, which shifts
             // the key-derived range sort key on AGG/UNIQUE tables and on tables without
             // an explicit ORDER BY, even when the column itself is not in the sort key.
-            if (oriColumn.isKey() != modColumn.isKey()) {
+            // On shared-data tables an eligible keyness flip that shifts the range sort key is
+            // routed to LakeRangeRewriteSchemaChangeJob (handled in analyzeAndCreateJob); the
+            // throw is kept for every other case.
+            boolean isRoutedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, alterClause);
+            if (oriColumn.isKey() != modColumn.isKey() && !isRoutedRangeRewrite) {
                 throw new DdlException("MODIFY COLUMN that changes keyness is not supported on tables with " +
                         "range distribution, because adding to or removing from the key column set shifts the " +
                         "range sort key on AGG/UNIQUE tables and on tables without explicit ORDER BY. Column: " +
@@ -1041,7 +1079,10 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean fastPathVarcharWiden = columnPos == null
                     && isOnlyDifferentFromColumnType && isVarcharLengthIncrease
                     && fastSchemaEvolutionEligible;
-            if (!fastPathVarcharWiden) {
+            // A routed range-rewrite re-sorts/re-routes all data into a freshly sampled K-tablet
+            // shadow index, so the stored boundary values do not need to stay valid -- skip the
+            // sort-key touch reject for it.
+            if (!fastPathVarcharWiden && !isRoutedRangeRewrite) {
                 rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn, "MODIFY COLUMN", newColName);
             }
         }
@@ -1194,7 +1235,10 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifySortKeyColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexMetaIdToSchema, List<Integer> sortKeyIdxes,
                                             List<Integer> sortKeyUniqueIds) throws DdlException {
-        if (olapTable.isRangeDistribution()) {
+        // On shared-data range tables a sort-key reorder is routed to LakeRangeRewriteSchemaChangeJob
+        // (the caller builds the job); compute the new sort key here and skip the reject. Every other
+        // range table keeps the existing rejection -- the sort key defines tablet boundaries.
+        if (olapTable.isRangeDistribution() && !needsRangeRewriteSchemaChange(olapTable, alterClause)) {
             throw new DdlException(
                 "Modifying sort key (ALTER TABLE ... ORDER BY) is not " +
                 "supported on tables with range distribution, because the " +
@@ -2131,6 +2175,182 @@ public class SchemaChangeHandler extends AlterHandler {
         return jobBuilder.build();
     }
 
+    /**
+     * Build a {@link LakeRangeRewriteSchemaChangeJob} for a sort-key reorder
+     * ({@code ALTER TABLE ... ORDER BY (...)}) on a shared-data range table. The column set and
+     * keysType are unchanged; only the sort key is permuted, so the new schema is the base schema and
+     * the new sort key is given by {@code sortKeyIdxes}.
+     */
+    private AlterJobV2 createRangeRewriteJob(Database db, OlapTable olapTable, List<Integer> sortKeyIdxes,
+                                             List<Integer> sortKeyUniqueIds) throws StarRocksException {
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        List<Column> newSchema = olapTable.getSchemaByIndexMetaId(baseIndexMetaId);
+        short shortKeyColumnCount = (sortKeyIdxes != null)
+                ? GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes)
+                : GlobalStateMgr.calcShortKeyColumnCount(newSchema, null);
+        return buildRangeRewriteJob(db, olapTable, baseIndexMetaId, newSchema, olapTable.getKeysType(),
+                sortKeyIdxes, sortKeyUniqueIds, shortKeyColumnCount);
+    }
+
+    /**
+     * Build a {@link LakeRangeRewriteSchemaChangeJob} for a MODIFY COLUMN keyness flip on a
+     * shared-data range table. The new base schema (with the flipped column already applied by
+     * {@link #processModifyColumn}) is passed in; keysType is unchanged by a keyness flip, and the new
+     * range sort key is key-derived (a routed keyness flip only occurs when no explicit sort key
+     * pins the column positions), so {@code sortKeyIdxes} is left null and the job derives the sort
+     * key from the new key columns.
+     */
+    private AlterJobV2 createRangeRewriteJob(Database db, OlapTable olapTable, List<Column> newSchema)
+            throws StarRocksException {
+        Preconditions.checkState(newSchema != null, "range-rewrite: missing new schema for base index");
+        // processModifyColumn shadow-prefixes the modified column's name (__starrocks_shadow_*). The
+        // range rewrite materializes the shadow index via an INSERT ... SELECT over the BASE column
+        // names and routes by per-index distribution expressions resolved against those names, so the
+        // shadow schema must use the un-prefixed names -- exactly as the sort-key reorder path does,
+        // which passes the base schema. Strip the prefix here while preserving the flipped keyness;
+        // otherwise the rewrite INSERT fails to resolve the prefixed routing column.
+        List<Column> shadowIndexSchema = new ArrayList<>(newSchema.size());
+        for (Column column : newSchema) {
+            Column copy = column.deepCopy();
+            copy.setName(Column.removeNamePrefix(column.getName()));
+            shadowIndexSchema.add(copy);
+        }
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(shadowIndexSchema, null);
+        return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), shadowIndexSchema,
+                olapTable.getKeysType(), null, null, shortKeyColumnCount);
+    }
+
+    /**
+     * Construct and populate a {@link LakeRangeRewriteSchemaChangeJob} with the new-schema information
+     * it consumes before {@code runPendingJob}: the new full schema, the new sort key
+     * ({@code sortKeyIdxes}/{@code sortKeyUniqueIds} and the projected sort-key {@link Column}s used to
+     * sample the K-tablet boundaries), the (unchanged) keysType, and the shadow/origin index
+     * identity. The shadow index id is freshly allocated; the shadow tablets are built later in the
+     * job's PENDING phase.
+     */
+    private AlterJobV2 buildRangeRewriteJob(Database db, OlapTable olapTable, long originIndexMetaId,
+                                            List<Column> newSchema, KeysType keysType, List<Integer> sortKeyIdxes,
+                                            List<Integer> sortKeyUniqueIds, short shortKeyColumnCount)
+            throws StarRocksException {
+        if (olapTable.getState() == OlapTableState.ROLLUP) {
+            throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
+        }
+        Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        String shadowIndexName = SHADOW_NAME_PREFIX + olapTable.getIndexNameByMetaId(originIndexMetaId);
+
+        LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
+                jobId, db.getId(), olapTable.getId(), olapTable.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, keysType, sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+        return job;
+    }
+
+    /**
+     * Populate the new-schema / new-sort-key / shadow-identity fields shared by every
+     * {@link LakeRangeRewriteSchemaChangeJob} (including its MV subclass {@link LakeMvSortKeyRewriteJob}):
+     * the new full schema, the new sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds} and the
+     * projected sort-key {@link Column}s used to sample the K-tablet boundaries), the (possibly
+     * unchanged) keysType, and the shadow/origin index identity. Package-visible so
+     * {@link AlterMVJobExecutor} can populate a {@link LakeMvSortKeyRewriteJob} identically to
+     * {@link #buildRangeRewriteJob}.
+     */
+    static void populateRangeRewriteJob(LakeRangeRewriteSchemaChangeJob job, List<Column> newSchema,
+                                        KeysType keysType, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds,
+                                        long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
+                                        short shortKeyColumnCount, ComputeResource computeResource) {
+        job.setNewSchema(newSchema);
+        job.setNewKeysType(keysType);
+        job.setNewSortKeyIdxes(sortKeyIdxes);
+        job.setNewSortKeyUniqueIds(sortKeyUniqueIds);
+        job.setNewSortKeyColumns(resolveSortKeyColumns(newSchema, sortKeyIdxes));
+        job.setShadowIndex(shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount);
+        job.setComputeResource(computeResource);
+    }
+
+    /**
+     * Resolve the current session's compute resource and verify it is available, for use by the
+     * range-rewrite job builders ({@link #buildRangeRewriteJob} and {@link #submitMvSortKeyRewriteJob}).
+     */
+    private static ComputeResource resolveAndValidateComputeResource() throws DdlException {
+        final ConnectContext connectContext = ConnectContext.get();
+        final ComputeResource computeResource = connectContext != null
+                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            throw new DdlException("no available compute nodes:" + computeResource);
+        }
+        return computeResource;
+    }
+
+    /**
+     * Submit a {@link LakeMvSortKeyRewriteJob} for {@code ALTER MATERIALIZED VIEW ... ORDER BY} on a
+     * shared-data range-distribution materialized view. Model B: the MV's base schema (column set and
+     * order) is UNCHANGED -- only the sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds}) changes,
+     * exactly the shipped {@code ALTER TABLE ... ORDER BY} reorder shape (see {@link #createRangeRewriteJob}).
+     * Runs under the MV table WRITE lock already held by
+     * {@code AlterJobExecutor.visitAlterMaterializedViewStatement} -- does NOT acquire a lock of its own.
+     *
+     * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the colocate / AUTO_INCREMENT gates
+     * from {@link #needsRangeRewriteSchemaChange}: both are structurally unreachable for an MV here.
+     * Colocation requires hash distribution, but {@code AlterMVClauseAnalyzerVisitor} already requires
+     * range distribution before routing to this method. An AUTO_INCREMENT row-id column implies a
+     * PRIMARY_KEYS MV, which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects.
+     */
+    void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,
+                                   List<Integer> sortKeyUniqueIds) throws StarRocksException {
+        long baseIndexMetaId = mv.getBaseIndexMetaId();
+        List<Column> newSchema = mv.getSchemaByIndexMetaId(baseIndexMetaId);
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes);
+
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        String shadowIndexName = SHADOW_NAME_PREFIX + mv.getIndexNameByMetaId(baseIndexMetaId);
+
+        LakeMvSortKeyRewriteJob job = new LakeMvSortKeyRewriteJob(
+                jobId, db.getId(), mv.getId(), mv.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, mv.getKeysType(), sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, baseIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+
+        // Capture BEFORE any suspend: a user-paused refresh task (or an INACTIVE MV, whose task is
+        // paused) must not be silently resumed on settle/replay.
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        job.setRefreshWasActiveAtSubmit(task != null && task.getState() != Constants.TaskState.PAUSE);
+
+        // Register the job and flip the MV to SCHEMA_CHANGE atomically, mirroring #process(...) below.
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job, wal -> {
+            mv.setState(OlapTableState.SCHEMA_CHANGE);
+            addAlterJobV2(job);
+        });
+    }
+
+    /**
+     * Project the new sort-key {@link Column}s out of the new schema: the columns at
+     * {@code sortKeyIdxes} when an explicit sort key is set, else the key columns. Mirrors
+     * {@link MetaUtils#getRangeDistributionColumns(OlapTable, long)} on the new schema.
+     */
+    private static List<Column> resolveSortKeyColumns(List<Column> newSchema, List<Integer> sortKeyIdxes) {
+        List<Column> sortKeyColumns = new ArrayList<>();
+        if (sortKeyIdxes != null) {
+            for (Integer idx : sortKeyIdxes) {
+                sortKeyColumns.add(newSchema.get(idx));
+            }
+        } else {
+            for (Column column : newSchema) {
+                if (column.isKey()) {
+                    sortKeyColumns.add(column);
+                }
+            }
+        }
+        return sortKeyColumns;
+    }
+
     @Override
     protected void runAfterLeaseValid() {
         super.runAfterLeaseValid();
@@ -2169,7 +2389,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
                                     List<List<Comparable>> schemaChangeJobInfos) {
-        ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;
@@ -2305,6 +2524,23 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
+                // A MODIFY COLUMN that only changes the comment does not need a schema change job; route it to
+                // the lightweight ModifyColumnCommentClause path instead, mirroring the explicit
+                // MODIFY COLUMN COMMENT syntax (including its restriction against batching). This is checked
+                // before processModifyColumn so a comment-only change on a primary key column is not rejected
+                // by the key-column validation there.
+                if (isCommentOnlyModification(modifyColumnClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                    }
+                    ColumnDef columnDef = modifyColumnClause.getColumnDef();
+                    ModifyColumnCommentClause commentClause = new ModifyColumnCommentClause(
+                            columnDef.getName(), columnDef.getComment(), modifyColumnClause.getPos());
+                    processModifyColumnComment(commentClause, db, olapTable, indexMetaIdToSchema);
+                    return null;
+                }
+
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());
                 AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
@@ -2312,6 +2548,28 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
+                List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+                if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
+                        && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
+                    // A keyness flip on a shared-data range table whose flip shifts the range sort key:
+                    // re-route/re-sort/re-aggregate all data into a freshly sampled K-tablet shadow
+                    // index and flip. Routed here (early return), bypassing finalAnalyze, because a
+                    // keyness flip changes the column's aggregation type -- which the generic
+                    // compatibility check rejects -- but the rewrite re-aggregates under the new key.
+                    // Only a post-flip schema that still satisfies finalAnalyze's key invariants (at least
+                    // one key column, every value after every key) is routed; an invalid flip -- the
+                    // last/only key demoted to a value, or a value column promoted ahead of a key -- falls
+                    // through to finalAnalyze, which rejects it synchronously with the precise "No key
+                    // column left" / "value should be after key" error instead of the rewrite job failing
+                    // asynchronously later.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN that changes keyness on a range-distribution table "
+                                + "can not be combined with other alter operations");
+                    }
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    return createRangeRewriteJob(db, olapTable, postFlipBaseSchema);
+                }
             } else if (alterClause instanceof ModifyColumnCommentClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
                 if (alterClauses.size() > 1) {
@@ -2363,6 +2621,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                        return createRangeRewriteJob(db, olapTable, sortKeyIdxes, sortKeyUniqueIds);
+                    }
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, sortKeyIdxes, sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexMetaIdToSchema);
@@ -2450,11 +2711,28 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean enableFileBundling = false;
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             String compactionStrategy = "";
+            FlatJsonConfig flatJsonConfig = null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index.
+                // The local-disk persistent index and the in-memory index are deprecated: disabling
+                // the persistent index or switching to LOCAL is no longer allowed (migrating an
+                // existing LOCAL table to CLOUD_NATIVE is still permitted). These restrictions only
+                // apply to primary key tables; enable_persistent_index is a no-op for other key types.
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    if (!enablePersistentIndex) {
+                        throw new DdlException("The persistent index can not be disabled for shared-data primary key " +
+                                "tables, the in-memory index is no longer supported");
+                    }
+                    if (!TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                        throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                                "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                                persistentIndexType);
+                    }
+                }
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
                 String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
@@ -2463,10 +2741,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
                             + "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
-                }
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
-                        && !enablePersistentIndex) {
-                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 // only support set persistent_index_type when enable_persistent_index is true
@@ -2478,6 +2752,14 @@ public class SchemaChangeHandler extends AlterHandler {
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index; switching
+                // to LOCAL is deprecated (migrating an existing LOCAL table to CLOUD_NATIVE is still allowed).
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                        && !TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                    throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                            "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                            persistentIndexType);
+                }
                 if (oldPersistentIndexType.equals(persistentIndexType)) {
                     LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
                             olapTable.getName(), persistentIndexType));
@@ -2530,16 +2812,43 @@ public class SchemaChangeHandler extends AlterHandler {
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                FlatJsonConfig newConfig = olapTable.containsFlatJsonConfig()
+                        ? new FlatJsonConfig(olapTable.getFlatJsonConfig())
+                        : new FlatJsonConfig();
+                newConfig.buildFromProperties(properties);
+                // The analyzer's enabled-check ran without the table lock, so a concurrent ALTER
+                // may have disabled flat_json since; re-validate against the locked state so a
+                // factor change cannot land on a disabled config (mirrors updateFlatJsonConfigMeta).
+                if (!newConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+                newConfig.incVersion();
+                metaType = TTabletMetaType.FLAT_JSON_CONFIG;
+                flatJsonConfig = newConfig;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
-            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(),
-                    olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                    metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        flatJsonConfig);
+            } else {
+                alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                        db.getId(),
+                        olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
+                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+            }
         } else {
             // shouldn't happen
             throw new DdlException("only support alter enable_persistent_index in shared_data mode");
@@ -2690,6 +2999,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             return false;
         }
+        List<Partition> partitions = Lists.newArrayList();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
@@ -2699,6 +3009,7 @@ public class SchemaChangeHandler extends AlterHandler {
             } else {
                 newFlatJsonConfig = new FlatJsonConfig(olapTable.getFlatJsonConfig());
             }
+            partitions.addAll(olapTable.getPartitions());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
@@ -2747,6 +3058,25 @@ public class SchemaChangeHandler extends AlterHandler {
 
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
+            // check for concurrent modifications by version
+            if (olapTable.containsFlatJsonConfig()
+                    && olapTable.getFlatJsonConfig().getVersion() != newFlatJsonConfig.getVersion()) {
+                Map<String, String> newProperties = olapTable.getFlatJsonConfig().toProperties();
+                newProperties.putAll(properties);
+                newFlatJsonConfig.buildFromProperties(newProperties);
+                newFlatJsonConfig.setVersion(olapTable.getFlatJsonConfig().getVersion());
+                // Re-validate after rebasing onto the (possibly concurrently-modified) current
+                // config: a factor change must not be silently merged onto a now-disabled config,
+                // which would persist an invalid disabled-with-factor state (the factor is dropped
+                // by toProperties() while disabled, diverging in-memory vs replay/failover).
+                if (!newFlatJsonConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
+                }
+            }
+            newFlatJsonConfig.incVersion();
             GlobalStateMgr.getCurrentState().getLocalMetastore().modifyFlatJsonMeta(db, olapTable, newFlatJsonConfig);
         } catch (Exception e) {
             isModifiedSuccess = false;
@@ -2754,7 +3084,111 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
 
+        if (isModifiedSuccess) {
+            try {
+                for (Partition partition : partitions) {
+                    updateFlatJsonPartitionTabletMeta(db, olapTable.getName(), partition.getName(),
+                            olapTable.getFlatJsonConfig());
+                }
+            } catch (DdlException e) {
+                LOG.warn("Failed to execute updateFlatJsonPartitionTabletMeta", e);
+            }
+        }
+
         return isModifiedSuccess;
+    }
+
+    /**
+     * Update one specified partition's flat_json_config by partition name of table
+     */
+    public void updateFlatJsonPartitionTabletMeta(Database db,
+                                                  String tableName,
+                                                  String partitionName,
+                                                  FlatJsonConfig flatJsonConfig) throws DdlException {
+        // be id -> Set<tablet id>
+        Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        if (olapTable == null) {
+            throw new DdlException("Table[" + tableName + "] does not exist");
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException(
+                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
+            }
+
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+                for (Tablet tablet : baseIndex.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                        tabletSet.add(tablet.getId());
+                    }
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        }
+
+        int totalTaskNum = beIdToTabletId.keySet().size();
+        if (totalTaskNum == 0) {
+            return;
+        }
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        AgentBatchTask batchTask = new AgentBatchTask();
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletId.entrySet()) {
+            countDownLatch.addMark(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createFlatJsonConfigUpdateTask(kv.getKey(), kv.getValue(), flatJsonConfig);
+            task.setLatch(countDownLatch);
+            batchTask.addTask(task);
+        }
+        if (!FeConstants.runningUnitTest) {
+            AgentTaskQueue.addBatchTask(batchTask);
+            AgentTaskExecutor.submit(batchTask);
+            LOG.info("send update flat_json_config tablet meta task for table {}, partition {}, number: {}",
+                    tableName, partitionName, batchTask.getTaskNum());
+            waitForTabletMetaBatchTask(batchTask, countDownLatch, totalTaskNum,
+                    "Failed to update partition[" + partitionName + "] flat_json_config tablet meta.");
+        }
+    }
+
+    // Wait for a dispatched tablet-meta batch task and turn a timeout/error into a DdlException.
+    private static void waitForTabletMetaBatchTask(AgentBatchTask batchTask,
+                                                   MarkedCountDownLatch<Long, Set<Long>> countDownLatch,
+                                                   int totalTaskNum, String errMsgPrefix) throws DdlException {
+        long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+        timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = errMsgPrefix;
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
+                }
+            }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
+        }
     }
 
     // return true means that the modification of FEMeta is successful,
@@ -3017,6 +3451,7 @@ public class SchemaChangeHandler extends AlterHandler {
             try {
                 ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 LOG.warn("InterruptedException: ", e);
             }
 
@@ -3987,6 +4422,172 @@ public class SchemaChangeHandler extends AlterHandler {
                 && oriColumn.isKey() == modColumn.isKey()
                 && oriColumn.isAllowNull() == modColumn.isAllowNull()
                 && oriColumn.isHidden() == modColumn.isHidden();
+    }
+
+    /**
+     * Whether the given alter clause is an eligible range-distribution key change that must be
+     * routed to {@link LakeRangeRewriteSchemaChangeJob} rather than rejected.
+     *
+     * <p>Eligible iff ALL of:
+     * <ul>
+     *   <li>the table is a shared-data (cloud-native) OLAP table — the rewrite job is lake-only, so a
+     *       non-lake range table must never reach it. Materialized views are excluded (this gates on
+     *       {@code isCloudNativeTable()}, not {@code isCloudNativeTableOrMaterializedView()}): a
+     *       key/sort-key {@code ALTER TABLE} on an MV is already rejected by
+     *       {@code AlterTableStatementAnalyzer}, and the rewrite's internal INSERT would be rejected
+     *       by {@code InsertAnalyzer} on a non-system MV target;</li>
+     *   <li>the table uses range distribution;</li>
+     *   <li>the clause is either a sort-key reorder ({@code ALTER TABLE ... ORDER BY (...)}, which
+     *       always shifts the range sort key) or a {@link ModifyColumnClause} that flips a column's
+     *       keyness AND that flip shifts the range sort key.</li>
+     * </ul>
+     *
+     * <p>Column-set-changing operations (add/drop key) remain out of scope and are rejected
+     * elsewhere; this predicate only decides between routing and the existing keyness-flip /
+     * sort-key-reorder rejections.
+     */
+    public static boolean needsRangeRewriteSchemaChange(OlapTable table, AlterClause clause) {
+        if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
+            return false;
+        }
+        // Range-colocate and AUTO_INCREMENT-key tables stay rejected (returning false here keeps the
+        // existing range-distribution rejection on both the reorder and keyness-flip paths). A colocate
+        // table's tablets must stay range-aligned with its ColocateRangeMgr expected ranges; the rewrite
+        // samples a fresh K-tablet layout independently, which would desync colocate scan/join routing
+        // after the flip. AUTO_INCREMENT columns are likewise out of scope for the re-route.
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
+                || table.hasAutoIncrementColumn()) {
+            return false;
+        }
+        // Tables with user rollup / synchronous-MV indexes beyond the base index are not eligible:
+        // createRangeRewriteJob / buildRangeRewriteJob rebuild ONLY the base index (baseIndexMetaId),
+        // so rollup indexes would be left with stale key/sort-key metadata after the rewrite.
+        if (table.getIndexMetaIdToMeta().size() > 1) {
+            return false;
+        }
+        // NOTE: PRIMARY_KEYS range-distribution tables are intentionally NOT excluded. The rewrite is
+        // designed to support them -- the op_write->op_schema_change@W conversion plus version-ordered
+        // vlog replay gives PK/UNIQUE/AGG-REPLACE newer-wins (see the P1b design's "PK flip at
+        // base_version = W" correctness obligation). PK column keyness is fixed (no MODIFY-COLUMN
+        // keyness flip is possible), so only the sort-key-reorder path can route a PK table.
+        if (clause instanceof ReorderColumnsClause) {
+            // A sort-key reorder (ALTER TABLE ... ORDER BY with fewer columns than the base schema)
+            // always shifts the range sort key. A full-schema reorder is handled on a different path
+            // and is not a range-rewrite.
+            return ((ReorderColumnsClause) clause).getColumnsByPos().size() != table.getBaseSchema().size();
+        }
+        if (clause instanceof ModifyColumnClause) {
+            return modifyColumnShiftsRangeSortKey(table, (ModifyColumnClause) clause);
+        }
+        return false;
+    }
+
+    /**
+     * Whether a MODIFY COLUMN flips the named column's keyness AND that flip shifts the range sort
+     * key of the base index. The "after" sort key is computed on a candidate base schema in which the
+     * modified column's key bit is flipped, then compared with the current sort key (mirroring how
+     * {@link MetaUtils#getRangeDistributionColumns(OlapTable, long)} resolves the sort key from the
+     * index's {@code sortKeyIdxes}, or from the key columns when no explicit sort key is set).
+     */
+    private static boolean modifyColumnShiftsRangeSortKey(OlapTable table, ModifyColumnClause clause) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        if (indexMeta == null) {
+            return false;
+        }
+        String columnName = clause.getColumnDef().getName();
+        Column oriColumn = null;
+        for (Column column : indexMeta.getSchema()) {
+            if (column.getName().equalsIgnoreCase(columnName)) {
+                oriColumn = column;
+                break;
+            }
+        }
+        if (oriColumn == null) {
+            return false;
+        }
+        boolean newIsKey = resolveModifyColumnKeyness(table, clause.getColumnDef(), oriColumn);
+        if (oriColumn.isKey() == newIsKey) {
+            return false;
+        }
+        if (!isPureKeynessFlip(oriColumn, clause.getColumnDef(), table)) {
+            // Only a *pure* keyness flip is routed to the range rewrite. If the MODIFY COLUMN also
+            // changes the type/length, nullability, default value, aggregation, generated expression,
+            // etc., it is not a pure flip: returning false here lets it fall through to finalAnalyze,
+            // where the generic compatibility checks (e.g. "Cannot shorten string length") reject or
+            // handle it exactly as they would without this routing. This keeps the routing from
+            // bypassing those validations when a keyness flip is bundled with another change.
+            return false;
+        }
+        List<String> currentSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        Map<String, Boolean> keynessOverride = Map.of(columnName, newIsKey);
+        List<String> candidateSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId,
+                        keynessOverride).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        return !currentSortKeyNames.equals(candidateSortKeyNames);
+    }
+
+    /**
+     * Whether {@code schema} still satisfies the key-set invariants that {@link #finalAnalyze} enforces:
+     * at least one key column, and every value column positioned after every key column (the key columns
+     * form a contiguous prefix). A routed keyness flip bypasses finalAnalyze, so the routing re-checks
+     * these here and declines to route a flip that would violate them -- the last/only key demoted to a
+     * value, or a value column promoted ahead of a key. Such a flip then falls through to finalAnalyze,
+     * which rejects it synchronously with the precise error rather than letting the rewrite job fail later.
+     */
+    private static boolean rangeRewriteKeySchemaIsValid(List<Column> schema) {
+        if (schema == null) {
+            return false;
+        }
+        boolean meetValue = false;
+        boolean hasKey = false;
+        for (Column column : schema) {
+            if (column.isKey() && meetValue) {
+                return false; // a value column precedes a key column
+            }
+            if (column.isKey()) {
+                hasKey = true;
+            } else {
+                meetValue = true;
+            }
+        }
+        return hasKey;
+    }
+
+    /**
+     * Whether a MODIFY COLUMN is a *pure* keyness flip: the column it would produce differs from the
+     * existing column in {@link Column#isKey()} only (type, length/precision/scale, nullability,
+     * default value, aggregation, generated expression, etc. all unchanged). Only such flips are
+     * routed to the range rewrite; a keyness flip bundled with any other change must fall through to
+     * finalAnalyze so its generic compatibility checks still run.
+     *
+     * <p>Consequence: an AGG value&harr;key flip inherently changes the column's aggregation state (a
+     * value column carries an aggregation function, a key does not), so it is not a pure keyness flip
+     * and is correctly not routed -- it falls through to the existing rejection. Pure keyness flips
+     * are mainly DUP (and any case where only the key bit toggles).
+     */
+    private static boolean isPureKeynessFlip(Column oriColumn, ColumnDef columnDef, OlapTable table) {
+        Column modColumn = buildColumnInternal(columnDef, table);
+        return oriColumn.differsOnlyInKeyness(modColumn);
+    }
+
+    /**
+     * Resolve the post-modify keyness of a column, mirroring the keys-type-driven key adjustments in
+     * {@link #processModifyColumn} (AGG promotes a no-aggregate column to KEY; PK keeps an existing
+     * key column a key; DUP/UNIQUE take the keyness from the clause).
+     */
+    private static boolean resolveModifyColumnKeyness(OlapTable table, ColumnDef columnDef, Column oriColumn) {
+        KeysType keysType = table.getKeysType();
+        if (keysType == KeysType.AGG_KEYS) {
+            // In aggregate-key tables a column with no aggregation method is a key column.
+            return columnDef.getAggregateType() == null || columnDef.isKey();
+        }
+        if (keysType == KeysType.PRIMARY_KEYS && oriColumn.isKey()) {
+            // Backward compatibility: a PK key column stays a key column when not respecified.
+            return true;
+        }
+        return columnDef.isKey();
     }
 
     /**

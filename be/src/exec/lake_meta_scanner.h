@@ -20,7 +20,7 @@
 #include "exec/meta_scanner.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/lake_meta_reader.h"
-#include "storage/query/olap_scan_range.h"
+#include "storage_primitive/olap_scan_range.h"
 
 namespace starrocks {
 

@@ -83,13 +83,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
-### lake_enable_protobuf_file_checksum
+### lake_enable_pk_preserve_txn_delete_order
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。请仅在整个集群都升级到支持该格式的版本之后再开启该配置项。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
+- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。出于降级安全考虑，默认关闭：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。请仅在整个集群已升级到支持该特性的版本、且不再计划回滚之后开启。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）。
+- 引入版本：-
+
+### lake_enable_protobuf_file_checksum
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
 ### lake_pk_compaction_max_input_rowsets

@@ -24,6 +24,7 @@
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/random/random.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
@@ -47,7 +48,6 @@
 #include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
@@ -56,10 +56,6 @@
 #include "storage/persistent_index.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/tablet_basic_info.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -80,6 +76,11 @@
 #include "storage/types.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/tablet_basic_info.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -5401,8 +5402,20 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            continue;
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // A rssid appears here only with non-empty rowids resolved from the primary index, so a 0-row
+            // segment means the index/rowset-meta disagree with the on-disk segment data. Silently skipping
+            // would return short read columns and later crash in append_selective; fail loudly instead.
+            std::string msg = strings::Substitute(
+                    "segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3; primary "
+                    "index/rowset-meta vs segment-data inconsistency (possibly a corrupt partial-update / "
+                    "auto-increment segment rewrite output)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
@@ -5464,8 +5477,18 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            return Status::OK();
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:auto_increment_segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // Same integrity guard as the main read loop: a 0-row segment with resolved rowids means the
+            // primary index / rowset meta disagree with the on-disk segment data.
+            std::string msg = strings::Substitute(
+                    "auto-increment: segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3 "
+                    "(primary index/rowset-meta vs segment-data inconsistency)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),

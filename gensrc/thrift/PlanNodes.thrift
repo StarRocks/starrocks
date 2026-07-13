@@ -164,6 +164,7 @@ enum TFileFormatType {
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
     FORMAT_AVRO = 11,
+    FORMAT_ARROW = 12,
 }
 
 // CDC envelope format for JSON data
@@ -240,6 +241,27 @@ enum TFileScanType {
     FILES_QUERY
 }
 
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers the
+// INCLUDE METADATA (<KEY> AS <alias>, ...) clause into hidden source slots described by
+// TRoutineLoadMetaColumn, so the BE scanner fills the slot from the Kafka/Pulsar message rather than
+// the payload. TIMESTAMP is the Kafka record timestamp / Pulsar publish time; EVENT_TIME is the Pulsar
+// event time; HEADERS is the whole header/property map (a single value is read with element_at).
+enum TStreamSourceMetaKind {
+    TOPIC = 0,
+    PARTITION = 1,
+    OFFSET = 2,
+    MESSAGE_ID = 3,
+    TIMESTAMP = 4,
+    EVENT_TIME = 5,
+    KEY = 6,
+    HEADERS = 7
+}
+
+struct TRoutineLoadMetaColumn {
+    1: optional Types.TSlotId slot_id
+    2: optional TStreamSourceMetaKind kind
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -304,6 +326,9 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
+    // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
+    35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
 // Broker scan range
@@ -484,6 +509,10 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+struct TChangesScanNode {
+    // no implementation, only used for placeholder in TPlanNode
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -565,6 +594,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
@@ -690,6 +720,10 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+  // Set by FE when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline
+  // breaker (blocking sort, analytic/window); suppresses TopN back-pressure on this scan (incl. the
+  // BE lake/connector self-enable path), since the RF cannot arrive while the scan is still reading.
+  58: optional bool topn_filter_back_pressure_disabled
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
@@ -737,6 +771,8 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+  // See TOlapScanNode.topn_filter_back_pressure_disabled.
+  61: optional bool topn_filter_back_pressure_disabled
 
   43: optional Descriptors.TTableSchemaKey schema_key
 
@@ -1582,6 +1618,9 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+
+  // just a placeholder
+  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

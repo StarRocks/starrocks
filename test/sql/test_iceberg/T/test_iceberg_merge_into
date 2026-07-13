@@ -147,6 +147,30 @@ set pipeline_dop = 0;
 set pipeline_sink_dop = 0;
 
 -- ================================================
+-- Test 10: Duplicate-match detection with high DOP and
+-- hash_join_interpolate_passthrough enabled. The post-probe passthrough this
+-- session var requests would round-robin chunks after the merge join and break
+-- the per-driver seen-set co-location; the MERGE planner suppresses it on the
+-- merge join, so the duplicate is still caught.
+-- ================================================
+set pipeline_dop = 4;
+set pipeline_sink_dop = 4;
+set hash_join_interpolate_passthrough = true;
+
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 1 AS id, 'dup1' AS name, 26 AS age, 55000 AS salary
+    UNION ALL
+    SELECT 1 AS id, 'dup2' AS name, 27 AS age, 56000 AS salary
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+
+set hash_join_interpolate_passthrough = false;
+set pipeline_dop = 0;
+set pipeline_sink_dop = 0;
+
+-- ================================================
 -- Error tests
 -- ================================================
 

@@ -326,7 +326,6 @@ public class StorageVolumeTest {
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assertions.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
-        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assertions.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
         Assertions.assertTrue(fileStore.hasHdfsFsInfo());

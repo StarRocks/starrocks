@@ -14,11 +14,36 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
+#include "base/metrics.h"
 #include "column/fixed_length_column.h"
 #include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/query_cache/lane_arbiter.h"
 
 namespace starrocks {
+
+namespace {
+
+void assert_metric_value(MetricRegistry* registry, const std::string& name, const std::string& value) {
+    auto* metric = registry->get_metric(name);
+    ASSERT_NE(nullptr, metric);
+    ASSERT_EQ(value, metric->to_string());
+}
+
+double metric_double_value(MetricRegistry* registry, const std::string& name) {
+    auto* metric = registry->get_metric(name);
+    EXPECT_NE(nullptr, metric);
+    return metric == nullptr ? 0.0 : std::stod(metric->to_string());
+}
+
+int64_t metric_int_value(MetricRegistry* registry, const std::string& name) {
+    auto* metric = registry->get_metric(name);
+    EXPECT_NE(nullptr, metric);
+    return metric == nullptr ? 0 : std::stoll(metric->to_string());
+}
+
+} // namespace
 
 TEST(ComputeEnvQueryCacheTest, cache_manager_populates_probes_and_invalidates) {
     query_cache::CacheManager cache_mgr(1024 * 1024);
@@ -60,6 +85,46 @@ TEST(ComputeEnvQueryCacheTest, lane_arbiter_assigns_releases_and_skips_processed
     lane_arbiter.enable_passthrough_mode();
     EXPECT_TRUE(lane_arbiter.in_passthrough_mode());
     EXPECT_EQ(query_cache::AR_IO, lane_arbiter.try_acquire_lane(40));
+}
+
+TEST(ComputeEnvQueryCacheTest, cache_manager_installs_updates_and_removes_metrics) {
+    MetricRegistry registry("query_cache_metrics_test");
+
+    {
+        query_cache::CacheManager cache_mgr(1024 * 1024);
+        ASSERT_TRUE(cache_mgr.install_metrics(&registry).ok());
+
+        assert_metric_value(&registry, "query_cache_capacity", "1048576");
+        assert_metric_value(&registry, "query_cache_usage", "0");
+        assert_metric_value(&registry, "query_cache_usage_ratio", "0.000000");
+        assert_metric_value(&registry, "query_cache_lookup_count", "0");
+        assert_metric_value(&registry, "query_cache_hit_count", "0");
+        assert_metric_value(&registry, "query_cache_hit_ratio", "0.000000");
+
+        auto chunk = std::make_shared<Chunk>();
+        auto column = Int8Column::create();
+        column->append(1);
+        chunk->append_column(std::move(column), 1);
+
+        query_cache::CacheValue value(100, 7, {chunk});
+        cache_mgr.populate("cache-key", value);
+        ASSERT_TRUE(cache_mgr.probe("cache-key").ok());
+
+        registry.trigger_hook();
+        EXPECT_GT(metric_int_value(&registry, "query_cache_usage"), 0);
+        EXPECT_GT(metric_double_value(&registry, "query_cache_usage_ratio"), 0.0);
+        assert_metric_value(&registry, "query_cache_lookup_count", "1");
+        assert_metric_value(&registry, "query_cache_hit_count", "1");
+        assert_metric_value(&registry, "query_cache_hit_ratio", "1.000000");
+    }
+
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_capacity"));
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_usage"));
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_usage_ratio"));
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_lookup_count"));
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_hit_count"));
+    EXPECT_EQ(nullptr, registry.get_metric("query_cache_hit_ratio"));
+    registry.trigger_hook();
 }
 
 } // namespace starrocks

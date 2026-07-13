@@ -19,8 +19,8 @@
 #include "column/chunk_schema_helper.h"
 #include "compute_env/dictionary_cache/chunk_util.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

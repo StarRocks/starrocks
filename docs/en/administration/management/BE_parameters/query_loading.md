@@ -386,6 +386,15 @@ This topic introduces the following types of BE configurations:
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
+### object_storage_client_cache_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of object storage clients (S3-compatible and Azure Blob) cached per client factory. The value is read on each client creation, so lowering it takes effect gradually as cached clients are evicted during subsequent creations. Values below `1` are treated as `1`.
+- Introduced in: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - Default: -1
@@ -640,11 +649,11 @@ This topic introduces the following types of BE configurations:
 
 ### jvm_call_thread_pool_size
 
-- Default: 1
+- Default: 4
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as HDFS/libhdfs close and stat operations and JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM work does not compete with Java UDF execution.
 - Introduced in: -
 
 ### udf_thread_pool_size
@@ -653,7 +662,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the UDF call PriorityThreadPool created in ExecEnv (used for executing user-defined functions / UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent UDF executions; keep small to avoid excessive CPU and memory contention.
+- Description: Sets the size of the Java UDF call PriorityThreadPool owned by JavaEnv (used for executing Java UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent Java UDF executions; keep small to avoid excessive CPU and memory contention.
 - Introduced in: v3.2.0
 
 ### update_memory_limit_percent
@@ -662,7 +671,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: No
-- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
+- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
 ### enable_vector_adaptive_search

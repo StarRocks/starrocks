@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 

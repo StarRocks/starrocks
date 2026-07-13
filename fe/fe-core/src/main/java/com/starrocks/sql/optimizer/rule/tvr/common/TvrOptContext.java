@@ -21,15 +21,44 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+
+import java.util.List;
+import java.util.Map;
 
 public class TvrOptContext {
     private final SessionVariable sessionVariable;
 
     private final Supplier<MaterializedView> lazyMV;
 
+    // Ordered INSERT output columns (position i writes target fullSchema[i]), stashed by
+    // InsertPlanner before optimization so IvmRewriter can bind aggregates to MV state columns.
+    private List<ColumnRefOperator> ivmInsertOutputColumns;
+
+    // Aggregate output ColumnRef id -> MV state column name, derived by IvmRewriter and
+    // consumed by IvmDeltaAggregateRule to locate each aggregate's state column by key
+    // instead of by schema position.
+    private Map<Integer, String> ivmStateColumnNameByAggRefId;
+
     public TvrOptContext(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
         this.lazyMV = () -> loadTvrTargetMV();
+    }
+
+    public void setIvmInsertOutputColumns(List<ColumnRefOperator> ivmInsertOutputColumns) {
+        this.ivmInsertOutputColumns = ivmInsertOutputColumns;
+    }
+
+    public List<ColumnRefOperator> getIvmInsertOutputColumns() {
+        return ivmInsertOutputColumns;
+    }
+
+    public void setIvmStateColumnNameByAggRefId(Map<Integer, String> ivmStateColumnNameByAggRefId) {
+        this.ivmStateColumnNameByAggRefId = ivmStateColumnNameByAggRefId;
+    }
+
+    public Map<Integer, String> getIvmStateColumnNameByAggRefId() {
+        return ivmStateColumnNameByAggRefId;
     }
 
     private MaterializedView loadTvrTargetMV() {

@@ -1,0 +1,90 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <fmt/format.h>
+
+#include <boost/thread/future.hpp>
+#include <future>
+
+#include "common/status.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "connector/common/partitioned_connector_chunk_sink.h"
+#include "formats/column_evaluator.h"
+#include "formats/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
+
+namespace starrocks::connector {
+
+class IcebergChunkSink : public PartitionedConnectorChunkSink {
+public:
+    IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
+                     std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
+
+    ~IcebergChunkSink() override = default;
+
+    void callback_on_commit(const CommitResult& result) override;
+
+    const std::vector<std::string>& transform_expr() const { return _transform_exprs; }
+
+    Status add(const ChunkPtr& chunk) override;
+
+private:
+    std::vector<std::string> _transform_exprs;
+};
+
+struct IcebergChunkSinkContext : public ConnectorSinkContext {
+    ~IcebergChunkSinkContext() override = default;
+
+    std::string path;
+    std::vector<std::string> column_names;
+    std::vector<std::string> partition_column_names;
+    std::vector<std::string> transform_exprs;
+    std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
+    std::vector<std::unique_ptr<ColumnEvaluator>> partition_evaluators;
+    int64_t max_file_size = 128L * 1024 * 1024;
+    std::string format;
+    TCompressionType::type compression_type = TCompressionType::UNKNOWN_COMPRESSION;
+    std::map<std::string, std::string> options;
+    std::vector<formats::FileColumnId> parquet_field_ids;
+    PriorityThreadPool* executor = nullptr;
+    TCloudConfiguration cloud_conf;
+    RuntimeState* runtime_state = nullptr;
+    int tuple_desc_id = -1;
+    std::shared_ptr<SortOrdering> sort_ordering;
+
+    // Override tuple descriptor for the spill writer. When set (non-null), used instead of
+    // looking up tuple_desc_id from runtime_state->desc_tbl(). Needed by RowDelta data
+    // sub-sink whose data-only tuple is not registered in the global descriptor table.
+    TupleDescriptor* override_tuple_desc = nullptr;
+
+    // Optional tag inserted into file name prefix to distinguish writers.
+    // Empty by default (standalone INSERT). Set to "data" for RowDelta composite sinks.
+    std::string writer_tag;
+};
+
+class IcebergChunkSinkProvider : public ConnectorSinkProvider {
+public:
+    explicit IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx);
+    ~IcebergChunkSinkProvider() override = default;
+
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergChunkSinkContext> _ctx;
+};
+
+} // namespace starrocks::connector

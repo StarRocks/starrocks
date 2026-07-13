@@ -43,6 +43,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gutil/strings/substitute.h"
 #include "platform/store_path.h"
 #include "rocksdb/convenience.h"
@@ -50,9 +51,8 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/primitive/storage_define.h"
+#include "runtime/runtime_env.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_metrics.h"
 
@@ -141,7 +141,7 @@ Status KVStore::init(bool read_only) {
     cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
-    auto* tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     if (tracker != nullptr) {
         cf_descs[2].options.write_buffer_size = calc_rocksdb_write_buffer_size(tracker);
     }

@@ -409,7 +409,6 @@ public class BackupJobTest {
         Assertions.assertTrue(jobInfo.exists());
 
         BackupMeta restoreMetaInfo = null;
-        BackupJobInfo restoreJobInfo = null;
         try {
             restoreMetaInfo = BackupMeta.fromFile(jobView.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
             Assertions.assertEquals(1, restoreMetaInfo.getTables().size());

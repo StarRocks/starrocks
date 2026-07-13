@@ -20,44 +20,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
-set(EXEC_PRIMITIVE_FILES
-    data_sink.cpp
-    exec_node.cpp
-    runtime_filter/runtime_filter_descriptor.cpp
-    runtime_filter/runtime_filter_probe.cpp
-    runtime_filter/runtime_filter_probe_wait.cpp
-    runtime_filter/runtime_filter_registry.cpp
-    runtime_filter/runtime_filter_helper.cpp
-    pipeline/operator.cpp
-    pipeline/operator_factory.cpp
-    pipeline/source_operator.cpp
-    pipeline/primitives/event.cpp
-    pipeline/primitives/pipeline_metrics.cpp
-    pipeline/primitives/pipeline_observer.cpp
-    pipeline/scan/dynamic_morsel_queue.cpp
-    pipeline/scan/fixed_morsel_queue.cpp
-    pipeline/scan/morsel_queue.cpp
-    pipeline/scan/morsel_queue_factory_base.cpp
-    pipeline/scan/scan_morsel.cpp
-    pipeline/scan/split_morsel_ticket_checker.cpp
-)
-
-ADD_BE_LIB(ExecPrimitive
-    ${EXEC_PRIMITIVE_FILES}
-)
-
-target_link_libraries(ExecPrimitive PUBLIC
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
 )
@@ -67,8 +29,8 @@ ADD_BE_LIB(ExecSchemaScannerCore
 )
 
 target_link_libraries(ExecSchemaScannerCore PUBLIC
-    ExprCore
-    RuntimeCore
+    Expr
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -97,7 +59,7 @@ ADD_BE_LIB(ExecSchemaScanners
 
 target_link_libraries(ExecSchemaScanners PUBLIC
     ExecSchemaScannerCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -111,6 +73,7 @@ set(EXEC_JOIN_CORE_FILES
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
     join/join_hash_table.cpp
+    join/join_hash_map_factory.cpp
     join/join_hash_map_mapping_inst.cpp
     join/join_hash_map_linear_chained_inst.cpp
     join/join_hash_map_linear_chained_set_inst.cpp
@@ -124,9 +87,8 @@ ADD_BE_LIB(ExecJoinCore
 
 target_link_libraries(ExecJoinCore PUBLIC
     ComputeEnv
-    ExprCore
-    Serde
-    RuntimeCore
+    Expr
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore
@@ -167,7 +129,7 @@ set(PIPELINE_RUNTIME_SRCS
 
 set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
-    pipeline/fragment_executor.cpp
+    pipeline/fragment_execution_params.cpp
     pipeline/pipeline_builder_operators.cpp
     pipeline/pipeline_driver_instantiator.cpp
 )
@@ -176,6 +138,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
+    pipeline/exchange/exchange_compression_strategy.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -292,7 +255,6 @@ set(EXEC_NON_PIPELINE_FILES
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp
-    query_scan_metrics.cpp
     capture_version_node.cpp
     empty_set_node.cpp
     exec_factory.cpp
@@ -302,9 +264,7 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    olap_common.cpp
     write_combined_txn_log.cpp
-    cache_stats_scanner.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
     agg_runtime_filter_builder.cpp
@@ -323,7 +283,6 @@ set(EXEC_NON_PIPELINE_FILES
     analytor.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
-    olap_scan_prepare.cpp
     meta_scan_node.cpp
     olap_meta_scanner.cpp
     olap_meta_scan_node.cpp
@@ -343,8 +302,6 @@ set(EXEC_NON_PIPELINE_FILES
     raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    parquet_schema_builder.cpp
-    parquet_reader.cpp
     parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
@@ -352,7 +309,6 @@ set(EXEC_NON_PIPELINE_FILES
     enforce_unique_row_locator_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    json_parser.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -361,25 +317,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    iceberg/iceberg_delete_builder.cpp    
-    paimon/paimon_delete_file_builder.cpp
-    hdfs_scanner/cache_select_scanner.cpp
-    hdfs_scanner/hdfs_scanner_text.cpp
-    hdfs_scanner/hdfs_scanner_json.cpp
-    hdfs_scanner/hdfs_scanner_partition.cpp
-    hdfs_scanner/hdfs_scanner_parquet.cpp
-    hdfs_scanner/hdfs_scanner_orc.cpp
-    hdfs_scanner/hdfs_scanner_avro.cpp
-    hdfs_scanner/hdfs_scanner_context.cpp
-    hdfs_scanner/hdfs_scanner.cpp
-    hdfs_scanner/jni_scanner.cpp
-    file_scanner/avro_cpp_scanner.cpp
-    file_scanner/avro_scanner.cpp
-    file_scanner/csv_scanner.cpp
-    file_scanner/file_scanner.cpp
-    file_scanner/json_scanner.cpp
-    file_scanner/orc_scanner.cpp
-    file_scanner/parquet_scanner.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -428,10 +365,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
-    jdbc_scanner.cpp
-    jdbc/type_checker.cpp
-    jdbc/type_checker_manager.cpp
-    jdbc/type_checker_xml_loader.cpp
     connector_scan_node.cpp
 )
 
@@ -469,6 +402,24 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/variable_result_writer.cpp
 )
 
+set(EXEC_RUNTIME_COMPAT_FILES
+    lookup_stream_mgr.cpp
+    exec_env.cpp
+    pipeline/pipeline_fragment_reporter.cpp
+    runtime_compat/runtime_state_helper.cpp
+    stream_load/transaction_mgr.cpp
+    stream_load/stream_load_executor.cpp
+    batch_write/isomorphic_batch_write.cpp
+    batch_write/batch_write_mgr.cpp
+    batch_write/batch_write_util.cpp
+    batch_write/txn_state_cache.cpp
+    runtime_filter_compat/runtime_filter_merger.cpp
+    runtime_filter_compat/runtime_filter_port.cpp
+    runtime_filter_compat/runtime_filter_rpc.cpp
+    runtime_filter_compat/runtime_filter_worker_context.cpp
+    runtime_filter_compat/runtime_filter_serde.cpp
+)
+
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
 # aggregate operator implementation .cpp files to control template
 # instantiation. Do not add those implementation files separately here.
@@ -496,7 +447,6 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
 ENDIF()
 
 ADD_BE_LIB(ExecRuntime
-    runtime/query_runtime_state.cpp
     runtime/group_execution/execution_group.cpp
     runtime/group_execution/execution_group_builder.cpp
     runtime/pipeline.cpp
@@ -514,12 +464,10 @@ target_link_libraries(ExecRuntime PUBLIC
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    ExprCore
-    Serde
-    RuntimeEnv
-    RuntimeCore
+    Expr
+    Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ColumnSortCore
     ChunkCore
@@ -534,10 +482,11 @@ target_link_libraries(ExecRuntime PUBLIC
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
     ${EXEC_DATA_SINK_FILES}
+    ${EXEC_RUNTIME_COMPAT_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatCore Platform)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
+target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)

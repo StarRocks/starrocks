@@ -66,8 +66,6 @@ public class ScalarFunction extends Function {
     // isolated/shared
     @SerializedName(value = "isolated")
     private boolean isolationType = true;
-    @SerializedName(value = "inputType")
-    private String inputType;
     @SerializedName(value = "content")
     private String content;
 
@@ -105,7 +103,6 @@ public class ScalarFunction extends Function {
         prepareFnSymbol = other.prepareFnSymbol;
         closeFnSymbol = other.closeFnSymbol;
         isolationType = other.isolationType;
-        inputType = other.inputType;
         content = other.content;
     }
 
@@ -223,10 +220,6 @@ public class ScalarFunction extends Function {
         this.isolationType = isolationType;
     }
 
-    public void setInputType(String inputType) {
-        this.inputType = inputType;
-    }
-
     public void setContent(String content) {
         this.content = content;
     }
@@ -261,8 +254,8 @@ public class ScalarFunction extends Function {
         if (!Strings.isEmpty(getSymbolName())) {
             props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         }
-        if (!Strings.isEmpty(inputType)) {
-            props.put(CreateFunctionStmt.INPUT_TYPE, inputType);
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
         }
         // Default isolation is isolated (true); only emit the property when explicitly shared.
         if (!isolationType) {
@@ -284,9 +277,6 @@ public class ScalarFunction extends Function {
         }
         fn.setScalar_fn(scalarFunction);
         fn.setIsolated(isolationType);
-        if (inputType != null) {
-            fn.setInput_type(inputType);
-        }
         if (content != null) {
             fn.setContent(content);
         }

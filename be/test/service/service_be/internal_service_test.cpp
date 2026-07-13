@@ -22,16 +22,35 @@
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/data_sinks/tablet_sink_index_channel.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
+#include "platform/platform_env.h"
+#include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
 
 namespace starrocks {
 
-class InternalServiceTest : public testing::Test {};
+class InternalServiceTest : public testing::Test {
+public:
+    void SetUp() override {
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, RuntimeEnv::GetInstance()->diagnose_daemon(),
+                                                             PlatformEnv::GetInstance()->brpc_stub_cache());
+        ASSERT_OK(_load_channel_mgr->init(RuntimeEnv::GetInstance()->load_mem_tracker()));
+    }
+
+    void TearDown() override {
+        if (_load_channel_mgr != nullptr) {
+            _load_channel_mgr->close();
+        }
+    }
+
+protected:
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
+};
 
 TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     PProxyRequest request;
     PProxyResult response;
     service._get_info_impl(&request, &response, nullptr, -10);
@@ -40,7 +59,7 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
 }
 
 TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     PMVMaintenanceTaskRequest request;
     PMVMaintenanceTaskResult response;
     brpc::Controller cntl;
@@ -54,7 +73,7 @@ TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
 }
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     {
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
@@ -92,7 +111,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
 }
 
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     {
         PHttpRequest request;
         PTabletWriterAddBatchResult response;
@@ -155,7 +174,7 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
 }
 
 TEST_F(InternalServiceTest, test_load_diagnose) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     PLoadDiagnoseRequest request;
     request.set_txn_id(1);
     request.mutable_id()->set_hi(0);
@@ -178,7 +197,7 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
 
 #ifdef WITH_STARCACHE
 TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
 
     PFetchDataCacheRequest request;
     PFetchDataCacheResponse response;
@@ -235,7 +254,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
 #endif
 
 TEST_F(InternalServiceTest, test_get_load_replica_status) {
-    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     PLoadReplicaStatusRequest request;
     request.mutable_load_id()->set_hi(0);
     request.mutable_load_id()->set_lo(0);

@@ -148,7 +148,7 @@ public class ConnectorMetricsMgrTest extends StarRocksTestBase {
     public void testIcebergMergeMetrics() {
         ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
         ConnectorMetricsMgr.increaseIcebergMergeDurationMs(700L);
-        ConnectorMetricsMgr.increaseIcebergMergeRows(120L, "update");
+        ConnectorMetricsMgr.increaseIcebergMergeRows(120L, "position_delete");
         ConnectorMetricsMgr.increaseIcebergMergeBytes(8192L, "data");
         ConnectorMetricsMgr.increaseIcebergMergeFiles(4L, "data");
 
@@ -161,7 +161,7 @@ public class ConnectorMetricsMgrTest extends StarRocksTestBase {
         Assertions.assertNotNull(duration);
         Assertions.assertTrue(duration.getValue() >= 700);
 
-        LongCounterMetric rows = findCounter("iceberg_merge_rows", "row_type", "update");
+        LongCounterMetric rows = findCounter("iceberg_merge_rows", "file_type", "position_delete");
         Assertions.assertNotNull(rows);
         Assertions.assertTrue(rows.getValue() >= 120);
 

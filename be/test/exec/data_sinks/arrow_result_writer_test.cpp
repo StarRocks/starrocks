@@ -23,8 +23,8 @@
 #include "common/runtime_profile.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
+#include "exec/exec_env.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

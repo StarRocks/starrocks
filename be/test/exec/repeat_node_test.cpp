@@ -25,7 +25,7 @@
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "platform/user_function_cache.h"

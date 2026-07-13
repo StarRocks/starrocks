@@ -17,19 +17,19 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/primary_index.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

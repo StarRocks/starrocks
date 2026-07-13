@@ -60,6 +60,8 @@ public interface AnalyzeStatus {
 
     Map<String, String> getProperties();
 
+    void setProperties(Map<String, String> properties);
+
     LocalDateTime getStartTime();
 
     LocalDateTime getEndTime();

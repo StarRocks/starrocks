@@ -27,17 +27,17 @@
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/execution_group_lifecycle.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "exec/runtime/adaptive/adaptive_dop_param.h"
-#include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/execution_group_lifecycle.h"
+#include "exec_primitive/pipeline/primitives/fragment_lifecycle.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -45,7 +45,7 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/predicate_tree_params.h"
+#include "storage_primitive/predicate_tree_params.h"
 
 namespace starrocks {
 
@@ -165,10 +165,6 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
-    void init_jit_profile(bool jit_enabled);
-
-    void update_jit_profile(int64_t time_ns);
-
     void iterate_pipeline(const std::function<void(Pipeline*)>& call);
     Status iterate_pipeline(const std::function<Status(Pipeline*)>& call);
 
@@ -232,9 +228,6 @@ private:
     AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
-
-    RuntimeProfile::Counter* _jit_counter = nullptr;
-    RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
 };

@@ -22,8 +22,8 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "exec/olap_scan_node.h"
-#include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
@@ -31,9 +31,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/projection_iterator.h"
 
 namespace starrocks {
 

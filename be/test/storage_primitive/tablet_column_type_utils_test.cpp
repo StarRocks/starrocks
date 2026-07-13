@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/tablet_column_type_utils.h"
+#include "storage_primitive/tablet_column_type_utils.h"
 
 #include <cstdint>
 

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/column.h"
 #include "formats/csv/converter.h"
 
 namespace starrocks::csv {
@@ -29,12 +30,24 @@ public:
                                const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;
+    bool consumes_raw_bytes() const override { return true; }
 
 private:
     bool validate(const Slice& s) const;
     bool split_map_key_value(Slice s, std::vector<Slice>& keys, std::vector<Slice>& values) const;
+    // Hive text map (LazyMap): no braces or quotes; entries split on this nesting
+    // level's separator and each entry splits at the first occurrence of the next
+    // level's separator (top level: collection delimiter / mapkey delimiter).
+    bool read_hive_map(Column* column, const Slice& s, const Options& options) const;
     std::unique_ptr<Converter> _key_converter;
     std::unique_ptr<Converter> _value_converter;
+    // read_hive_map's scratch column: all of a map field's keys are CONVERTED into it
+    // first, so duplicate keys can be detected on the converted values (raw slices are
+    // not comparable identities under ESCAPED BY -- "\a" and "a" unescape to the same
+    // logical key). Lazily cloned from the real keys column and reused across rows;
+    // safe for the same reason as NullableConverter::_unescape_buf (one converter per
+    // column position, invoked sequentially per row, never reentrant).
+    mutable MutableColumnPtr _tmp_keys;
     char _map_delimiter{','};
     char _kv_delimiter{':'};
 };

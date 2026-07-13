@@ -19,7 +19,7 @@
 #include "base/concurrency/blocking_queue.hpp"
 #include "compute_env/result/result_queue_mgr.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace arrow {

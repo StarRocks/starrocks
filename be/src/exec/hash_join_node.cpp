@@ -42,14 +42,13 @@
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/group_execution/execution_group_builder.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {
 

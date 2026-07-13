@@ -1,0 +1,98 @@
+name: UNSTABLE CASE AI ANALYSIS
+
+# Standalone, history-aware AI analysis of unstable cases. FULLY DECOUPLED from
+# the review workflow: separate file, its own manual trigger, no job dependency.
+# It is a pure consumer of the OSS evidence base — it reads the accumulated
+# case_history under <CH>/ plus the current blacklist, and analyzes the cases
+# that have real failure history. A Claude hiccup here cannot affect any test
+# execution or the review result. See ci-tool bin/analyze_unstable_cases.py.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to analyze (section key <repo>-<branch>)'
+        required: false
+        default: 'main'
+        type: string
+      case_types:
+        description: 'Case types (CSV: FE-UT,BE-UT,SQL-Tester,TIMEOUT) or all'
+        required: false
+        default: 'all'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: AI ANALYSIS
+    runs-on: [self-hosted, ubuntu, ai]
+    env:
+      BRANCH:     ${{ inputs.branch || 'main' }}
+      CASE_TYPES: ${{ inputs.case_types || 'all' }}
+      # AI uses the `claude` CLI on the runner (already installed + authed);
+      # no ANTHROPIC_API_KEY / anthropic SDK needed.
+    steps:
+      - name: Analyze unstable cases (history-aware)
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
+
+          WORK="/tmp/unstable-ai-${GITHUB_RUN_ID}"
+          HIST="${WORK}/history"
+          mkdir -p "${WORK}" "${HIST}"
+
+          # Accumulated case_history for this branch (the <CH>/ evidence base).
+          ch_branch="${BRANCH//\//_}"
+          CH="oss://${bucket}/unstable_case_report/ci-case-history"
+          ${_oss} cp -r "${CH}/inspection/${ch_branch}/" "${HIST}/inspection/" >/dev/null 2>&1 || true
+          ${_oss} cp -r "${CH}/pr/${ch_branch}/"         "${HIST}/pr/"         >/dev/null 2>&1 || true
+          # Distinguish "legitimately empty" from "OSS unreachable": if nothing
+          # landed, the analysis has no history to reason over — say so loudly
+          # rather than emit a confident "no failure history" report.
+          if ! find "${HIST}" -name '*.jsonl' -print -quit | grep -q .; then
+            echo "::warning::No case_history downloaded from ${CH}/{inspection,pr}/${ch_branch}/ — analysis will have NO history (OSS empty or unreachable)."
+          fi
+
+          # Analyze the currently-blacklisted cases (those with failure history)
+          # for the branch — no dependency on any review run.
+          python3 bin/analyze_unstable_cases.py \
+            --from-blacklist files/unstable_case.json \
+            --repo "${{ github.repository }}" \
+            --branch "${BRANCH}" \
+            --types "${CASE_TYPES}" \
+            --history-dir "${HIST}" \
+            --out "${WORK}/out"
+
+          # Publish to OSS (timestamped). Do NOT mask a failed upload with a
+          # fake success URL — the report is this workflow's output. The report
+          # dir is also attached as a run artifact (next step, always), so it is
+          # never lost even if OSS is unavailable; only print the OSS URL when
+          # the upload actually succeeded.
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          OUT_OSS="oss://${bucket}/unstable-case-ai-analysis/${ch_branch}/${TS}/"
+          if ${_oss} cp "${WORK}/out/analysis.html" "${OUT_OSS}analysis.html" -f \
+             && ${_oss} cp "${WORK}/out/analysis.json" "${OUT_OSS}analysis.json" -f; then
+            echo "AI analysis report: ${OUT_OSS}analysis.html"
+            echo "AI analysis report (OSS): ${OUT_OSS}analysis.html" >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "::warning::OSS upload failed — report is attached as the 'ai-analysis-report' run artifact instead."
+            echo "OSS upload failed — download the 'ai-analysis-report' run artifact." >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - name: Upload report artifact (fallback, always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis-report
+          path: /tmp/unstable-ai-${{ github.run_id }}/out
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Clean ENV
+        if: always()
+        run: rm -rf /tmp/unstable-ai-${GITHUB_RUN_ID} ${{ github.workspace }}/* || true

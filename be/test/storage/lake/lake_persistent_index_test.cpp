@@ -23,10 +23,10 @@
 #include "column/fixed_length_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/runtime_type_traits.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
@@ -34,7 +34,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/primitive/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
 
@@ -400,7 +400,11 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
-        index->flush_memtable(true);
+        ASSERT_OK(index->flush_memtable(true));
+        // Wait for async flush to complete so every sstable is committed; otherwise a
+        // still-pending memtable would be dropped from the committed metadata and the
+        // compaction below would have nothing (or too few sstables) to merge.
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 

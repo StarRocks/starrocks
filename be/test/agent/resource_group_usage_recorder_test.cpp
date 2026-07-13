@@ -18,10 +18,10 @@
 #include "common/system/cpu_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -32,11 +32,10 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     // Save original workgroup_manager to restore at end (otherwise subsequent tests fail)
     auto original_wg_manager = std::move(exec_env.compute_env()->_workgroup_manager);
 
-    ComputeEnvWorkGroupOptions workgroup_options;
-    workgroup_options.max_executor_threads = num_cores;
-    workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
-    workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-    ASSERT_OK(exec_env.compute_env()->init_workgroup(workgroup_options));
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    ASSERT_OK(exec_env.compute_env()->_init_workgroup(compute_env_options, num_cores));
     auto default_wg = exec_env.workgroup_manager()->get_default_workgroup();
 
     ResourceGroupUsageRecorder recorder;
@@ -52,7 +51,7 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     ASSERT_EQ(group_usages[0].mem_pool_mem_limit_bytes, default_wg->mem_limit_bytes());
 
     // Restore original workgroup_manager
-    exec_env.compute_env()->stop_workgroup();
+    exec_env.compute_env()->_stop_workgroup();
     exec_env.compute_env()->_workgroup_manager->destroy();
     exec_env.compute_env()->_workgroup_manager = std::move(original_wg_manager);
 }

@@ -55,11 +55,11 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS

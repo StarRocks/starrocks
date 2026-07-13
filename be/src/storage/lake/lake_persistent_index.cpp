@@ -19,13 +19,13 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
 #include "platform/key_cache.h"
-#include "runtime/env/global_env.h"
-#include "serde/column_array_serde.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -40,11 +40,11 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -87,7 +87,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
     for (int i = 0; i < num_sstables; i++) {
@@ -346,7 +346,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
-            if (GlobalEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
+            if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
         }
@@ -463,17 +463,17 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 
 // Used to rebuild delete operation.
 Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                                         uint32_t rowset_id) {
+                                         uint32_t del_rssid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
-    RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, rowset_id));
+    RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, del_rssid));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
 
-Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id) {
+Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid) {
     KeyIndexSet not_founds;
     size_t num_found;
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), del_rssid));
     KeyIndexSet& key_indexes = not_founds;
     RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
@@ -914,7 +914,7 @@ static bool should_parallel_rebuild_prefetch(int num_files) {
     if (!config::enable_pk_index_parallel_execution || num_files <= 1) {
         return false;
     }
-    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+    auto* update_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();
     return update_tracker != nullptr &&
            !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_rebuild_mem_ratio);
 }
@@ -974,23 +974,38 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     };
 
     // Phase-1 work (parallel-safe): read + decode the del file, extract keys, and build the skip
-    // filter. The index get() -- the ONLY SST-reading step here -- is needed *only* for del files that
-    // did NOT originate from this rowset; for origin del files the filter is a no-op (all false ->
-    // every key erased), so we skip the get() entirely and avoid its cold-start SST reads. This is the
-    // dominant cold-rebuild win. replay_erase (Phase 2) is a pure memtable write.
+    // filter. A delete's rssid is `origin_rowset_id + op_offset`; the filter drops keys whose current
+    // index entry is NEWER than the delete (rss_rowid > that), i.e. keys upserted by a later segment.
+    // This is what preserves the in-transaction upsert/delete order during rebuild: the segment replay
+    // (call order) overwrites by call order, so without this filter a delete applied after a later
+    // re-upsert would wrongly erase it.
+    //
+    // The filter needs an index get() (the ONLY SST-reading step here). It is a no-op -- and is skipped
+    // -- when nothing can be newer than the delete: an origin del file that follows the last segment
+    // (op_offset == max segment id) erases every key of this rowset, so we avoid its cold-start SST
+    // reads. This preserves the dominant cold-rebuild win for the common (non-interleaved) case.
+    // replay_erase (Phase 2) is a pure memtable write.
     auto load_one = [&](int del_idx, DecodedDel* out) -> Status {
         ASSIGN_OR_RETURN(out->pkc, read_one(del_idx));
         RETURN_IF_ERROR(extract_keys(out->pkc, &out->keys));
         out->filter.assign(out->keys.size(), false);
         const auto& del = rowset->metadata().del_files(del_idx);
-        if (rowset->id() != del.origin_rowset_id()) {
-            // Non-origin del file: drop deletes that are too old for the current index entry.
-            // We can't insert delete operation to index directly, because some delete operation is
-            // older than current item, and we need to igore these delete operations.
+        const bool is_origin = (rowset->id() == del.origin_rowset_id());
+        // Fall back to the max segment id when a delete has no recorded op_offset (older metadata):
+        // it then follows the last segment, so the filter erases everything (the legacy behavior).
+        // This must cover non-origin (compaction-inherited) dels too: otherwise del.op_offset() reads a
+        // defaulted 0, under-setting too_old below and wrongly skipping -- resurrecting -- rows on
+        // rebuild. Matches resolve_del_op_offset() and erase_one().
+        const uint32_t op_offset = !del.has_op_offset() ? get_max_segment_idx(rowset->metadata()) : del.op_offset();
+        // Skip the get()-based filter only when the delete follows the last segment of its own rowset,
+        // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
+        const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
+        if (need_filter) {
             std::vector<IndexValue> found_values(out->keys.size(), IndexValue(NullIndexValue));
             RETURN_IF_ERROR(get(out->keys.size(), out->keys.data(), found_values.data()));
-            // Use `rowset_id + op_offset` as delete file's rssid; deletes older than that are stale.
-            const uint32_t too_old = del.origin_rowset_id() + del.op_offset();
+            // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
+            // newer (upserted by a later segment, or a newer rowset) are skipped.
+            const uint32_t too_old = del.origin_rowset_id() + op_offset;
             for (size_t i = 0; i < out->keys.size(); i++) {
                 if (found_values[i] != IndexValue(NullIndexValue) && found_values[i].get_rssid() > too_old) {
                     out->filter[i] = true;
@@ -1000,12 +1015,20 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return Status::OK();
     };
 
-    // Phase-2 work. Order-dependent memtable mutation; callers invoke sequentially in del_idx order.
-    // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
-    // so we use max segment id as `op_offset`.
-    // TODO : support real order of mix upsert and delete in one transaction.
-    auto erase_one = [&](const DecodedDel& d) -> Status {
-        const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
+    // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
+    // A delete's rssid is `rowset_id + op_offset` (op_offset = the segment index it follows). The LSM
+    // resolves upsert vs delete for the same key by rss_rowid, so applying the right per-del rssid
+    // preserves the in-transaction order without needing to physically interleave with the segment
+    // replay. For inherited (compaction) del files (origin_rowset_id != this rowset) keep the legacy
+    // max-segment rssid, matching prior behavior.
+    auto erase_one = [&](int del_idx, const DecodedDel& d) -> Status {
+        const auto& del = rowset->metadata().del_files(del_idx);
+        const uint32_t max_seg = get_max_segment_idx(rowset->metadata());
+        // Origin del files use their own op_offset (falling back to max when unrecorded -> after all
+        // segments, the legacy behavior); inherited (compaction) del files keep the max-segment rssid.
+        const uint32_t del_rebuild_rssid = (del.origin_rowset_id() == rowset->id())
+                                                   ? rowset->id() + (del.has_op_offset() ? del.op_offset() : max_seg)
+                                                   : rowset->id() + max_seg;
         return replay_erase(d.keys.size(), d.keys.data(), d.filter, rowset_version, del_rebuild_rssid);
     };
 
@@ -1021,7 +1044,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
             DecodedDel d;
             RETURN_IF_ERROR(load_one(del_idx, &d));
-            RETURN_IF_ERROR(erase_one(d));
+            RETURN_IF_ERROR(erase_one(del_idx, d));
         }
         return Status::OK();
     }
@@ -1054,7 +1077,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         }
     };
 
-    auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
@@ -1071,7 +1094,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
 
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
-        RETURN_IF_ERROR(erase_one(decoded[del_idx]));
+        RETURN_IF_ERROR(erase_one(del_idx, decoded[del_idx]));
     }
     return Status::OK();
 }
@@ -1294,7 +1317,10 @@ StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& ro
     }
     RETURN_IF_ERROR(res.status());
     out.iters = std::move(res).value();
-    CHECK(out.iters.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    // Surface a wrong-sized iterator vector as a graceful error rather than aborting the BE: this is
+    // a recovery path (experimental_lake_ignore_lost_segment), and the sibling checks in
+    // LakePrimaryIndex / the local persistent-index loader already use RETURN_ERROR_IF_FALSE.
+    RETURN_ERROR_IF_FALSE(out.iters.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     // One flat scan unit per non-null, non-skipped segment; the unit borrows the iterator owned by
     // out.iters.
@@ -1525,7 +1551,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // Phase B (PARALLEL): one task per (rowset, segment) unit on pk_index_execution_thread_pool via
         // ONE CONCURRENT token; each worker buffers its decoded batches into its own result slot. This
         // is the only parallel layer; Phase A's get_each_segment_iterator stays serial (own pool).
-        auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
         for (const auto& unit : scan_units) {
             const auto* unit_ptr = &unit;

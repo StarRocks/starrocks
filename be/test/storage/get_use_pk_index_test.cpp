@@ -30,8 +30,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/kv_store.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -43,6 +41,8 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 

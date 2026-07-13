@@ -23,14 +23,14 @@
 #include "platform/platform_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/local_tablet_reader.h"
-#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

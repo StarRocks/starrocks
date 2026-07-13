@@ -111,6 +111,10 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+message CdcMetadataPB {
+    // no implementation, only used for placeholder in TabletMetadataPB
+}
+
 // An Index Delta Group (IDG) entry describes a standalone .idx file
 // produced by an ADD INDEX schema change. The file stores index blobs
 // for one or more (column, index_type) pairs for a single segment,
@@ -218,6 +222,17 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
+    // Per-segment unique id embedded in this segment's vector index (.vi) filenames
+    // ("<segment_base>_<segment_vector_index_uid>_<index_id>.vi") so that bundle-file segments
+    // sharing one physical file across tablets still get distinct .vi files. Its VALUE is the id of
+    // the tablet that WROTE the segment, used purely as a unique key (do not treat it as a live
+    // tablet reference): it is RECORDED here, instead of using the reading tablet's id, so the name
+    // is stable and reader-agnostic -- carried verbatim by CopyFrom across tablet SPLIT so every
+    // child sharing this segment resolves the same .vi. Always stamped by the writer in the same
+    // step that records vector_index_ids, so a segment carrying vector_index_ids always carries this
+    // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
+    // DCHECK its presence -- there is no fall back to the reading tablet's id.
+    optional int64 segment_vector_index_uid = 13;
 }
 
 message RowsetMetadataPB {
@@ -321,6 +336,10 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
+
+    // These are just placeholders
+    repeated int64 metadata_ancestors = 50;
+    optional CdcMetadataPB cdc_metadata = 51;
 }
 
 message MetadataUpdateInfoPB {
@@ -371,6 +390,15 @@ message TxnLogPB {
         repeated FileMetaPB dels_meta = 19;
         // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
         repeated FileMetaPB rewrite_segments_meta = 20;
+        // Parallel to `dels_meta` (index by del_id): the in-rowset segment index each delete
+        // logically follows, so its rssid is `rowset_id + op_offset`. Used to preserve the
+        // in-transaction upsert/delete order. A UINT32_MAX entry means "not recorded" (e.g.
+        // spill / concurrent flush); readers then fall back to the max segment index (legacy
+        // "all deletes after all upserts"). Empty (size != dels_meta_size) means no del carries
+        // an offset -- the downgrade-safe default until the cluster is fully upgraded
+        // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
+        // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
+        repeated uint32 del_op_offsets = 21;
     }
 
     message OpCompaction {
@@ -552,6 +580,10 @@ message TxnInfoPB {
     // to unblock a stuck-publish transaction. Only meaningful for load/compaction
     // txn types in the current implementation; alter is not supported yet.
     optional bool no_op_publish = 12;
+    // Watershed version W for a TXN_SHADOW_REWRITE flip publish: the shadow tablet's source op_write is
+    // anchored as op_schema_change@W. W == 1 means the base partition was empty at the watershed
+    // (PARTITION_INIT_VERSION == 1), so there is no source op_write and BE synthesizes an empty one.
+    optional int64 shadow_rewrite_alter_version = 13;
 }
 
 message SplittingTabletInfoPB {
@@ -585,6 +617,9 @@ message ReshardingTabletInfoPB {
     optional SplittingTabletInfoPB splitting_tablet_info = 1;
     optional MergingTabletInfoPB merging_tablet_info = 2;
     optional IdenticalTabletInfoPB identical_tablet_info = 3;
+    // Ordinal 4 was shadow_rewrite_tablet_info (removed; shadow rewrite is now keyed on
+    // TxnInfoPB.txn_type == TXN_SHADOW_REWRITE). Do NOT reuse ordinal 4 in this message. The proto2
+    // `reserved 4;` keyword is intentionally NOT used: the FE jprotobuf generator's parser rejects it.
 }
 
 // Placeholder for external cluster snapshot feature.

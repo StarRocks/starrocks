@@ -40,6 +40,7 @@ import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadata;
@@ -52,6 +53,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
+import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.PlanMode;
@@ -151,6 +153,7 @@ import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
@@ -278,31 +281,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             LOG.info("IcebergMetadata will use direct commit (no queue) for catalog {}", catalogName);
         }
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry, commitQueueManager);
     }
 
     @Override
@@ -519,6 +497,51 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Use caseSensitive=false to be consistent with StarRocks expression conversion
         boolean caseSensitive = false;
 
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts>) cannot be soundly expressed as an
+        // Iceberg (string-domain) filter, so they are split out and evaluated StarRocks-side per partition in
+        // executeMetadataDelete. Metadata (whole-file) delete stays sound only when every candidate file is
+        // entirely matched or entirely unmatched by the whole predicate.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        boolean droppedExists = residual.pushable.size() + residual.residual.size() < conjuncts.size();
+        if (droppedExists) {
+            // A cast-on-string conjunct references a non-partition column (or a mixed OR): a file may contain
+            // both matching and non-matching rows, so it cannot be whole-file deleted -> fall back to row-level.
+            return false;
+        }
+        if (residual.hasResidual()) {
+            // Partition values must be readable (no partition-transform evolution) to evaluate the residual, and
+            // the pushable part must also be partition level so each file is wholly matched/unmatched; otherwise
+            // fall back to row-level delete.
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                return false;
+            }
+            if (!residual.pushable.isEmpty()) {
+                // Strict conversion: a non-cast conjunct that cannot be converted/bound must make metadata delete
+                // ineligible. Non-strict convert would silently skip it and still return alwaysTrue, so
+                // selectsPartitions could wrongly pass and the skipped conjunct would be ignored at execution ->
+                // whole-file over-delete. On null (some pushable conjunct is unconvertible) fall back to row-level.
+                Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                        new ScalarOperatorToIcebergExpr.IcebergContext(nativeTable.schema().asStruct()));
+                if (pushableExpr == null || !ExpressionUtil.selectsPartitions(pushableExpr, nativeTable, caseSensitive)) {
+                    return false;
+                }
+            }
+            // The residual is evaluated against each partition value at execution time. A non-deterministic
+            // function (rand(), uuid(), ...) only materializes per row at execution and never folds to a constant,
+            // so executeMetadataDelete could evaluate nothing and silently delete nothing. Such predicates must be
+            // evaluated per row -> fall back to row-level delete.
+            for (ScalarOperator conjunct : residual.residual) {
+                if (Utils.hasNonDeterministicFunc(conjunct)) {
+                    return false;
+                }
+            }
+            // Whole predicate is partition level and deterministic; the matching partitions are deleted
+            // file-by-file in executeMetadataDelete after StarRocks-side residual evaluation.
+            return true;
+        }
+
         // Convert ScalarOperator to Iceberg Expression
         Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTable.schema());
         if (deleteExpr == null) {
@@ -587,26 +610,85 @@ public class IcebergMetadata implements ConnectorMetadata {
         long startMs = System.currentTimeMillis();
         String deleteType = "metadata";
 
-        // Convert ScalarOperator to Iceberg Expression
-        Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
-        if (deleteExpr == null) {
-            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    "Failed to convert predicate to Iceberg expression", deleteType);
-            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    System.currentTimeMillis() - startMs, deleteType);
-            throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
-        }
+        // Cast-on-string-partition conjuncts cannot be expressed as a sound Iceberg filter; evaluate them
+        // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
+        // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
 
-        DeleteFiles deleteFiles = nativeTbl.newDelete()
-                .deleteFromRowFilter(deleteExpr);
+        DeleteFiles deleteFiles = nativeTbl.newDelete();
+        String deleteDesc;
+        if (residual.hasResidual()) {
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                // Defensive: canDeleteUsingMetadata should have returned false; never silently mis-delete.
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Cannot metadata-delete cast-on-string-partition predicate under partition evolution", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete a cast-on-string-partition predicate on " +
+                        "partition-transform-evolved table %s.%s", dbName, tableName);
+            }
+            // Strict conversion, consistent with canDeleteUsingMetadata: an unconvertible pushable conjunct must
+            // not be silently dropped (that would ignore it and over-delete). canDeleteUsingMetadata already
+            // guarantees non-null here; guard defensively.
+            Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                    new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct()));
+            if (pushableExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Unconvertible pushable predicate for metadata delete", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete on %s.%s: pushable predicate is not " +
+                        "convertible to an Iceberg expression", dbName, tableName);
+            }
+            int matchedFiles = 0;
+            try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
+                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    if (PartitionCastPredicatePruner.partitionDefinitelyMatches(residual.residual,
+                            icebergPartitionValues(task, icebergTable, false))) {
+                        deleteFiles.deleteFile(task.file());
+                        matchedFiles++;
+                    }
+                }
+            } catch (IOException e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to plan files for metadata delete on %s.%s: %s",
+                        dbName, tableName, e.getMessage());
+            }
+            if (matchedFiles == 0) {
+                // No partition matched the residual -> nothing to delete; do not commit an empty snapshot.
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                LOG.info("Metadata delete on {}.{} matched no partitions; nothing deleted", dbName, tableName);
+                return;
+            }
+            deleteDesc = "cast-on-string-partition residual, matchedFiles=" + matchedFiles;
+        } else {
+            // Convert ScalarOperator to Iceberg Expression
+            Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
+            if (deleteExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Failed to convert predicate to Iceberg expression", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
+            }
+            deleteFiles.deleteFromRowFilter(deleteExpr);
+            deleteDesc = deleteExpr.toString();
+        }
 
         // Set engine info and user for audit
         updateCommitInfo(deleteFiles, context);
 
         try {
             deleteFiles.commit();
-            LOG.info("Successfully executed metadata delete on {}.{}, delete expression: {}",
-                    dbName, tableName, deleteExpr);
+            LOG.info("Successfully executed metadata delete on {}.{}, delete: {}",
+                    dbName, tableName, deleteDesc);
 
             // Get deleted rows and bytes from snapshot summary
             Snapshot newSnapshot = nativeTbl.currentSnapshot();
@@ -1134,15 +1216,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         GetRemoteFilesParams params = key.getParams();
         boolean enableCollectColumnStatistics = params.isEnableColumnStats();
 
-        String dbName = icebergTable.getCatalogDBName();
-        String tableName = icebergTable.getCatalogTableName();
-
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Types.StructType schema = nativeTbl.schema().asStruct();
 
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
+        // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
+        // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
+        // here against each file's partition values (consistent with the backend filter).
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                scalarOperators, identityStringPartitionColumns(icebergTable));
+        boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1150,6 +1235,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                              connectContext, enableCollectColumnStatistics, params.getFieldNames())) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
+                if (residual.hasResidual() && !PartitionCastPredicatePruner.partitionMayMatch(residual.residual,
+                        icebergPartitionValues(scanTask, icebergTable, existPartitionTransformedEvolution))) {
+                    continue;
+                }
 
                 FileScanTask icebergSplitScanTask = scanTask;
                 if (enableCollectColumnStatistics) {
@@ -1204,10 +1293,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
+            // See collectTableStatisticsAndCacheIcebergSplit: keep cast-on-string-partition conjuncts out of the
+            // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
+            PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                    scalarOperators, identityStringPartitionColumns(icebergTable));
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                     icebergTable.getNativeTable().schema().asStruct());
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
+            if (residual.hasResidual()) {
+                baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
+                        icebergTable.hasPartitionTransformedEvolution());
+            }
         }
 
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
@@ -1264,6 +1361,101 @@ public class IcebergMetadata implements ConnectorMetadata {
                 }
             }
         };
+    }
+
+    // Wraps a streaming source, dropping files whose partition value cannot satisfy the residual conjuncts
+    // (cast-on-string-partition-column predicates that Iceberg cannot prune soundly).
+    private RemoteFileInfoSource filterByPartitionResidual(RemoteFileInfoSource base,
+                                                           List<ScalarOperator> residual,
+                                                           IcebergTable table,
+                                                           boolean existPartitionTransformedEvolution) {
+        return new RemoteFileInfoSource() {
+            private RemoteFileInfo next;
+
+            private void advance() {
+                while (next == null && base.hasMoreOutput()) {
+                    RemoteFileInfo candidate = base.getOutput();
+                    if (candidate instanceof IcebergRemoteFileInfo) {
+                        FileScanTask task = ((IcebergRemoteFileInfo) candidate).getFileScanTask();
+                        if (!PartitionCastPredicatePruner.partitionMayMatch(
+                                residual, icebergPartitionValues(task, table, existPartitionTransformedEvolution))) {
+                            continue;
+                        }
+                    }
+                    next = candidate;
+                }
+            }
+
+            @Override
+            public RemoteFileInfo getOutput() {
+                advance();
+                RemoteFileInfo result = next;
+                next = null;
+                return result;
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                advance();
+                return next != null;
+            }
+
+            @Override
+            public void close() throws Exception {
+                base.close();
+            }
+        };
+    }
+
+    // Identity partition columns of string type (lower-cased names). Only these can be residual-pruned here:
+    // their partition value round-trips through the same string cast the predicate carries.
+    private static Set<String> identityStringPartitionColumns(IcebergTable table) {
+        Set<String> names = new HashSet<>();
+        org.apache.iceberg.Table nativeTable = table.getNativeTable();
+        for (PartitionField field : nativeTable.spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(nativeTable.schema(), field);
+            Column column = table.getColumn(name);
+            if (column != null && column.getType().isStringType()) {
+                names.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        return names;
+    }
+
+    // Raw string partition values for the file, keyed by (identity) partition column name. Returns an empty map
+    // under partition-transform evolution, where getIcebergPartitionValues drops non-identity fields and would
+    // misalign the value-to-column mapping (residual pruning then conservatively keeps every file).
+    private static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
+                                                              boolean existPartitionTransformedEvolution) {
+        if (existPartitionTransformedEvolution) {
+            return Collections.emptyMap();
+        }
+        PartitionSpec spec = table.getNativeTable().spec();
+        org.apache.iceberg.PartitionData partitionData =
+                (org.apache.iceberg.PartitionData) task.file().partition();
+        List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
+        Map<String, String> result = new HashMap<>();
+        int index = 0;
+        for (PartitionField field : spec.fields()) {
+            if (field.transform().isVoid()) {
+                continue;
+            }
+            if (index >= values.size()) {
+                break;
+            }
+            String value = values.get(index++);
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(table.getNativeTable().schema(), field);
+            if (value != null) {
+                result.put(name, value);
+            }
+        }
+        return result;
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks, GetRemoteFilesParams params) {
@@ -1358,7 +1550,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Scan tableScan = scan;
-        return new CloseableIterator<>() {
+        return new SynchronizedCloseableIterator<>(new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -1407,7 +1599,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             public void close() {
                 closePlannedTaskIterator();
             }
-        };
+        });
     }
 
     private boolean hasPositionDeletes(FileScanTask task) {
@@ -1831,22 +2023,93 @@ public class IcebergMetadata implements ConnectorMetadata {
             return 1;
         }
 
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts> against a 'yyyy-MM-dd' partition)
+        // are pruned unsoundly by Iceberg's string-domain manifest evaluator, so keep them out of the pushed
+        // predicate. They are instead evaluated below against each manifest's partition summary in the DATETIME
+        // domain, so a manifest whose partition range definitely cannot satisfy them is still pruned. A kept
+        // manifest is counted in full (manifest-level granularity), so the result stays a safe over-estimate.
+        Set<String> stringPartitionColumns = identityStringPartitionColumns(icebergTable);
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                Utils.extractConjuncts(predicate), stringPartitionColumns);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
 
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTbl.io());
         List<ManifestFile> matchingManifests = filterManifests(dataManifests, nativeTbl, icebergPredicate);
 
         long rowCount = 0;
         for (ManifestFile manifest : matchingManifests) {
+            if (residual.hasResidual() && !PartitionCastPredicatePruner.rangeMayMatch(
+                    residual.residual, manifestPartitionDateRanges(manifest, icebergTable, stringPartitionColumns))) {
+                continue;
+            }
             if (!canCountRowsFromManifest(manifest)) {
                 return -1;
             }
             rowCount += orZeroRows(manifest.addedRowsCount()) + orZeroRows(manifest.existingRowsCount());
         }
         return Math.max(rowCount, 1);
+    }
+
+    // Per identity string partition column, the manifest's [min, max] partition value parsed into the DATETIME
+    // domain, for coarse residual pruning. A column is omitted (treated as "unknown range" -> keep) when its
+    // bounds are absent or cannot be parsed as a temporal value, so pruning never drops a possibly-matching
+    // manifest.
+    private Map<String, LocalDateTime[]> manifestPartitionDateRanges(ManifestFile manifest, IcebergTable table,
+                                                                     Set<String> stringPartitionColumns) {
+        Map<String, LocalDateTime[]> ranges = new HashMap<>();
+        List<ManifestFile.PartitionFieldSummary> summaries = manifest.partitions();
+        if (summaries == null || summaries.isEmpty()) {
+            return ranges;
+        }
+        org.apache.iceberg.Table nativeTable = table.getNativeTable();
+        PartitionSpec spec = nativeTable.specs().get(manifest.partitionSpecId());
+        if (spec == null) {
+            return ranges;
+        }
+        List<PartitionField> fields = spec.fields();
+        List<org.apache.iceberg.types.Types.NestedField> partitionTypeFields = spec.partitionType().fields();
+        for (int i = 0; i < fields.size() && i < summaries.size() && i < partitionTypeFields.size(); i++) {
+            PartitionField field = fields.get(i);
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(nativeTable.schema(), field);
+            // findColumnName returns null when the field's source id is not in the current schema
+            // (e.g. partition evolution / dropped source column). Skip it -> manifest conservatively kept.
+            if (name == null) {
+                continue;
+            }
+            String nameLower = name.toLowerCase(Locale.ROOT);
+            if (!stringPartitionColumns.contains(nameLower)) {
+                continue;
+            }
+            ManifestFile.PartitionFieldSummary summary = summaries.get(i);
+            if (summary.lowerBound() == null || summary.upperBound() == null) {
+                continue;
+            }
+            try {
+                org.apache.iceberg.types.Type type = partitionTypeFields.get(i).type();
+                String lower = Conversions.fromByteBuffer(type, summary.lowerBound()).toString();
+                String upper = Conversions.fromByteBuffer(type, summary.upperBound()).toString();
+                LocalDateTime lo = DateUtils.parseStrictDateTime(lower);
+                LocalDateTime hi = DateUtils.parseStrictDateTime(upper);
+                // Iceberg computes the summary min/max in the string domain. For values that parse as
+                // dates but are not lexicographically ordered as dates (e.g. non-zero-padded fields),
+                // the parsed bounds can come out inverted (lo > hi). Skip such a column so the manifest
+                // is conservatively kept rather than pruned on an inverted range.
+                if (lo.isAfter(hi)) {
+                    LOG.debug("skip inverted manifest partition range for column {}: [{}, {}]", name, lower, upper);
+                    continue;
+                }
+                ranges.put(nameLower, new LocalDateTime[] {lo, hi});
+            } catch (Exception e) {
+                // Undecodable / non-temporal bounds -> leave the column out so the manifest is conservatively kept.
+                LOG.debug("skip manifest partition range for column {}", name, e);
+            }
+        }
+        return ranges;
     }
 
     private static long orZeroRows(Long value) {
@@ -2352,16 +2615,16 @@ public class IcebergMetadata implements ConnectorMetadata {
 
                 Snapshot newSnapshot = nativeTbl.currentSnapshot();
                 if (newSnapshot != null && newSnapshot.summary() != null) {
-                    // matched = target rows hit by UPDATE/DELETE (position deletes);
-                    // written = data rows written (UPDATE rewrites + INSERTs).
-                    long matchedRows = Long.parseLong(newSnapshot.summary()
+                    // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
+                    // data = data rows written (UPDATE rewrites + INSERTs).
+                    long positionDeleteRows = Long.parseLong(newSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                    long writtenRows = Long.parseLong(newSnapshot.summary()
+                    long dataRows = Long.parseLong(newSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(matchedRows,
-                            ConnectorMetricsMgr.MERGE_ROW_TYPE_MATCHED);
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(writtenRows,
-                            ConnectorMetricsMgr.MERGE_ROW_TYPE_WRITTEN);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(positionDeleteRows,
+                            ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(dataRows,
+                            ConnectorMetricsMgr.FILE_TYPE_DATA);
                 }
 
                 ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,

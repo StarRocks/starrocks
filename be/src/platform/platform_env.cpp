@@ -22,6 +22,8 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "platform/broker_mgr.h"
+#include "platform/small_file_mgr.h"
 #include "platform/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -54,6 +56,20 @@ Status PlatformEnv::init(PlatformEnvOptions options) {
     _broker_client_cache->init_metrics(options.metrics, "broker");
     ThriftRpcHelper::setup(_backend_client_cache.get(), _frontend_client_cache.get(), _broker_client_cache.get());
 
+    _broker_mgr = std::make_unique<BrokerMgr>();
+    status = _broker_mgr->init(options.metrics);
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
+
+    _small_file_mgr = std::make_unique<SmallFileMgr>(config::small_file_dir, options.metrics);
+    status = _small_file_mgr->init();
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
+
     HttpBrpcStubCache::initialize(_rpc_timer.get());
 #ifndef __APPLE__
     LakeServiceBrpcStubCache::initialize(_rpc_timer.get());
@@ -63,6 +79,8 @@ Status PlatformEnv::init(PlatformEnvOptions options) {
 }
 
 void PlatformEnv::destroy() {
+    _small_file_mgr.reset();
+    _broker_mgr.reset();
     ThriftRpcHelper::clear();
 #ifndef __APPLE__
     if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
