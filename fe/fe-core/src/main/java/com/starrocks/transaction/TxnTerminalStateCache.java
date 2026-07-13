@@ -141,6 +141,11 @@ class TxnTerminalStateCache {
         if (r == null) {
             return false;
         }
+        if (Config.transaction_terminal_state_cache_num <= 0) {
+            // Cache disabled at runtime: reads must return nothing, even for records admitted while
+            // it was enabled (otherwise "set to 0 to disable" would only stop writes, not reads).
+            return false;
+        }
         if (r.finishTime <= 0) {
             // Finish time unknown: fall back to the LRU capacity bound only.
             return true;
