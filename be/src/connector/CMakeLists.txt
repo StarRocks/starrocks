@@ -118,7 +118,6 @@ target_link_libraries(ConnectorIceberg PRIVATE
 
 ADD_BE_LIB(Connector
         connector_registry.cpp
-        changes_connector.cpp
 )
 
 target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache Storage)
@@ -140,6 +139,26 @@ target_link_libraries(ConnectorLake PUBLIC
         Platform
         FileSystem
         IO
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+ADD_BE_LIB(ConnectorChanges
+        changes/changes_connector.cpp
+)
+
+target_link_libraries(ConnectorChanges PUBLIC
+        ConnectorPrimitive
+        Storage
+        ComputeEnv
+        StoragePrimitive
+        Expr
+        Runtime
         ChunkCore
         ColumnCore
         Types

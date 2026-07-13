@@ -31,7 +31,6 @@
 #include "common/runtime_profile.h"
 #include "compute_env/query/scan_conjuncts_manager.h"
 #include "connector_primitive/connector.h"
-#include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_pool.h"
@@ -217,13 +216,12 @@ class ChangesDataSourceProvider final : public DataSourceProvider {
 public:
     ~ChangesDataSourceProvider() override = default;
     friend class ChangesDataSource;
-    ChangesDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    explicit ChangesDataSourceProvider(const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
-    ConnectorScanNode* _scan_node;
     const TChangesScanNode _changes_scan_node;
 };
 

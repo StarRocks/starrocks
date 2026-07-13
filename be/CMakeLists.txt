@@ -883,6 +883,7 @@ endif()
 set (DIRECT_CONNECTOR_LINK_LIBS
     Connector
     ConnectorLake
+    ConnectorChanges
     ConnectorFile
     ConnectorHive
     ConnectorIceberg

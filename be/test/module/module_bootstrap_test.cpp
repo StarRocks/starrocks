@@ -28,6 +28,9 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsConnectorsIdempotent
     const auto* cache_stats = registry->get(Connector::CACHE_STATS);
     ASSERT_NE(nullptr, cache_stats);
     EXPECT_EQ(ConnectorType::CACHE_STATS, cache_stats->connector_type());
+    const auto* changes = registry->get(Connector::CHANGES);
+    ASSERT_NE(nullptr, changes);
+    EXPECT_EQ(ConnectorType::CHANGES, changes->connector_type());
     const auto* hive = registry->get(Connector::HIVE);
     ASSERT_NE(nullptr, hive);
     EXPECT_EQ(ConnectorType::HIVE, hive->connector_type());
@@ -46,6 +49,7 @@ TEST(ModuleBootstrapTest, BootstrapBuiltinConnectorsInstallsConnectorsIdempotent
     status = bootstrap_builtin_connectors();
     ASSERT_TRUE(status.ok()) << status;
     EXPECT_EQ(cache_stats, registry->get(Connector::CACHE_STATS));
+    EXPECT_EQ(changes, registry->get(Connector::CHANGES));
     EXPECT_EQ(hive, registry->get(Connector::HIVE));
     EXPECT_EQ(file, registry->get(Connector::FILE));
     EXPECT_EQ(lake, registry->get(Connector::LAKE));

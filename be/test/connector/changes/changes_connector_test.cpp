@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/changes_connector.h"
+#include "connector/changes/changes_connector.h"
 
 #include <gtest/gtest.h>
 
@@ -34,7 +34,11 @@
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/pipeline/fragment_context.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
+#include "common/system/cpu_info.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -42,8 +46,10 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/casts.h"
+#include "platform/store_path.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -53,7 +59,6 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/test_util.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
@@ -74,28 +79,63 @@ constexpr const char* kRowVersionColumnName = "__ROW_VERSION__";
 class ChangesConnectorTest : public ::testing::Test {
 public:
     ChangesConnectorTest()
-            : _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
-              _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)) {}
+            : _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
+              _update_mem_tracker(-1, "changes_connector_test") {}
+
+    static void SetUpTestSuite() {
+        ASSERT_TRUE(config::init(nullptr));
+        CpuInfo::init();
+    }
 
     void SetUp() override {
+        _old_compact_threads = config::compact_threads;
+        if (config::compact_threads <= 0) {
+            config::compact_threads = 1;
+        }
+
+        CHECK_OK(_store_path_registry.init({StorePath(kRootLocation)}));
+        StorageEnvOptions storage_env_options;
+        storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+        storage_env_options.store_path_registry = &_store_path_registry;
+        storage_env_options.update_mem_tracker = &_update_mem_tracker;
+        storage_env_options.lake_metadata_cache_limit = 1024 * 1024;
+        CHECK_OK(StorageEnv::GetInstance()->init(storage_env_options));
+
+        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        CHECK(_tablet_mgr != nullptr);
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         (void)FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
-        _runtime_state = lake::create_runtime_state();
-        _fragment_ctx = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
-        _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
-        _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
+
+        reset_runtime_state();
     }
 
     void TearDown() override {
-        (void)fs::remove_all(kRootLocation);
         if (_backup_location_provider != nullptr) {
             (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
         }
+        _runtime_state.reset();
+        StorageEnv::GetInstance()->stop();
+        StorageEnv::GetInstance()->stop_lake_tablet_manager();
+        StorageEnv::GetInstance()->destroy();
+        config::compact_threads = _old_compact_threads;
+        (void)fs::remove_all(kRootLocation);
     }
 
 protected:
+    void reset_runtime_state(const TQueryOptions& query_options = TQueryOptions()) {
+        TUniqueId fragment_id;
+        TQueryGlobals query_globals;
+        _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                        static_cast<const QueryExecutionServices*>(nullptr), nullptr);
+        auto* fragment_dict_state = _runtime_state->obj_pool()->add(new FragmentDictState());
+        _runtime_state->set_fragment_dict_state(fragment_dict_state);
+        TUniqueId query_id;
+        _runtime_state->init_mem_trackers(query_id);
+        _runtime_state->set_fragment_runtime_state(&_fragment_runtime_state);
+    }
+
     // -------------------------------------------------------------------
     // TupleDescriptor builder
     // -------------------------------------------------------------------
@@ -246,7 +286,7 @@ protected:
     }
 
     std::unique_ptr<ChangesDataSourceProvider> make_provider(TTupleId tuple_id, int64_t schema_id) {
-        return std::make_unique<ChangesDataSourceProvider>(/*scan_node=*/nullptr, make_plan_node(tuple_id, schema_id));
+        return std::make_unique<ChangesDataSourceProvider>(make_plan_node(tuple_id, schema_id));
     }
 
     // -------------------------------------------------------------------
@@ -848,7 +888,10 @@ protected:
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
     std::shared_ptr<lake::LocationProvider> _backup_location_provider;
     std::shared_ptr<RuntimeState> _runtime_state;
-    pipeline::FragmentContext* _fragment_ctx = nullptr;
+    pipeline::FragmentRuntimeState _fragment_runtime_state;
+    StorePathRegistry _store_path_registry;
+    MemTracker _update_mem_tracker;
+    int32_t _old_compact_threads = 0;
 };
 
 } // namespace
@@ -3002,10 +3045,7 @@ TEST_F(ChangesConnectorTest, test_pk_predicate_pushdown_filters_and_reports_stat
 TEST_F(ChangesConnectorTest, test_pk_pushdown_with_join_runtime_filter_enabled) {
     TQueryOptions query_options;
     query_options.__set_enable_join_runtime_filter_pushdown(true);
-    _runtime_state = lake::create_runtime_state(query_options);
-    _fragment_ctx = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
-    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
-    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
+    reset_runtime_state(query_options);
     ASSERT_TRUE(_runtime_state->enable_join_runtime_filter_pushdown());
 
     _keys_type = PRIMARY_KEYS;

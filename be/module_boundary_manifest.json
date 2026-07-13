@@ -1004,6 +1004,38 @@
       "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectorchanges",
+      "doc_label": "ConnectorChanges",
+      "summary": "CHANGES connector and per-publish change-read planner above Storage, without registry composition, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/changes/AGENTS.md",
+      "owned_targets": ["ConnectorChanges"],
+      "owned_roots": ["be/src/connector/changes"],
+      "allowed_include_prefixes": [
+        "connector/changes/",
+        "connector_primitive/",
+        "compute_env/",
+        "storage/",
+        "storage_primitive/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["connector/", "exec/", "service/", "http/", "cache/", "agent/", "script/", "tools/", "formats/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "Storage", "ComputeEnv", "StoragePrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_changes_test"],
+      "allowed_test_link_deps": ["ConnectorChanges", "TestUtil", "ConnectorPrimitive", "Storage", "ComputeEnv", "StoragePrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorChanges limited to CHANGES scan planning and reads over Storage and lower compute/runtime contracts; keep registration in ModuleBootstrap and avoid registry, service, or full Exec coupling."
+    },
+    {
       "id": "connectorcachestats",
       "doc_label": "ConnectorCacheStats",
       "summary": "Cache-stats connector implementation above connector contracts with storage and filesystem access, without registry composition, service, cache, or full Exec coupling.",
@@ -1130,6 +1162,7 @@
         "module/",
         "connector/benchmark/",
         "connector/cache_stats/",
+        "connector/changes/",
         "connector/file/",
         "connector/hive/",
         "connector/iceberg/",
@@ -1148,7 +1181,7 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
-      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorFile", "ConnectorHive", "ConnectorIceberg", "ConnectorLake", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorFile", "ConnectorHive", "ConnectorIceberg", "ConnectorLake", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorChanges", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["module_bootstrap_test"],
       "allowed_test_link_deps": ["ModuleBootstrap"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."

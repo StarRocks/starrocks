@@ -41,6 +41,26 @@ add_executable(connector_common_test
 target_link_libraries(connector_common_test ${CONNECTOR_COMMON_TEST_LINK_LIBS} gtest_main)
 set_target_properties(connector_common_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+set(CONNECTOR_CHANGES_TEST_LINK_LIBS
+    ConnectorChanges
+    TestUtil
+    ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_changes_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
+        changes/changes_connector_test.cpp
+)
+target_link_libraries(connector_changes_test ${CONNECTOR_CHANGES_TEST_LINK_LIBS} gtest_main)
+set_target_properties(connector_changes_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(CONNECTOR_FILE_TEST_LINK_LIBS
     ConnectorFile
     ${CONNECTOR_COMMON_TEST_DEPENDENCIES}

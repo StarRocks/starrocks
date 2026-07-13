@@ -33,6 +33,7 @@ target_link_libraries(ModuleBootstrap PRIVATE
         ConnectorIceberg
         ConnectorLake
         ConnectorCacheStats
+        ConnectorChanges
         Base
         Gutil
         StarRocksGen

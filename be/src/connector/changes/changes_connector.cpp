@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/changes_connector.h"
+#include "connector/changes/changes_connector.h"
 
 #include <fmt/format.h>
 
@@ -22,8 +22,7 @@
 #include "column/chunk_factory.h"
 #include "column/nullable_column.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/connector_scan_node.h"
-#include "exec/pipeline/fragment_context.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -270,15 +269,15 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
 
 // --- ChangesConnector ---
 
-DataSourceProviderPtr ChangesConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+DataSourceProviderPtr ChangesConnector::create_data_source_provider(ConnectorScanNode* /*scan_node*/,
                                                                     const TPlanNode& plan_node) const {
-    return std::make_unique<ChangesDataSourceProvider>(scan_node, plan_node);
+    return std::make_unique<ChangesDataSourceProvider>(plan_node);
 }
 
 // --- ChangesDataSourceProvider ---
 
-ChangesDataSourceProvider::ChangesDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _changes_scan_node(plan_node.changes_scan_node) {}
+ChangesDataSourceProvider::ChangesDataSourceProvider(const TPlanNode& plan_node)
+        : _changes_scan_node(plan_node.changes_scan_node) {}
 
 DataSourcePtr ChangesDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<ChangesDataSource>(this, scan_range);
@@ -386,7 +385,7 @@ Status ChangesDataSource::_init_tablet_schema() {
     schema_key_pb.set_schema_id(t_schema_key.schema_id);
     ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
                                              schema_key_pb, _tablet_id, _runtime_state->query_id(),
-                                             _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
+                                             _runtime_state->fragment_runtime_state()->fe_addr(), _head_metadata));
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_all_slots));
     return Status::OK();
 }

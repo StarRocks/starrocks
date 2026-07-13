@@ -18,6 +18,7 @@
 #include <string>
 
 #include "connector/cache_stats/cache_stats_connector.h"
+#include "connector/changes/changes_connector.h"
 #include "connector/connector_registry.h"
 #include "connector/file/file_connector.h"
 #include "connector/hive/hive_connector.h"
@@ -65,6 +66,7 @@ Status bootstrap_builtin_connectors() {
     install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
+    install_if_absent<ChangesConnector>(registry, Connector::CHANGES);
 #ifndef __APPLE__
     install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
 #endif
