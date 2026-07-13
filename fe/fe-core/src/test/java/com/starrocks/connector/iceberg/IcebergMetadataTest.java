@@ -142,6 +142,8 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetricsModes;
@@ -1526,6 +1528,45 @@ public class IcebergMetadataTest extends TableTestBase {
         return new BinaryPredicateOperator(BinaryType.EQ,
                 new CastOperator(DATETIME, new ColumnRefOperator(3, VARCHAR, "k2", true)),
                 ConstantOperator.createDatetime(LocalDateTime.of(year, month, day, 0, 0, 0)));
+    }
+
+    @Test
+    public void testGetDeleteFilesStringDatePartitionCast() throws Exception {
+        // An equality-delete file lives in partition k2=2020-06-14. Previously getDeleteFiles pushed
+        // CAST(k2 AS DATETIME) = <ts> to Iceberg's string-domain scan filter, which pruned this delete file
+        // (its 'yyyy-MM-dd' partition value never equals the rendered '...00:00:00' string), so the equality
+        // delete was not applied and deleted rows leaked. It must now be kept.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbGetDeleteFiles", 2);
+        table.newFastAppend().appendFile(DataFiles.builder(spec)
+                .withPath("/path/to/gdf-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(3).build()).commit();
+        DeleteFile eqDelete = FileMetadata.deleteFileBuilder(spec)
+                .ofEqualityDeletes(3)   // k2 field id
+                .withPath("/path/to/gdf-0614-eqdel.orc").withFormat(FileFormat.ORC)
+                .withFileSizeInBytes(10).withPartitionPath("k2=2020-06-14").withRecordCount(1).build();
+        table.newRowDelta().addDeletes(eqDelete).commit();
+        table.refresh();
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        long snapshotId = table.currentSnapshot().snapshotId();
+
+        // cast predicate matching the partition -> delete file kept (previously wrongly pruned in the string domain).
+        Set<DeleteFile> matched = metadata.getDeleteFiles(
+                icebergTable, snapshotId, k2EqDate(2020, 6, 14), FileContent.EQUALITY_DELETES);
+        Assertions.assertEquals(1, matched.size(),
+                "equality-delete file must not be pruned by a cast-on-string-partition predicate");
+
+        // cast predicate for a different date -> the 2020-06-14 delete file definitely cannot match -> pruned.
+        Set<DeleteFile> none = metadata.getDeleteFiles(
+                icebergTable, snapshotId, k2EqDate(2019, 1, 1), FileContent.EQUALITY_DELETES);
+        Assertions.assertTrue(none.isEmpty(),
+                "a definitely-non-matching partition's delete file should be pruned StarRocks-side");
     }
 
     @Test

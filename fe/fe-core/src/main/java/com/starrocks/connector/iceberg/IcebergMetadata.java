@@ -1787,9 +1787,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = icebergTable.getCatalogTableName();
         org.apache.iceberg.Table table = icebergTable.getNativeTable();
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly by Iceberg's
+        // string-domain comparison; pushing them here would drop equality-delete files whose 'yyyy-MM-dd' partition
+        // value never equals the rendered '...00:00:00' string, so the deletes would not be applied and already
+        // deleted rows would leak back into the result. Keep such conjuncts out of the pushed predicate and instead
+        // filter the returned delete files against their partition values StarRocks-side.
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                scalarOperators, identityStringPartitionColumns(icebergTable));
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                 table.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
                 catalogName, dbName, tableName, PlanMode.LOCAL, ConnectContext.get());
@@ -1803,7 +1810,55 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.filter(icebergPredicate);
         }
 
-        return ((StarRocksIcebergTableScan) scan).getDeleteFiles(content);
+        Set<DeleteFile> deleteFiles = ((StarRocksIcebergTableScan) scan).getDeleteFiles(content);
+        if (residual.hasResidual()) {
+            // Keep a delete file unless its partition value definitely cannot satisfy the residual (partitionMayMatch
+            // drops only on a definitive false). Dropping a possibly-matching delete file would under-apply deletes,
+            // so this only prunes delete files from partitions that provably cannot match.
+            deleteFiles = deleteFiles.stream()
+                    .filter(f -> PartitionCastPredicatePruner.partitionMayMatch(
+                            residual.residual, deleteFilePartitionValues(f, icebergTable)))
+                    .collect(Collectors.toSet());
+        }
+        return deleteFiles;
+    }
+
+    // Raw string partition values for an equality/position delete file, keyed by (identity) partition column name,
+    // using the delete file's own partition spec (a delete file may predate the current spec). Returns an empty map
+    // on any decoding uncertainty (partition-transform evolution, dropped source column, non-PartitionData), which
+    // makes partitionMayMatch conservatively keep the file so a needed delete is never dropped.
+    private static Map<String, String> deleteFilePartitionValues(DeleteFile file, IcebergTable table) {
+        try {
+            org.apache.iceberg.Table nativeTable = table.getNativeTable();
+            PartitionSpec spec = nativeTable.specs().get(file.specId());
+            if (spec == null || !(file.partition() instanceof org.apache.iceberg.PartitionData)) {
+                return Collections.emptyMap();
+            }
+            org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) file.partition();
+            List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
+            Map<String, String> result = new HashMap<>();
+            int index = 0;
+            for (PartitionField field : spec.fields()) {
+                if (field.transform().isVoid()) {
+                    continue;
+                }
+                if (index >= values.size()) {
+                    break;
+                }
+                String value = values.get(index++);
+                if (!field.transform().isIdentity()) {
+                    continue;
+                }
+                String name = table.getPartitionSourceName(nativeTable.schema(), field);
+                if (name != null && value != null) {
+                    result.put(name, value);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            LOG.debug("failed to decode delete file partition values, keep file: {}", file.path(), e);
+            return Collections.emptyMap();
+        }
     }
 
     /**
