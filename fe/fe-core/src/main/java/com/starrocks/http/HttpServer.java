@@ -288,6 +288,9 @@ public class HttpServer {
         BootstrapFinishAction.registerAction(controller);
 
         OAuth2Action.registerAction(controller);
+
+        // Context Base REST actions
+        com.starrocks.http.rest.context.ContextRestActions.registerActions(controller);
     }
 
     public void start() {
