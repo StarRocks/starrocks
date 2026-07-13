@@ -14,6 +14,15 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD:be/test/storage/load_spill_pipeline_merge_test.cpp
+=======
+#include <atomic>
+#include <limits>
+#include <thread>
+#include <unordered_set>
+
+#include "base/testutil/assert.h"
+>>>>>>> 2928602a6b ([BugFix] Fix LoadChunkSpiller init race that crashes BE during load spill (#76098)):be/test/compute_env/load_spill/load_chunk_spiller_test.cpp
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -378,6 +387,59 @@ TEST_F(LoadSpillPipelineMergeTest, test_duplicate_slot_idx) {
     ASSERT_NE(task->merge_itr, nullptr);
     // Should only merge first continuous sequence
     ASSERT_GE(task->total_block_groups, 1);
+}
+
+// Regression test for the LoadChunkSpiller::_prepare() initialization race.
+//
+// Multiple memtable-flush threads share a single LoadChunkSpiller and call spill()
+// concurrently on the first spill (see the parallel-flush comment on
+// LoadChunkSpiller::spill). Before the fix, _prepare() used `_spiller == nullptr` as its
+// readiness flag with no lock, so one thread could publish `_spiller` before creating the
+// serde's encode context, while a racing thread observed the non-null spiller, skipped
+// initialization, and called ColumnarSerde::serialize() with a null encode context --
+// dereferencing it in _get_encode_levels() and crashing with SIGSEGV.
+//
+// Each round drives many threads through the first spill of a fresh LoadChunkSpiller so the
+// narrow initialization window is exercised repeatedly; every concurrent spill must succeed.
+TEST_F(LoadChunkSpillerTest, test_concurrent_first_spill_is_thread_safe) {
+    constexpr int kRounds = 200;
+    constexpr int kThreads = 8;
+    for (int round = 0; round < kRounds; round++) {
+        auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr,
+                                                                     _local_spill_dir_mgr.get());
+        ASSERT_OK(block_manager->init());
+        RuntimeProfile profile("test");
+        // No slot tracker: spill() then skips mark_slot_ready(), keeping the test focused on
+        // the _prepare() initialization race rather than slot bookkeeping.
+        LoadChunkSpiller spiller(block_manager.get(), &profile, nullptr);
+
+        std::atomic<int> ready{0};
+        std::atomic<bool> go{false};
+        std::vector<Status> results(kThreads);
+        std::vector<std::thread> threads;
+        threads.reserve(kThreads);
+        for (int t = 0; t < kThreads; t++) {
+            threads.emplace_back([&, t]() {
+                auto chunk = gen_data(100, t * 100);
+                ready.fetch_add(1, std::memory_order_release);
+                // Spin so all threads reach the first spill as simultaneously as possible,
+                // maximizing the chance of hitting the initialization window.
+                while (!go.load(std::memory_order_acquire)) {
+                }
+                results[t] = spiller.spill(*chunk, t).status();
+            });
+        }
+        while (ready.load(std::memory_order_acquire) < kThreads) {
+        }
+        go.store(true, std::memory_order_release);
+        for (auto& th : threads) {
+            th.join();
+        }
+        for (int t = 0; t < kThreads; t++) {
+            ASSERT_TRUE(results[t].ok()) << "round " << round << " thread " << t << ": " << results[t].to_string();
+        }
+        ASSERT_NE(nullptr, spiller.spiller());
+    }
 }
 
 } // namespace starrocks

@@ -149,23 +149,45 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
 }
 
 Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
-    if (_spiller == nullptr) {
-        // 1. alloc & prepare spiller
+    // Multiple memtable-flush threads share this LoadChunkSpiller and reach here concurrently
+    // on the first spill. std::call_once runs the init body exactly once: the winning thread
+    // builds the spiller while the others block until it returns, then every thread observes
+    // the fully-constructed `_spiller`. call_once establishes the happens-before edge, so the
+    // spiller and its prepared serde are visible without any manual atomics. `_prepare_status`
+    // caches the outcome; a failed init is reported to all callers instead of leaving a
+    // half-built spiller reachable (the crash this fix addresses).
+    std::call_once(_prepare_once, [&] {
+        // Build everything on a local first, so a half-initialized spiller is never published
+        // through `_spiller`. The previous code assigned `_spiller` before preparing its serde,
+        // which let a racing thread observe a non-null spiller whose serde encode context was
+        // still null and crash in ColumnarSerde::serialize().
         spill::SpilledOptions options;
         options.encode_level = 7;
+<<<<<<< HEAD:be/src/storage/load_chunk_spiller.cpp
         options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
+=======
+        // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
+        // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
+        auto spiller = _spiller_factory->create(options);
+        if (_prepare_status = spiller->prepare(_runtime_state.get()); !_prepare_status.ok()) {
+            return;
+        }
+>>>>>>> 2928602a6b ([BugFix] Fix LoadChunkSpiller init race that crashes BE during load spill (#76098)):be/src/compute_env/load_spill/load_chunk_spiller.cpp
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
         spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
-        _spiller->set_metrics(metrics);
-        // 2. prepare serde
-        if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {
-            const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
-            RETURN_IF_ERROR(_spiller->serde()->prepare());
+        spiller->set_metrics(metrics);
+        // Prepare serde (creates the encode context) BEFORE publishing the spiller.
+        if (const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->empty()) {
+            const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
+            if (_prepare_status = spiller->serde()->prepare(); !_prepare_status.ok()) {
+                return;
+            }
         }
-    }
-    return Status::OK();
+        _spiller = std::move(spiller);
+    });
+    return _prepare_status;
 }
 
 Status LoadChunkSpiller::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
