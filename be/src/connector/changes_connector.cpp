@@ -21,6 +21,7 @@
 
 #include "column/chunk_factory.h"
 #include "column/nullable_column.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -30,97 +31,24 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_env.h"
+#include "storage/tablet_reader_params.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/olap_scan_range.h"
 #include "storage_primitive/range.h"
 #include "storage_primitive/roaring2range.h"
 
 namespace starrocks::connector {
 
 namespace {
-
-// Per-segment ChunkIterator wrapper that appends one column per requested
-// CHANGES metadata kind onto every chunk it surfaces. Each instance is
-// bound to its source rowset's version, so the right version is written into
-// each row regardless of which publish the rows came from.
-class ChangesMetaColumnIterator final : public ChunkIterator {
-public:
-    ChangesMetaColumnIterator(ChunkIteratorPtr inner, int64_t version,
-                              const std::vector<std::pair<SlotId, size_t>>& data_slot_chunk_indices,
-                              const std::vector<ChangesMetaSlot>& meta_slots, int8_t change_type = 0)
-            : ChunkIterator(inner->schema(), inner->chunk_size()),
-              _inner(std::move(inner)),
-              _version(version),
-              _change_type(change_type),
-              _data_slot_chunk_indices(&data_slot_chunk_indices),
-              _meta_slots(&meta_slots) {}
-
-    void close() override {
-        if (_inner != nullptr) {
-            _inner->close();
-            _inner.reset();
-        }
-    }
-
-protected:
-    Status do_get_next(Chunk* chunk) override {
-        RETURN_IF_ERROR(_inner->get_next(chunk));
-        // Post-read conjunct evaluation resolves SlotRef by slot id, so the
-        // inner segment iterator's name-indexed columns need a slot-id map.
-        // The mapping is precomputed against the projected read schema and
-        // stays valid for every chunk this iterator surfaces.
-        for (const auto& [slot_id, col_idx] : *_data_slot_chunk_indices) {
-            chunk->set_slot_id_to_index(slot_id, col_idx);
-        }
-        size_t nrows = chunk->num_rows();
-        for (const auto& meta : *_meta_slots) {
-            ASSIGN_OR_RETURN(ColumnPtr col, _build_metadata_column(meta.kind, nrows));
-            if (meta.slot->is_nullable()) {
-                auto null_col = NullColumn::create(nrows, 0);
-                col = NullableColumn::create(std::move(col), std::move(null_col));
-            }
-            chunk->append_column(std::move(col), meta.slot->id());
-        }
-        return Status::OK();
-    }
-
-private:
-    StatusOr<ColumnPtr> _build_metadata_column(TChangesMetaKind::type kind, size_t nrows) const {
-        switch (kind) {
-        case TChangesMetaKind::CHANGE_TYPE: {
-            // 0 = INSERT (after value), 1 = DELETE (before value). Each wrapper is
-            // built for one side, so every row it surfaces carries the same tag.
-            auto val_col = Int8Column::create();
-            val_col->reserve(nrows);
-            for (size_t r = 0; r < nrows; r++) {
-                val_col->append(_change_type);
-            }
-            return ColumnPtr(std::move(val_col));
-        }
-        case TChangesMetaKind::ROW_VERSION: {
-            auto val_col = Int64Column::create();
-            val_col->reserve(nrows);
-            for (size_t r = 0; r < nrows; r++) {
-                val_col->append(_version);
-            }
-            return ColumnPtr(std::move(val_col));
-        }
-        }
-        return Status::InternalError(fmt::format("unhandled TChangesMetaKind: {}", static_cast<int>(kind)));
-    }
-
-    ChunkIteratorPtr _inner;
-    int64_t _version;
-    int8_t _change_type;
-    const std::vector<std::pair<SlotId, size_t>>* _data_slot_chunk_indices;
-    const std::vector<ChangesMetaSlot>* _meta_slots;
-};
 
 lake::TabletManager* lake_tablet_manager() {
     return StorageEnv::GetInstance()->lake_tablet_manager();
@@ -206,9 +134,9 @@ Status ChangesReadPlanner::_locate_changed_segments(const TabletMetadataPB& befo
             }
             // A missing column_overlay_vecs entry means this publish overlaid no column on this
             // segment, so it is correctly left uncarried below -- never a captured-but-unrecorded
-            // overlay. Every column-mode partial update on a walked publish records its rows
+            // overlay. Every column-mode partial update on a traversed publish records its rows
             // (append_dcg takes updated_rowids as required); a publish that cannot record them
-            // (primary-key recover, replication) marks the version NotSupported, which the walk
+            // (primary-key recover, replication) marks the version NotSupported, which the traversal
             // rejects before reaching this step. So the plain presence lookup here cannot drop an
             // update: no entry here is always "no column change on this segment", not "lost rows".
             const bool column_overlaid = cdc.column_overlay_vecs().count(rssid) > 0;
@@ -372,13 +300,14 @@ ChangesDataSource::ChangesDataSource(const ChangesDataSourceProvider* provider, 
 
 Status ChangesDataSource::open(RuntimeState* state) {
     _runtime_state = state;
+    _init_counter();
 
     const auto& scan_node = _provider->_changes_scan_node;
     const auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(scan_node.tuple_id);
     if (tuple_desc == nullptr) {
         return Status::InternalError("tuple descriptor not found");
     }
-
+    _all_slots = &tuple_desc->slots();
     // Classify each tuple slot as data vs. CHANGES metadata by matching its
     // col_name against the descriptor names in the plan node. A descriptor
     // whose name has no matching slot was dropped by projection pruning.
@@ -402,26 +331,32 @@ Status ChangesDataSource::open(RuntimeState* state) {
         return Status::InternalError("lake tablet manager not available");
     }
     ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
-    RETURN_IF_ERROR(_init_read_schema());
-    _is_primary_keys = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS;
+    RETURN_IF_ERROR(_init_tablet_schema());
+    RETURN_IF_ERROR(_init_pushdown_predicates());
+    RETURN_IF_ERROR(_init_storage_read_schema());
+    RETURN_IF_ERROR(_init_output_columns());
+
+    // Initialize the changes read planner
     if (_base_version > _head_version) {
         return Status::InvalidArgument(fmt::format("CHANGES version range invalid: base_version({}) > head_version({})",
                                                    _base_version, _head_version));
     }
-    _planner.emplace(tablet_mgr, _is_primary_keys);
-    _walk_meta = _head_metadata;
-    _walk_version = _head_version;
+    _changes_read_planner.emplace(tablet_mgr, _is_primary_key_table());
+    _current_meta = _head_metadata;
+
     return Status::OK();
 }
 
 void ChangesDataSource::close(RuntimeState* state) {
-    if (_active_iterator != nullptr) _active_iterator->close();
-    _active_iterator.reset();
-    _segment_read_index = 0;
-    _draining_delete_changes = false;
+    _update_counter();
+    if (_current_segment_iterator != nullptr) _current_segment_iterator->close();
+    _current_segment_iterator.reset();
     _current_plan.reset();
-    _walk_meta.reset();
-    _planner.reset();
+    _current_meta.reset();
+    _changes_read_planner.reset();
+    _conjuncts_manager.reset();
+    _residual_conjunct_ctxs.clear();
+    _data_slot_conjunct_ctxs.clear();
     _head_metadata.reset();
     _tablet_schema.reset();
 }
@@ -430,7 +365,17 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return _read_next_chunk(chunk);
 }
 
-Status ChangesDataSource::_init_read_schema() {
+void ChangesDataSource::_init_counter() {
+    if (_runtime_profile == nullptr) return;
+    _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
+    _zonemap_filtered_counter = ADD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT);
+    _bloom_filter_filtered_counter = ADD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT);
+    _short_key_filtered_counter = ADD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT);
+    _predicate_filtered_counter = ADD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT);
+}
+
+Status ChangesDataSource::_init_tablet_schema() {
+    DCHECK(_all_slots != nullptr);
     DCHECK(_head_metadata != nullptr);
 
     auto* tablet_mgr = lake_tablet_manager();
@@ -442,91 +387,288 @@ Status ChangesDataSource::_init_read_schema() {
     ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
                                              schema_key_pb, _tablet_id, _runtime_state->query_id(),
                                              _runtime_state->fragment_ctx()->fe_addr(), _head_metadata));
-    // Virtual columns (e.g. _tablet_id_) aren't part of the storage schema; the
-    // analyzer attaches them to every OlapTable relation, so add them to the
-    // schema we look slots up in. Matches LakeDataSource::build_tablet_reader.
-    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, _data_slots));
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_all_slots));
+    return Status::OK();
+}
 
-    // Tablet column index resolved per slot; we sort the index list before
-    // building _read_schema, so each slot's position in the sorted list is
-    // exactly the column index it will occupy in surfaced chunks.
-    std::vector<std::pair<SlotId, uint32_t>> slot_tablet_indices;
-    slot_tablet_indices.reserve(_data_slots.size());
-    std::vector<uint32_t> column_indices;
-    column_indices.reserve(_data_slots.size());
+Status ChangesDataSource::_init_pushdown_predicates() {
+    DCHECK(_runtime_state != nullptr);
+    DCHECK(_tablet_schema != nullptr);
+
+    if (_conjunct_ctxs.empty()) return Status::OK();
+
+    // A constant-false/null predicate (e.g. WHERE 1=0) makes the scan empty; short-circuit to EndOfFile.
+    Status const_conjuncts_status;
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &const_conjuncts_status));
+    if (!const_conjuncts_status.ok()) return const_conjuncts_status;
+
+    const auto* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_provider->_changes_scan_node.tuple_id);
+
+    // Split by metadata-slot membership: a conjunct touching a CHANGES metadata column
+    // (__CHANGE_TYPE__ / __ROW_VERSION__) becomes a residual and never reaches the parser. Those
+    // columns are appended after the segment read and absent from _tablet_schema, so
+    // OlapPredicateParser would map their column_id to (uint32_t)-1 and crash the segment iterator.
+    // Only data-column conjuncts are pushed down.
+    std::unordered_set<SlotId> meta_slot_ids;
+    for (const auto& m : _changes_meta_slots) {
+        meta_slot_ids.insert(m.slot->id());
+    }
+    for (auto* ctx : _conjunct_ctxs) {
+        bool touches_meta = false;
+        ctx->root()->for_each_slot_id([&](SlotId id) { touches_meta |= (meta_slot_ids.count(id) > 0); });
+        if (touches_meta) {
+            _residual_conjunct_ctxs.push_back(ctx);
+        } else {
+            _data_slot_conjunct_ctxs.push_back(ctx);
+        }
+    }
+    if (_data_slot_conjunct_ctxs.empty()) return Status::OK();
+
+    for (uint32_t idx : _tablet_schema->sort_key_idxes()) {
+        _sort_key_column_names.emplace_back(_tablet_schema->column(idx).name());
+    }
+
+    ScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_data_slot_conjunct_ctxs;
+    opts.tuple_desc = tuple_desc;
+    opts.obj_pool = &_obj_pool;
+    opts.runtime_state = _runtime_state;
+    opts.scan_keys_unlimited = true;
+    opts.key_column_names = &_sort_key_column_names;
+    const auto& query_options = _runtime_state->query_options();
+    opts.max_scan_key_num = (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0)
+                                    ? query_options.max_scan_key_num
+                                    : config::max_scan_key_num;
+    opts.runtime_filters = _runtime_filters;
+    opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
+    opts.pred_tree_params = _runtime_state->fragment_runtime_state()->pred_tree_params();
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
+    RETURN_IF_ERROR(_conjuncts_manager->parse_conjuncts());
+
+    OlapPredicateParser parser(_tablet_schema);
+    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(&parser, _parsed_column_predicates));
+    PredicateAndNode pushdown_root;
+    PredicateAndNode non_pushdown_root;
+    pred_tree.root().partition_copy([&parser](const auto& node) { return parser.can_pushdown(node); }, &pushdown_root,
+                                    &non_pushdown_root);
+    _pushdown_pred_tree = PredicateTree::create(std::move(pushdown_root));
+    _residual_pred_tree = PredicateTree::create(std::move(non_pushdown_root));
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, _pushdown_pred_tree,
+                                                                      _pushdown_pred_tree_for_zone_map));
+
+    std::vector<ExprContext*> not_pushdown;
+    _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown);
+    _residual_conjunct_ctxs.insert(_residual_conjunct_ctxs.end(), not_pushdown.begin(), not_pushdown.end());
+
+    std::vector<std::unique_ptr<OlapScanRange>> key_ranges;
+    RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&key_ranges));
+    std::vector<OlapTuple> start_keys;
+    std::vector<OlapTuple> end_keys;
+    auto range_op = TabletReaderParams::RangeStartOperation::GT;
+    auto end_range_op = TabletReaderParams::RangeEndOperation::LT;
+    for (const auto& kr : key_ranges) {
+        if (kr->begin_scan_range.size() == 1 && kr->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
+            continue;
+        }
+        range_op = kr->begin_include ? TabletReaderParams::RangeStartOperation::GE
+                                     : TabletReaderParams::RangeStartOperation::GT;
+        end_range_op =
+                kr->end_include ? TabletReaderParams::RangeEndOperation::LE : TabletReaderParams::RangeEndOperation::LT;
+        start_keys.push_back(kr->begin_scan_range);
+        end_keys.push_back(kr->end_scan_range);
+    }
+    RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablet_schema, range_op, end_range_op, start_keys, end_keys,
+                                                         &_pushdown_key_ranges, &_mem_pool));
+    return Status::OK();
+}
+
+Status ChangesDataSource::_init_storage_read_schema() {
+    DCHECK(_tablet_schema != nullptr);
+
+    std::vector<uint32_t> cids;
+    cids.reserve(_data_slots.size());
     for (auto* slot : _data_slots) {
         int32_t index = _tablet_schema->field_index(slot->col_name());
         if (index < 0) {
             return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
         }
-        column_indices.push_back(static_cast<uint32_t>(index));
-        slot_tablet_indices.emplace_back(slot->id(), static_cast<uint32_t>(index));
+        cids.push_back(static_cast<uint32_t>(index));
     }
-    // Metadata-only projection (e.g. SELECT __ROW_VERSION__) yields zero data
-    // slots, so the segment iterator would be opened over an empty schema and
-    // every chunk would surface with num_rows() == 0. Force-include the first
-    // tablet column so the iterator drives row count from real segment data;
-    // _data_slot_chunk_indices stays empty, so this anonymous column is not
-    // resolvable via slot id and never reaches the tuple.
-    if (column_indices.empty()) {
-        if (_tablet_schema->num_columns() == 0) {
-            return Status::InternalError("tablet schema has no columns");
-        }
-        column_indices.push_back(0);
-    }
-    std::sort(column_indices.begin(), column_indices.end());
-    _read_schema = ChunkHelper::convert_schema(_tablet_schema, column_indices);
-
-    _data_slot_chunk_indices.clear();
-    _data_slot_chunk_indices.reserve(slot_tablet_indices.size());
-    for (const auto& [slot_id, tablet_idx] : slot_tablet_indices) {
-        auto it = std::lower_bound(column_indices.begin(), column_indices.end(), tablet_idx);
-        DCHECK(it != column_indices.end() && *it == tablet_idx);
-        _data_slot_chunk_indices.emplace_back(slot_id, static_cast<size_t>(it - column_indices.begin()));
+    if (cids.empty()) {
+        // Metadata-only projection (e.g. SELECT __ROW_VERSION__) has no data slot, so the segment
+        // iterator would open over an empty schema and every chunk would surface with num_rows() == 0,
+        // dropping the whole read before the metadata columns are appended. Force-include the first
+        // tablet column so the iterator drives the row count from real segment data.
+        _read_schema_has_forced_column = true;
+        _storage_read_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<uint32_t>{0});
+    } else {
+        std::sort(cids.begin(), cids.end());
+        _storage_read_schema = ChunkHelper::convert_schema(_tablet_schema, cids);
     }
     return Status::OK();
 }
 
+Status ChangesDataSource::_init_output_columns() {
+    DCHECK(_tablet_schema != nullptr);
+
+    // Classify each data slot and map it to its tablet cid. _unused_cids_after_pushdown starts as every
+    // read data cid; the residual/output passes below whittle it down to the pushdown-predicate-only set.
+    std::unordered_map<SlotId, uint32_t> slot_to_cid;
+    for (auto* slot : _data_slots) {
+        auto cid = static_cast<uint32_t>(_tablet_schema->field_index(slot->col_name()));
+        slot_to_cid[slot->id()] = cid;
+        _unused_cids_after_pushdown.insert(cid);
+        if (slot->is_output_column()) {
+            _has_output_column = true;
+        } else {
+            _unused_slot_ids.insert(slot->id());
+        }
+    }
+    // A predicate-only metadata column (e.g. WHERE __CHANGE_TYPE__ = 1) is appended for the residual eval
+    // but must not surface, so it joins the surface drop-set too.
+    for (const auto& m : _changes_meta_slots) {
+        if (m.slot->is_output_column()) {
+            _has_output_column = true;
+        } else {
+            _unused_slot_ids.insert(m.slot->id());
+        }
+    }
+
+    // Keep in _unused_cids_after_pushdown only columns nothing surfaces: not an output slot and not read
+    // by any residual predicate (cid-space tree plus slot-space conjuncts translated to cids).
+    for (auto cid : _residual_pred_tree.column_ids()) {
+        _unused_cids_after_pushdown.erase(cid);
+    }
+    for (auto* ctx : _residual_conjunct_ctxs) {
+        ctx->root()->for_each_slot_id([&](SlotId id) {
+            auto it = slot_to_cid.find(id);
+            if (it != slot_to_cid.end()) _unused_cids_after_pushdown.erase(it->second);
+        });
+    }
+    for (auto* slot : _data_slots) {
+        if (slot->is_output_column()) _unused_cids_after_pushdown.erase(slot_to_cid[slot->id()]);
+    }
+
+    // The output chunk drives its row count from its columns, so the read must keep at least one column
+    // materialized. When every read column is pushdown-predicate-only, dropping them all would leave an
+    // empty output schema whose chunks report zero rows and silently drop every change. Retain the last
+    // one; it is non-output, so the surface step still strips it.
+    if (_storage_read_schema.num_fields() > 0 &&
+        _unused_cids_after_pushdown.size() >= _storage_read_schema.num_fields()) {
+        _unused_cids_after_pushdown.erase(_storage_read_schema.field(_storage_read_schema.num_fields() - 1)->id());
+    }
+    return Status::OK();
+}
+
+void ChangesDataSource::_update_counter() {
+    if (_runtime_profile == nullptr) return;
+    const auto& i = _insert_read_stats;
+    const auto& d = _delete_read_stats;
+    COUNTER_UPDATE(_raw_rows_counter, i.raw_rows_read + d.raw_rows_read);
+    COUNTER_UPDATE(_zonemap_filtered_counter, i.rows_stats_filtered + d.rows_stats_filtered);
+    COUNTER_UPDATE(_bloom_filter_filtered_counter, i.rows_bf_filtered + d.rows_bf_filtered);
+    COUNTER_UPDATE(_short_key_filtered_counter, i.rows_key_range_filtered + d.rows_key_range_filtered);
+    COUNTER_UPDATE(_predicate_filtered_counter, i.rows_vec_cond_filtered + d.rows_vec_cond_filtered);
+}
+
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     while (true) {
-        // Advance the lazy walk until an open iterator is ready. Per publish, drain
-        // insert_changes (-> INSERT) first, then delete_changes (-> DELETE), then step
-        // to the next publish. The next publish's plan is built lazily, only on reach.
-        while (_active_iterator == nullptr) {
+        // Advance the lazy traversal until an open iterator is ready. Within a publish, drain
+        // insert_changes (INSERT) then delete_changes (DELETE); then step to the next publish, whose
+        // plan is built only on reach.
+        while (_current_segment_iterator == nullptr) {
             if (!_current_plan.has_value()) {
-                ASSIGN_OR_RETURN(bool has, _advance_to_next_publish());
+                ASSIGN_OR_RETURN(bool has, _advance_to_next_version());
                 if (!has) return Status::EndOfFile("end of changes data");
                 continue;
             }
-            const auto& changes =
-                    _draining_delete_changes ? _current_plan->delete_changes : _current_plan->insert_changes;
-            const int8_t change_type = _draining_delete_changes ? 1 : 0;
-            if (_segment_read_index < changes.size()) {
-                ASSIGN_OR_RETURN(_active_iterator,
-                                 _build_segment_iterator(*_current_plan, changes[_segment_read_index], change_type));
-                ++_segment_read_index; // a null result (empty segment) re-loops and steps to the next read
-            } else if (!_draining_delete_changes) {
-                _draining_delete_changes = true;
-                _segment_read_index = 0;
+            const auto& changes = (_current_change_type == ChangeType::DELETE) ? _current_plan->delete_changes
+                                                                               : _current_plan->insert_changes;
+            if (_current_segment_index < changes.size()) {
+                ASSIGN_OR_RETURN(
+                        _current_segment_iterator,
+                        _build_segment_iterator(*_current_plan, changes[_current_segment_index], _current_change_type));
+                ++_current_segment_index; // a null result (empty segment) re-loops and steps to the next read
+            } else if (_current_change_type == ChangeType::INSERT) {
+                _current_change_type = ChangeType::DELETE;
+                _current_segment_index = 0;
             } else {
-                ASSIGN_OR_RETURN(bool has, _advance_to_next_publish());
+                ASSIGN_OR_RETURN(bool has, _advance_to_next_version());
                 if (!has) return Status::EndOfFile("end of changes data");
             }
         }
-        auto data_chunk = ChunkFactory::new_chunk(_read_schema, _runtime_state->chunk_size());
-        Status st = _active_iterator->get_next(data_chunk.get());
+        auto data_chunk =
+                ChunkFactory::new_chunk(_current_segment_iterator->output_schema(), _runtime_state->chunk_size());
+        Status st = _current_segment_iterator->get_next(data_chunk.get());
         if (st.is_end_of_file()) {
-            _active_iterator->close();
-            _active_iterator.reset();
+            _current_segment_iterator->close();
+            _current_segment_iterator.reset();
             continue;
         }
         RETURN_IF_ERROR(st);
         if (data_chunk->num_rows() == 0) continue;
-        // Post-read fallback: evaluate the full _conjunct_ctxs list as a correctness
-        // backstop. Must run after every column (data + metadata) is populated.
-        if (!_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, data_chunk.get()));
+        // Residual predicates the storage read could not enforce, in two phases. Pushed-down
+        // predicates already filtered at storage and are NOT re-checked here.
+        // (1) ColumnPredicates that could not be pushed down, in cid space. Runs on the data-only
+        //     chunk — before the metadata columns are appended — so every cid resolves against a
+        //     schema that still describes exactly the columns present.
+        if (!_residual_pred_tree.empty()) {
+            size_t nrows = data_chunk->num_rows();
+            _reused_selection.resize(nrows);
+            RETURN_IF_ERROR(_residual_pred_tree.evaluate(data_chunk.get(), _reused_selection.data(), 0,
+                                                         static_cast<uint16_t>(nrows)));
+            data_chunk->filter(_reused_selection);
             if (data_chunk->num_rows() == 0) continue;
+        }
+
+        // Slot-space residual evaluation and the tuple resolve SlotRef by slot id, so the data columns need
+        // a slot-id map. Match each data slot to its chunk column by name against the read chunk's schema,
+        // which reflects init_output_schema: a pushdown-predicate-only column dropped there is absent and
+        // simply gets no mapping. The forced row-count column (metadata-only projection) carries no data
+        // slot's name and stays unmapped too.
+        const auto& schema = data_chunk->schema();
+        for (auto* slot : _data_slots) {
+            for (size_t i = 0; i < schema->num_fields(); i++) {
+                if (schema->field(i)->name() == slot->col_name()) {
+                    data_chunk->set_slot_id_to_index(slot->id(), i);
+                    break;
+                }
+            }
+        }
+        data_chunk->reset_schema();
+
+        // (2) Append the CHANGES metadata columns, then evaluate the slot-space residual conjuncts
+        //     (conjuncts that did not reduce to a ColumnPredicate + metadata-column conjuncts), which
+        //     need every column present.
+        RETURN_IF_ERROR(
+                _append_meta_columns(data_chunk.get(), _current_change_type, _current_plan->after_meta->version()));
+        if (!_residual_conjunct_ctxs.empty()) {
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_residual_conjunct_ctxs, data_chunk.get()));
+            if (data_chunk->num_rows() == 0) continue;
+        }
+
+        // (3) Narrow to strictly the isOutputColumn slots. Non-output columns (residual-only data
+        //     columns, predicate-only metadata columns) were needed by the eval phases above but must
+        //     not reach the tuple. When nothing is an output column (every slot is predicate-only, e.g.
+        //     SELECT <const> over a predicate-only column), stripping every column would zero the row
+        //     count and silently drop every change; surface the chunk unchanged instead — the caller
+        //     addresses columns by slot id and ignores the non-output ones.
+        if (_has_output_column) {
+            for (auto slot_id : _unused_slot_ids) {
+                data_chunk->remove_column_by_slot_id(slot_id);
+            }
+            if (_read_schema_has_forced_column) {
+                // A metadata-only projection forced tablet column 0 into the read to drive the row count;
+                // no slot references it, so remove_column_by_slot_id can't reach it. The metadata columns
+                // now carry the row count, so drop the filler (index 0, appended before them) and reindex
+                // the surviving output metadata columns.
+                data_chunk->remove_column_by_index(0);
+                data_chunk->reset_slot_id_to_index();
+                size_t idx = 0;
+                for (const auto& m : _changes_meta_slots) {
+                    if (m.slot->is_output_column()) data_chunk->set_slot_id_to_index(m.slot->id(), idx++);
+                }
+            }
         }
         _rows_read += data_chunk->num_rows();
         _bytes_read += data_chunk->bytes_usage();
@@ -535,30 +677,30 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
     }
 }
 
-StatusOr<bool> ChangesDataSource::_advance_to_next_publish() {
-    if (_walk_version <= _base_version) return false;
-    RETURN_IF_ERROR(_check_degradation(_walk_meta));
+StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
+    const int64_t current_version = _current_meta->version();
+    if (current_version <= _base_version) return false;
+    RETURN_IF_ERROR(_check_degradation(_current_meta));
     int64_t parent_version = -1;
-    if (_walk_meta->metadata_ancestors_size() > 0) {
-        const int64_t direct_parent = _walk_meta->metadata_ancestors(0);
-        if (direct_parent >= _base_version && direct_parent < _walk_version) {
+    if (_current_meta->metadata_ancestors_size() > 0) {
+        const int64_t direct_parent = _current_meta->metadata_ancestors(0);
+        if (direct_parent >= _base_version && direct_parent < current_version) {
             parent_version = direct_parent;
         }
     }
     if (parent_version < 0) {
         return Status::NotSupported(
                 fmt::format("CHANGES ancestor chain on tablet {} cannot reach base version {} from version {}",
-                            _tablet_id, _base_version, _walk_version));
+                            _tablet_id, _base_version, current_version));
     }
     auto* tablet_mgr = lake_tablet_manager();
     ASSIGN_OR_RETURN(auto parent_meta, tablet_mgr->get_tablet_metadata(_tablet_id, parent_version));
-    ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _planner->plan(parent_meta, _walk_meta));
+    ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _changes_read_planner->plan(parent_meta, _current_meta));
     _current_plan = std::move(plan);
-    _draining_delete_changes = false;
-    _segment_read_index = 0;
-    _active_iterator.reset();
-    _walk_meta = parent_meta;
-    _walk_version = parent_version;
+    _current_change_type = ChangeType::INSERT;
+    _current_segment_index = 0;
+    _current_segment_iterator.reset();
+    _current_meta = parent_meta;
     return true;
 }
 
@@ -574,23 +716,31 @@ Status ChangesDataSource::_check_degradation(const TabletMetadataPtr& meta) {
 
 StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const VersionChangeReadPlan& plan,
                                                                       const SegmentChangeReadPlan& seg,
-                                                                      int8_t change_type) {
+                                                                      ChangeType change_type) {
     auto* tablet_mgr = lake_tablet_manager();
     const TabletMetadataPtr& read_meta = seg.from_before_meta ? plan.before_meta : plan.after_meta;
-    const int64_t tag_version = plan.after_meta->version();
-    OlapReaderStatistics* stats = (change_type == 0) ? &_insert_read_stats : &_delete_read_stats;
+    OlapReaderStatistics* stats = (change_type == ChangeType::INSERT) ? &_insert_read_stats : &_delete_read_stats;
     // Single-segment range so only this segment's footer loads.
     auto rowset =
             std::make_shared<lake::Rowset>(tablet_mgr, read_meta, seg.rowset_pos, seg.segment_pos, seg.segment_pos + 1);
 
     std::vector<ChunkIteratorPtr> iters;
-    if (_is_primary_keys) {
+    if (_is_primary_key_table()) {
         // PK: read exactly seg.rowids with no delete vector (the rows were already selected and must
         // not be re-filtered). Apply the dcg overlay only for a column-update read; a raw read
         // (read_with_dcg == false) returns the stored bytes as-is. Every PK read carries rowids.
         auto range = std::make_shared<SparseRange<>>(roaring2range(*seg.rowids));
         std::vector<SparseRangePtr> ranges{std::move(range)};
-        ASSIGN_OR_RETURN(iters, rowset->get_each_segment_iterator_no_delvec(_read_schema, read_meta->version(), stats,
+        RowsetReadOptions opts;
+        opts.stats = stats;
+        opts.version = read_meta->version();
+        // Resolve pushed predicates and the read schema against the scan schema, not the rowset's
+        // historical schema, so a CHANGES range spanning a schema change reads the intended columns.
+        opts.tablet_schema = _tablet_schema;
+        opts.pred_tree = _pushdown_pred_tree;
+        opts.pred_tree_for_zone_map = _pushdown_pred_tree_for_zone_map;
+        opts.ranges = _pushdown_key_ranges;
+        ASSIGN_OR_RETURN(iters, rowset->get_each_segment_iterator_no_delvec(_storage_read_schema, opts,
                                                                             /*apply_dcg=*/seg.read_with_dcg, &ranges));
     } else {
         // DUP/AGG: a plain whole-segment read; these tables have no delete vector or dcg overlay.
@@ -600,7 +750,10 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         opts.tablet_schema = _tablet_schema;
         opts.use_page_cache = false;
         opts.is_primary_keys = false;
-        ASSIGN_OR_RETURN(iters, rowset->read(_read_schema, opts));
+        opts.pred_tree = _pushdown_pred_tree;
+        opts.pred_tree_for_zone_map = _pushdown_pred_tree_for_zone_map;
+        opts.ranges = _pushdown_key_ranges;
+        ASSIGN_OR_RETURN(iters, rowset->read(_storage_read_schema, opts));
     }
 
     if (iters.empty()) return ChunkIteratorPtr{nullptr};
@@ -608,8 +761,43 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         return Status::InternalError(fmt::format("CHANGES single-segment read returned {} iterators on tablet {}",
                                                  iters.size(), _tablet_id));
     }
-    return std::make_shared<ChangesMetaColumnIterator>(std::move(iters[0]), tag_version, _data_slot_chunk_indices,
-                                                       _changes_meta_slots, change_type);
+    // Drop the pushdown-predicate-only columns from the iterator's output: the read still filters on
+    // them, but their dict-decode and materialization are skipped. Neither CHANGES read path passes
+    // delete predicates, so narrowing the output schema is safe here.
+    if (!_unused_cids_after_pushdown.empty()) {
+        RETURN_IF_ERROR(iters[0]->init_output_schema(_unused_cids_after_pushdown));
+    }
+    return std::move(iters[0]);
+}
+
+Status ChangesDataSource::_append_meta_columns(Chunk* chunk, ChangeType change_type, int64_t row_version) {
+    size_t nrows = chunk->num_rows();
+    for (const auto& meta : _changes_meta_slots) {
+        ColumnPtr col;
+        switch (meta.kind) {
+        case TChangesMetaKind::CHANGE_TYPE: {
+            auto val_col = Int8Column::create();
+            auto v = static_cast<int8_t>(change_type);
+            val_col->append_value_multiple_times(&v, nrows);
+            col = ColumnPtr(std::move(val_col));
+            break;
+        }
+        case TChangesMetaKind::ROW_VERSION: {
+            auto val_col = Int64Column::create();
+            val_col->append_value_multiple_times(&row_version, nrows);
+            col = ColumnPtr(std::move(val_col));
+            break;
+        }
+        default:
+            return Status::InternalError(fmt::format("unhandled TChangesMetaKind: {}", static_cast<int>(meta.kind)));
+        }
+        if (meta.slot->is_nullable()) {
+            auto null_col = NullColumn::create(nrows, 0);
+            col = NullableColumn::create(std::move(col), std::move(null_col));
+        }
+        chunk->append_column(std::move(col), meta.slot->id());
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::connector

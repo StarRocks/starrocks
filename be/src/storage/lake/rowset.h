@@ -106,11 +106,13 @@ public:
 
     // Build one iterator per segment, never applying a delete vector: the rows the caller selects via
     // rowid_range_per_segment[i] (size must equal num_segments()) are returned as-is, not re-filtered
-    // by deletes. When |apply_dcg| is set, the delta column group overlay (this rowset's tablet
-    // metadata at |version|) is applied so column-updated rows surface their updated values; otherwise
-    // the stored bytes are read raw.
+    // by deletes. When |apply_dcg| is set, this rowset's delta column group overlay is applied so
+    // column-updated rows surface their updated values; otherwise the stored bytes are read raw.
+    // From |options| it reads only stats, pred_tree, pred_tree_for_zone_map, ranges, tablet_schema,
+    // and version; the filesystem, delete-vector, dcg, primary-key, and id fields are set here, and
+    // any other RowsetReadOptions field is ignored.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_no_delvec(
-            const Schema& schema, int64_t version, OlapReaderStatistics* stats, bool apply_dcg,
+            const Schema& schema, const RowsetReadOptions& options, bool apply_dcg,
             const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }

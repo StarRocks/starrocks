@@ -27,11 +27,15 @@
 #include "base/hash/crc32c.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -110,7 +114,8 @@ protected:
     // `shape`; when false, the data column is skipped so the metadata slots
     // sit on their own (mirroring queries that project only metadata columns).
     // Returns 0 (the tuple id).
-    TTupleId install_tuple_descriptor(TupleShape shape, bool include_data = true) {
+    TTupleId install_tuple_descriptor(TupleShape shape, bool include_data = true, bool c1_is_output = true,
+                                      bool c0_is_output = true, bool change_type_is_output = true) {
         TDescriptorTableBuilder tbl_builder;
         TTupleDescriptorBuilder tup;
         int col_pos = 0;
@@ -120,6 +125,7 @@ protected:
                                  .column_name("c0")
                                  .column_pos(col_pos++)
                                  .nullable(false)
+                                 .is_output_column(c0_is_output)
                                  .build());
             // Column-update tests project the value column c1 alongside the key
             // c0, so they can assert a DELETE row carries the before c1 value and
@@ -132,6 +138,7 @@ protected:
                                      .column_name("c1")
                                      .column_pos(col_pos++)
                                      .nullable(false)
+                                     .is_output_column(c1_is_output)
                                      .build());
             }
         }
@@ -146,6 +153,7 @@ protected:
                                  .column_name(kChangeTypeColumnName)
                                  .column_pos(col_pos++)
                                  .nullable(meta_nullable)
+                                 .is_output_column(change_type_is_output)
                                  .build());
         }
         if (include_rv) {
@@ -269,6 +277,9 @@ protected:
         // when the fixture runs with _with_c1. Must have num_rows entries when
         // non-empty; when empty the writer fills c1 = start_value + rowid like c0.
         std::vector<int32_t> c1_values;
+        // Explicit cX (middle value column) values, used only when the fixture
+        // runs with _with_cx. Same length rule as c1_values.
+        std::vector<int32_t> cX_values;
         // When non-empty, this rowset holds several segments with these per-segment
         // row counts (instead of the single segment of num_rows). Segment s holds c0 =
         // start_value + 1000*s + rowid so the segments are distinguishable. Lets a
@@ -286,6 +297,14 @@ protected:
     // column-update (delta column group) tests overlay c1 and assert its
     // before/after values, which a key-only schema cannot express.
     bool _with_c1 = false;
+
+    // When true, the published schema and segment writer carry a second non-key
+    // value column cX (unique id 5) positioned BEFORE c1, so a rowset written
+    // under this schema places c1 at a later ordinal than a head schema that
+    // omits cX. Lets a test model a light DROP COLUMN across a CHANGES range and
+    // verify the read resolves columns against the scan schema rather than the
+    // rowset's own historical schema.
+    bool _with_cx = false;
 
     // Bootstrap an empty TabletMetadata at v=1 so the tablet is registered
     // with the TabletManager and subsequent rowset writes can find it.
@@ -312,6 +331,17 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        if (_with_cx) {
+            // Added before c1 so c1 sits at a later ordinal than in a head schema
+            // that omits cX (models a light DROP COLUMN shifting c1's ordinal).
+            auto* cx = schema->add_column();
+            cx->set_unique_id(5);
+            cx->set_name("cX");
+            cx->set_type("INT");
+            cx->set_is_key(false);
+            cx->set_is_nullable(false);
+            cx->set_aggregation(_keys_type == PRIMARY_KEYS ? "REPLACE" : "NONE");
+        }
         if (_with_c1) {
             auto* c1 = schema->add_column();
             c1->set_unique_id(1);
@@ -319,9 +349,13 @@ protected:
             c1->set_type("INT");
             c1->set_is_key(false);
             c1->set_is_nullable(false);
-            // A non-key column needs an aggregation method in the storage schema;
-            // PRIMARY KEYS uses REPLACE, matching the production column shape.
-            c1->set_aggregation("REPLACE");
+            // A non-key column needs an aggregation method in the storage schema,
+            // matching the production column shape per keys type: DUPLICATE KEYS uses
+            // NONE, PRIMARY and AGGREGATE KEYS use REPLACE. The aggregation also gates
+            // predicate pushdown on the column (OlapPredicateParser::can_pushdown pushes
+            // a non-PK column's predicate only when its aggregation is NONE), so under
+            // AGGREGATE KEYS a c1 predicate is not pushable and lands in the residual tree.
+            c1->set_aggregation(_keys_type == DUP_KEYS ? "NONE" : "REPLACE");
         }
     }
 
@@ -499,7 +533,8 @@ protected:
     // _with_c1 the segment also carries the value column c1, taken from
     // `c1_values` if supplied, else c1 = start_value + rowid like c0.
     void write_segment(int64_t tablet_id, const std::shared_ptr<TabletSchema>& tablet_schema, int64_t num_rows,
-                       std::string* out_path, int32_t start_value = 0, const std::vector<int32_t>& c1_values = {}) {
+                       std::string* out_path, int32_t start_value = 0, const std::vector<int32_t>& c1_values = {},
+                       const std::vector<int32_t>& cX_values = {}) {
         auto data_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         auto c0 = Int32Column::create();
         std::vector<int32_t> values;
@@ -510,6 +545,16 @@ protected:
         c0->append_numbers(values.data(), values.size() * sizeof(int32_t));
         Columns columns;
         columns.push_back(std::move(c0));
+        if (_with_cx) {
+            auto cx = Int32Column::create();
+            std::vector<int32_t> vx;
+            vx.reserve(static_cast<size_t>(num_rows));
+            for (int64_t i = 0; i < num_rows; i++) {
+                vx.push_back(cX_values.empty() ? start_value + static_cast<int32_t>(i) : cX_values[i]);
+            }
+            cx->append_numbers(vx.data(), vx.size() * sizeof(int32_t));
+            columns.push_back(std::move(cx));
+        }
         if (_with_c1) {
             auto c1 = Int32Column::create();
             std::vector<int32_t> v1;
@@ -619,7 +664,7 @@ protected:
                 }
                 if (spec.num_rows > 0 && spec.segment_path.empty()) {
                     write_segment(tablet_id, tablet_schema, spec.num_rows, &spec.segment_path, spec.start_value,
-                                  spec.c1_values);
+                                  spec.c1_values, spec.cX_values);
                 }
                 auto* rmeta = meta->add_rowsets();
                 rmeta->set_id(spec.id);
@@ -633,7 +678,7 @@ protected:
                     rmeta->set_max_compact_input_rowset_id(spec.id);
                 }
                 if (!spec.segment_path.empty()) {
-                    // Real writers always stamp the per-segment row count (SegmentFileInfo::to_proto);
+                    // Real writers always set the per-segment row count (SegmentFileInfo::to_proto);
                     // each spec is a single-segment rowset, so the segment's count is spec.num_rows.
                     auto* smeta = rmeta->add_segment_metas();
                     smeta->set_filename(spec.segment_path);
@@ -655,6 +700,27 @@ protected:
     // get_next() pumping
     // -------------------------------------------------------------------
 
+    // Drain `ds` under a `c0 > 50` predicate already installed via
+    // set_predicates, asserting every surfaced row satisfies the predicate and
+    // that the storage layer itself filtered rows (rows_vec_cond_filtered > 0
+    // on the insert side), proving the predicate was pushed down rather than
+    // left for a post-read backstop. Returns the total surfaced row count so
+    // callers can additionally check the exact surviving-row count. Shared by
+    // the PK and DUP/AGG pushdown-stats tests, which each build their own
+    // fixture (PK vs. DUP tablet, one wide segment) and predicate before
+    // calling this.
+    int64_t drain_and_expect_pushdown_filtered(DataSource* ds, SlotId c0_slot_id) {
+        std::vector<ChunkPtr> chunks;
+        int64_t total = drain(ds, &chunks);
+        for (const auto& ch : chunks) {
+            const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+            for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 50);
+        }
+        auto* cds = down_cast<connector::ChangesDataSource*>(ds);
+        EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0);
+        return total;
+    }
+
     // Drain `ds` to EOF. Returns total rows surfaced. When `chunks_out` is
     // non-null, surfaced chunks are appended so callers can inspect
     // the appended metadata columns.
@@ -674,7 +740,7 @@ protected:
         return total;
     }
 
-    // Pump get_next() until it returns a non-OK, non-EOF status (the lazy walk
+    // Pump get_next() until it returns a non-OK, non-EOF status (the lazy traversal
     // surfaces degradation / unreachable-base / delete-predicate when the cursor
     // reaches that publish), or OK if the source drains cleanly to EOF.
     Status drain_until_error(DataSource* ds) {
@@ -864,7 +930,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         ds->close(_runtime_state.get());
     }
 
-    // Sub-case C: in-range rowset with delete_predicate. The lazy walk plans the
+    // Sub-case C: in-range rowset with delete_predicate. The lazy traversal plans the
     // publish only when the cursor reaches it, so open() succeeds and the read
     // surfaces NotSupported.
     {
@@ -947,7 +1013,7 @@ TEST_F(ChangesConnectorTest, test_dup_multi_segment_new_rowset_surfaces_every_se
     EXPECT_EQ(5 + 7 + 4, total);
 }
 
-TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
+TEST_F(ChangesConnectorTest, test_metadata_traversal_edge_cases) {
     auto open_and_drain = [&](TTupleId tuple_id, int64_t schema_id, int64_t tablet_id, int64_t base,
                               int64_t head) -> int64_t {
         auto provider = make_provider(tuple_id, schema_id);
@@ -958,7 +1024,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
         return total;
     };
 
-    // Sub-case A: base == head; the lazy walk reaches base on the first advance,
+    // Sub-case A: base == head; the lazy traversal reaches base on the first advance,
     // so no rowsets surface for reading.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
@@ -970,7 +1036,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
     }
 
     // Sub-case B: head whose recorded ancestor is exactly base; one in-range
-    // rowset surfaces and the walk stops at base.
+    // rowset surfaces and the traversal stops at base.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -982,7 +1048,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
     }
 
     // Sub-case C: head carries one rowset already present at base and one new
-    // at head; the recorded ancestor base ends the walk.
+    // at head; the recorded ancestor base ends the traversal.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -998,8 +1064,8 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
         EXPECT_EQ(3, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/3, /*head=*/4));
     }
 
-    // Sub-case D: multi-level ancestor walk (v=5 -> v=4 -> v=3, base=2). v=3's
-    // recorded ancestor is exactly base, ending the walk after every rowset
+    // Sub-case D: multi-level ancestor traversal (v=5 -> v=4 -> v=3, base=2). v=3's
+    // recorded ancestor is exactly base, ending the traversal after every rowset
     // surfaced through v=5's metadata.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
@@ -1040,7 +1106,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
     }
 
     // Sub-case F: a rowset already present at base is excluded by the set
-    // difference regardless of its version stamp.
+    // difference regardless of its version.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -1052,7 +1118,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
                                       {.version = 5, .id = 501, .num_rows = 6}};
         publish_metadata(tablet_id, /*version=*/5, schema_id, /*ancestors=*/{3}, &r5);
         // id=500 already exists at base (it is in meta(3)), so meta(5) \ meta(3)
-        // excludes it; its version stamp is irrelevant to the detection. Only
+        // excludes it; its version is irrelevant to the detection. Only
         // id=501 (new at v=5) surfaces = 6 rows.
         EXPECT_EQ(6, open_and_drain(tuple_id, schema_id, tablet_id, /*base=*/3, /*head=*/5));
     }
@@ -1072,7 +1138,7 @@ TEST_F(ChangesConnectorTest, test_metadata_walk_edge_cases) {
 }
 
 // ============================================================================
-// Test 4 — ChangesMetaColumnIterator under each TupleShape: chunk shape (column
+// Test 4 — metadata-column append under each TupleShape: chunk shape (column
 // count), column types, slot-id resolution, and the appended metadata values.
 // ============================================================================
 
@@ -1193,7 +1259,7 @@ TEST_F(ChangesConnectorTest, test_append_metadata_columns_slot_variants) {
         }
     }
 
-    // Sub-case E: data column only. ChangesMetaColumnIterator stays a passthrough.
+    // Sub-case E: data column only. No metadata columns are appended.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::DATA_ONLY);
         ASSERT_EQ(-1, slot_id_of(tuple_id, kChangeTypeColumnName));
@@ -1221,6 +1287,9 @@ TEST_F(ChangesConnectorTest, test_append_metadata_columns_slot_variants) {
         EXPECT_EQ(kNumRows, open_and_collect(tuple_id, next_id(), next_id(), &chunks));
         ASSERT_FALSE(chunks.empty());
         EXPECT_TRUE(chunks.front()->is_slot_exist(rv_id));
+        // The forced row-count filler column carries no slot and must be stripped before surfacing,
+        // leaving __ROW_VERSION__ as the only column.
+        EXPECT_EQ(1u, chunks.front()->num_columns());
         const auto& rv_col = chunks.front()->get_column_by_slot_id(rv_id);
         const auto* rv_data = down_cast<const Int64Column*>(rv_col.get());
         for (size_t i = 0; i < rv_data->size(); i++) {
@@ -1240,6 +1309,9 @@ TEST_F(ChangesConnectorTest, test_append_metadata_columns_slot_variants) {
         EXPECT_EQ(kNumRows, open_and_collect(tuple_id, next_id(), next_id(), &chunks));
         ASSERT_FALSE(chunks.empty());
         EXPECT_TRUE(chunks.front()->is_slot_exist(ct_id));
+        // The forced row-count filler column carries no slot and must be stripped before surfacing,
+        // leaving __CHANGE_TYPE__ as the only column.
+        EXPECT_EQ(1u, chunks.front()->num_columns());
         const auto& ct_col = chunks.front()->get_column_by_slot_id(ct_id);
         const auto* ct_data = down_cast<const Int8Column*>(ct_col.get());
         for (size_t i = 0; i < ct_data->size(); i++) {
@@ -1460,13 +1532,13 @@ TEST_F(ChangesConnectorTest, test_primary_keys_surviving_rows) {
 // ============================================================================
 // Test 8 — Degradation read. A publish marked non-OK under cdc_metadata, or an
 // ancestor chain that cannot reach base, surfaces NotSupported when the lazy
-// walk reaches that publish during reading, rather than partial changes. An
+// traversal reaches that publish during reading, rather than partial changes. An
 // empty (base == head) interval stays OK and surfaces zero rows.
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_degradation_read) {
     // Sub-case A: an in-range node carries a non-OK cdc_metadata.capture_status;
-    // the lazy walk returns that status verbatim when it reaches the node.
+    // the lazy traversal returns that status verbatim when it reaches the node.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -1487,7 +1559,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
     }
 
     // Sub-case B: a non-OK status on an ancestor (not the head) is still seen
-    // by the walk and surfaces.
+    // by the traversal and surfaces.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -1498,7 +1570,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
                          Status::NotSupported("degraded ancestor"));
         std::vector<RowsetSpec> r3 = {{.version = 2, .id = 70, .num_rows = 3, .segment_path = r2[0].segment_path},
                                       {.version = 3, .id = 71, .num_rows = 4}};
-        // v=3's only recorded ancestor is v=2, so the walk must visit (and
+        // v=3's only recorded ancestor is v=2, so the traversal must visit (and
         // check) v=2 to continue toward base.
         publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3);
 
@@ -1513,7 +1585,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
     }
 
     // Sub-case C: head has no ancestor leading down to base; the chain cannot
-    // span the interval, so the walk surfaces NotSupported on reach.
+    // span the interval, so the traversal surfaces NotSupported on reach.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -1533,7 +1605,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
     }
 
     // Sub-case D: an empty interval (base == head) returns OK with zero rows
-    // even though that head node carries a non-OK status — the walk reaches base
+    // even though that head node carries a non-OK status — the traversal reaches base
     // immediately, so no node is ever checked.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
@@ -2028,7 +2100,7 @@ TEST_F(ChangesConnectorTest, test_primary_keys_before_values_compaction_output) 
     // surviving output) drives every post-compaction edge.
     //   v=2 (compaction): output O (id=20) c0=[200..209], no deletes.
     //   v=3: delete rowid 3 (c0=203). v=4: delete rowid 7 (c0=207).
-    // CHANGES(base=2, head=4] walks edges (3,4) then (2,3): DELETE(203)@v3 and
+    // CHANGES(base=2, head=4] traverses edges (3,4) then (2,3): DELETE(203)@v3 and
     // DELETE(207)@v4, each emitted once.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
@@ -2415,7 +2487,7 @@ TEST_F(ChangesConnectorTest, test_primary_keys_column_update_compaction_output) 
 // Test 13 — Multi-publish range must not collapse. A segment is added in one
 // in-range publish and a row of it deleted in a later in-range publish, while
 // the head node records base directly in its ancestor window. The traversal
-// must still walk one publish at a time so the delete surfaces; collapsing the
+// must still advance one publish at a time so the delete surfaces; collapsing the
 // whole range into a single base->head diff would treat the segment as newly
 // added against base and drop the delete as born-and-died.
 // ============================================================================
@@ -2778,6 +2850,1123 @@ TEST_F(ChangesConnectorTest, test_planner_same_segment_delete_and_column_update_
     EXPECT_EQ(2u, s.rowids->cardinality());
     EXPECT_TRUE(s.rowids->contains(1));
     EXPECT_TRUE(s.rowids->contains(3));
+}
+
+// ============================================================================
+// Test 13 — PRIMARY KEYS storage-layer predicate pushdown. A data-column
+// predicate is pushed into the PK segment read (opts.pred_tree), so rows are
+// filtered inside the segment iterator rather than only post-read. Metadata-
+// column predicates and mixed conjuncts must stay post-read (feeding them to
+// the parser would build a ColumnPredicate on a column not in the tablet
+// schema and crash the read).
+// ============================================================================
+
+// Append an integer `<slot> <opcode> <value>` binary-pred subtree (pred node,
+// slot ref, literal) to `nodes` in prefix order. `prim_type` is the column's
+// logical type, needed because __CHANGE_TYPE__ is TINYINT and __ROW_VERSION__
+// BIGINT — types ExprsTestHelper's typed helpers do not all cover.
+static void append_int_binary_pred(std::vector<TExprNode>* nodes, SlotId slot_id, TPrimitiveType::type prim_type,
+                                   TExprOpcode::type opcode, int64_t value) {
+    TTypeDesc ttype = gen_type_desc(prim_type);
+    TExprNode pred;
+    pred.node_type = TExprNodeType::BINARY_PRED;
+    pred.num_children = 2;
+    pred.__set_opcode(opcode);
+    pred.__set_child_type(prim_type);
+    pred.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+    TExprNode slot_ref;
+    slot_ref.node_type = TExprNodeType::SLOT_REF;
+    slot_ref.type = ttype;
+    slot_ref.num_children = 0;
+    slot_ref.__isset.slot_ref = true;
+    slot_ref.slot_ref.slot_id = slot_id;
+    slot_ref.slot_ref.tuple_id = 0;
+    slot_ref.__set_is_nullable(true);
+
+    TExprNode literal;
+    literal.num_children = 0;
+    literal.is_nullable = false;
+    literal.type = ttype;
+    literal.node_type = TExprNodeType::INT_LITERAL;
+    TIntLiteral int_literal;
+    int_literal.value = value;
+    literal.__set_int_literal(int_literal);
+
+    nodes->emplace_back(pred);
+    nodes->emplace_back(slot_ref);
+    nodes->emplace_back(literal);
+}
+
+// Build a single `<slot> <opcode> <value>` conjunct on one integer column.
+static TExpr make_int_binary_pred_texpr(SlotId slot_id, TPrimitiveType::type prim_type, TExprOpcode::type opcode,
+                                        int64_t value) {
+    TExpr texpr;
+    append_int_binary_pred(&texpr.nodes, slot_id, prim_type, opcode, value);
+    return texpr;
+}
+
+// `left <opcode> right` over two slots. Two distinct slot ids mean it never reduces to a
+// single-column ColumnPredicate (normalize needs a constant RHS; build_column_expr_predicates
+// needs exactly one slot id), so it lands in get_not_push_down_conjuncts -> _residual_conjunct_ctxs
+// and is evaluated post-read. Nothing reaches storage, so rows_vec_cond_filtered stays 0.
+static TExpr make_two_slot_int_cmp_texpr(SlotId left_slot, SlotId right_slot, TExprOpcode::type opcode) {
+    TTypeDesc int_type = gen_type_desc(TPrimitiveType::INT);
+    TExprNode pred;
+    pred.node_type = TExprNodeType::BINARY_PRED;
+    pred.num_children = 2;
+    pred.__set_opcode(opcode);
+    pred.__set_child_type(TPrimitiveType::INT);
+    pred.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    TExprNode lhs;
+    lhs.node_type = TExprNodeType::SLOT_REF;
+    lhs.type = int_type;
+    lhs.num_children = 0;
+    lhs.__isset.slot_ref = true;
+    lhs.slot_ref.slot_id = left_slot;
+    lhs.slot_ref.tuple_id = 0;
+    lhs.__set_is_nullable(true);
+    TExprNode rhs = lhs;
+    rhs.slot_ref.slot_id = right_slot;
+    TExpr texpr;
+    texpr.nodes.emplace_back(pred); // prefix order: pred, lhs, rhs
+    texpr.nodes.emplace_back(lhs);
+    texpr.nodes.emplace_back(rhs);
+    return texpr;
+}
+
+// Build one compound `(<data_slot> > <gt_value>) AND (<meta_slot> = <eq_value>)`
+// conjunct: a single expression referencing both a data column and a metadata
+// column, so the whole conjunct must stay post-read.
+static TExpr make_and_data_gt_meta_eq_texpr(SlotId data_slot, int32_t gt_value, SlotId meta_slot,
+                                            TPrimitiveType::type meta_type, int64_t eq_value) {
+    TExprNode compound;
+    compound.__set_node_type(TExprNodeType::COMPOUND_PRED);
+    compound.__set_num_children(2);
+    compound.__set_opcode(TExprOpcode::COMPOUND_AND);
+    compound.__set_child_type(TPrimitiveType::BOOLEAN);
+    compound.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    compound.__set_is_nullable(true);
+
+    TExpr texpr;
+    texpr.nodes.emplace_back(compound);
+    append_int_binary_pred(&texpr.nodes, data_slot, TPrimitiveType::INT, TExprOpcode::GT, gt_value);
+    append_int_binary_pred(&texpr.nodes, meta_slot, meta_type, TExprOpcode::EQ, eq_value);
+    return texpr;
+}
+
+// A PRIMARY KEYS tablet with one 100-row segment (c0 = 0..99) inserted at v=2.
+// Spanning a single wide segment lets a c0 > 50 predicate filter rows inside
+// the segment iterator, so rows_vec_cond_filtered becomes > 0 only when the
+// predicate is pushed down.
+TEST_F(ChangesConnectorTest, test_pk_predicate_pushdown_filters_and_reports_stats) {
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    CHECK_OK(ds->open(_runtime_state.get()));
+
+    // c0 = 51..99 survive (49 rows), every surfaced row has c0 > 50, and the
+    // segment iterator itself filtered rows (proves pushdown, not post-read).
+    EXPECT_EQ(49, drain_and_expect_pushdown_filtered(ds.get(), c0_slot_id));
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Same PK multi-row fixture and c0 > 50 predicate as the test above, but with
+// join-runtime-filter pushdown turned on and a real (empty) RuntimeFilterProbeCollector
+// wired into the DataSource. ChunkPredicateBuilder::_get_column_predicates
+// (be/src/exec/olap_scan_prepare.cpp) unconditionally iterates
+// _opts.runtime_filters->descriptors() once enable_join_runtime_filter_pushdown() and
+// is_olap_scan are both true, regardless of whether any predicate actually references a
+// runtime filter slot. Before the fix, _build_pushdown_predicates() left
+// ScanConjunctsManagerOptions::runtime_filters null, so this configuration dereferenced a
+// null pointer and crashed every predicated CHANGES scan in production (the flag defaults
+// to on). This test's runtime state carries the flag, unlike the rest of the suite, so it
+// is the one that reaches that branch.
+TEST_F(ChangesConnectorTest, test_pk_pushdown_with_join_runtime_filter_enabled) {
+    TQueryOptions query_options;
+    query_options.__set_enable_join_runtime_filter_pushdown(true);
+    _runtime_state = lake::create_runtime_state(query_options);
+    _fragment_ctx = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
+    _runtime_state->set_fragment_ctx(_fragment_ctx, &_fragment_ctx->fragment_runtime_state());
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
+    ASSERT_TRUE(_runtime_state->enable_join_runtime_filter_pushdown());
+
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    RuntimeFilterProbeCollector runtime_filters;
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ds->set_runtime_filters(&runtime_filters);
+    CHECK_OK(ds->open(_runtime_state.get()));
+
+    // Same surviving rows as the flag-off test: c0 = 51..99 (49 rows). Reaching this
+    // point without crashing is itself the regression check for the null dereference;
+    // the row count and per-row predicate confirm the pushdown still filters correctly.
+    EXPECT_EQ(49, drain_and_expect_pushdown_filtered(ds.get(), c0_slot_id));
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Same PK multi-row fixture and c0 > 50 predicate as the pushdown-stats test
+// above, but asserts the pushdown-filtered row count is surfaced through the
+// query profile rather than through the insert_read_stats() accessor. A
+// RuntimeProfile is attached via set_runtime_profile() before open(), mirroring
+// how the scan operator wires a DataSource in production; the base class hangs
+// a "DataSource" child profile off it, and the pushdown counters registered by
+// ChangesDataSource live on that child.
+TEST_F(ChangesConnectorTest, test_predicate_pushdown_surfaces_profile_counters) {
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    RuntimeProfile profile("test");
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ds->set_runtime_profile(&profile);
+    CHECK_OK(ds->open(_runtime_state.get()));
+    drain(ds.get());
+    ds->close(_runtime_state.get());
+
+    auto* child = profile.get_child("DataSource");
+    ASSERT_NE(nullptr, child);
+    auto* pred_filter_counter = child->get_counter("PredFilterRows");
+    ASSERT_NE(nullptr, pred_filter_counter);
+    EXPECT_GT(pred_filter_counter->value(), 0);
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Constant-false/null conjunct (WHERE false / 1=0): open() fetches the published head metadata and
+// initializes the tablet schema, then _init_pushdown_predicates detects the const-false conjunct and
+// short-circuits to EndOfFile; close() must stay safe. The attached RuntimeProfile makes close()'s
+// _update_counter() actually run, which guards that _init_counter() is called before the early return
+// (otherwise it would touch null counters).
+TEST_F(ChangesConnectorTest, test_const_false_predicate_short_circuit) {
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, /*rowsets=*/nullptr);
+
+    // Constant boolean-false conjunct, modeling `WHERE false` / `1=0`.
+    TExpr false_texpr;
+    {
+        TScalarType scalar_type;
+        scalar_type.type = TPrimitiveType::BOOLEAN;
+        TTypeNode type_node;
+        type_node.type = TTypeNodeType::SCALAR;
+        type_node.__set_scalar_type(scalar_type);
+        TTypeDesc type_desc;
+        type_desc.types.push_back(type_node);
+
+        TBoolLiteral bool_literal;
+        bool_literal.value = false;
+
+        TExprNode node;
+        node.node_type = TExprNodeType::BOOL_LITERAL;
+        node.num_children = 0;
+        node.type = type_desc;
+        node.is_nullable = false;
+        node.__set_bool_literal(bool_literal);
+
+        false_texpr.nodes.push_back(node);
+    }
+    std::vector<TExpr> texprs{false_texpr};
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    RuntimeProfile profile("test");
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ds->set_runtime_profile(&profile);
+
+    // (a) open() short-circuits to EndOfFile on the constant-false predicate (evaluated while building
+    //     the pushdown predicates).
+    Status st = ds->open(_runtime_state.get());
+    EXPECT_TRUE(st.is_end_of_file()) << st.to_string();
+
+    // (b) _init_counter() ran before the early return: the counter close() touches is registered.
+    auto* child = profile.get_child("DataSource");
+    ASSERT_NE(nullptr, child);
+    EXPECT_NE(nullptr, child->get_counter("RawRowsRead"));
+
+    // (c) close() after the short-circuit is safe (non-null counters, no reader).
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A DUP_KEYS tablet with one 100-row segment (c0 = 0..99) inserted at v=2 —
+// same shape as the PK stats test above, minus PRIMARY_KEYS. Before this
+// change, _build_pushdown_predicates() short-circuited for non-PK tables and
+// _build_segment_iterator's DUP/AGG branch never set opts.pred_tree, so
+// rows_vec_cond_filtered stayed 0 and c0 > 50 was enforced only by the
+// post-read conjunct backstop. Now the DUP/AGG branch consumes
+// _pushdown_pred_tree the same way the PK branch does.
+TEST_F(ChangesConnectorTest, test_dup_predicate_pushdown_filters_and_reports_stats) {
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    CHECK_OK(ds->open(_runtime_state.get()));
+
+    // c0 = 51..99 survive (49 rows), same as the PK fixture above, now via the
+    // DUP/AGG read path.
+    EXPECT_EQ(49, drain_and_expect_pushdown_filtered(ds.get(), c0_slot_id));
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// An AGGREGATE-key tablet with one 100-row segment (c0 = 0..99, c1 = 0..99) inserted at v=2.
+// c1 is a value column with a REPLACE aggregation, so OlapPredicateParser::can_pushdown rejects
+// its predicate (a non-PK column is pushable only when its aggregation is NONE). The predicate
+// still normalizes into a single-column ColumnPredicate, so it lands in the non-pushdown residual
+// tree (_residual_pred_tree) rather than in _residual_conjunct_ctxs — the branch the other residual
+// tests (two-slot / metadata-column conjuncts) never reach. The connector enforces it after the
+// storage read: the rows are filtered correctly while rows_vec_cond_filtered stays 0 because the
+// segment iterator saw no predicate.
+TEST_F(ChangesConnectorTest, test_agg_non_pushable_column_predicate_filtered_by_residual_tree) {
+    _keys_type = AGG_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c1_slot_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c1_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    CHECK_OK(ds->open(_runtime_state.get()));
+
+    // c1 = 51..99 survive (49 rows); every surfaced row satisfies c1 > 50.
+    std::vector<ChunkPtr> chunks;
+    EXPECT_EQ(49, drain(ds.get(), &chunks));
+    for (const auto& ch : chunks) {
+        const auto* c1 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c1_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c1->get_data()[i], 50);
+    }
+    // The residual tree, not storage, filtered the rows: the segment iterator saw no predicate.
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_EQ(0, cds->insert_read_stats().rows_vec_cond_filtered);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// c1 is referenced only by a PUSHED-DOWN predicate (c1 > 50) and is not projected
+// (isOutputColumn=false). It must be read and filtered at storage, but dropped from
+// the output chunk by init_output_schema — the surfaced chunk holds exactly c0.
+TEST_F(ChangesConnectorTest, test_pk_predicate_only_column_dropped_from_output) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::DATA_ONLY, /*include_data=*/true,
+                                             /*c1_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}}; // c1==c0==0..99
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_id = slot_id_of(tuple_id, "c0");
+    SlotId c1_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c0_id);
+    ASSERT_NE(-1, c1_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    EXPECT_EQ(49, total); // c1 > 50 -> 51..99
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_TRUE(ch->is_slot_exist(c0_id));
+        EXPECT_FALSE(ch->is_slot_exist(c1_id));
+        EXPECT_EQ(1u, ch->num_columns());
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 50);
+    }
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0); // c1 read + pushdown-filtered
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Same as test_pk_predicate_only_column_dropped_from_output, but on a DUP_KEYS
+// tablet so the drop is exercised on the Rowset::read path rather than the PK
+// no-delvec path.
+TEST_F(ChangesConnectorTest, test_dup_predicate_only_column_dropped_from_output) {
+    _keys_type = DUP_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::DATA_ONLY, /*include_data=*/true,
+                                             /*c1_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}}; // c1==c0==0..99
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_id = slot_id_of(tuple_id, "c0");
+    SlotId c1_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c0_id);
+    ASSERT_NE(-1, c1_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    EXPECT_EQ(49, total); // c1 > 50 -> 51..99
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_TRUE(ch->is_slot_exist(c0_id));
+        EXPECT_FALSE(ch->is_slot_exist(c1_id));
+        EXPECT_EQ(1u, ch->num_columns());
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 50);
+    }
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0); // c1 read + pushdown-filtered
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A metadata-only projection (SELECT __ROW_VERSION__) whose sole data column c0 is
+// referenced only by a pushed-down predicate (c0 > 50, isOutputColumn=false).
+// Dropping every read-schema column would leave the segment read with an empty
+// output schema, whose chunks report zero rows and would silently drop all changes.
+// One column must stay materialized to carry the row count, so the 49 matching
+// changes still surface with their __ROW_VERSION__ metadata.
+TEST_F(ChangesConnectorTest, test_metadata_only_projection_with_all_data_columns_pushed_down) {
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::ROW_VERSION_ONLY, /*include_data=*/true,
+                                             /*c1_is_output=*/true, /*c0_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_id = slot_id_of(tuple_id, "c0");
+    SlotId rv_id = slot_id_of(tuple_id, kRowVersionColumnName);
+    ASSERT_NE(-1, c0_id);
+    ASSERT_NE(-1, rv_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    EXPECT_EQ(49, total); // c0 > 50 -> 51..99, no silent row loss
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_TRUE(ch->is_slot_exist(rv_id));
+        const auto* rv = as_int64(ch->get_column_by_slot_id(rv_id));
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_EQ(2, rv->get_data()[i]);
+    }
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0); // c0 read + pushdown-filtered
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A DUP_KEYS tablet whose sort key c0 spans several short-key blocks (segment
+// writer indexes one short-key entry per 100 rows under BE_TEST), with a range
+// predicate that excludes most of them. The connector derives c0 as the sort-key
+// column, ScanConjunctsManager builds a c0 > 400 scan-key range, and parse_seek_range
+// turns it into a SeekRange fed to the DUP/AGG read — so the short-key seek skips
+// whole blocks before any column is read, surfacing as rows_key_range_filtered > 0.
+// PK reads exact rowids and derives no ranges, so this narrowing is DUP/AGG-only.
+//
+// enable_short_key_for_one_column_filter must be on for a single-key-column filter to
+// build a scan key at all (build_scan_keys otherwise skips one-column filters). It is a
+// production toggle, not a test contrivance: a one-column sort-key CHANGES scan relies on
+// it exactly as an operator would; the wiring under test (derive names -> get_key_ranges ->
+// parse_seek_range -> opts.ranges) is identical regardless of how many key columns exist.
+TEST_F(ChangesConnectorTest, test_dup_short_key_range_narrows_read) {
+    bool saved = config::enable_short_key_for_one_column_filter;
+    config::enable_short_key_for_one_column_filter = true;
+    DeferOp restore([&] { config::enable_short_key_for_one_column_filter = saved; });
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    // One 500-row segment, c0 = 0..499 ascending. Short-key entries sit at rowids
+    // 0,100,...,400, so c0 > 400 lets the seek drop the first four 100-row blocks.
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 500, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/400));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    CHECK_OK(ds->open(_runtime_state.get()));
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    // c0 = 401..499 survive (99 rows); every surfaced row satisfies c0 > 400.
+    EXPECT_EQ(99, total);
+    for (const auto& ch : chunks) {
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 400);
+    }
+    // The short-key seek skipped the excluded blocks before reading columns.
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_key_range_filtered, 0);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// The PK analogue of test_dup_short_key_range_narrows_read: short-key range
+// narrowing now runs for PRIMARY KEYS too. A bulk-insert window fills a whole
+// new segment, so its changed rowids are the entire segment (0..499) and the
+// per-segment rowid range is not sparse. The connector derives c0 as the
+// sort-key column, builds a c0 > 400 scan-key range, and feeds it as opts.ranges
+// to the PK read; the segment iterator intersects that short-key window with the
+// whole-segment rowid range, so the seek skips the first four 100-row blocks
+// before reading columns, surfacing as rows_key_range_filtered > 0 — exactly the
+// value the DUP read gets on the same shape.
+//
+// enable_short_key_for_one_column_filter is on for the same reason as the DUP
+// test: c0 is the only sort-key column, and build_scan_keys otherwise skips a
+// one-column filter, so no scan key (and no seek range) would be built at all.
+TEST_F(ChangesConnectorTest, test_pk_short_key_range_narrows_read) {
+    _keys_type = PRIMARY_KEYS;
+    bool saved = config::enable_short_key_for_one_column_filter;
+    config::enable_short_key_for_one_column_filter = true;
+    DeferOp restore([&] { config::enable_short_key_for_one_column_filter = saved; });
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    // One 500-row segment inserted at v=2, c0 = 0..499 ascending, no delete vector.
+    // The PK insert-change read selects the whole segment (rowids 0..499); short-key
+    // entries sit at rowids 0,100,...,400, so c0 > 400 lets the seek drop the first
+    // four 100-row blocks.
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 500, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/400));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    CHECK_OK(ds->open(_runtime_state.get()));
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    // c0 = 401..499 survive (99 rows); every surfaced row satisfies c0 > 400.
+    EXPECT_EQ(99, total);
+    for (const auto& ch : chunks) {
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 400);
+    }
+    // The short-key seek skipped the excluded blocks before reading columns.
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_key_range_filtered, 0);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A predicate on a CHANGES metadata column (__CHANGE_TYPE__) stays post-read:
+// the column is appended after the read, not in the tablet schema, so it must
+// never reach the parser. The result is filtered correctly and no rows are
+// filtered at the storage layer (rows_vec_cond_filtered == 0), proving the
+// conjunct did not slip into the pushdown path (which would crash).
+TEST_F(ChangesConnectorTest, test_pk_metadata_predicate_stays_post_read) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // v=2: base segment S (id=10), c0 in [100..103], c1 = [10,11,12,13].
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    // v=3: overlay c1 on rowids {1,2} -> DELETE(before)+INSERT(after) for k101, k102.
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 21, 22, 13});
+                         attach_cdc_delvecs(meta, CdcCaptureMap::COLUMN_OVERLAY, {{/*rssid=*/10, {1, 2}}});
+                     });
+
+    // WHERE __CHANGE_TYPE__ = 1 (DELETE). __CHANGE_TYPE__ is TINYINT.
+    SlotId ct_slot_id = slot_id_of(tuple_id, kChangeTypeColumnName);
+    ASSERT_NE(-1, ct_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(make_int_binary_pred_texpr(ct_slot_id, TPrimitiveType::TINYINT, TExprOpcode::EQ, /*=*/1));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    auto rows = collect_change_rows_with_c1(ds.get(), tuple_id);
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_EQ(0, cds->insert_read_stats().rows_vec_cond_filtered);
+    EXPECT_EQ(0, cds->delete_read_stats().rows_vec_cond_filtered);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+
+    // Only the two DELETE (before) rows survive the post-read filter.
+    std::vector<ChangeRowC1> expected = {{/*c0=*/101, /*before c1=*/11, /*DELETE*/ 1, /*v=*/3},
+                                         {/*c0=*/102, /*before c1=*/12, /*DELETE*/ 1, /*v=*/3}};
+    std::sort(expected.begin(), expected.end());
+    EXPECT_EQ(expected, rows);
+}
+
+// A single compound conjunct `c0 > 50 AND __ROW_VERSION__ = v` references both a
+// data and a metadata column, so the whole conjunct stays post-read (the split
+// is per-conjunct, not per-leaf). Result is filtered correctly; nothing pushed
+// to storage.
+TEST_F(ChangesConnectorTest, test_pk_mixed_predicate_post_read) {
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    SlotId rv_slot_id = slot_id_of(tuple_id, kRowVersionColumnName);
+    ASSERT_NE(-1, c0_slot_id);
+    ASSERT_NE(-1, rv_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(make_and_data_gt_meta_eq_texpr(c0_slot_id, /*gt=*/50, rv_slot_id, TPrimitiveType::BIGINT,
+                                                       /*__ROW_VERSION__=*/2));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    // c0 in [0..99] at v=2: c0 > 50 keeps 51..99 (49), __ROW_VERSION__ = 2 keeps all.
+    EXPECT_EQ(49, total);
+    for (const auto& ch : chunks) {
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_GT(c0->get_data()[i], 50);
+    }
+    // The whole conjunct stayed post-read (references a metadata slot); nothing filtered at storage.
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_EQ(0, cds->insert_read_stats().rows_vec_cond_filtered);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A column-updated row: the pushdown predicate on the value column c1 sees the
+// overlaid value on the INSERT (after) side and the pre-overlay value on the
+// DELETE (before) side, because the pred_tree is applied over each side's own
+// segment read (after-side reads the dcg overlay, before-side reads raw). A
+// c1 > 50 predicate matches only the after value.
+TEST_F(ChangesConnectorTest, test_pk_dcg_column_predicate_uses_overlaid_value) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // v=2: base segment S (id=10), c0 in [100..103], c1 = [10,11,12,13].
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    // v=3: overlay c1 on rowid {1} raising 11 -> 100. DELETE(before c1=11)+INSERT(after c1=100).
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 100, 12, 13});
+                         attach_cdc_delvecs(meta, CdcCaptureMap::COLUMN_OVERLAY, {{/*rssid=*/10, {1}}});
+                     });
+
+    // WHERE c1 > 50 — a pushdown-eligible data-column predicate.
+    SlotId c1_slot_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c1_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    auto rows = collect_change_rows_with_c1(ds.get(), tuple_id);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+
+    // Only the INSERT (after) row for k101 has c1 = 100 > 50; the DELETE (before)
+    // row carried c1 = 11 and is filtered out by the before-side read's predicate.
+    std::vector<ChangeRowC1> expected = {{/*c0=*/101, /*after c1=*/100, /*INSERT*/ 0, /*v=*/3}};
+    EXPECT_EQ(expected, rows);
+}
+
+// A predicate-only value column c1 (isOutputColumn=false) whose base segment
+// values are overlaid by a later column update. init_output_schema drops c1 from
+// the segment read's OUTPUT projection, but the dcg overlay and the pushed-down
+// c1 > 50 filter both run inside the segment iterator, ahead of that projection —
+// so the dropped c1 is still overlaid, then filtered on its overlaid value.
+// Rowids {1,2} have base c1 {11,12} (< 50) raised to {100,99} (> 50): their
+// INSERT (after) rows survive ONLY because the overlay was applied during the
+// read. Rowid 3 is overlaid to 20 (< 50) and filtered at storage on the after
+// side, so the insert read reports a vectorized filter. c1 must not surface.
+TEST_F(ChangesConnectorTest, test_pk_pushdown_only_column_with_dcg_overlay_dropped) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE, /*include_data=*/true,
+                                             /*c1_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // v=2: base segment S (id=10), c0 in [100..103], c1 = [10,11,12,13].
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    // v=3: overlay c1 on rowids {1,2,3}, raising 11->100 and 12->99 (both cross the
+    // c1 > 50 threshold) and 13->20 (stays below). Each updated rowid yields a
+    // DELETE(before, raw c1) + INSERT(after, overlaid c1).
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 100, 99, 20});
+                         attach_cdc_delvecs(meta, CdcCaptureMap::COLUMN_OVERLAY, {{/*rssid=*/10, {1, 2, 3}}});
+                     });
+
+    SlotId c0_id = slot_id_of(tuple_id, "c0");
+    SlotId c1_id = slot_id_of(tuple_id, "c1");
+    SlotId ct_id = slot_id_of(tuple_id, kChangeTypeColumnName);
+    SlotId rv_id = slot_id_of(tuple_id, kRowVersionColumnName);
+    ASSERT_NE(-1, c0_id);
+    ASSERT_NE(-1, c1_id);
+    ASSERT_NE(-1, ct_id);
+    ASSERT_NE(-1, rv_id);
+
+    // WHERE c1 > 50 — pushdown-eligible on the value column, referenced only here.
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    // Only the two overlaid INSERT (after) rows pass c1 > 50 (overlaid 100, 99);
+    // all three DELETE (before) rows carry the base c1 (11, 12, 13) and are
+    // filtered out, and the third INSERT (overlaid 20) is filtered too.
+    EXPECT_EQ(2, total);
+    ASSERT_FALSE(chunks.empty());
+    std::vector<ChangeRow> rows;
+    for (const auto& ch : chunks) {
+        EXPECT_TRUE(ch->is_slot_exist(c0_id));
+        EXPECT_FALSE(ch->is_slot_exist(c1_id)); // dropped by init_output_schema
+        EXPECT_TRUE(ch->is_slot_exist(ct_id));
+        EXPECT_TRUE(ch->is_slot_exist(rv_id));
+        EXPECT_EQ(3u, ch->num_columns()); // exactly c0 + __CHANGE_TYPE__ + __ROW_VERSION__
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_id).get());
+        const auto* ct = as_int8(ch->get_column_by_slot_id(ct_id));
+        const auto* rv = as_int64(ch->get_column_by_slot_id(rv_id));
+        for (size_t i = 0; i < ch->num_rows(); i++) {
+            rows.push_back({c0->get_data()[i], ct->get_data()[i], rv->get_data()[i]});
+        }
+    }
+    std::sort(rows.begin(), rows.end());
+    // Survivors are exactly the two overlaid INSERT rows (k101, k102). Their base
+    // c1 (11, 12) is < 50: were the overlay not applied during the pushdown read,
+    // the after side would filter on the base values and surface zero rows.
+    std::vector<ChangeRow> expected = {{/*c0=*/101, /*INSERT*/ 0, /*v=*/3}, {/*c0=*/102, /*INSERT*/ 0, /*v=*/3}};
+    EXPECT_EQ(expected, rows);
+
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0); // c1 read + pushdown-filtered at storage
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// A pushdown predicate on the value column c1 (not the key c0) filters at the
+// storage layer: c1 is a scan slot in the read schema, read, and filtered inside
+// the segment iterator. The surfaced key c0 reflects c1's filter — only rows
+// whose c1 passed survive.
+TEST_F(ChangesConnectorTest, test_pk_predicate_only_column) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    // v=2: 100 rows, c0 = 0..99, c1 = 0..99 (write_segment fills c1 = start_value + rowid).
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    // WHERE c1 > 50, where c1 is the non-key value column, distinct from the key c0.
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    SlotId c1_slot_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c0_slot_id);
+    ASSERT_NE(-1, c1_slot_id);
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c1_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    auto rows = collect_change_rows_with_c1(ds.get(), tuple_id);
+
+    // c1 = 51..99 survive (49 rows); each row's c1 (== c0) is > 50.
+    EXPECT_EQ(49u, rows.size());
+    for (const auto& r : rows) {
+        EXPECT_GT(r.c1, 50);
+        EXPECT_EQ(r.c0, r.c1); // write_segment set c1 = c0 for these rows
+    }
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_GT(cds->insert_read_stats().rows_vec_cond_filtered, 0);
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// c0 < c1 stays residual (two-slot comparison, never pushed down). c1 is read and used for
+// filtering but not projected (isOutputColumn=false); init_output_schema does NOT drop it (it is
+// residual), so the connector's post-eval narrowing must, leaving exactly c0.
+TEST_F(ChangesConnectorTest, test_pk_residual_only_data_column_dropped) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::DATA_ONLY, /*include_data=*/true,
+                                             /*c1_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2,
+                                   .id = 10,
+                                   .num_rows = 10,
+                                   .start_value = 0,
+                                   .c1_values = std::vector<int32_t>(10, 5)}}; // c0=0..9, c1=5
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_id = slot_id_of(tuple_id, "c0");
+    SlotId c1_id = slot_id_of(tuple_id, "c1");
+    ASSERT_NE(-1, c0_id);
+    ASSERT_NE(-1, c1_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(make_two_slot_int_cmp_texpr(c0_id, c1_id, TExprOpcode::LT)); // c0 < c1
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    EXPECT_EQ(5, total); // c0 < 5 keeps c0 in {0,1,2,3,4}
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_FALSE(ch->is_slot_exist(c1_id));
+        EXPECT_EQ(1u, ch->num_columns());
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_LT(c0->get_data()[i], 5);
+    }
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    EXPECT_EQ(0, cds->insert_read_stats().rows_vec_cond_filtered); // residual, not storage-filtered
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// WHERE __CHANGE_TYPE__ = 1 is a metadata-touching residual: __CHANGE_TYPE__ is appended after the
+// read so the residual can be evaluated, but it is non-output and must not be surfaced; the
+// projected __ROW_VERSION__ stays.
+TEST_F(ChangesConnectorTest, test_predicate_only_meta_column_dropped) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE, /*include_data=*/true,
+                                             /*c1_is_output=*/true, /*c0_is_output=*/true,
+                                             /*change_type_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 21, 22, 13});
+                         attach_cdc_delvecs(meta, CdcCaptureMap::COLUMN_OVERLAY, {{/*rssid=*/10, {1, 2}}});
+                     });
+
+    SlotId ct_id = slot_id_of(tuple_id, kChangeTypeColumnName);
+    SlotId rv_id = slot_id_of(tuple_id, kRowVersionColumnName);
+    ASSERT_NE(-1, ct_id);
+    ASSERT_NE(-1, rv_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(make_int_binary_pred_texpr(ct_id, TPrimitiveType::TINYINT, TExprOpcode::EQ, /*=*/1));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    EXPECT_EQ(2, total); // two DELETE (before) rows survive __CHANGE_TYPE__ = 1
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_FALSE(ch->is_slot_exist(ct_id));
+        EXPECT_TRUE(ch->is_slot_exist(rv_id));
+        const auto* rv = as_int64(ch->get_column_by_slot_id(rv_id));
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_EQ(3, rv->get_data()[i]);
+    }
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Every surfaced slot is predicate-only (the sole slot __CHANGE_TYPE__ is non-output and referenced
+// only by WHERE __CHANGE_TYPE__ = 1). Narrowing to an empty output chunk would report zero rows and
+// silently drop every change; the connector must instead surface the post-eval chunk with its row
+// count intact, exactly as a non-CHANGES scan leaves its predicate-only columns in place. Models the
+// FE plan `SELECT <const> ... WHERE <predicate-only column>`.
+TEST_F(ChangesConnectorTest, test_all_columns_non_output_preserves_row_count) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::CHANGE_TYPE_ONLY, /*include_data=*/false,
+                                             /*c1_is_output=*/true, /*c0_is_output=*/true,
+                                             /*change_type_is_output=*/false);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 21, 22, 13});
+                         attach_cdc_delvecs(meta, CdcCaptureMap::COLUMN_OVERLAY, {{/*rssid=*/10, {1, 2}}});
+                     });
+
+    SlotId ct_id = slot_id_of(tuple_id, kChangeTypeColumnName);
+    ASSERT_NE(-1, ct_id);
+    ASSERT_EQ(-1, slot_id_of(tuple_id, kRowVersionColumnName));
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(make_int_binary_pred_texpr(ct_id, TPrimitiveType::TINYINT, TExprOpcode::EQ, /*=*/1));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ds->set_predicates(conjunct_ctxs);
+    ASSERT_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+
+    // The two DELETE rows survive __CHANGE_TYPE__ = 1 and are not silently dropped despite no output column.
+    EXPECT_EQ(2, total);
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& ch : chunks) {
+        EXPECT_GT(ch->num_rows(), 0u);
+    }
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// ============================================================================
+// A CHANGES range that spans a light DROP COLUMN must read each rowset against
+// the scan (head) schema, not the rowset's own historical schema. The base
+// rowset is written under S1 = [c0, cX, c1] (c1 at ordinal 2); the head drops cX
+// so the scan schema is S2 = [c0, c1] (c1 at ordinal 1). A primary-key
+// before-value (DELETE) read of that base rowset goes through the no-delvec path,
+// which must forward the scan tablet_schema down to the segment iterator —
+// otherwise column ids resolve by ordinal against S1 and the c1 output reads cX's
+// data. Regression test for that path dropping opts.tablet_schema.
+// ============================================================================
+TEST_F(ChangesConnectorTest, test_pk_before_value_read_uses_scan_schema_across_dropped_column) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t base_schema_id = next_id();
+    int64_t head_schema_id = next_id();
+    int64_t tablet_id = next_id();
+
+    // Base v2 under S1 = [c0, cX, c1]. cX and c1 hold disjoint value ranges so the
+    // surfaced value reveals which physical column the read actually resolved.
+    _with_cx = true;
+    initialize_tablet(tablet_id, base_schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2,
+                                   .id = 10,
+                                   .num_rows = 5,
+                                   .start_value = 100,
+                                   .c1_values = {500, 501, 502, 503, 504},
+                                   .cX_values = {900, 901, 902, 903, 904}}};
+    publish_metadata(tablet_id, /*version=*/2, base_schema_id, /*ancestors=*/{1}, &r2);
+    std::string seg_path = r2[0].segment_path;
+
+    // Head v3 under S2 = [c0, c1] (cX dropped) deletes rowids {1, 3} of the base
+    // segment, so (base=2, head=3) surfaces their before values as DELETEs.
+    _with_cx = false;
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 5, .segment_path = seg_path, .deleted_rows = {1, 3}}};
+    publish_metadata(tablet_id, /*version=*/3, head_schema_id, /*ancestors=*/{2}, &r3);
+
+    auto provider = make_provider(tuple_id, head_schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    auto rows = collect_change_rows_with_c1(ds.get(), tuple_id);
+    ds->close(_runtime_state.get());
+
+    // With the scan schema forwarded, the DELETE before-values carry c1 (501, 503).
+    // Resolving against the base rowset's own S1 would surface cX (901, 903) at the
+    // same ordinal instead.
+    std::vector<ChangeRowC1> expected = {{/*c0=*/101, /*c1=*/501, /*DELETE*/ 1, /*v=*/3},
+                                         {/*c0=*/103, /*c1=*/503, /*DELETE*/ 1, /*v=*/3}};
+    std::sort(expected.begin(), expected.end());
+    EXPECT_EQ(expected, rows);
 }
 
 } // namespace starrocks::connector

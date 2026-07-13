@@ -27,15 +27,23 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "common/object_pool.h"
+#include "common/runtime_profile.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "connector_primitive/connector.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/mem_pool.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/predicate_parser.h"
+#include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "storage_primitive/range.h"
 
 namespace starrocks {
@@ -67,13 +75,13 @@ class TabletManager;
 //
 // Mechanism. A write becomes readable through a "publish", which appends a new
 // immutable tablet metadata version pointing back to the parent it was built
-// from; the versions form a chain (the lineage). before_meta / after_meta name
+// from; the versions form a chain. before_meta / after_meta name
 // the two ends of one publish's edge:
 //
 //     v_base <--p1-- v1 <--p2-- v2 <--p3-- ... <--pN-- v_head
 //
 //     (each "<--pi--" is one publish; an arrow points from a child version to
-//      its parent.) The scan walks the edges backwards — pN, p(N-1), ..., p1,
+//      its parent.) The scan traverses the edges backwards — pN, p(N-1), ..., p1,
 //      i.e. head down to base — and at each edge diffs before_meta (the parent)
 //      against after_meta (the child) to recover that publish's changed rows.
 //      One publish per step keeps a change locatable: within a single publish a
@@ -96,7 +104,7 @@ class TabletManager;
 //     (before_meta, after_meta) it locates which rows changed and where to read
 //     them (a VersionChangeReadPlan), inspecting only small bitmaps, no columns.
 //   - Connector (ChangesConnector / ChangesDataSourceProvider / ChangesDataSource):
-//     drives the backward walk, runs the planner per edge, reads the located rows
+//     drives the backward traversal, runs the planner per edge, reads the located rows
 //     through segment iterators, and appends the two metadata columns.
 
 namespace starrocks::connector {
@@ -117,8 +125,7 @@ struct SegmentChangeReadPlan {
     bool read_with_dcg;            // apply the dcg overlay (true) or read raw (false); neither applies a delvec
 };
 
-// One publish = the edge before_meta -> after_meta. Holds before_meta, after_meta,
-// and the located reads grouped by change type. Every surfaced row's ROW_VERSION is
+// One publish = the edge before_meta -> after_meta. Every surfaced row's ROW_VERSION is
 // after_meta->version(), so it is not stored per read.
 struct VersionChangeReadPlan {
     TabletMetadataPtr before_meta;
@@ -127,9 +134,8 @@ struct VersionChangeReadPlan {
     std::vector<SegmentChangeReadPlan> delete_changes; // -> DELETE (before value; some are read raw from after_meta)
 };
 
-// Plans one publish's reads: a near-pure function over (before_meta, after_meta).
-// plan() runs three steps — classify the changed segments, then locate the
-// after-value reads and the before-value reads (primary-key tables only).
+// Plans one publish's reads from (before_meta, after_meta): a near-pure function that inspects
+// only metadata bitmaps, no columns.
 class ChangesReadPlanner {
 public:
     ChangesReadPlanner(lake::TabletManager* tablet_mgr, bool is_primary_keys)
@@ -214,16 +220,6 @@ public:
     ChangesDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
-    bool insert_local_exchange_operator() const override { return false; }
-    // CHANGES emits one scan range per tablet; an empty delta yields zero
-    // ranges and 0 rows. Returning false here would let the pipeline layer
-    // inject a default-constructed TScanRangeParams() placeholder, which
-    // drives a get_tablet_metadata(tablet_id=0, ...) call that fails with
-    // "starlet err grpc.GetShard(shardId=0)". Matches OlapScanNode/Lake.
-    // TODO: fold empty-delta CHANGES into a ValuesScan in the FE optimizer
-    // so no scan operator is scheduled at all.
-    bool accept_empty_scan_ranges() const override { return true; }
-
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
@@ -231,16 +227,8 @@ protected:
     const TChangesScanNode _changes_scan_node;
 };
 
-// Pairs a tuple slot with the CHANGES metadata kind that fills it.
-struct ChangesMetaSlot {
-    TChangesMetaKind::type kind;
-    const SlotDescriptor* slot;
-};
-
-// Drives one tablet's CHANGES scan: walks the metadata lineage backwards from
-// head to base, runs the planner on each publish, and reads the located rows
-// through segment iterators, appending the change-type and row-version columns
-// named in the plan node.
+// Drives one tablet's CHANGES scan: backward traversal over the version chain, planner per
+// publish, segment reads, and the metadata-column append.
 class ChangesDataSource final : public DataSource {
 public:
     ~ChangesDataSource() override = default;
@@ -257,23 +245,47 @@ public:
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_ns; }
 
+    const OlapReaderStatistics& insert_read_stats() const { return _insert_read_stats; }
+    const OlapReaderStatistics& delete_read_stats() const { return _delete_read_stats; }
+
 private:
-    // Builds the projected read schema, read from the live schema service rather than
-    // head metadata, whose schema can lag one just published.
-    Status _init_read_schema();
+    // Numbered to match TOpType (UPSERT/DELETE) — the constants FE's ChangesScanBuilder compares
+    // __CHANGE_TYPE__ against — so both sides agree on the value.
+    enum class ChangeType : int8_t {
+        INSERT = TOpType::UPSERT,
+        DELETE = TOpType::DELETE,
+    };
+    // Pairs a tuple slot with the CHANGES metadata kind that fills it.
+    struct ChangesMetaSlot {
+        TChangesMetaKind::type kind;
+        const SlotDescriptor* slot;
+    };
+
+    void _init_counter();
+    Status _init_tablet_schema();
+    Status _init_pushdown_predicates();
+    Status _init_storage_read_schema();
+    Status _init_output_columns();
+
+    bool _is_primary_key_table() const { return _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS; }
     Status _read_next_chunk(ChunkPtr* chunk);
-    // Steps the walk to the parent publish and plans that edge. Errors if the lineage
-    // can't reach base (the range isn't on it) rather than short-reading; returns false
-    // once the walk reaches base.
-    StatusOr<bool> _advance_to_next_publish();
+    // Steps the traversal to the parent version and plans that publish edge; returns false once it
+    // reaches base. Errors (rather than short-reading) if the version chain can't reach base — i.e.
+    // the requested range isn't on it.
+    StatusOr<bool> _advance_to_next_version();
     // Returns the publish's recorded degradation status (OK if reconstructable), so an
     // unreconstructable publish surfaces as an error instead of silently dropping rows.
     static Status _check_degradation(const TabletMetadataPtr& meta);
-    // Opens a chunk iterator for one located read (segment + rowids), wrapped to append
-    // the change-type and row-version columns. change_type tags the rows and selects the
+    // Opens a chunk iterator for one located read (segment + rowids). change_type selects the
     // read-stats counter; returns null for an empty read.
     StatusOr<ChunkIteratorPtr> _build_segment_iterator(const VersionChangeReadPlan& plan,
-                                                       const SegmentChangeReadPlan& seg, int8_t change_type);
+                                                       const SegmentChangeReadPlan& seg, ChangeType change_type);
+    // Turns a data-only chunk into the row shape the scan emits: maps the data columns to their slot ids and
+    // appends the CHANGES metadata columns (__CHANGE_TYPE__ / __ROW_VERSION__), whose change_type and
+    // row_version are constant for the whole read.
+    Status _append_meta_columns(Chunk* chunk, ChangeType change_type, int64_t row_version);
+
+    void _update_counter();
 
     // --- Inputs (immutable after open) ---
     const ChangesDataSourceProvider* _provider;
@@ -283,30 +295,78 @@ private:
 
     // --- Runtime context ---
     RuntimeState* _runtime_state = nullptr;
+    ObjectPool _obj_pool;
+    MemPool _mem_pool;
+
+    // --- Slots and schema ---
+    const std::vector<SlotDescriptor*>* _all_slots = nullptr;
     std::vector<SlotDescriptor*> _data_slots;
     std::vector<ChangesMetaSlot> _changes_meta_slots;
-    std::vector<std::pair<SlotId, size_t>> _data_slot_chunk_indices;
-
-    std::shared_ptr<const TabletMetadataPB> _head_metadata;
+    std::shared_ptr<const TabletMetadataPB> _head_metadata = nullptr;
     TabletSchemaCSPtr _tablet_schema;
-    bool _is_primary_keys = false;
-    std::optional<ChangesReadPlanner> _planner;
 
-    // --- Lazy ancestor-walk state ---
-    TabletMetadataPtr _walk_meta; // node the walk currently sits at (the after_meta of the next edge)
-    int64_t _walk_version = 0;
-    std::optional<VersionChangeReadPlan> _current_plan; // the publish being drained
-    bool _draining_delete_changes = false;              // insert_changes drained first, then delete_changes
-    size_t _segment_read_index = 0;                     // cursor into the change list being drained
-    ChunkIteratorPtr _active_iterator;                  // iterator of the current segment read; null = none open
+    // --- Predicate pushdown ---
+    std::vector<ExprContext*> _data_slot_conjunct_ctxs;
+    std::vector<std::string> _sort_key_column_names;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager;
+    ColumnPredicatePtrs _parsed_column_predicates;
 
-    Schema _read_schema;
+    // A CHANGES query's predicates play one of two roles:
+    //
+    //   Pushdown predicates — enforced by the storage read itself, so a row that fails them is never
+    //   read back. Held as a row-level ColumnPredicate tree, its zonemap-index form, and short-key
+    //   ranges over the sort-key prefix.
+    //
+    //   Residual predicates — the ones the storage read cannot enforce, left for the connector to
+    //   apply to the rows it returns. Two forms: a ColumnPredicate tree over data columns (predicates
+    //   that could not be pushed down), and expressions over the CHANGES metadata columns
+    //   (__CHANGE_TYPE__ / __ROW_VERSION__) or predicates that do not reduce to a ColumnPredicate.
+    PredicateTree _pushdown_pred_tree;
+    PredicateTree _pushdown_pred_tree_for_zone_map;
+    std::vector<SeekRange> _pushdown_key_ranges;
+    PredicateTree _residual_pred_tree;
+    std::vector<ExprContext*> _residual_conjunct_ctxs;
+    Filter _reused_selection;
+
+    // The tablet columns the segment read materializes: every data slot's column, or — when the
+    // projection is metadata-only (e.g. SELECT __ROW_VERSION__) — the first tablet column, forced in so
+    // the iterator still drives a real row count. _read_schema_has_forced_column marks that filler case;
+    // no slot references the filler, so the surface step drops it before the tuple sees it.
+    Schema _storage_read_schema;
+    bool _read_schema_has_forced_column = false;
+
+    // Output-column narrowing, applied at two points:
+    //   _unused_cids_after_pushdown — read columns a pushed-down predicate filtered on but nothing reads
+    //     back (no output slot, no residual). The segment read drops them (init_output_schema), skipping
+    //     their dict-decode and materialization.
+    //   _unused_slot_ids — non-output data and metadata slots. Read/appended for the residual eval, then
+    //     stripped from the surfaced chunk so it carries strictly the isOutputColumn slots.
+    // _has_output_column is false only when every slot is predicate-only; stripping all columns would
+    // then zero the row count, so the surface step leaves the chunk as-is instead.
+    std::unordered_set<uint32_t> _unused_cids_after_pushdown;
+    std::unordered_set<uint32_t> _unused_slot_ids;
+    bool _has_output_column = false;
+
+    // --- Current read position (head → base) ---
+    std::optional<ChangesReadPlanner> _changes_read_planner;
+    TabletMetadataPtr _current_meta = nullptr;            // tablet metadata version the scan currently sits at
+    std::optional<VersionChangeReadPlan> _current_plan;   // read plan of the publish currently being drained
+    ChangeType _current_change_type = ChangeType::INSERT; // side being emitted; INSERT drained before DELETE
+    size_t _current_segment_index = 0;                    // index of the current segment read in the change list
+    ChunkIteratorPtr _current_segment_iterator = nullptr; // iterator over the current segment read; null = none
+
     OlapReaderStatistics _insert_read_stats;
     OlapReaderStatistics _delete_read_stats;
 
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
+
+    RuntimeProfile::Counter* _raw_rows_counter = nullptr;
+    RuntimeProfile::Counter* _zonemap_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _bloom_filter_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _short_key_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _predicate_filtered_counter = nullptr;
 };
 
 } // namespace starrocks::connector

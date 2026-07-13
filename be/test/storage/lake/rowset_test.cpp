@@ -1088,8 +1088,11 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_no_delvec_range_mode_uses_
         auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, /*segment_start=*/1,
                                                      /*segment_end=*/2);
         OlapReaderStatistics stats;
+        RowsetReadOptions opts;
+        opts.version = 1;
+        opts.stats = &stats;
         ASSIGN_OR_ABORT(auto iters,
-                        rowset->get_each_segment_iterator_no_delvec(input_schema, 1, &stats, /*apply_dcg=*/true));
+                        rowset->get_each_segment_iterator_no_delvec(input_schema, opts, /*apply_dcg=*/true));
         EXPECT_EQ(count_rows_from_iters(iters), 2);
     }
 
@@ -1099,8 +1102,11 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_no_delvec_range_mode_uses_
         auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, /*segment_start=*/1,
                                                      /*segment_end=*/2);
         OlapReaderStatistics stats;
+        RowsetReadOptions opts;
+        opts.version = 1;
+        opts.stats = &stats;
         ASSIGN_OR_ABORT(auto iters,
-                        rowset->get_each_segment_iterator_no_delvec(input_schema, 1, &stats, /*apply_dcg=*/true));
+                        rowset->get_each_segment_iterator_no_delvec(input_schema, opts, /*apply_dcg=*/true));
         EXPECT_EQ(count_rows_from_iters(iters), 34);
     }
 }
@@ -2093,7 +2099,10 @@ TEST_F(LakeRowsetDcgTest, get_each_segment_iterator_no_delvec_applies_overlay_sk
         auto rowset =
                 std::make_shared<lake::Rowset>(_tablet_mgr.get(), read_metadata, 0, 0 /* compaction_segment_limit */);
         OlapReaderStatistics stats;
-        ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator_no_delvec(input_schema, version, &stats,
+        RowsetReadOptions opts;
+        opts.version = version;
+        opts.stats = &stats;
+        ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator_no_delvec(input_schema, opts,
                                                                                 /*apply_dcg=*/true, &ranges));
         auto c1 = collect_c1(iters);
         EXPECT_EQ(c1, (std::vector<int>{10, 21, 22, 13}));

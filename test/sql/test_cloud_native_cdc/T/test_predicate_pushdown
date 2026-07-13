@@ -1,0 +1,65 @@
+-- name: test_cdc_pk_predicate_pushdown @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- A data-column predicate on a CHANGES scan is pushed into the storage read: the
+-- segment iterator filters rows before they reach the connector, and the query
+-- profile's PredFilterRows counter records exactly how many the storage layer dropped.
+
+CREATE TABLE pk_t (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_t", "ppk", "1800000");
+INSERT INTO pk_t SELECT number, number * 10 FROM TABLE(generate_series(1, 1000)) g(number);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_t", "ppk", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk0}", "ppk");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk1}", "ppk");
+    SET enable_profile = false;
+} END CLEANUP
+
+-- Result correctness: 500 of the 1000 inserted rows satisfy k > 500.
+SELECT count(*) FROM pk_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500;
+
+-- Predicate reaches the CHANGES scan node in the plan.
+function: assert_explain_contains("SELECT count(*) FROM pk_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500", "ChangesScanNode", "PREDICATES", "k > 500")
+
+-- Storage-layer proof: run with profiling and read the scan's PredFilterRows from the
+-- query profile. The vectorized predicate dropped the 500 rows with k <= 500 inside the
+-- segment iterator, so the counter is exactly 500.
+SET enable_profile = true;
+SET enable_async_profile = false;
+SELECT count(*) FROM pk_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500;
+SELECT regexp_extract(get_query_profile(last_query_id()), 'PredFilterRows: ([0-9]+)', 1);
+
+
+-- name: test_cdc_dup_predicate_pushdown @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- Same storage-layer pushdown on a duplicate-key CHANGES scan (whole-segment read path).
+
+CREATE TABLE dup_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_t", "pdup", "1800000");
+INSERT INTO dup_t SELECT number, number * 10 FROM TABLE(generate_series(1, 1000)) g(number);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t", "pdup", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk0}", "pdup");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk1}", "pdup");
+    SET enable_profile = false;
+} END CLEANUP
+
+SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500;
+
+function: assert_explain_contains("SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500", "ChangesScanNode", "PREDICATES", "k > 500")
+
+SET enable_profile = true;
+SET enable_async_profile = false;
+SELECT count(*) FROM dup_t [_CHANGES_${bk0}_${bk1}_] WHERE k > 500;
+SELECT regexp_extract(get_query_profile(last_query_id()), 'PredFilterRows: ([0-9]+)', 1);

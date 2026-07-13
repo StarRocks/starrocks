@@ -26,6 +26,7 @@ import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.planner.ChangesScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -257,6 +259,48 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             assertEquals(1, countCols.size(), "count(*) should materialize exactly one column: " + countCols);
             assertFalse(countCols.contains("__CHANGE_TYPE__") || countCols.contains("__ROW_VERSION__"),
                     "count(*) must not pick a CDC metadata column: " + countCols);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesScanSlotIsOutputColumn() throws Exception {
+        String name = "ch_oc_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("oc_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("oc_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+        try {
+            // k is projected; v is referenced ONLY by the WHERE predicate, so it is
+            // materialized as a slot but must NOT be flagged as an output column.
+            String sql = String.format(
+                    "SELECT k FROM %s [_CHANGES_%d_%d_] WHERE v > 1",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            ChangesScanNode scan = null;
+            for (ScanNode node : planPair.second.getScanNodes()) {
+                if (node instanceof ChangesScanNode) {
+                    scan = (ChangesScanNode) node;
+                    break;
+                }
+            }
+            assertNotNull(scan, "ExecPlan should contain a ChangesScanNode");
+            Map<String, Boolean> outputByColumn = scan.getDesc().getSlots().stream()
+                    .collect(Collectors.toMap(s -> s.getColumn().getName(), SlotDescriptor::isOutputColumn));
+            assertTrue(outputByColumn.containsKey("k") && outputByColumn.containsKey("v"), outputByColumn.toString());
+            assertTrue(outputByColumn.get("k"), "projected k must be output: " + outputByColumn);
+            assertFalse(outputByColumn.get("v"), "WHERE-only v must be non-output: " + outputByColumn);
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());

@@ -625,13 +625,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_no_delvec(
-        const Schema& schema, int64_t version, OlapReaderStatistics* stats, bool apply_dcg,
+        const Schema& schema, const RowsetReadOptions& options, bool apply_dcg,
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_no_delvec_us");
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    seg_options.stats = stats;
+    seg_options.stats = options.stats;
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
@@ -642,7 +642,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_no_del
     if (apply_dcg) {
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     }
-    seg_options.version = version;
+    seg_options.pred_tree = options.pred_tree;
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+    seg_options.ranges = options.ranges;
+    seg_options.tablet_schema = options.tablet_schema;
+    seg_options.version = options.version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
 
