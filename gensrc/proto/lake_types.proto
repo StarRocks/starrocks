@@ -584,6 +584,14 @@ message TxnInfoPB {
     // anchored as op_schema_change@W. W == 1 means the base partition was empty at the watershed
     // (PARTITION_INIT_VERSION == 1), so there is no source op_write and BE synthesizes an empty one.
     optional int64 shadow_rewrite_alter_version = 13;
+    // TXN_SHADOW_REWRITE flip publish: true when the rewrite produced no source op_write because the base
+    // partition was empty at the watershed. FE sets it from the rewrite txn loading zero rows (loadedRows
+    // == 0); it does NOT consult tablet commit infos, which are reset to null at the VISIBLE finish before
+    // FE reads this (see the rewriteSourceEmpty comment in LakeOnlineRewriteJobBase).
+    // When true, BE synthesizes an empty op_schema_change@W for ANY W (no source load), generalizing the
+    // W == 1 empty fast-path to a partition that is empty at W > 1 (e.g. a repeat online rewrite of an
+    // empty range partition). When false, the source op_write MUST exist and is loaded as before.
+    optional bool shadow_rewrite_source_empty = 14;
 }
 
 message SplittingTabletInfoPB {
