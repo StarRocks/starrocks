@@ -1029,9 +1029,17 @@ public class CompactionSchedulerTest {
                     PartitionIdentifier id = new PartitionIdentifier(1, 2, 100 + i);
                     PhysicalPartition partition = new PhysicalPartition(100 + i, 100 + i, new MaterializedIndex());
                     CompactionJob job = new CompactionJob(db, table, partition, 100 + i, false, null, "", null);
-                    CompactionTask task = Mockito.mock(CompactionTask.class);
-                    Mockito.when(task.isDone()).thenReturn(false);
-                    Mockito.when(task.tabletCount()).thenReturn(2);
+                    // Use a real anonymous CompactionTask instead of Mockito.mock: the FOR-TEST
+                    // 1-arg ctor leaves responseFuture null, so isDone() is already false; only
+                    // tabletCount() must be overridden (its request is null and would NPE). This
+                    // keeps the class on JMockit alone and avoids a JMockit+Mockito instrumentation
+                    // clash that can error this test and drop the whole class's coverage.
+                    CompactionTask task = new CompactionTask(100 + i) {
+                        @Override
+                        public int tabletCount() {
+                            return 2;
+                        }
+                    };
                     job.setTasks(Lists.newArrayList(task));
                     r.put(id, job);
                 }
