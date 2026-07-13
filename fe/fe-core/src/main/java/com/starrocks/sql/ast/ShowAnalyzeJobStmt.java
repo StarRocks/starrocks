@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatisticUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -60,31 +61,38 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
+                row.set(3, tableName);
 
-                if (table == null) {
-                    throw new MetaNotFoundException("No found table: " + tableName);
-                }
+                // root always holds every privilege, so the privilege check below is guaranteed to pass for it.
+                // getTable() is only needed here to feed that check and to recompute the collectible-column
+                // count for display - both skippable for root - so skip it entirely to avoid an expensive
+                // Glue/HMS lookup on every row of every poll (e.g. BYOC ops polling this SHOW statement as root).
+                if (StatisticUtils.isRootUser(context)) {
+                    if (null != columns && !columns.isEmpty()) {
+                        String str = String.join(",", columns);
+                        row.set(4, str.length() > 100 ? str.substring(0, 100) + "..." : str);
+                    }
+                } else {
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
 
-                row.set(3, table.getName());
+                    if (table == null) {
+                        throw new MetaNotFoundException("No found table: " + tableName);
+                    }
 
-                // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
-                // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
-                // table to check privilege on.
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-                } catch (AccessDeniedException e) {
-                    return null;
-                }
+                    // In new privilege framework(RBAC), user needs any action on the table to show analysis job
+                    // on it, for jobs on entire instance or entire db, we just show it directly because there
+                    // isn't a specified table to check privilege on.
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                    } catch (AccessDeniedException e) {
+                        return null;
+                    }
 
-                if (null != columns && !columns.isEmpty()
-                        && (columns.size() != table.getBaseSchema().size())) {
-                    String str = String.join(",", columns);
-                    if (str.length() > 100) {
-                        row.set(4, str.substring(0, 100) + "...");
-                    } else {
-                        row.set(4, str);
+                    if (null != columns && !columns.isEmpty()
+                            && (columns.size() != table.getBaseSchema().size())) {
+                        String str = String.join(",", columns);
+                        row.set(4, str.length() > 100 ? str.substring(0, 100) + "..." : str);
                     }
                 }
             }

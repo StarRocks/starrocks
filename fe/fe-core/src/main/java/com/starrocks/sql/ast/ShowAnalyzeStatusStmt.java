@@ -54,24 +54,33 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
-        Table table;
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
-            if (table == null) {
-                throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+        // root always holds every privilege, so the privilege check below is guaranteed to pass for it.
+        // getTable() is only needed here to feed that check and to recompute the collectible-column count
+        // for display - both skippable for root - so skip it entirely to avoid an expensive Glue/HMS lookup
+        // on every row of every poll (e.g. BYOC ops polling this SHOW statement as root).
+        if (StatisticUtils.isRootUser(context)) {
+            if (null != columns && !columns.isEmpty()) {
+                row.set(3, String.join(",", columns));
             }
-            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
-        } catch (Exception e) {
-            LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
-            return null;
-        }
+        } else {
+            Table table;
+            try {
+                table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                        context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+                if (table == null) {
+                    throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+                }
+                Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
+            } catch (Exception e) {
+                LOG.warn("Failed to check privilege for show analyze status for table {}.",
+                        analyzeStatus.getTableName(), e);
+                return null;
+            }
 
-        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
-        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
-            String str = String.join(",", columns);
-            row.set(3, str);
+            long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
+            if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
+                row.set(3, String.join(",", columns));
+            }
         }
 
         row.set(4, analyzeStatus.getType().name());

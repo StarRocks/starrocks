@@ -304,10 +304,16 @@ public class AnalyzeStmtTest {
                         "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
+        // root always holds every privilege and skips getTable() entirely for SHOW ANALYZE STATUS/JOB
+        // (avoids an expensive Glue/HMS lookup on every row), so a row referencing a table that no longer
+        // exists in the external catalog is still shown instead of being filtered out.
         AnalyzeStatus extenalAnalyzeStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
                 "tx", "tx:xxxx", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
-        Assertions.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        extenalAnalyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assertions.assertEquals("[-1, hive0.partitioned_db, tx, ALL, FULL, ONCE, SUCCESS, " +
+                        "2020-01-01 01:01:00, , {}, ]",
+                ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus).toString());
 
         sql = "show histogram meta where updateTime = '2020-01-01 01:01:00'";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);

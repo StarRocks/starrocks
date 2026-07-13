@@ -483,6 +483,12 @@ public class StatisticUtils {
         }
     }
 
+    // root always holds every privilege, so privilege checks on root are guaranteed to pass.
+    // Callers on hot paths (e.g. SHOW ANALYZE STATUS/JOB) can use this to skip the privilege check itself.
+    public static boolean isRootUser(ConnectContext context) {
+        return context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
+    }
+
     // Get all the columns in the table that can be collected.
     // The list will only contain:
     // 1. non-aggregated column
