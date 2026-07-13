@@ -284,19 +284,19 @@ description: "Alphabetical s"
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。現在この BE の StarOSWorker に割り当てられている shard 数（worker のローカル shard テーブルのサイズ）。値は `StarOSWorker::add_shard` および `StarOSWorker::remove_shard` の内部で同期的に書き込まれ（mutation 時に push される方式）、メトリクス取得時に再計算されるわけではありません。したがって取得される値は、直近に発生した shard テーブルの変更結果を反映します。BE シャットダウン時に gauge はリセットされず、次回の mutation が発生するまで前回の値を保持します。BE 間の shard 分布バランスを観測したり、FE 側の配置結果との乖離を検出するために利用できます。
 
-## `starrocks_fe_alter_job_duration_ms`
+## `starrocks_fe_alter_column_duration_ms`
 
 - 単位: ミリ秒
 - タイプ: サマリー
-- ラベル: `type` (`fse_v1` または `fse_v2`)
-- 説明: ALTER スキーマ変更ジョブの所要時間 (type 別)。初回リリースでは共有データモードの Fast Schema Evolution v1 (tablet メタの非同期更新) と v2 (同期・メタデータのみ) を対象とします。`fse_v1` は非同期ジョブのエンドツーエンドの実時間 (デーモンのキュー待ちと全 tablet への伝播を含む)、`fse_v2` はステートメントスレッド上の同期 apply の所要時間であるため、両者の比較は同一条件の比較ではなく桁レベルの目安として扱ってください。新規のクラウドネイティブテーブルではデフォルトで `cloud_native_fast_schema_evolution_v2` が有効なため、`fse_v1` のカウントが少ないことはテーブル設定を反映したものであり、移行が停滞していることを意味しません。分位値 (0.75, 0.95, 0.98, 0.99, 0.999)、`_sum`、および `_count` の出力が含まれます。
+- ラベル: `execution_mode` (`legacy_fse` または `fse`)、`is_leader`
+- 説明: ALTER TABLE の列変更を適用するのにかかった時間 (ミリ秒)。ステートメント単位。`execution_mode` ラベルは変更の適用方法を示します。`fse` は現行の Fast Schema Evolution (FSE) で、ステートメント実行中に即座に完了します。`legacy_fse` は旧来の FSE パスで、バックグラウンドで実行され通常はるかに遅くなります。`legacy_fse` は `cloud_native_fast_schema_evolution_v2` が無効な共有データ (shared-data) クラスターでのみ発生します (デフォルトは有効で、その場合は `fse`)。報告するのは Leader FE (`is_leader="true"`) のみです。0.75、0.95、0.98、0.99、0.999 の分位値と `_sum`、`_count` を含みます。
 
-## `starrocks_fe_alter_table_column_op_total`
+## `starrocks_fe_alter_column_operation_total`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `op_type` (`add`、`drop`、または `modify`)
-- 説明: ALTER TABLE 列操作の総数を、操作タイプ別に句ごとにカウントします。`ADD COLUMNS (a, b, c)` は 1 回の `add` としてカウントします (列単位ではなく操作単位)。`RENAME`/`REORDER`/コメントのみの変更は含みません。
+- ラベル: `type` (`add`、`drop`、または `modify`)、`is_leader`
+- 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 

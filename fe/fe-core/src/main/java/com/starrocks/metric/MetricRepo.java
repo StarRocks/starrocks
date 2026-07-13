@@ -40,9 +40,9 @@ import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterColumnMetrics;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.backup.AbstractJob;
@@ -194,12 +194,6 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("time_travel_type",
                     () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
-
-    // ALTER TABLE column operation counter, labeled by op_type (add/drop/modify).
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ALTER_TABLE_COLUMN_OP =
-            new MetricWithLabelGroup<>("op_type",
-                    () -> new LongCounterMetric("alter_table_column_op_total", MetricUnit.OPERATIONS,
-                            "Total number of ALTER TABLE column operations, by operation type."));
 
     // Per-catalog-type query counters
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
@@ -1458,9 +1452,6 @@ public final class MetricRepo {
         // global MV refresh duration histogram: low-cardinality, always emitted (not gated like per-MV histograms)
         MaterializedViewMetricsRegistry.collectGlobalDurationHistograms(visitor);
 
-        // ALTER schema-change job duration histograms (type=fse_v1 / fse_v2)
-        AlterColumnMetrics.collectDurationHistograms(visitor);
-
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
         for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
@@ -1506,6 +1497,8 @@ public final class MetricRepo {
         MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         TransactionMetricRegistry.getInstance().report(visitor);
+
+        AlterMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();

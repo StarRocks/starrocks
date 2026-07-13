@@ -2609,7 +2609,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add column
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
-                AlterColumnMetrics.recordColumnOp("add");
+                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.ADD);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2617,7 +2617,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
-                AlterColumnMetrics.recordColumnOp("add");
+                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.ADD);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
                     return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
                 }
@@ -2631,7 +2631,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
-                AlterColumnMetrics.recordColumnOp("drop");
+                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.DROP);
 
                 List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
@@ -2758,7 +2758,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
-                AlterColumnMetrics.recordColumnOp("modify");
+                AlterMetricRegistry.getInstance().updateAlterColumnCounter(AlterMetricRegistry.AlterColumnOperationType.MODIFY);
                 List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
                 if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
                         && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
@@ -2877,13 +2877,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (RunMode.isSharedNothingMode() ||
                 (olapTable instanceof LakeTable && ((LakeTable) olapTable).isFastSchemaEvolutionV2()) ||
                 (olapTable instanceof LakeMaterializedView && ((LakeMaterializedView) olapTable).isFastSchemaEvolutionV2())) {
-            long startMs = System.currentTimeMillis();
             updateCatalogForFastSchemaEvolution(schemaChangeData);
-            if (RunMode.isSharedDataMode()) {
-                // Within branch (b), shared-data can only be the FSE-v2 sub-case (shared-nothing FSE is
-                // synchronous too but is not timed in this iteration).
-                AlterColumnMetrics.recordJobDuration("fse_v2", System.currentTimeMillis() - startMs);
-            }
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
@@ -4439,6 +4433,7 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private void updateCatalogForFastSchemaEvolution(SchemaChangeData schemaChangeData)
             throws DdlException, NotImplementedException {
+        long startMs = System.currentTimeMillis();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         // for schema change add/drop value column optimize, direct modify table meta.
@@ -4454,6 +4449,9 @@ public class SchemaChangeHandler extends AlterHandler {
         applyFastSchemaEvolutionMetaChange(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
                 schemaChangeData.getNewIndexMetaIdToSchema(),
                 schemaChangeData.getIndexes(), jobId, indexMetaIdToNewSchemaId);
+        AlterMetricRegistry.getInstance().updateAlterColumnDuration(
+                AlterMetricRegistry.AlterColumnExecutionMode.FAST_SCHEMA_EVOLUTION,
+                System.currentTimeMillis() - startMs);
     }
 
     private AlterJobV2 createFastSchemaEvolutionJobInSharedDataMode(SchemaChangeData schemaChangeData) {
