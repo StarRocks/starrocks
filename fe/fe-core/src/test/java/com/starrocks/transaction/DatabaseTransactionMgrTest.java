@@ -742,6 +742,36 @@ public class DatabaseTransactionMgrTest {
                 () -> masterDbTransMgr.commitPreparedTransaction(txnId1));
     }
 
+    // Repro + regression for the production 2PC re-commit path used by the Flink connector on
+    // savepoint/resume. GlobalTransactionMgr.prepareTransaction/commitPreparedTransaction dereference
+    // getTransactionState(...).getTableIdList() to lock tables BEFORE delegating to
+    // DatabaseTransactionMgr, so a count-evicted (already-VISIBLE) transaction NPEs there and never
+    // reaches the terminal-state cache fallback. After the fix, both must resolve the evicted txn
+    // from the cache (idempotent success) instead of throwing.
+    @Test
+    public void testRecommitEvictedTxnViaGlobalTransactionMgr2PCPath() throws StarRocksException {
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // Evict the finished (VISIBLE) txn purely by count (ignores age), populating the cache.
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 50000;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertNull(masterDbTransMgr.getTransactionState(txnId1));
+
+        // Production 2PC entry points (GlobalTransactionMgr, not the db mgr directly). Must NOT NPE
+        // and must return idempotent success from the terminal-state cache.
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId1,
+                TransactionState.DEFAULT_PREPARED_TIMEOUT_MS, Lists.newArrayList(), Lists.newArrayList(), null);
+        masterTransMgr.commitPreparedTransaction(GlobalStateMgrTestUtil.testDbId1, txnId1, 10000);
+
+        // A truly-unknown txn still fails as not-found (not NPE) through the same path.
+        assertThrows(TransactionNotFoundException.class,
+                () -> masterTransMgr.commitPreparedTransaction(GlobalStateMgrTestUtil.testDbId1, 999999L, 10000));
+    }
+
     @Test
     public void testGetTableTransInfo() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr =
