@@ -19,8 +19,7 @@ import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -60,17 +59,8 @@ public abstract class JoinTuningGuide implements TuningGuide {
     }
 
     protected boolean isColocateJoin(OptExpression optExpression) {
-        // through the required properties type check if it is colocate join
-        return optExpression.getRequiredProperties().stream().allMatch(
-                physicalPropertySet -> {
-                    if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
-                        return false;
-                    }
-                    HashDistributionDesc.SourceType hashSourceType =
-                            ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                    .getHashDistributionDesc().getSourceType();
-                    return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
-                });
+        return optExpression.getRequiredProperties().stream().allMatch(physicalPropertySet ->
+                DistributionSpecHelper.supportColocate(physicalPropertySet.getDistributionProperty().getSpec()));
     }
 
     protected boolean isShuffleJoin(OptExpression leftChild, OptExpression rightChild) {
