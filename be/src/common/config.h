@@ -1468,9 +1468,10 @@ CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
 // "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
 // turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
-// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enable only
-// after the cluster is fully upgraded and no rollback to a pre-fix BE is expected.
-CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "false");
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
+// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
+// the legacy path is used and no incompatible on-disk state is written.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
