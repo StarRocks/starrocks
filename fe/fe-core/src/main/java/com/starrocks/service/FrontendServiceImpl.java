@@ -1309,8 +1309,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return expected != null && !expected.isEmpty() && expected.equals(token);
     }
 
-    private boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
-                                        String clientIp) {
+    // Package-private for testability: FrontendServiceImplTest exercises the
+    // internal-load table whitelist directly (same pattern as
+    // isAuthorizedByInternalToken above).
+    boolean checkIsInternalLoad(String user, String passwd, String db, String tbl,
+                                String clientIp) {
         for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends()) {
             if (fe.getHost().equals(clientIp) && fe.isAlive() && fe.getHost().equals(user) &&
                     fe.getNodeName().equals(passwd) && StatsConstants.STATISTICS_DB_NAME.equals(db) &&
