@@ -2398,10 +2398,12 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "PROPERTIES (\"replication_num\" = \"1\")");
         try {
             connectContext.getSessionVariable().setEnablePipelineEngine(true);
-            // The inner window consumes `s` in dict form, so its Decode sits below the join.
-            // The outer ranking-window filter becomes a PARTITION-TOP-N above the join whose
-            // partition-by column must keep the string ref of `s` — rewriting it to the dict
-            // ref would reference a slot already pruned below (slot_id not found on BE).
+            // `s` is consumed by both windows purely as a grouping key and never needed in
+            // string form (only `m` and `rn` are output), so it stays in dict form all the
+            // way from the scan to the top — there is no Decode of `s` below the join. Both
+            // the inner and outer PARTITION-TOP-N therefore correctly partition by the dict
+            // ref, which is alive throughout (this exercises the "arrives in dict form ->
+            // rewrite to dict ref" branch of the fix).
             String sql = "SELECT m, rn FROM (\n" +
                     "  SELECT t.s, r.m,\n" +
                     "         row_number() over (partition by t.s order by t.s) rn\n" +
@@ -2415,17 +2417,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     ") y WHERE rn = 1";
             String plan = getVerboseExplain(sql);
             Assertions.assertEquals(2, plan.split("PARTITION-TOP-N", -1).length - 1, plan);
-            // on branch-3.5 the inner window's Decode sits below the join, so `s` arrives
-            // at the outer window already decoded; the outer PARTITION-TOP-N and ANALYTIC
-            // must keep the string ref — a partition-by referencing the dict ref already
-            // decoded below would fail on BE with "slot_id not found"
-            assertContains(plan, "  11:PARTITION-TOP-N\n" +
-                    "  |  partition by: [3: s, VARCHAR(128), true]");
-            assertContains(plan, "  14:ANALYTIC\n" +
+            // outer PARTITION-TOP-N and ANALYTIC above the join: `s` still in dict form -> dict ref
+            assertContains(plan, "  10:PARTITION-TOP-N\n" +
+                    "  |  partition by: [10: s, INT, true]");
+            assertContains(plan, "  13:ANALYTIC\n" +
                     "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
                     "args nullable: false; result nullable: true], ]\n" +
-                    "  |  partition by: [3: s, VARCHAR(128), true]");
-            // the inner PARTITION-TOP-N still consumes `s` in dict form and keeps the dict ref
+                    "  |  partition by: [10: s, INT, true]");
+            // inner PARTITION-TOP-N below the join also consumes `s` in dict form -> dict ref
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: [10: s, INT, true]");
 
