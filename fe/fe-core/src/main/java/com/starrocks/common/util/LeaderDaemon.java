@@ -250,9 +250,12 @@ public abstract class LeaderDaemon {
         }
         LOG.info("{} exits", name);
         // The worker cleans up its own leader-session state as its last act (race-free: nothing else is
-        // running for this daemon by now). Clear the interrupt set by the stop request first, so onStopped()
-        // may use interruptible blocking primitives (e.g. pool.awaitTermination) that would otherwise throw
-        // immediately on the still-set flag and skip the drain.
+        // running for this daemon by now). Unconditionally clear any pending interrupt first - whatever set
+        // it (the stop-request interrupt, a self-stop setStop() on a lost lease, or the loop's own re-assert
+        // on InterruptedException). This is deliberately NOT gated on interruptOnStop(): onStopped()'s drain
+        // (e.g. pool.awaitTermination) must run to completion, otherwise isRunning would clear with owned
+        // pools not yet terminated and a straggler would slip past the re-activation gate. It is the dying
+        // worker's last act, so the flag has no other consumer to preserve it for.
         Thread.interrupted();
         try {
             onStopped();
@@ -278,7 +281,15 @@ public abstract class LeaderDaemon {
         }
         if (!gsm.isLeaderLeaseValid(lease)) {
             LOG.info("{} sees lease invalid, self-stop. lease={}", name, lease);
-            setStop();
+            // Fast path: leadership was lost before this cycle started (the lease is invalidated at the very
+            // first demotion stage, well before stopLeaderOnlyDaemonThreads reaches this daemon). Self-stop
+            // now instead of spinning until the demotion flow stops us - this also keeps interval==0 daemons
+            // from tight-looping during the demotion window. The worker is running this check, not blocked,
+            // so no interrupt is needed (setStop() would force one, ignoring interruptOnStop()); just request
+            // stop and the loop breaks on its next isStopRequested check. A daemon already inside
+            // runAfterLeaseValid is instead woken/stopped by the demotion flow (interrupt, or onStopRequested
+            // for interrupt-unsafe daemons).
+            requestStop(false);
             return;
         }
         runAfterLeaseValid();
