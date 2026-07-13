@@ -154,11 +154,8 @@ import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
-<<<<<<< HEAD
 import org.apache.iceberg.metrics.TimerResult;
-=======
 import org.apache.iceberg.types.Conversions;
->>>>>>> a1b11c4fdbf... [BugFix] Fix Iceberg manifest row-count estimation when a string date partition column is compared with a temporal value (#76107)
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
