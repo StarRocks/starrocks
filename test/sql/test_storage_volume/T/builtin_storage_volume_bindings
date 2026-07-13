@@ -1,4 +1,4 @@
--- name: test_builtin_sv_no_lock_leak @cloud
+-- name: test_builtin_sv_no_lock_leak @cloud @sequential
 -- Regression test for DB read lock leak in getBindingsOfBuiltinStorageVolume().
 -- Scenario: one DB is explicitly bound to a custom SV (dbToStorageVolume has an entry);
 -- another DB has no explicit binding (uses builtin_storage_volume implicitly).
