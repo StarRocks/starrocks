@@ -35,6 +35,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
@@ -67,6 +68,7 @@ class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
+class SchemaScannerFactory;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RuntimeFilterCache;
@@ -93,7 +95,11 @@ class ConnectorSinkSpillExecutor;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
+    // Retains any existing schema scanner factory. Lightweight callers without one installed cannot run schema scans.
     Status init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env);
+    // Installs or replaces the schema scanner factory only when a non-null factory is supplied.
+    Status init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env,
+                std::unique_ptr<SchemaScannerFactory> schema_scanner_factory);
     void stop();
     void clear_query_contexts();
     void destroy();
@@ -104,6 +110,7 @@ public:
 
     // only used for test
     ExecEnv();
+    explicit ExecEnv(std::unique_ptr<SchemaScannerFactory> schema_scanner_factory);
 
     // Empty destructor because the compiler-generated one requires full
     // declarations for classes in scoped_ptrs.
@@ -149,6 +156,7 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     ComputeEnv* compute_env() const { return _compute_env; }
+    const SchemaScannerFactory* schema_scanner_factory() const { return _schema_scanner_factory.get(); }
 
     int64_t max_executor_threads() const { return _runtime_env->max_executor_threads(); }
 
@@ -170,6 +178,7 @@ private:
     TableMetricsManager* _table_metrics_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     ComputeEnv* _compute_env = nullptr;
+    std::unique_ptr<SchemaScannerFactory> _schema_scanner_factory;
 
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;

@@ -591,6 +591,7 @@
       "allowed_test_targets": ["data_workflows_test"],
       "allowed_test_link_deps": [
         "DataWorkflows",
+        "SchemaScannerBuiltin",
         "Storage",
         "Exec",
         "ConnectorFile",
@@ -1157,7 +1158,8 @@
       "doc_label": "ExecSchemaScannerCore",
       "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",
       "owned_targets": ["ExecSchemaScannerCore"],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "additional_owned_globs": ["be/src/exec/schema_scanner_factory.h"],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner_factory.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/schema_scanner/", "exec/pipeline/", "storage/", "http/", "service/", "cache/"],
       "forbidden_includes": [
         "exec/exec_env.h",
@@ -1168,6 +1170,15 @@
       "allowed_test_targets": ["schema_scanner_core_test"],
       "allowed_test_link_deps": ["ExecSchemaScannerCore", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
+    },
+    {
+      "id": "schemascannerbuiltin",
+      "doc_label": "SchemaScannerBuiltin",
+      "summary": "Temporary top-level composition target for the builtin schema scanner factory while concrete scanners remain in Exec compatibility targets.",
+      "owned_targets": ["SchemaScannerBuiltin"],
+      "allowed_include_prefixes": ["exec/builtin_schema_scanner_factory.h", "exec/schema_scanner.h", "exec/schema_scanner_factory.h", "exec/schema_scanner/", "gen_cpp/"],
+      "allowed_target_deps": ["Exec", "ExecSchemaScannerCore", "ExecSchemaScanners"],
+      "remediation": "Keep builtin scanner selection above Exec; PR2 must replace the temporary Exec dependency with explicit layered schema scanner targets."
     },
     {
       "id": "execschemascanners",
