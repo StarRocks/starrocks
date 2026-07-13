@@ -83,8 +83,10 @@ Status TantivyInvertedWriter::init() {
         return Status::IOError("tantivy: failed to create temp dir '" + _temp_dir + "': " + ec.message());
     }
 
-    tb::RustResult r = tb::tantivy_create_index_writer(_temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str(),
-                                                       _support_phrase, _support_bm25);
+    tb::RustResult r = tb::tantivy_create_index_writer(
+            _temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str(), _support_phrase, _support_bm25,
+            static_cast<uintptr_t>(config::tantivy_writer_memory_budget_bytes),
+            config::tantivy_writer_merge_policy.value().c_str());
     TantivyResultGuard guard(r);
     if (!r.success) {
         return tantivy_status_from_error(r);

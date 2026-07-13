@@ -224,14 +224,23 @@ void tantivy_free_index_reader(void* reader);
  * `support_bm25`: when true, per-document fieldnorms are stored (needed for
  * BM25 length normalization). When false, fieldnorms are omitted.
  *
+ * `memory_budget_bytes`: memory budget for the IndexWriter. 0 uses the
+ * compile-time default (256 MB).
+ *
+ * `merge_policy`: NUL-terminated C string selecting the merge policy.
+ * `"no_merge"` disables merging; anything else uses `LogMergePolicy`.
+ * NULL is treated as `"default"`.
+ *
  * SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
- * C strings.
+ * C strings. `merge_policy` may be NULL.
  */
 RustResult tantivy_create_index_writer(const char *path,
                                        const char *field_name,
                                        const char *tokenizer,
                                        bool support_phrase,
-                                       bool support_bm25);
+                                       bool support_bm25,
+                                       uintptr_t memory_budget_bytes,
+                                       const char *merge_policy);
 
 /**
  * Append a batch of UTF-8 strings as documents in order. `values_ptr` is an

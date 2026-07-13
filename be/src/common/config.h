@@ -1750,4 +1750,16 @@ CONF_Int32(cow_optimization_diagnose_level, "0");
 CONF_mBool(tantivy_ignore_write_error, "false");
 CONF_String(tantivy_index_local_tmp_dir, "tmp/tantivy_tmp");
 
+// tantivy IndexWriter memory budget per writer (bytes). When buffered
+// postings exceed this threshold tantivy spills an internal segment.
+// Larger values reduce segment count (fewer merges, faster writes) at
+// the cost of higher per-writer memory usage.  Default 256 MB.
+CONF_mInt64(tantivy_writer_memory_budget_bytes, "268435456");
+
+// tantivy merge policy applied after commit.
+// Options: "default" (= LogMergePolicy), "no_merge" (skip merging entirely).
+// Use "no_merge" for write-once scenarios (StarRocks packs the temp dir
+// into a compound .idx immediately after commit, so merging is pure overhead
+// unless query-time multi-segment perf is critical).
+CONF_mString(tantivy_writer_merge_policy, "default");
 } // namespace starrocks::config
