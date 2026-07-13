@@ -38,14 +38,14 @@ public class JWTSecurityIntegration extends SecurityIntegration {
     @Override
     public AuthenticationProvider getAuthenticationProvider() {
         String jwksUrl = propertyMap.get(JWTAuthenticationProvider.JWT_JWKS_URL);
-        String principalFiled = propertyMap.get(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD);
+        String principalField = propertyMap.get(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD);
         String commaSeparatedIssuer = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER);
         String[] requireIssuer = commaSeparatedIssuer == null ?
                 new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
         String commaSeperatedRequireAudiences = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_AUDIENCE);
         String[] requireAudiences = commaSeperatedRequireAudiences == null ?
                 new String[0] : COMMA_SPLIT.split(commaSeperatedRequireAudiences.trim());
-        return new JWTAuthenticationProvider(jwksUrl, principalFiled, requireIssuer, requireAudiences);
+        return new JWTAuthenticationProvider(jwksUrl, principalField, requireIssuer, requireAudiences);
     }
 
     @Override

@@ -28,14 +28,14 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     public static final String JWT_REQUIRED_AUDIENCE = "required_audience";
 
     private final String jwksUrl;
-    private final String principalFiled;
+    private final String principalField;
     private final String[] requiredIssuer;
     private final String[] requiredAudience;
 
-    public JWTAuthenticationProvider(String jwksUrl, String principalFiled,
+    public JWTAuthenticationProvider(String jwksUrl, String principalField,
                                      String[] requiredIssuer, String[] requiredAudience) {
         this.jwksUrl = jwksUrl;
-        this.principalFiled = principalFiled;
+        this.principalField = principalField;
         this.requiredIssuer = requiredIssuer;
         this.requiredAudience = requiredAudience;
     }
@@ -49,7 +49,7 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
             MysqlCodec.readInt1(authBuffer);
             byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
+            OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalField, requiredIssuer,
                     requiredAudience);
             authContext.setAuthToken(new String(idToken));
         } catch (Exception e) {
