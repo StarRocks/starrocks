@@ -15,7 +15,7 @@
 //! C ABI shim for the writer side.
 //!
 //! Surface:
-//!   - tantivy_create_index_writer(path, field_name, tokenizer)
+//!   - tantivy_create_index_writer(path, field_name, tokenizer, support_phrase, support_bm25)
 //!   - tantivy_index_add_strings_batch(writer, values_ptr, count)
 //!   - tantivy_commit_index(writer)
 //!   - tantivy_free_index_writer(writer)
@@ -50,6 +50,12 @@ macro_rules! cstr_or_err {
 /// opaque writer handle in `RustResult.value.ptr`. Caller MUST release with
 /// `tantivy_free_index_writer` and the result with `free_rust_result`.
 ///
+/// `support_phrase`: when true, term positions are stored (needed for phrase
+/// queries). When false, only term frequencies are stored (smaller on disk).
+///
+/// `support_bm25`: when true, per-document fieldnorms are stored (needed for
+/// BM25 length normalization). When false, fieldnorms are omitted.
+///
 /// SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
 /// C strings.
 #[no_mangle]
@@ -57,6 +63,8 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
     path: *const c_char,
     field_name: *const c_char,
     tokenizer: *const c_char,
+    support_phrase: bool,
+    support_bm25: bool,
 ) -> RustResult {
     catch_ffi(|| {
         let path_str = cstr_or_err!(path, "path");
@@ -66,6 +74,8 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
             std::path::Path::new(path_str),
             field_name_str,
             tokenizer_str,
+            support_phrase,
+            support_bm25,
         ) {
             Ok(w) => RustResult::ok_ptr(create_binding(w)),
             Err(e) => RustResult::err(e.to_string()),

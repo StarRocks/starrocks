@@ -57,17 +57,40 @@ pub struct IndexWriterWrapper {
 
 impl IndexWriterWrapper {
     /// Create a fresh tantivy index at `path` (must be empty/non-existent)
-    /// with one TEXT field named `field_name` and the analyzer chain identified by `tokenizer_name`.
-    pub fn create(path: &Path, field_name: &str, tokenizer_name: &str) -> Result<Self> {
+    /// with one TEXT field named `field_name` and the analyzer chain identified
+    /// by `tokenizer_name`.
+    ///
+    /// `support_phrase` controls whether term positions are stored (required for
+    /// `PhraseQuery`). When `true`, `IndexRecordOption::WithFreqsAndPositions`
+    /// is used; when `false`, `IndexRecordOption::WithFreqs` (smaller on disk).
+    ///
+    /// `support_bm25` controls whether per-document field length norms
+    /// (fieldnorms) are stored. These are required for BM25 scoring to
+    /// differentiate short vs. long documents. When `false`,
+    /// `set_fieldnorms(false)` is applied.
+    pub fn create(
+        path: &Path,
+        field_name: &str,
+        tokenizer_name: &str,
+        support_phrase: bool,
+        support_bm25: bool,
+    ) -> Result<Self> {
         std::fs::create_dir_all(path)?;
 
         let analyzer = tokenizer::build(tokenizer_name)?;
+
+        let record_option = if support_phrase {
+            IndexRecordOption::WithFreqsAndPositions
+        } else {
+            IndexRecordOption::WithFreqs
+        };
 
         let mut schema_builder = Schema::builder();
         let text_options = TextOptions::default().set_indexing_options(
             TextFieldIndexing::default()
                 .set_tokenizer(TOKENIZER_NAME)
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+                .set_index_option(record_option)
+                .set_fieldnorms(support_bm25),
         );
         let text_field = schema_builder.add_text_field(field_name, text_options);
         let row_id_field = schema_builder.add_u64_field("row_id", FAST);

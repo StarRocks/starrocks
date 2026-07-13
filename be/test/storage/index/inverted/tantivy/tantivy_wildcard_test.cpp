@@ -64,7 +64,7 @@ std::vector<uint32_t> array_to_vector(const tb::RustU32Array& arr) {
 void build_index_raw(const std::string& index_path, const std::string& field, const std::vector<std::string>& docs) {
     // tokenizer="raw" → no tokenization, term dict equals the original strings.
     // This gives the wildcard FFI parser=none semantics.
-    tb::RustResult cw = tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "raw");
+    tb::RustResult cw = tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "raw", true, true);
     RustResultGuard g_cw{cw};
     ASSERT_TRUE(cw.success) << "create_index_writer: " << (cw.error ? cw.error : "?");
     void* writer = cw.value.ptr;

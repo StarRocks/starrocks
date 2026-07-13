@@ -218,10 +218,20 @@ void tantivy_free_index_reader(void* reader);
  * opaque writer handle in `RustResult.value.ptr`. Caller MUST release with
  * `tantivy_free_index_writer` and the result with `free_rust_result`.
  *
+ * `support_phrase`: when true, term positions are stored (needed for phrase
+ * queries). When false, only term frequencies are stored (smaller on disk).
+ *
+ * `support_bm25`: when true, per-document fieldnorms are stored (needed for
+ * BM25 length normalization). When false, fieldnorms are omitted.
+ *
  * SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
  * C strings.
  */
-RustResult tantivy_create_index_writer(const char* path, const char* field_name, const char* tokenizer);
+RustResult tantivy_create_index_writer(const char *path,
+                                       const char *field_name,
+                                       const char *tokenizer,
+                                       bool support_phrase,
+                                       bool support_bm25);
 
 /**
  * Append a batch of UTF-8 strings as documents in order. `values_ptr` is an

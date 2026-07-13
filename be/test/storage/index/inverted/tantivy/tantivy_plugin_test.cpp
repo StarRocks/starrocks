@@ -90,8 +90,10 @@ TEST(TantivyPluginTest, WriteAndFinishCompound) {
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
 
+    std::string idx_dir = temp_dir + "/index";
+
     std::unique_ptr<InvertedWriter> writer;
-    ASSERT_OK(plugin->create_inverted_index_writer(typeinfo, "content", temp_dir, &tablet_index, &writer));
+    ASSERT_OK(plugin->create_inverted_index_writer(typeinfo, "content", idx_dir, &tablet_index, &writer));
     ASSERT_OK(writer->init());
 
     // Add some values.
@@ -144,11 +146,14 @@ TEST(TantivyPluginTest, ReadAfterWrite) {
     TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+    tablet_index.add_index_properties("parser", "english");
+
+    std::string idx_dir = temp_dir + "/index";
 
     // Write phase.
     {
         std::unique_ptr<InvertedWriter> writer;
-        ASSERT_OK(plugin->create_inverted_index_writer(typeinfo, "content", temp_dir, &tablet_index, &writer));
+        ASSERT_OK(plugin->create_inverted_index_writer(typeinfo, "content", idx_dir, &tablet_index, &writer));
         ASSERT_OK(writer->init());
 
         Slice slices[] = {Slice("the quick brown fox"), Slice("lazy brown dog"), Slice("quick fox jumps")};
@@ -162,7 +167,7 @@ TEST(TantivyPluginTest, ReadAfterWrite) {
     // Read phase — load from the same local directory.
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
-    ASSERT_OK(plugin->create_inverted_index_reader(temp_dir, tablet_index_sp, TYPE_VARCHAR, &reader));
+    ASSERT_OK(plugin->create_inverted_index_reader(idx_dir, tablet_index_sp, TYPE_VARCHAR, &reader));
 
     IndexReadOptions opts;
     ASSERT_OK(reader->load(opts, nullptr));

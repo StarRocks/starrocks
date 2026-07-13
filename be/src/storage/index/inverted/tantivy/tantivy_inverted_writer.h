@@ -41,12 +41,15 @@ public:
     uint64_t size() const override;
 
 private:
-    TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string tokenizer, int64_t index_id);
+    TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string tokenizer, int64_t index_id,
+                          bool support_phrase, bool support_bm25);
 
     std::string _field_name;
     std::string _temp_dir;
     std::string _tokenizer;
     int64_t _index_id = 0;
+    bool _support_phrase = true;
+    bool _support_bm25 = true;
 
     TantivyWriterGuard _writer;
     roaring::Roaring _null_bitmap;

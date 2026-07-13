@@ -29,11 +29,13 @@ namespace starrocks {
 namespace tb = ::starrocks::tantivy_binding;
 
 TantivyInvertedWriter::TantivyInvertedWriter(std::string field_name, std::string temp_dir, std::string tokenizer,
-                                             int64_t index_id)
+                                             int64_t index_id, bool support_phrase, bool support_bm25)
         : _field_name(std::move(field_name)),
           _temp_dir(std::move(temp_dir)),
           _tokenizer(std::move(tokenizer)),
-          _index_id(index_id) {}
+          _index_id(index_id),
+          _support_phrase(support_phrase),
+          _support_bm25(support_bm25) {}
 
 Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::string& field_name,
                                      const std::string& path, TabletIndex* tablet_index,
@@ -52,9 +54,21 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
         return Status::NotSupported("tantivy: unsupported parser '" + parser_str + "'");
     }
 
+    // Read support_phrase / support_bm25 from search properties to control the
+    // tantivy schema: positions (for phrase queries) and fieldnorms (for BM25).
+    const auto& search_props = tablet_index->search_properties();
+    bool support_phrase = true;
+    bool support_bm25 = true;
+    if (auto it = search_props.find("support_phrase"); it != search_props.end()) {
+        support_phrase = (it->second == "true");
+    }
+    if (auto it = search_props.find("support_bm25"); it != search_props.end()) {
+        support_bm25 = (it->second == "true");
+    }
+
     int64_t index_id = tablet_index->index_id();
     auto writer = std::unique_ptr<TantivyInvertedWriter>(
-            new TantivyInvertedWriter(field_name, path, std::move(tokenizer), index_id));
+            new TantivyInvertedWriter(field_name, path, std::move(tokenizer), index_id, support_phrase, support_bm25));
     *res = std::move(writer);
     return Status::OK();
 }
@@ -69,7 +83,8 @@ Status TantivyInvertedWriter::init() {
         return Status::IOError("tantivy: failed to create temp dir '" + _temp_dir + "': " + ec.message());
     }
 
-    tb::RustResult r = tb::tantivy_create_index_writer(_temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str());
+    tb::RustResult r = tb::tantivy_create_index_writer(_temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str(),
+                                                       _support_phrase, _support_bm25);
     TantivyResultGuard guard(r);
     if (!r.success) {
         return tantivy_status_from_error(r);

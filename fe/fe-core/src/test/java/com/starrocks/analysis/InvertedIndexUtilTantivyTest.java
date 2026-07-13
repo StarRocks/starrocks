@@ -165,8 +165,19 @@ public class InvertedIndexUtilTantivyTest extends PlanTestBase {
         Assertions.assertDoesNotThrow(
                 () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
         String spKey = SearchParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT);
-        Assertions.assertEquals("false", props.get(spKey),
-                "support_phrase should be auto-filled with 'false' for tantivy");
+        Assertions.assertEquals("true", props.get(spKey),
+                "support_phrase should be auto-filled with 'true' for tantivy");
+    }
+
+    @Test
+    public void supportBm25DefaultFilled_forTantivy() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        String bm25Key = SearchParamsKey.SUPPORT_BM25.name().toLowerCase(Locale.ROOT);
+        Assertions.assertEquals("true", props.get(bm25Key),
+                "support_bm25 should be auto-filled with 'true' for tantivy");
     }
 
     @Test

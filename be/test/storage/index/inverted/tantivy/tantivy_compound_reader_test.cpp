@@ -56,6 +56,7 @@ CompoundIndexEntry write_and_pack(const std::string& index_dir, const std::vecto
     TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+    tablet_index.add_index_properties("parser", "english");
 
     std::unique_ptr<InvertedWriter> writer;
     EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir, &tablet_index,
@@ -125,6 +126,7 @@ TEST(TantivyCompoundReaderTest, FullRoundTrip) {
     // Create tantivy reader and load via compound path.
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+    tablet_index.add_index_properties("parser", "english");
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(index_dir, tablet_index_sp, TYPE_VARCHAR,
@@ -230,6 +232,7 @@ TEST(TantivyCompoundReaderTest, MultipleIndexesInOneBin) {
 
         TabletIndex ti;
         ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+        ti.add_index_properties("parser", "english");
         auto ti_sp = std::make_shared<TabletIndex>(ti);
         std::unique_ptr<InvertedReader> reader;
         ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx0_dir, ti_sp, TYPE_VARCHAR, &reader));
@@ -253,6 +256,7 @@ TEST(TantivyCompoundReaderTest, MultipleIndexesInOneBin) {
 
         TabletIndex ti;
         ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+        ti.add_index_properties("parser", "english");
         auto ti_sp = std::make_shared<TabletIndex>(ti);
         std::unique_ptr<InvertedReader> reader;
         ASSERT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(idx1_dir, ti_sp, TYPE_VARCHAR, &reader));
