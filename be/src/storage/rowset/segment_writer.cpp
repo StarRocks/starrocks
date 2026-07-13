@@ -54,6 +54,7 @@
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/json_column_writer.h"
@@ -200,6 +201,18 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.segment_file_mark.rowset_path_prefix.empty()) {
+            // Writers that produce auxiliary segments without a segment file mark (e.g. the
+            // column-mode partial update .cols writer) cannot derive a valid standalone index
+            // path: the path built below would be malformed and readers never look it up.
+            // Skip standalone (CLucene) index generation there instead of writing it to a
+            // bogus location; readers fall back to evaluating predicates on the data.
+            // Footer-inlined implementations (builtin) need no path and are kept.
+            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
+            if (imp_type != InvertedImplementType::BUILTIN) {
+                opts.need_inverted_index = false;
+            }
+        }
         if (opts.need_inverted_index) {
             opts.standalone_index_file_paths.emplace(
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,

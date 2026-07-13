@@ -53,6 +53,7 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -4015,7 +4016,33 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.segment_rows = num_rows();
 
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
+            // Column-mode partial update rewrites a column into a delta column group
+            // (.cols) file and leaves the base segment untouched, so the base segment's
+            // inverted index still reflects pre-update values. Mirror _apply_bitmap_index:
+            // take the index from the DCG segment when the column has been rewritten, so
+            // the index stays consistent with the data actually returned.
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            } else {
+                std::shared_ptr<TabletIndex> index_meta;
+                RETURN_IF_ERROR(segment_ptr->tablet_schema().get_indexes_for_column(ucid, GIN, index_meta));
+                if (index_meta != nullptr) {
+                    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                    if (imp_type != InvertedImplementType::BUILTIN) {
+                        // Standalone (CLucene) inverted indexes are not produced by the DCG
+                        // writer, and the base segment's copy is stale for this column, so no
+                        // index is served. Ordinary predicates (e.g. equality) then evaluate
+                        // on the fresh column data. MATCH predicates cannot be evaluated
+                        // without an index and fail with an explicit error -- preferable to
+                        // silently filtering on pre-update values. Compaction rewrites the
+                        // base segment and restores index acceleration.
+                        continue;
+                    }
+                }
+            }
+            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(
                     ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
             _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
         }
