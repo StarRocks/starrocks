@@ -280,6 +280,12 @@ public final class MetricRepo {
     public static final LongCounterMetric COUNTER_CONTEXT_SEARCH_TOTAL =
             new LongCounterMetric("context_search_total",
                     MetricUnit.REQUESTS, "total number of CONTEXT_SEARCH invocations");
+    public static final LongCounterMetric COUNTER_CONTEXT_CHANNEL_SEND_TOTAL =
+            new LongCounterMetric("context_channel_send_total",
+                    MetricUnit.REQUESTS, "total number of channel messages sent");
+    public static final LongCounterMetric COUNTER_CONTEXT_CHANNEL_PULL_TOTAL =
+            new LongCounterMetric("context_channel_pull_total",
+                    MetricUnit.REQUESTS, "total number of channel pull requests");
     public static final LongCounterMetric COUNTER_CONTEXT_UPSERT_TOTAL =
             new LongCounterMetric("context_upsert_total",
                     MetricUnit.REQUESTS, "total number of CONTEXT UPSERT statements executed");
@@ -886,6 +892,8 @@ public final class MetricRepo {
         COUNTER_QUERY_ALL = new LongCounterMetric("query_total", MetricUnit.REQUESTS, "total query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ALL);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CONTEXT_SEARCH_TOTAL);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CONTEXT_CHANNEL_SEND_TOTAL);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CONTEXT_CHANNEL_PULL_TOTAL);
         COUNTER_QUERY_ERR = new LongCounterMetric("query_err", MetricUnit.REQUESTS, "total error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ERR);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CONTEXT_UPSERT_TOTAL);

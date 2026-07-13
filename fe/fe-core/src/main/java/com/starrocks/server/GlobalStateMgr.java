@@ -116,9 +116,11 @@ import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.context.ChannelExecutor;
 import com.starrocks.context.ContextMetaManager;
 import com.starrocks.context.ContextMgr;
 import com.starrocks.context.ContextReadExecutor;
+import com.starrocks.context.ContextTaskScheduler;
 import com.starrocks.context.ContextWriteExecutor;
 import com.starrocks.context.SnapshotResolver;
 import com.starrocks.context.WorkspaceObjectWriter;
@@ -559,6 +561,12 @@ public class GlobalStateMgr {
     private final ContextReadExecutor contextReadExecutor;
     private final ContextWriteExecutor contextWriteExecutor;
     private final WorkspaceObjectWriter workspaceObjectWriter;
+    private final ContextTaskScheduler contextTaskScheduler;
+    private final ChannelExecutor channelExecutor;
+    private final com.starrocks.context.ContextTaskDaemon contextBulkImportDaemon;
+    private final com.starrocks.context.ContextTaskDaemon contextDerivedPageDaemon;
+    private final com.starrocks.context.ContextTaskDaemon contextReferenceResyncDaemon;
+    private final com.starrocks.context.ContextTaskDaemon contextWorkspaceCommitDaemon;
     private final SnapshotResolver contextSnapshotResolver;
     private final TextSearchExecutor contextTextSearchExecutor;
     private final VectorSearchExecutor contextVectorSearchExecutor;
@@ -998,6 +1006,16 @@ public class GlobalStateMgr {
                 this.contextMgr, this.contextVersionAllocator, this.contextSnapshotAllocator);
         this.workspaceObjectWriter = new WorkspaceObjectWriter(
                 this.contextMgr, this.contextSnapshotAllocator);
+        this.contextTaskScheduler = new ContextTaskScheduler();
+        this.channelExecutor = new ChannelExecutor(this.contextMgr, this.contextWriteExecutor);
+        this.contextBulkImportDaemon = new com.starrocks.context.ContextTaskDaemon(
+                com.starrocks.context.ContextTaskScheduler.TaskKind.BULK_IMPORT);
+        this.contextDerivedPageDaemon = new com.starrocks.context.ContextTaskDaemon(
+                com.starrocks.context.ContextTaskScheduler.TaskKind.DERIVED_PAGE);
+        this.contextReferenceResyncDaemon = new com.starrocks.context.ContextTaskDaemon(
+                com.starrocks.context.ContextTaskScheduler.TaskKind.REFERENCE_RESYNC);
+        this.contextWorkspaceCommitDaemon = new com.starrocks.context.ContextTaskDaemon(
+                com.starrocks.context.ContextTaskScheduler.TaskKind.WORKSPACE_COMMIT);
         this.contextSnapshotResolver = new SnapshotResolver();
         this.contextTextSearchExecutor = new TextSearchExecutor();
         this.contextVectorSearchExecutor = new VectorSearchExecutor();
@@ -1350,6 +1368,14 @@ public class GlobalStateMgr {
 
     public WorkspaceObjectWriter getWorkspaceObjectWriter() {
         return workspaceObjectWriter;
+    }
+
+    public ContextTaskScheduler getContextTaskScheduler() {
+        return contextTaskScheduler;
+    }
+
+    public ChannelExecutor getChannelExecutor() {
+        return channelExecutor;
     }
 
     public SnapshotResolver getContextSnapshotResolver() {
@@ -1921,6 +1947,10 @@ public class GlobalStateMgr {
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         contextMetaManager.start();
+        contextBulkImportDaemon.start();
+        contextDerivedPageDaemon.start();
+        contextReferenceResyncDaemon.start();
+        contextWorkspaceCommitDaemon.start();
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
