@@ -3267,6 +3267,22 @@ public class Config extends ConfigBase {
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**
+     * Retention grace, measured from when a shard group first becomes orphaned (leaves the FE live
+     * set), before its tablets' metadata is physically deleted from object storage. Unlike
+     * shard_group_clean_threshold_sec (keyed on shard-group create time, hence already expired for a
+     * long-lived index the moment it is superseded), this protects an in-flight query planned against
+     * a now-superseded index -- a tablet-split parent, a tablet-merge child, or a schema-change /
+     * rollup origin index -- from failing (404 on a &lt;tablet&gt;_&lt;version&gt;.meta) when that index's
+     * shards are reclaimed out from under it. Set to 0 to disable. Default 1800s (30 min), aligned
+     * with lake_autovacuum_grace_period_minutes; both should exceed the maximum expected query time.
+     */
+    @ConfField(mutable = true, comment = "Grace period in seconds, measured from when a shard group becomes " +
+            "orphaned, before its tablet metadata is physically deleted in shared-data mode. Protects in-flight " +
+            "queries planned against a superseded index (tablet-split parent / merge child / schema-change " +
+            "origin). 0 disables. Default 1800 (30 min).")
+    public static long lake_orphan_shard_group_retention_grace_seconds = 1800L;
+
+    /**
      * fe sync with star mgr meta interval in seconds
      */
     @ConfField(mutable = true, comment = "The interval in seconds at which StarMgrMetaSyncer runs periodical" +

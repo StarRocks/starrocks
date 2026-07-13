@@ -285,11 +285,15 @@ public class StarMgrMetaSyncerTest {
         // skip all the initialization in MetricRepo
         MetricRepo.hasInit = true;
         starMgrMetaSyncer = new StarMgrMetaSyncer();
+        // The existing single-cycle delete tests assume no orphan retention grace; the dedicated
+        // grace test (testOrphanShardGroupRetentionGrace) sets it explicitly.
+        Config.lake_orphan_shard_group_retention_grace_seconds = 0;
     }
 
     @AfterEach
     public void tearDown() {
         Config.shard_group_clean_threshold_sec = originalCleanConfigValue;
+        Config.lake_orphan_shard_group_retention_grace_seconds = 1800L;
     }
 
     @Test
@@ -626,6 +630,88 @@ public class StarMgrMetaSyncerTest {
         };
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         // can delete the shards, because the error is INVALID_ARGUMENT
+        Assertions.assertEquals(0, allShardIds.size());
+    }
+
+    @Test
+    public void testOrphanShardGroupRetentionGrace() {
+        Config.shard_group_clean_threshold_sec = 0;                        // create-time gate off
+        Config.lake_orphan_shard_group_retention_grace_seconds = 3600;     // long orphan grace
+        long groupIdToClear = shardGroupId + 1;
+        List<Long> allShardGroupId = Lists.newArrayList(groupIdToClear);
+        List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
+        int numOfShards = allShardIds.size();
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        for (long groupId : allShardGroupId) {
+            shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                    .setGroupId(groupId)
+                    .putLabels("tableId", String.valueOf(6L))
+                    .putLabels("dbId", String.valueOf(66L))
+                    .putLabels("partitionId", String.valueOf(666L))
+                    .putLabels("indexId", String.valueOf(6666L))
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                    .addAllShardIds(allShardIds)
+                    .build());
+        }
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) throws StarClientException {
+                allShardGroupId.removeAll(groupIds);
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+
+            @Mock
+            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
+                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                return groupId == groupIdToClear ? allShardIds : Lists.newArrayList();
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                allShardIds.removeAll(shardIds);
+            }
+        };
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                resp.failedTablets = new ArrayList<>();
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        // First cycle: the group is only just observed as orphaned, so the grace retains it -- an
+        // in-flight query planned against its (superseded) tablets could still be reading their .meta.
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assertions.assertEquals(numOfShards, allShardIds.size());
+
+        // Once the grace is disabled, the next cycle physically deletes the orphaned shards.
+        Config.lake_orphan_shard_group_retention_grace_seconds = 0;
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         Assertions.assertEquals(0, allShardIds.size());
     }
 
