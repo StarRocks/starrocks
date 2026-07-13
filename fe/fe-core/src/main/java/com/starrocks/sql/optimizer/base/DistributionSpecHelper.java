@@ -91,4 +91,19 @@ public final class DistributionSpecHelper {
                 new EquivalentDescriptor(tableId, Collections.emptyList());
         return new RangeDistributionSpec(colocateColumns, emptyEquiv);
     }
+
+    /**
+     * Whether a required distribution property carrying {@code spec} can be satisfied by a colocate
+     * join without a shuffle exchange: a hash-{@code LOCAL} spec (classic colocate) or a
+     * {@link RangeDistributionSpec} (range colocate).
+     */
+    public static boolean supportColocate(DistributionSpec spec) {
+        if (spec instanceof RangeDistributionSpec) {
+            return true;
+        }
+        if (spec instanceof HashDistributionSpec) {
+            return ((HashDistributionSpec) spec).getHashDistributionDesc().isLocal();
+        }
+        return false;
+    }
 }
