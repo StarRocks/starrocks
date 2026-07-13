@@ -287,13 +287,13 @@ public class StarMgrMetaSyncerTest {
         starMgrMetaSyncer = new StarMgrMetaSyncer();
         // The existing single-cycle delete tests assume no orphan retention grace; the dedicated
         // grace test (testOrphanShardGroupRetentionGrace) sets it explicitly.
-        Config.lake_orphan_shard_group_retention_grace_seconds = 0;
+        Config.shard_group_clean_retention_grace_seconds = 0;
     }
 
     @AfterEach
     public void tearDown() {
         Config.shard_group_clean_threshold_sec = originalCleanConfigValue;
-        Config.lake_orphan_shard_group_retention_grace_seconds = 1800L;
+        Config.shard_group_clean_retention_grace_seconds = 1800L;
     }
 
     @Test
@@ -636,7 +636,7 @@ public class StarMgrMetaSyncerTest {
     @Test
     public void testOrphanShardGroupRetentionGrace() {
         Config.shard_group_clean_threshold_sec = 0;                        // create-time gate off
-        Config.lake_orphan_shard_group_retention_grace_seconds = 3600;     // long orphan grace
+        Config.shard_group_clean_retention_grace_seconds = 3600;     // long orphan grace
         long groupIdToClear = shardGroupId + 1;
         List<Long> allShardGroupId = Lists.newArrayList(groupIdToClear);
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
@@ -710,7 +710,7 @@ public class StarMgrMetaSyncerTest {
         Assertions.assertEquals(numOfShards, allShardIds.size());
 
         // Once the grace is disabled, the next cycle physically deletes the orphaned shards.
-        Config.lake_orphan_shard_group_retention_grace_seconds = 0;
+        Config.shard_group_clean_retention_grace_seconds = 0;
         Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
         Assertions.assertEquals(0, allShardIds.size());
     }

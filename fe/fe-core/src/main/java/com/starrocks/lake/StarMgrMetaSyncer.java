@@ -85,7 +85,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     // Wall-clock time (ms) at which each shard group was first observed as orphaned (present in
     // StarMgr but no longer in the FE live set). Used to enforce
-    // Config.lake_orphan_shard_group_retention_grace_seconds before physical deletion. Only touched
+    // Config.shard_group_clean_retention_grace_seconds before physical deletion. Only touched
     // from the daemon thread in deleteUnusedShardAndShardGroup(); pruned there to the current orphan
     // set, so it stays bounded and a non-persisted restart merely restarts the grace (safe).
     private final Map<Long, Long> orphanShardGroupFirstSeenMs = new HashMap<>();
@@ -363,7 +363,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // tablet metadata for a while AFTER it leaves the FE live set, so an in-flight query planned
         // against it can still read its .meta. Covers tablet split (parent), merge (child) and
         // schema-change / rollup (origin) uniformly, since all funnel through this GC path.
-        long orphanGraceMs = Config.lake_orphan_shard_group_retention_grace_seconds * 1000L;
+        long orphanGraceMs = Config.shard_group_clean_retention_grace_seconds * 1000L;
         Set<Long> orphansThisRun = new HashSet<>();
 
         // Keep in mind that the collected shardGroupId may not be complete, all the subsequent operations

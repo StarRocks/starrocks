@@ -3280,7 +3280,7 @@ public class Config extends ConfigBase {
             "orphaned, before its tablet metadata is physically deleted in shared-data mode. Protects in-flight " +
             "queries planned against a superseded index (tablet-split parent / merge child / schema-change " +
             "origin). 0 disables. Default 1800 (30 min).")
-    public static long lake_orphan_shard_group_retention_grace_seconds = 1800L;
+    public static long shard_group_clean_retention_grace_seconds = 1800L;
 
     /**
      * fe sync with star mgr meta interval in seconds
