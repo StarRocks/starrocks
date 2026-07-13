@@ -88,6 +88,9 @@ public class LakePublishBatchTest {
     // Dedicated table for the sticky-retry tests so they are immune to version-gap fixture pollution left by
     // other tests in this class (e.g. testPublishDbDroped aborts txns and leaves nextVersion ahead of visibleVersion).
     private static final String TABLE_STICKY = "table_for_test_sticky_retry";
+    // File-bundling variant: the sticky skip must be DISABLED here so publishPartitionBatch re-runs the
+    // carry-forward bundle computation on every attempt (see PublishVersionDaemon.fileBundling handling).
+    private static final String TABLE_STICKY_BUNDLING = "table_for_test_sticky_retry_bundling";
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
@@ -232,6 +235,19 @@ public class LakePublishBatchTest {
                 " PROPERTIES(\"replication_num\" = \"" + 3 +
                 "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"false\")";
         starRocksAssert.withTable(sql4);
+
+        String sql5 = "create table " + TABLE_STICKY_BUNDLING +
+                " (dt date NOT NULL, pk bigint NOT NULL, v0 string not null) primary KEY (dt, pk) " +
+                "PARTITION BY RANGE(`dt`) (\n" +
+                "    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),\n" +
+                "    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),\n" +
+                "    PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),\n" +
+                "    PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))\n" +
+                ")" +
+                "DISTRIBUTED BY HASH(pk) BUCKETS 3" +
+                " PROPERTIES(\"replication_num\" = \"" + 3 +
+                "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
+        starRocksAssert.withTable(sql5);
     }
 
     @AfterAll
@@ -1055,6 +1071,53 @@ public class LakePublishBatchTest {
             awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
         } finally {
             release.countDown();
+        }
+    }
+
+    // SR-38350 / Codex P1: for a FILE-BUNDLING table the sticky skip must be disabled, because publishPartitionBatch
+    // recomputes a whole-partition carry-forward bundle against the currently visible index set on each attempt.
+    // This asserts that, unlike the non-bundling case, an already-succeeded partition IS re-published on the retry
+    // (so a stale bundle can never be finalized), while the batch still converges.
+    @Test
+    public void testStickyRetryFileBundlingAlwaysRepublishes() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table =
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_STICKY_BUNDLING);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+        generateSimpleTabletCommitInfo(db, table, transTablets1, transTablets2);
+
+        long savedInterval = Config.lake_publish_version_retry_interval_ms;
+        Config.lake_publish_version_retry_interval_ms = 0;
+
+        final long failPartitionId = table.getPartitions().iterator().next().getDefaultPhysicalPartition().getId();
+        Map<Long, Integer> callCounts = new ConcurrentHashMap<>();
+        Set<Long> alreadyFailed = ConcurrentHashMap.newKeySet();
+
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public boolean publishPartitionBatch(Database d, long tableId, PartitionPublishVersionData data,
+                                                 TransactionStateBatch stateBatch) {
+                long pid = data.getPartitionId();
+                callCounts.merge(pid, 1, Integer::sum);
+                return !(pid == failPartitionId && alreadyFailed.add(pid));
+            }
+        };
+
+        try {
+            List<VisibleStateWaiter> waiters =
+                    beginAndCommitBatch(db, table, 4, transTablets1, transTablets2, "bundling");
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
+
+            // For a file-bundling table the skip is disabled: at least one already-succeeded (non-failed) partition
+            // is re-published on the retry cycle, proving stale-bundle finalization cannot occur.
+            boolean anOtherPartitionWasRepublished = callCounts.entrySet().stream()
+                    .anyMatch(e -> e.getKey() != failPartitionId && e.getValue() >= 2);
+            Assertions.assertTrue(anOtherPartitionWasRepublished,
+                    "file-bundling partitions must be re-published (not skipped) so carry-forward stays current");
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = savedInterval;
         }
     }
 }

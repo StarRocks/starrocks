@@ -998,6 +998,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // by future refactors: (1) keep the terminal .exceptionally on this chain (it guarantees the guard-set
         // removal in .thenRun runs even on failure); (2) do not introduce a synchronous throw between the guard-set
         // add and the .thenRun registration (it would leak the tableId and freeze the table's publish).
+        // File-bundling tables cannot use the "skip already-published partition" optimization. For those tables
+        // publishPartitionBatch recomputes a whole-partition carry-forward bundle against the CURRENTLY visible
+        // index set (see collectFileBundlingCarryForwardTablets). If we skipped a partition that succeeded on an
+        // earlier attempt while another partition of the same batch was still failing, and a rollup/MV index became
+        // visible in between, the batch could finish with a stale bundle that omits the newly visible index. So for
+        // file-bundling tables we always re-run publishPartitionBatch (idempotent on the BE) so the carry-forward
+        // stays current; only the failure backoff below still applies. Non-file-bundling tables use the full sticky
+        // skip. Read best-effort without a lock: publishPartitionBatch re-reads the authoritative value under its own
+        // lock, so a wrong read only costs (never corrupts) the optimization. The one unsafe direction — reading
+        // false while an ENABLE_FILE_BUNDLING alter concurrently turns it on — is defended by the version-adjacency
+        // guards (that alter bumps nextVersion under the table WRITE lock, tripping trimBatchAtVersionGap / the
+        // visibleVersion+1 check), and the value is re-read on the next cycle.
+        OlapTable batchTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        boolean fileBundling = batchTable != null && batchTable.isFileBundling();
         int skippedPublished = 0;
         int inBackoff = 0;
         int publishing = 0;
@@ -1006,7 +1021,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // A partition is already published only when every one of its per-transaction commit infos has a
             // positive versionTime. A freshly appended transaction joins with versionTime == 0, which correctly
             // forces the partition to re-publish the widened version range (idempotent on the BE side).
-            if (!commitInfos.isEmpty()
+            if (!fileBundling && !commitInfos.isEmpty()
                     && commitInfos.stream().allMatch(ci -> partitionPublished(ci.getVersionTime()))) {
                 // Skip the BE publish RPC. Note: a skipped partition is not re-added to
                 // txnStateBatch.putBeTablets() this round, so its txn logs are reclaimed by vacuum rather than
@@ -1121,7 +1136,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
                                                                  @NotNull TransactionState txnState) {
         long versionTime = partitionCommitInfo.getVersionTime();
-        if (partitionPublished(versionTime)) {
+        // File-bundling tables must not skip an already-published partition: publishPartition recomputes a
+        // whole-partition carry-forward bundle against the CURRENTLY visible index set on every attempt (see
+        // collectFileBundlingCarryForwardTablets). For a multi-partition transaction where one partition already
+        // succeeded and another is still failing, skipping the succeeded partition on retry could finalize a stale
+        // bundle if a rollup/MV index became visible in between. So re-run the publish for file-bundling tables so
+        // carry-forward stays current (idempotent on the BE); only the failure backoff still applies. This mirrors
+        // the batch path (publishLakeTransactionBatchAsync).
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getId(), tableCommitInfo.getTableId());
+        boolean fileBundling = table != null && table.isFileBundling();
+        if (!fileBundling && partitionPublished(versionTime)) {
             return CompletableFuture.completedFuture(true);
         }
         if (partitionInBackoff(versionTime, System.currentTimeMillis(),
