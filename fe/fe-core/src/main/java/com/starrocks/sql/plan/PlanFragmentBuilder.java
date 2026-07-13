@@ -157,13 +157,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -3380,22 +3380,8 @@ public class PlanFragmentBuilder {
         }
 
         private boolean isColocateJoin(OptExpression optExpression) {
-            // Colocate join detection: a required property is colocate when
-            // it is either a hash-LOCAL spec (classic colocate) or a
-            // RangeDistributionSpec (range colocate; scan-local by invariant).
-            return optExpression.getRequiredProperties().stream().allMatch(
-                    physicalPropertySet -> {
-                        DistributionSpec spec = physicalPropertySet.getDistributionProperty().getSpec();
-                        if (spec instanceof RangeDistributionSpec) {
-                            return true;
-                        }
-                        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
-                            return false;
-                        }
-                        HashDistributionDesc.SourceType hashSourceType =
-                                ((HashDistributionSpec) spec).getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
-                    });
+            return optExpression.getRequiredProperties().stream().allMatch(physicalPropertySet ->
+                    DistributionSpecHelper.supportColocate(physicalPropertySet.getDistributionProperty().getSpec()));
         }
 
         public boolean isShuffleJoin(OptExpression optExpression) {
