@@ -1235,6 +1235,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：3000
 * 单位：毫秒
 
+### one_tablet_opt_max_tablet_rows
+
+* 描述：按 tablet 大小控制单 tablet 优化。当查询被裁剪到单个 tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 shuffle。这对小 tablet 很高效，但当 tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（shuffle）计划。设置为 `-1` 可禁用该门控，无论 tablet 大小都始终应用单 tablet 优化。
+* 默认值：10000000
+* 类型：Long
+* 引入版本：v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * 描述：指定一个物化视图改写规则可消耗的最大时间。当达到阈值时，将不再使用该规则进行查询改写。

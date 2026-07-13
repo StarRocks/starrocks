@@ -1466,6 +1466,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 3000
 * **Unit**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **Description**: Controls the single-tablet optimization by tablet size. When a query is pruned to a single tablet, StarRocks can run the aggregation in a single phase and gather the result on a single node, skipping the shuffle. This is efficient for a small tablet, but serializes the whole query on one node when the tablet is large. If the row count of the selected single tablet exceeds this threshold, the optimization is disabled and a normal distributed (shuffled) plan is used instead. Set it to `-1` to disable this gate and always apply the single-tablet optimization regardless of tablet size.
+* **Default**: 10000000
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **Description**: Specifies the maximum time that one materialized view rewrite rule can consume. When the threshold is reached, this rule will not be used for query rewrite.
