@@ -206,6 +206,13 @@ private:
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    // MorselQueueFactory must outlive the pipelines/operators declared below: a
+    // scan operator's ConnectorChunkSource::close() is invoked from ~ScanOperator
+    // during _pipelines teardown and calls back into the MorselQueueFactory via
+    // ScanOperatorFactory::morsel_queue_factory(). Declaring _morsel_queue_factories
+    // before _pipelines makes it destroyed after them, avoiding a use-after-free on
+    // non-EOF (cancel/error/limit) teardown paths.
+    MorselQueueFactoryMap _morsel_queue_factories;
     // Must outlive PipelineDriver observers owned by _pipelines.
     std::unique_ptr<EventScheduler> _event_scheduler;
     Pipelines _pipelines;
@@ -217,7 +224,6 @@ private:
     std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
 
-    MorselQueueFactoryMap _morsel_queue_factories;
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
     std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
