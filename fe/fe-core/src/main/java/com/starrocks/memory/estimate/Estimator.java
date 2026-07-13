@@ -421,6 +421,87 @@ public class Estimator {
         return shallowSize + (long) (avgSize * collection.size());
     }
 
+<<<<<<< HEAD
+=======
+    // Structural overhead of a Map's internal entry objects plus the backing table, which shallow
+    // size + sampled key/value elements do not otherwise count. Only concrete JDK hash/tree maps are
+    // charged; immutable/view maps (Map.of, Guava ImmutableMap, singletonMap, ...) store entries
+    // inline or in arrays and would be over-counted, so they get no node overhead here.
+    private static long mapStructureOverhead(Map<?, ?> map) {
+        int size = map.size();
+        if (size == 0) {
+            return 0;
+        }
+        if (map instanceof java.util.LinkedHashMap) {   // subclass of HashMap, check first
+            return (long) size * LINKED_HASH_ENTRY_SIZE + hashTableBytes(size);
+        }
+        if (map instanceof HashMap || map instanceof java.util.concurrent.ConcurrentHashMap) {
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
+        if (map instanceof java.util.TreeMap) {
+            return (long) size * TREE_ENTRY_SIZE;       // red-black tree nodes, no backing table
+        }
+        return 0;
+    }
+
+    // Structural overhead of a stand-alone collection's internals. Only concrete JDK collections are
+    // charged; immutable/view collections (List.of, Guava Immutable*, Arrays.asList, ...) get none.
+    // Not applied to Map key/value views.
+    private static long collectionBackingOverhead(Collection<?> collection) {
+        int size = collection.size();
+        if (size == 0) {
+            return 0;
+        }
+        if (collection instanceof java.util.LinkedHashSet) {   // subclass of HashSet, check first
+            return (long) size * LINKED_HASH_ENTRY_SIZE + hashTableBytes(size);
+        }
+        if (collection instanceof HashSet) {
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
+        if (collection instanceof java.util.TreeSet) {
+            return (long) size * TREE_ENTRY_SIZE;
+        }
+        if (collection instanceof ArrayList) {
+            return ARRAY_HEADER_SIZE + (long) size * REFERENCE_SIZE;   // backing Object[]
+        }
+        if (collection instanceof java.util.LinkedList) {
+            return (long) size * LINKED_LIST_NODE_SIZE;
+        }
+        if (collection instanceof java.util.concurrent.ConcurrentHashMap.KeySetView) {
+            // Backed by a ConcurrentHashMap; charge the same node + table overhead as the map itself.
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
+        return 0;
+    }
+
+    // JDK containers get the sampling paths (their internals are modeled by the *Overhead helpers,
+    // and their fields are not reflectively accessible anyway); anything else is field-walked.
+    private static boolean isJdkContainer(Class<?> clazz) {
+        return clazz.getName().startsWith("java.util.");
+    }
+
+    // A cache's keySet()/values()/asMap() view keeps a back-reference to the owning cache, so
+    // field-walking it would re-traverse and double-count the whole cache (and hand a size-0 count
+    // down to the array sampler for an empty cache). Sample these views instead of field-walking.
+    private static boolean isCacheView(Class<?> clazz) {
+        String name = clazz.getName();
+        return name.startsWith("com.github.benmanes.caffeine.")
+                || name.startsWith("com.google.common.cache.");
+    }
+
+    // Bytes of a hash table's backing array: capacity (next power of two that keeps the load factor)
+    // times a reference, plus the array header. Sized from the entry count, matching maps built via
+    // the sizing/copy constructors (the dominant population); put-grown small maps retain a larger
+    // 16-slot minimum table that this under-counts by a few dozen bytes.
+    private static long hashTableBytes(int size) {
+        int capacity = 2;
+        while (capacity * HASH_LOAD_FACTOR < size) {
+            capacity <<= 1;
+        }
+        return ARRAY_HEADER_SIZE + (long) capacity * REFERENCE_SIZE;
+    }
+
+>>>>>>> a673d6689e ([BugFix] Fix Iceberg manifest data-file cache serving an incomplete file set (backport #76215) (#76268))
     /**
      * Estimate the size of an array using sampling.
      *
