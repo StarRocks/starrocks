@@ -125,21 +125,21 @@ public class OptimizeClauseTest {
                 new StringLiteral("2024-12-31"),
                 NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("BETWEEN 2024-01-01 AND 2024-12-31", clause.toSql());
+        Assertions.assertEquals("BETWEEN '2024-01-01' AND '2024-12-31'", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRangeNullStart() {
         OptimizeRange range = new OptimizeRange(null, new StringLiteral("2024-12-31"), NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("BETWEEN AND 2024-12-31", clause.toSql());
+        Assertions.assertEquals("BETWEEN AND '2024-12-31'", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRangeNullEnd() {
         OptimizeRange range = new OptimizeRange(new StringLiteral("2024-01-01"), null, NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("BETWEEN 2024-01-01 AND", clause.toSql());
+        Assertions.assertEquals("BETWEEN '2024-01-01' AND", clause.toSql());
     }
 
     @Test
@@ -188,7 +188,7 @@ public class OptimizeClauseTest {
 
         Assertions.assertEquals(
                 "PARTITIONS (p1) DUPLICATE KEY(`col1`) ORDER BY (`col2`) " +
-                        "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 BETWEEN 2024-01-01 AND 2024-12-31",
+                        "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 BETWEEN '2024-01-01' AND '2024-12-31'",
                 clause.toSql());
     }
 }

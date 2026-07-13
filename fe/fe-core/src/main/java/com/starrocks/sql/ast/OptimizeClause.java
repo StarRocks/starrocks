@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.SqlUtils;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -220,15 +221,25 @@ public class OptimizeClause extends AlterTableClause {
             }
             sb.append("BETWEEN ");
             if (range.getStart() != null) {
-                sb.append(range.getStart().getStringValue()).append(" ");
+                sb.append(toSqlStringLiteral(range.getStart())).append(" ");
             }
             sb.append("AND");
             if (range.getEnd() != null) {
-                sb.append(" ").append(range.getEnd().getStringValue());
+                sb.append(" ").append(toSqlStringLiteral(range.getEnd()));
             }
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Render a {@link StringLiteral} as a single-quoted,
+     * backslash-and-quote-escaped SQL string. Using {@code getStringValue()} directly would drop the
+     * surrounding quotes (and the escaping), producing e.g. {@code BETWEEN 2024-01-01 AND 2024-12-31}
+     * which is neither the submitted clause nor valid for the {@code optimizeRange} grammar.
+     */
+    private static String toSqlStringLiteral(StringLiteral literal) {
+        return "'" + SqlUtils.escapeSqlString(literal.getStringValue()) + "'";
     }
 
     @Override
