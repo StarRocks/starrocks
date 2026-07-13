@@ -96,19 +96,18 @@ public class StarMgrServerTest {
         // stopCheckpointController must be a no-op when startCheckpointController has not run.
         StarMgrServer server = new StarMgrServer();
         Assertions.assertNull(server.checkpointController);
-        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController(1000L));
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
     }
 
     @Test
     public void testStopCheckpointControllerStopsExistingController() {
-        // stopCheckpointController must forward to LeaderDaemon.stopGracefully on the owned
-        // controller. With a freshly constructed (never started) controller the join is a
-        // no-op and onStopped() runs without side effects, so this exercises the line where
-        // the not-null branch is taken.
+        // stopCheckpointController must forward the fire-and-forget stopBestEffort() to the owned
+        // controller (demotion no longer joins). With a freshly constructed (never started) controller
+        // this just requests stop without side effects, so it exercises the not-null branch.
         StarMgrServer server = new StarMgrServer();
         server.checkpointController = new CheckpointController(
                 "star_os_checkpoint_controller_test", new com.starrocks.utframe.MockJournal(), "");
 
-        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController(1000L));
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
     }
 }

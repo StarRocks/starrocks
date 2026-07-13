@@ -170,32 +170,6 @@ public class LeaderTaskExecutorTest {
         Assertions.assertTrue(target.executor.isTerminated());
     }
 
-    @Test
-    public void testStartRefusesToRestartBeforePoolTerminates() {
-        // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
-        // underlying executor has not yet terminated (in-flight task ignoring interrupt),
-        // start() must throw IllegalStateException instead of spinning up a parallel pool.
-        LeaderTaskExecutor target = new LeaderTaskExecutor("leader_task_executor_refuse_test", 1, 10, false);
-        target.start();
-        ThreadPoolExecutor blockedPool = new java.util.concurrent.ThreadPoolExecutor(
-                1, 1, 0L, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(1));
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        target.executor = blockedPool;
-
-        try {
-            Assertions.assertThrows(IllegalStateException.class, target::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
-
     private class TestLeaderTask extends LeaderTask {
 
         public TestLeaderTask(long signature) {

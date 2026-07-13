@@ -41,7 +41,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
 import com.starrocks.common.Status;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPushType;
@@ -89,13 +88,9 @@ public class AgentTaskQueue {
         // and the replay paths never enqueue); INIT stays admitted so bootstrap, checkpoint-image
         // GlobalStateMgr instances, and plain unit tests are unaffected.
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        FrontendNodeType feType = globalStateMgr.getFeType();
-        if (globalStateMgr.isLeaderDemoting()
-                || feType == FrontendNodeType.FOLLOWER
-                || feType == FrontendNodeType.OBSERVER
-                || feType == FrontendNodeType.UNKNOWN) {
-            throw new IllegalStateException(
-                    "node is demoting or not the leader (" + feType + "), refuse to enqueue agent task: " + task);
+        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            throw new IllegalStateException("node is demoting or not the leader (" + globalStateMgr.getFeType()
+                    + "), refuse to enqueue agent task: " + task);
         }
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();

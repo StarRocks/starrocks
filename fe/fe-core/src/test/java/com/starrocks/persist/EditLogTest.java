@@ -21,6 +21,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
@@ -51,6 +52,19 @@ public class EditLogTest {
     @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+    }
+
+    @Test
+    public void testWaitInfinityAbortsOnTerminalJournalFailure() {
+        // A journal task aborted with a terminal cause (writer sealed on demotion, not leader, or
+        // admission closed) can never succeed on retry. waitInfinity must unwind immediately with
+        // IllegalStateException instead of looping forever - regardless of leaderRoleState - so a stale
+        // committer cannot pin the locks it holds and stall the follower's journal replay. Before the
+        // fix this looped forever (retrying the permanently-failed task) whenever the node was not in
+        // the DEMOTING window.
+        JournalTask task = new JournalTask(System.nanoTime(), new DataOutputBuffer(), -1);
+        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed"));
+        Assertions.assertThrows(IllegalStateException.class, () -> EditLog.waitInfinity(task));
     }
 
     @Test

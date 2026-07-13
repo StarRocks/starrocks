@@ -1561,7 +1561,8 @@ public class EditLog {
             } catch (ExecutionException e) {
                 if (shouldAbortWaitInfinity(e)) {
                     throw new IllegalStateException(
-                            "journal task failed while leader is demoting", getJournalWaitFailureCause(e));
+                            "journal task aborted and cannot be retried (writer sealed on demotion, "
+                                    + "not leader, or admission closed)", getJournalWaitFailureCause(e));
                 }
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
@@ -1576,10 +1577,29 @@ public class EditLog {
     }
 
     private static boolean shouldAbortWaitInfinity(Throwable throwable) {
-        if (!GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+        // A journal task aborted with a terminal cause (writer sealed on demotion, node not leader,
+        // or admission closed) can never succeed on retry, so unwind immediately regardless of the
+        // current leader-role state. Otherwise a stale committer that observes the abort AFTER the
+        // demotion has completed (leaderRoleState flipped from DEMOTING back to INACTIVE, or the node
+        // was already re-elected) would retry the permanently-failed task forever, pinning any lock it
+        // holds (e.g. a table WRITE lock on the commit path) and stalling the follower's journal replay.
+        if (isTerminalJournalFailure(throwable)) {
+            return true;
+        }
+        // An interrupt raised while this node is demoting is a shutdown signal: stop retrying and unwind.
+        return GlobalStateMgr.getCurrentState().isLeaderDemoting()
+                && (throwable instanceof InterruptedException || throwable instanceof ExecutionException);
+    }
+
+    private static boolean isTerminalJournalFailure(Throwable throwable) {
+        Throwable cause = getJournalWaitFailureCause(throwable);
+        if (!(cause instanceof JournalWriteException)) {
             return false;
         }
-        return throwable instanceof InterruptedException || throwable instanceof ExecutionException;
+        JournalWriteException.Reason reason = ((JournalWriteException) cause).getReason();
+        return reason == JournalWriteException.Reason.WRITER_ABORTED
+                || reason == JournalWriteException.Reason.NOT_LEADER
+                || reason == JournalWriteException.Reason.ADMISSION_CLOSED;
     }
 
     private static Throwable getJournalWaitFailureCause(Throwable throwable) {

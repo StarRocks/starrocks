@@ -175,34 +175,6 @@ public class PriorityLeaderTaskExecutorTest {
     }
 
     @Test
-    public void testStartRefusesToRestartBeforePoolTerminates() {
-        // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
-        // underlying executor has not yet terminated, start() must throw IllegalStateException
-        // instead of spinning up a parallel pool against the same runningTasks map.
-        PriorityLeaderTaskExecutor target =
-                new PriorityLeaderTaskExecutor("priority_task_executor_refuse_test", 1, 100, false);
-        target.start();
-        PriorityThreadPoolExecutor blockedPool = com.starrocks.common.ThreadPoolManager
-                .newDaemonFixedPriorityThreadPool(
-                        1, 100, "priority_task_executor_refuse_test_blocked_pool", false);
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        target.executor = blockedPool;
-
-        try {
-            Assertions.assertThrows(IllegalStateException.class, target::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
-
-    @Test
     public void testCloseWithTimeoutLogsWhenExecutorRefusesToTerminate() {
         // close(awaitMillis) returning false from awaitTermination triggers a LOG.warn for
         // each pool that did not drain. Exercise both branches by submitting an

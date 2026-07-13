@@ -95,36 +95,32 @@ public final class ExportChecker extends LeaderDaemon {
     }
 
     /**
-     * Coordinated stop for leader demotion. Drains each checker so onStopped() runs and the
-     * worker thread exits, then closes every owned LeaderTaskExecutor and blocks up to
-     * {@code timeoutMs} for its internal pools to actually terminate. Without this wait
-     * demotion would return immediately while ExportExportingTask is still blocked in
-     * subTasksDoneSignal.await(getLeftTimeSecond()) and would run concurrently with the
-     * re-elected leader's export work. The next {@link #init(long)} call (run by the
-     * re-elected leader) replaces the static maps with fresh instances.
+     * Fire-and-forget stop for leader demotion. Requests stop on each checker (no join) and
+     * shutdownNow()s every owned LeaderTaskExecutor WITHOUT waiting for the pools to drain, so the
+     * single state-change thread is not blocked. Each checker's worker self-cleans in onStopped() and
+     * deregisters on exit; the export pool tasks (ExportExportingTask) treat the interrupt as a
+     * shutdown signal and unwind, leaving healthy export jobs for the next leader. The re-activation
+     * cleanliness gate verifies the checkers are quiesced; the next {@link #init(long)} call (run by
+     * the re-elected leader) replaces the static maps with fresh instances.
      */
-    public static void stopAll(long timeoutMs) {
+    public static void stopAll() {
         for (ExportChecker exportChecker : checkers.values()) {
             try {
-                exportChecker.stopGracefully(timeoutMs);
+                exportChecker.stopBestEffort();
             } catch (Throwable t) {
                 LOG.warn("stop {} failed", exportChecker.getName(), t);
             }
         }
-        // Split the drain budget across the three executors so the total stopAll() wall time
-        // stays within timeoutMs even when every pool needs the full budget.
-        int executorCount = executors.size() + (exportingSubTaskExecutor != null ? 1 : 0);
-        long perExecutorMs = executorCount > 0 ? Math.max(1L, timeoutMs / executorCount) : 0L;
         for (LeaderTaskExecutor leaderTaskExecutor : executors.values()) {
             try {
-                leaderTaskExecutor.close(perExecutorMs);
+                leaderTaskExecutor.close();
             } catch (Throwable t) {
                 LOG.warn("close export LeaderTaskExecutor failed", t);
             }
         }
         if (exportingSubTaskExecutor != null) {
             try {
-                exportingSubTaskExecutor.close(perExecutorMs);
+                exportingSubTaskExecutor.close();
             } catch (Throwable t) {
                 LOG.warn("close exportingSubTaskExecutor failed", t);
             }
@@ -133,6 +129,23 @@ public final class ExportChecker extends LeaderDaemon {
 
     public static LeaderTaskExecutor getExportingSubTaskExecutor() {
         return exportingSubTaskExecutor;
+    }
+
+    /**
+     * Whether any owned export pool was shut down by a previous demotion (stopAll()) but has not finished
+     * terminating - i.e. a straggler export task from the previous leader session is still running. Read by
+     * the re-activation cleanliness gate: these pools are static (not owned by a checker daemon's
+     * isRunning), so the gate checks them directly. A fresh/running or already-terminated pool is not a
+     * straggler.
+     */
+    public static boolean anyPoolStoppedButNotTerminated() {
+        for (LeaderTaskExecutor executor : executors.values()) {
+            if (executor.isShutdown() && !executor.isTerminated()) {
+                return true;
+            }
+        }
+        return exportingSubTaskExecutor != null
+                && exportingSubTaskExecutor.isShutdown() && !exportingSubTaskExecutor.isTerminated();
     }
 
     @Override

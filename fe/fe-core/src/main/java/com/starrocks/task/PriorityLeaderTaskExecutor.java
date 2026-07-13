@@ -63,15 +63,10 @@ public class PriorityLeaderTaskExecutor {
     }
 
     public synchronized void start() {
-        // Refuse to overlap with a previous worker that did not drain in close(): if the pool
-        // is shutdown but not yet terminated, in-flight priority tasks from the previous leader
-        // session are still running. Mirrors the BatchWriteMgr / AlterHandler restart guard.
-        if (executor.isShutdown() && !executor.isTerminated()) {
-            throw new IllegalStateException(
-                    "PriorityLeaderTaskExecutor " + name + " executor has not terminated; refuse to restart");
-        }
-        // Rebuild the pools if a previous demotion shut them down so subsequent submissions
-        // do not raise RejectedExecutionException on the new leader session.
+        // The re-activation cleanliness gate (GlobalStateMgr.assertLeaderSessionQuiescedOrExit) has already
+        // verified this pool terminated before start() runs, so there is no restart guard here - just
+        // rebuild the pools if a previous demotion shut them down, so submissions do not raise
+        // RejectedExecutionException on the new leader session.
         if (executor.isShutdown()) {
             buildPools();
         }
@@ -126,6 +121,20 @@ public class PriorityLeaderTaskExecutor {
 
     public void close() {
         close(0L);
+    }
+
+    /** Whether the work pool has been shut down (a previous demotion called close()). */
+    public boolean isShutdown() {
+        return executor.isShutdown();
+    }
+
+    /**
+     * Whether both internal pools have fully terminated after a {@link #close()}. Combined with
+     * {@link #isShutdown()} by the re-activation cleanliness gate: a pool that is shut down but not yet
+     * terminated is a straggler from the previous leader session (a fresh/running pool is not shut down).
+     */
+    public boolean isTerminated() {
+        return executor.isTerminated() && scheduledThreadPool.isTerminated();
     }
 
     /**

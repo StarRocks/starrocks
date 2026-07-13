@@ -21,6 +21,7 @@ import com.starrocks.ha.FrontendNodeType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -344,5 +345,41 @@ public class LeaderDaemonTest {
         // stopGracefully without a worker thread must be a no-op that returns cleanly.
         d.stopGracefully(100L);
         Assertions.assertFalse(d.isRunning());
+    }
+
+    @Test
+    public void testIsAgentTaskDispatchDisallowed() {
+        // The agent-task enqueue guard and the AgentBatchTask dispatch fence share this predicate: a
+        // node must not push BE agent tasks unless it is an active, non-demoting leader.
+        TestGlobalStateMgr leader = activeLeader();
+        Assertions.assertFalse(leader.isAgentTaskDispatchDisallowed(), "an active leader may dispatch agent tasks");
+
+        // Demoting: disallowed even though feType is still LEADER (leaderRoleState == DEMOTING).
+        leader.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        Assertions.assertTrue(leader.isAgentTaskDispatchDisallowed(),
+                "a demoting node must not dispatch even while feType is still LEADER");
+
+        // Follower (not demoting): disallowed via feType.
+        TestGlobalStateMgr follower = new TestGlobalStateMgr();
+        follower.setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        Assertions.assertTrue(follower.isAgentTaskDispatchDisallowed(), "a follower must not dispatch agent tasks");
+    }
+
+    @Test
+    public void testFindLeaderSessionStragglersIgnoresFreshRunningPools() {
+        // Regression: a freshly-constructed (running, never-shut-down) leader-session pool must NOT be
+        // flagged as a straggler by the re-activation gate. The gate keys on isShutdown()-but-not-
+        // terminated, not merely !isTerminated(); a running pool has isShutdown()==false. Before the fix
+        // this false-positived and System.exit'd the process on a normal (re-)activation with live pools.
+        TestGlobalStateMgr gsm = new TestGlobalStateMgr();
+        List<String> stragglers = gsm.findLeaderSessionStragglers();
+        Assertions.assertFalse(stragglers.contains("loadingLoadTaskScheduler(pool)"),
+                "a fresh running load pool must not be flagged as a straggler");
+        Assertions.assertFalse(stragglers.contains("pendingLoadTaskScheduler(pool)"),
+                "a fresh running load pool must not be flagged as a straggler");
+        Assertions.assertFalse(stragglers.contains("exportChecker(pools)"),
+                "fresh/absent export pools must not be flagged as stragglers");
+        Assertions.assertFalse(stragglers.contains("taskManager(schedulers)"),
+                "fresh running task-manager schedulers must not be flagged as stragglers");
     }
 }

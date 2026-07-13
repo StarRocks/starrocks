@@ -1597,63 +1597,6 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void testStartRefusesToRestartBeforeSchedulersTerminate() throws Exception {
-        // Mirror of BatchWriteMgr / AlterHandler / LeaderTaskExecutor restart guard. If
-        // stop() returns but a scheduler has not yet terminated (in-flight task ignoring
-        // interrupt), start() must throw IllegalStateException rather than launching a
-        // parallel scheduler against the same TaskRunManager / periodFutureMap.
-        TaskManager mgr = new TaskManager();
-        mgr.start();
-        java.util.concurrent.ScheduledThreadPoolExecutor blockedPool =
-                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        mgr.stop();
-        mgr.periodScheduler = blockedPool;
-
-        try {
-            Assertions.assertThrows(IllegalStateException.class, mgr::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
-
-    @Test
-    public void testStartRefusesToRestartBeforeDispatchSchedulerTerminates() throws Exception {
-        // Mirror of testStartRefusesToRestartBeforeSchedulersTerminate but for the dispatch
-        // scheduler branch. Both guards must short-circuit start() rather than spawning a
-        // second scheduler generation.
-        TaskManager mgr = new TaskManager();
-        mgr.start();
-        java.util.concurrent.ScheduledThreadPoolExecutor blockedPool =
-                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        mgr.stop();
-        // periodScheduler is set to a clean shutdown pool so the first guard does not fire;
-        // dispatchScheduler is set to the blocked pool so the second guard does.
-        mgr.dispatchScheduler = blockedPool;
-
-        try {
-            Assertions.assertThrows(IllegalStateException.class, mgr::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
-
-    @Test
     public void testStopWithTimeoutLogsWhenSchedulerRefusesToTerminate() throws Exception {
         // stop(timeoutMs) must call awaitTermination on both pools; when the await returns
         // false (a worker ignored shutdownNow's interrupt) it logs a warning and proceeds

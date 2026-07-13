@@ -66,10 +66,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 public class HeartbeatMgrTest {
 
@@ -266,8 +263,7 @@ public class HeartbeatMgrTest {
         Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
         Assertions.assertTrue(before.isTerminated(),
                 "previous executor must be terminated after onStopped() awaits drain");
-        // Reference is kept (not nulled) on success so the restart guard in start() can fire
-        // when termination times out; start() rebuilds on isShutdown() so reuse is safe.
+        // Reference is kept (not nulled); start() rebuilds on isShutdown() so reuse is safe.
         Assertions.assertSame(before, mgr.executor,
                 "executor reference is retained after successful drain");
         Assertions.assertNotNull(mgr.executor);
@@ -292,62 +288,4 @@ public class HeartbeatMgrTest {
         }
     }
 
-    @Test
-    public void testOnStoppedLogsWhenExecutorRefusesToTerminate() {
-        // When the heartbeat worker pool ignores shutdownNow's interrupt long enough to
-        // outlast the drain budget, onStopped must log a warning and return rather than
-        // blocking forever. Covers the LOG.warn branch in onStopped's awaitTermination.
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
-        ThreadPoolExecutor stuck = new ThreadPoolExecutor(
-                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
-        stuck.execute(() -> {
-            long deadline = System.currentTimeMillis() + 2000L;
-            while (System.currentTimeMillis() < deadline) {
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException ignored) {
-                    // simulate uninterruptible heartbeat RPC
-                }
-            }
-        });
-        mgr.executor = stuck;
-        int oldTimeout = com.starrocks.common.Config.leader_demotion_drain_timeout_sec;
-        com.starrocks.common.Config.leader_demotion_drain_timeout_sec = 1;
-        try {
-            mgr.onStopped();
-            Assertions.assertNotNull(mgr.executor,
-                    "executor reference must be retained when drain timed out so restart guard fires");
-        } finally {
-            com.starrocks.common.Config.leader_demotion_drain_timeout_sec = oldTimeout;
-            stuck.shutdownNow();
-        }
-    }
-
-    @Test
-    public void testStartRefusesToRestartBeforeExecutorTerminates() {
-        // Mirror of BatchWriteMgr / AlterHandler restart guard. If a previous executor is
-        // shutdown but has not yet terminated (heartbeat RPC ignoring interrupt), start()
-        // must throw IllegalStateException rather than spinning up a fresh pool against the
-        // same backends.
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
-        mgr.start();
-        ThreadPoolExecutor blockedPool = new ThreadPoolExecutor(
-                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
-        blockedPool.execute(() -> {
-            try {
-                Thread.sleep(30_000L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        blockedPool.shutdown();
-        mgr.setStop();
-        mgr.executor = blockedPool;
-
-        try {
-            Assertions.assertThrows(IllegalStateException.class, mgr::start);
-        } finally {
-            blockedPool.shutdownNow();
-        }
-    }
 }

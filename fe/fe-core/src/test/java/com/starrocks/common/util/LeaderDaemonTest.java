@@ -145,6 +145,41 @@ public class LeaderDaemonTest {
         Assertions.assertFalse(daemon.isRunning());
     }
 
+    @Test
+    public void testStopBestEffortDoesNotJoinAndWorkerSelfCleansAndDeregisters(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        // Fire-and-forget demotion: stopBestEffort() requests stop (interrupting the worker by default)
+        // and returns WITHOUT joining. The worker then exits on its own, runs onStopped() as its last
+        // act, and deregisters from the running-instances registry that the re-activation cleanliness
+        // gate reads.
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+
+        daemon.start();
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+        Assertions.assertTrue(LeaderDaemon.getRunningInstances().contains(daemon),
+                "a started daemon must appear in the running-instances registry");
+
+        daemon.stopBestEffort();
+        Assertions.assertTrue(daemon.isStopped());
+
+        // The worker self-cleans and deregisters on its own; wait for it (stopBestEffort did not join).
+        long deadline = System.currentTimeMillis() + 5000L;
+        while (System.currentTimeMillis() < deadline
+                && (daemon.isRunning() || LeaderDaemon.getRunningInstances().contains(daemon))) {
+            Thread.sleep(10);
+        }
+        Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertFalse(LeaderDaemon.getRunningInstances().contains(daemon),
+                "worker must deregister from the running-instances registry on exit");
+        Assertions.assertTrue(stopped.get(), "worker must run onStopped() on its own exit");
+        Assertions.assertTrue(interrupted.get(), "default stopBestEffort interrupts the blocked worker");
+    }
+
     private void mockValidLeaderLease(GlobalStateMgr globalStateMgr) {
         LeaderLease lease = new LeaderLease(1L, 1L);
         new Expectations() {

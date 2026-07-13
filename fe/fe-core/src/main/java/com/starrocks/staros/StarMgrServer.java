@@ -232,16 +232,17 @@ public class StarMgrServer {
     }
 
     /**
-     * Symmetric counterpart to {@link #startCheckpointController()}. Stops the StarMgr-side
-     * CheckpointController so its daemon thread exits and leader-session bookkeeping is
-     * cleared during leader demotion drain. The field is left as-is because
-     * {@link #startCheckpointController()} unconditionally replaces it with a fresh
-     * instance on re-election; the old one becomes garbage once stopGracefully returns.
+     * Symmetric counterpart to {@link #startCheckpointController()}. Fire-and-forget stop for leader
+     * demotion: requests stop on the StarMgr-side CheckpointController without joining, so the single
+     * state-change thread is not blocked. The controller's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. The field is left
+     * as-is because {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once its worker exits.
      */
-    public void stopCheckpointController(long timeoutMs) {
+    public void stopCheckpointController() {
         CheckpointController controller = checkpointController;
         if (controller != null) {
-            controller.stopGracefully(timeoutMs);
+            controller.stopBestEffort();
         }
     }
 

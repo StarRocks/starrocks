@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ExportCheckerTest {
     
@@ -102,22 +103,22 @@ public class ExportCheckerTest {
         Assertions.assertNotNull(exportingBefore);
         Assertions.assertNotNull(subTaskBefore);
 
-        ExportChecker.stopAll(1000L);
+        ExportChecker.stopAll();
         Assertions.assertTrue(readPoolFromExecutor(pendingBefore).isShutdown(),
                 "pending executor pool must be shut down");
         Assertions.assertTrue(readPoolFromExecutor(exportingBefore).isShutdown(),
                 "exporting executor pool must be shut down");
         Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isShutdown(),
                 "sub-task executor pool must be shut down");
-        // stopAll must block until the pools actually terminate so demotion does not race
-        // with old-leader export work. With idle pools (no in-flight tasks) every executor
-        // should terminate before stopAll returns.
-        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).isTerminated(),
-                "pending executor pool must be terminated before stopAll returns");
-        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).isTerminated(),
-                "exporting executor pool must be terminated before stopAll returns");
-        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).isTerminated(),
-                "sub-task executor pool must be terminated before stopAll returns");
+        // stopAll is fire-and-forget (no drain wait); the shutdownNow'd executors terminate shortly
+        // after. With idle pools (no in-flight tasks) they terminate promptly - await it rather than
+        // assert synchronously to avoid a race with the asynchronous termination.
+        Assertions.assertTrue(readPoolFromExecutor(pendingBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "pending executor pool must terminate");
+        Assertions.assertTrue(readPoolFromExecutor(exportingBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "exporting executor pool must terminate");
+        Assertions.assertTrue(readPoolFromExecutor(subTaskBefore).awaitTermination(5, TimeUnit.SECONDS),
+                "sub-task executor pool must terminate");
 
         // init() again must produce fresh instances.
         ExportChecker.init(1000L);
@@ -125,7 +126,7 @@ public class ExportCheckerTest {
         Assertions.assertNotSame(exportingBefore, readExecutor(JobState.EXPORTING));
         Assertions.assertNotSame(subTaskBefore, readSubTaskExecutor());
         // Tear down what init() just created so the test does not leak threads.
-        ExportChecker.stopAll(1000L);
+        ExportChecker.stopAll();
     }
 
     private com.starrocks.task.LeaderTaskExecutor readExecutor(JobState state) throws Exception {

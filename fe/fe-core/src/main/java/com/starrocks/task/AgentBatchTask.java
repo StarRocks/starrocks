@@ -171,6 +171,18 @@ public class AgentBatchTask implements Runnable {
 
     @Override
     public void run() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            // A demoting/non-leader node must not dispatch BE agent tasks. The AgentTaskQueue.addTask
+            // guard only covers enqueue/tracking, but many callers submit an already-built AgentBatchTask
+            // without addTask, and a lingering leader-session thread can reach here during the follower
+            // window. Dispatching now would send stale-session RPCs against BE using this node's outdated
+            // metadata (e.g. a force-DROP that deletes replica files the next leader still references).
+            // Skip it; the re-elected leader re-drives from durable state and BE tasks are idempotent.
+            LOG.warn("skip dispatching {} agent task(s): node is not an active leader (feType={}, demoting={})",
+                    getTaskNum(), globalStateMgr.getFeType(), globalStateMgr.isLeaderDemoting());
+            return;
+        }
         for (Long backendId : this.backendIdToTasks.keySet()) {
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);

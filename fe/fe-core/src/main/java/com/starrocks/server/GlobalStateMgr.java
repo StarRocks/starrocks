@@ -1365,13 +1365,23 @@ public class GlobalStateMgr {
 
     private void transferToLeader() {
         FrontendNodeType oldType = feType;
-        // stop replayer
+        // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
+        // acquire) cannot hang leader activation on the single state-change thread forever; if it does
+        // not stop in time, terminate for a clean restart rather than wedge with a bdbje master that
+        // never activates.
         if (replayer != null) {
             replayer.setStop();
+            long replayerJoinTimeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
             try {
-                replayer.join();
+                replayer.join(replayerJoinTimeoutMs);
             } catch (InterruptedException e) {
-                LOG.warn("got exception when stopping the replayer thread", e);
+                Thread.currentThread().interrupt();
+                LOG.warn("interrupted while stopping the replayer thread", e);
+            }
+            if (replayer.isAlive()) {
+                LOG.error("replayer did not stop within {}ms during transfer to leader; terminating the process "
+                        + "for a clean restart", replayerJoinTimeoutMs);
+                System.exit(-1);
             }
             replayer = null;
         }
@@ -1407,6 +1417,12 @@ public class GlobalStateMgr {
         }
 
         journalWriter.startDaemon();
+
+        // Verify the previous leader session (if any) has fully quiesced before starting a new one.
+        // Demotion stops the leader-only daemons fire-and-forget; if a straggler is still alive, restart
+        // for a clean slate rather than run two workers against the same singleton state. Done before
+        // feType flips to LEADER so no new leader work (or a stale straggler's admission) can slip in.
+        assertLeaderSessionQuiescedOrExit();
 
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
@@ -1688,9 +1704,14 @@ public class GlobalStateMgr {
             throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
                     "leader work admission is closed");
         }
-        if (leaderRoleState == LeaderRoleState.DEMOTING) {
+        // Reject writes while demoting AND while activating. During ACTIVATING the node has already
+        // set feType=LEADER (so the isLeader() check above passes) but has not yet published the lease;
+        // no legitimate leader work runs in that window (journal replay happens before it, bootstrap
+        // after the lease is published), so rejecting it fences a stale straggler thread whose journal
+        // write would otherwise slip through between feType=LEADER and publishLeaderLease.
+        if (leaderRoleState == LeaderRoleState.DEMOTING || leaderRoleState == LeaderRoleState.ACTIVATING) {
             throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
-                    "leader is demoting, submit log is not allowed");
+                    "leader role state is " + leaderRoleState + ", submit log is not allowed");
         }
     }
 
@@ -1829,6 +1850,24 @@ public class GlobalStateMgr {
         return !isLeader() || !isLeaderWorkAdmissionOpen() || isLeaderDemoting();
     }
 
+    /**
+     * True when this node must NOT perform leader-only BE agent-task work — it is demoting, or its FE
+     * type is not a leader/bootstrap role. Used both to reject enqueue ({@code AgentTaskQueue.addTask})
+     * and to skip dispatch ({@code AgentBatchTask.run()}), so a demoting/non-leader node cannot push
+     * stale leader-session RPCs (e.g. a force-DROP that deletes replica files the next leader still
+     * references) to BE. INIT stays allowed so bootstrap, checkpoint-image GlobalStateMgr instances,
+     * and plain unit tests are unaffected.
+     */
+    public boolean isAgentTaskDispatchDisallowed() {
+        if (isLeaderDemoting()) {
+            return true;
+        }
+        FrontendNodeType type = getFeType();
+        return type == FrontendNodeType.FOLLOWER
+                || type == FrontendNodeType.OBSERVER
+                || type == FrontendNodeType.UNKNOWN;
+    }
+
     @VisibleForTesting
     LeaderRoleState getLeaderRoleState() {
         return leaderRoleState;
@@ -1965,76 +2004,80 @@ public class GlobalStateMgr {
      * demotion and the FE singletons become reusable when this node is re-elected.
      */
     void stopLeaderOnlyDaemonThreads() {
-        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // Fire-and-forget: request stop on every leader-only daemon/pool and return WITHOUT joining, so
+        // this single state-change thread is not blocked draining ~40 daemons (a stuck one used to force
+        // System.exit here, degrading a graceful transfer into a restart). Each daemon's worker self-cleans
+        // in onStopped() and deregisters on exit; the re-activation cleanliness gate then verifies quiescence
+        // and exits only if a straggler is still alive when this node is re-elected.
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
         if (RunMode.isSharedDataMode()) {
-            stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopGracefully(timeoutMs));
+            stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
         }
-        stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
-        stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
+        stopOne("tabletCollector", () -> tabletCollector.stopBestEffort());
+        stopOne("reportHandler", () -> reportHandler.stopBestEffort());
         if (RunMode.isSharedDataMode()) {
-            stopOne("clusterSnapshotMgr", () -> clusterSnapshotMgr.stopGracefully(timeoutMs));
+            stopOne("clusterSnapshotMgr", () -> clusterSnapshotMgr.stopBestEffort());
         }
-        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
-        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
-        stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
-        stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
+        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopBestEffort());
+        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopBestEffort());
+        stopOne("replicationMgr", () -> replicationMgr.stopBestEffort());
+        stopOne("safeModeChecker", () -> safeModeChecker.stopBestEffort());
         if (RunMode.isSharedDataMode()) {
-            stopOne("vectorIndexBuildScheduler", () -> vectorIndexBuildScheduler.stopGracefully(timeoutMs));
-            stopOne("fullVacuumDaemon", () -> fullVacuumDaemon.stopGracefully(timeoutMs));
-            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopGracefully(timeoutMs));
-            stopOne("starMgrMetaSyncer", () -> starMgrMetaSyncer.stopGracefully(timeoutMs));
+            stopOne("vectorIndexBuildScheduler", () -> vectorIndexBuildScheduler.stopBestEffort());
+            stopOne("fullVacuumDaemon", () -> fullVacuumDaemon.stopBestEffort());
+            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopBestEffort());
+            stopOne("starMgrMetaSyncer", () -> starMgrMetaSyncer.stopBestEffort());
         }
         if (taskRunStateSynchronizer != null) {
-            stopOne("taskRunStateSynchronizer", () -> taskRunStateSynchronizer.stopGracefully(timeoutMs));
+            stopOne("taskRunStateSynchronizer", () -> taskRunStateSynchronizer.stopBestEffort());
         }
-        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
-        stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
-        stopOne("pipeScheduler", () -> pipeScheduler.stopGracefully(timeoutMs));
-        stopOne("pipeListener", () -> pipeListener.stopGracefully(timeoutMs));
+        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopBestEffort());
+        stopOne("mvActiveChecker", () -> mvActiveChecker.stopBestEffort());
+        stopOne("pipeScheduler", () -> pipeScheduler.stopBestEffort());
+        stopOne("pipeListener", () -> pipeListener.stopBestEffort());
         if (taskCleaner != null) {
-            stopOne("taskCleaner", () -> taskCleaner.stopGracefully(timeoutMs));
+            stopOne("taskCleaner", () -> taskCleaner.stopBestEffort());
         }
-        stopOne("taskManager", () -> taskManager.stop(timeoutMs));
-        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
-        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
-        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
-        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopGracefully(timeoutMs));
-        stopOne("batchWriteMgr", () -> batchWriteMgr.stopGracefully(timeoutMs));
-        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopGracefully(timeoutMs));
-        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopGracefully(timeoutMs));
+        stopOne("taskManager", () -> taskManager.stop(0));
+        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopBestEffort());
+        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopBestEffort());
+        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopBestEffort());
+        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopBestEffort());
+        stopOne("batchWriteMgr", () -> batchWriteMgr.stopBestEffort());
+        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopBestEffort());
+        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopBestEffort());
         if (timePrinter != null) {
-            stopOne("timePrinter", () -> timePrinter.stopGracefully(timeoutMs));
+            stopOne("timePrinter", () -> timePrinter.stopBestEffort());
         }
-        stopOne("recycleBin", () -> getRecycleBin().stopGracefully(timeoutMs));
-        stopOne("backupHandler", () -> getBackupHandler().stopGracefully(timeoutMs));
-        stopOne("consistencyChecker", () -> consistencyChecker.stopGracefully(timeoutMs));
-        stopOne("alterJobMgr", () -> getAlterJobMgr().stopGracefully(timeoutMs));
+        stopOne("recycleBin", () -> getRecycleBin().stopBestEffort());
+        stopOne("backupHandler", () -> getBackupHandler().stopBestEffort());
+        stopOne("consistencyChecker", () -> consistencyChecker.stopBestEffort());
+        stopOne("alterJobMgr", () -> getAlterJobMgr().stopBestEffort());
         if (txnTimeoutChecker != null) {
-            stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopGracefully(timeoutMs));
+            stopOne("txnTimeoutChecker", () -> txnTimeoutChecker.stopBestEffort());
         }
-        stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopGracefully(timeoutMs));
-        stopOne("exportChecker", () -> ExportChecker.stopAll(timeoutMs));
-        stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopGracefully(timeoutMs));
-        stopOne("loadEtlChecker", () -> loadEtlChecker.stopGracefully(timeoutMs));
-        stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopGracefully(timeoutMs));
-        stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopGracefully(timeoutMs));
-        stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopGracefully(timeoutMs));
-        stopOne("loadJobScheduler", () -> loadJobScheduler.stopGracefully(timeoutMs));
-        stopOne("loadingLoadTaskScheduler", () -> loadingLoadTaskScheduler.close(timeoutMs));
-        stopOne("pendingLoadTaskScheduler", () -> pendingLoadTaskScheduler.close(timeoutMs));
+        stopOne("publishVersionDaemon", () -> publishVersionDaemon.stopBestEffort());
+        stopOne("exportChecker", ExportChecker::stopAll);
+        stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopBestEffort());
+        stopOne("loadEtlChecker", () -> loadEtlChecker.stopBestEffort());
+        stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopBestEffort());
+        stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopBestEffort());
+        stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopBestEffort());
+        stopOne("loadJobScheduler", () -> loadJobScheduler.stopBestEffort());
+        stopOne("loadingLoadTaskScheduler", () -> loadingLoadTaskScheduler.close());
+        stopOne("pendingLoadTaskScheduler", () -> pendingLoadTaskScheduler.close());
         if (!RunMode.isSharedDataMode()) {
             stopOne("colocateTableBalancer",
-                    () -> ColocateTableBalancer.getInstance().stopGracefully(timeoutMs));
-            stopOne("tabletScheduler", () -> tabletScheduler.stopGracefully(timeoutMs));
-            stopOne("tabletChecker", () -> tabletChecker.stopGracefully(timeoutMs));
+                    () -> ColocateTableBalancer.getInstance().stopBestEffort());
+            stopOne("tabletScheduler", () -> tabletScheduler.stopBestEffort());
+            stopOne("tabletChecker", () -> tabletChecker.stopBestEffort());
         }
-        stopOne("heartbeatMgr", () -> heartbeatMgr.stopGracefully(timeoutMs));
-        stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopGracefully(timeoutMs));
-        stopOne("checkpointController", () -> checkpointController.stopGracefully(timeoutMs));
+        stopOne("heartbeatMgr", () -> heartbeatMgr.stopBestEffort());
+        stopOne("keyRotationDaemon", () -> keyRotationDaemon.stopBestEffort());
+        stopOne("checkpointController", () -> checkpointController.stopBestEffort());
         if (RunMode.isSharedDataMode()) {
             stopOne("starMgrCheckpointController",
-                    () -> StarMgrServer.getCurrentState().stopCheckpointController(timeoutMs));
+                    () -> StarMgrServer.getCurrentState().stopCheckpointController());
         }
     }
 
@@ -2044,6 +2087,59 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("stop {} failed", name, t);
         }
+    }
+
+    /**
+     * Re-activation cleanliness gate. Demotion stops leader-only daemons fire-and-forget (no join, see
+     * {@link #stopLeaderOnlyDaemonThreads()}), so a straggler whose interrupt was eaten may still be
+     * alive when this node is re-elected. Before serving as leader again this verifies the previous
+     * session's workers finished: a fresh worker running concurrently with a straggler against the same
+     * singleton state is strictly worse than a restart. If any straggler remains, it logs the offenders
+     * (and how long the leader role state has lingered) and terminates the process for a clean restart.
+     * Called before feType is set to LEADER so no new leader work starts while a previous session lingers.
+     */
+    private void assertLeaderSessionQuiescedOrExit() {
+        List<String> stragglers = findLeaderSessionStragglers();
+        if (!stragglers.isEmpty()) {
+            long inFlightMs = System.currentTimeMillis() - leaderRoleStateSinceMs;
+            LOG.error("re-activation aborted: the previous leader session did not quiesce; these leader-only "
+                    + "workers/pools are still in flight after {}ms: {}. Terminating the process for a clean "
+                    + "restart instead of running concurrent workers against shared state.", inFlightMs, stragglers);
+            System.exit(-1);
+        }
+    }
+
+    /**
+     * Leader-session workers/pools that have NOT finished stopping from a previous leader session. A pool
+     * is a straggler only when it was shut down (by the previous demotion) but has not terminated - a
+     * fresh or actively-running pool is NOT shut down and so is never flagged. Extracted from the gate so
+     * it is unit-testable without triggering {@link System#exit}.
+     */
+    @VisibleForTesting
+    List<String> findLeaderSessionStragglers() {
+        List<String> stragglers = new ArrayList<>();
+        // Daemons: onStopped() awaits its owned pools until terminated before the worker clears
+        // isRunning, so a daemon absent here means its worker AND its pools are quiesced.
+        for (LeaderDaemon daemon : LeaderDaemon.getRunningInstances()) {
+            stragglers.add(daemon.getName());
+        }
+        // Leader-session pools with no owning daemon (no isRunning to cover them): a pool is a straggler
+        // only if a previous demotion shut it down (fire-and-forget, no await) and it has not terminated.
+        if (loadingLoadTaskScheduler != null
+                && loadingLoadTaskScheduler.isShutdown() && !loadingLoadTaskScheduler.isTerminated()) {
+            stragglers.add("loadingLoadTaskScheduler(pool)");
+        }
+        if (pendingLoadTaskScheduler != null
+                && pendingLoadTaskScheduler.isShutdown() && !pendingLoadTaskScheduler.isTerminated()) {
+            stragglers.add("pendingLoadTaskScheduler(pool)");
+        }
+        if (ExportChecker.anyPoolStoppedButNotTerminated()) {
+            stragglers.add("exportChecker(pools)");
+        }
+        if (taskManager != null && taskManager.schedulersStoppedButNotTerminated()) {
+            stragglers.add("taskManager(schedulers)");
+        }
+        return stragglers;
     }
 
     // start threads that should run on all FE

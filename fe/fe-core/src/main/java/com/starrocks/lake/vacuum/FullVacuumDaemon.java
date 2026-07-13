@@ -82,14 +82,9 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
 
     @Override
     public synchronized void start() {
-        // Refuse to overlap with a previous pool that has not finished draining: isShutdown()
-        // becomes true before in-flight full-vacuum tasks actually exit, so a fast
-        // demote/re-elect can put two full-vacuum executor generations against the same
-        // metadata / object store. Mirrors the AutovacuumDaemon / BatchWriteMgr restart guard.
-        if (executorService.isShutdown() && !executorService.isTerminated()) {
-            throw new IllegalStateException(
-                    "FullVacuumDaemon executorService has not terminated; refuse to restart");
-        }
+        // The re-activation cleanliness gate verifies the previous pool terminated before start() runs
+        // (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here - just rebuild the pool if a previous demotion shut it down.
         if (executorService.isShutdown()) {
             executorService = newExecutorService();
         }
@@ -98,22 +93,11 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
 
     @Override
     protected void onStopped() {
-        // Same contract as AutovacuumDaemon: shut down the pool so worker threads exit on
-        // demotion, clear in-flight partition bookkeeping so the next leader does not skip
-        // partitions whose ids stayed in vacuumingPartitions across the boundary, and wait
-        // boundedly for the pool to actually terminate so a subsequent start() does not race
-        // a still-alive full-vacuum worker against a freshly created pool. If termination
-        // times out, start() will refuse to rebuild.
-        executorService.shutdownNow();
-        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        try {
-            if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-                LOG.warn("FullVacuumDaemon executorService did not terminate within drain timeout");
-            }
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            LOG.warn("Interrupted while waiting for FullVacuumDaemon executorService to terminate");
-        }
+        // Same contract as AutovacuumDaemon: shut down the pool and wait until it actually terminates, so
+        // this worker does not clear isRunning until the full-vacuum tasks are quiescent (the re-activation
+        // gate reads isRunning as the single quiescence signal). Only then clear vacuumingPartitions so
+        // stale partition ids do not make the next leader skip partitions.
+        shutdownNowAndAwaitTermination("FullVacuumDaemon.executorService", executorService);
         vacuumingPartitions.clear();
     }
 

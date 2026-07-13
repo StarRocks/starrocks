@@ -89,14 +89,9 @@ public class AutovacuumDaemon extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
-        // Refuse to overlap with a previous pool that has not finished draining: isShutdown()
-        // becomes true before in-flight vacuum tasks actually exit, so a fast demote/re-elect
-        // can put two vacuum executor generations against the same metadata. Mirrors the
-        // BatchWriteMgr / AlterHandler restart guard.
-        if (executorService.isShutdown() && !executorService.isTerminated()) {
-            throw new IllegalStateException(
-                    "AutovacuumDaemon executorService has not terminated; refuse to restart");
-        }
+        // The re-activation cleanliness gate verifies the previous pool terminated before start() runs
+        // (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here - just rebuild the pool if a previous demotion shut it down.
         if (executorService.isShutdown()) {
             executorService = newExecutorService();
         }
@@ -105,23 +100,12 @@ public class AutovacuumDaemon extends LeaderDaemon {
 
     @Override
     protected void onStopped() {
-        // vacuumingPartitions is leader-session bookkeeping: the in-flight executor tasks
-        // remove themselves from this set in a finally block, but shutdownNow() will cancel
-        // queued tasks that have not yet run, so we clear here to avoid stale partition ids
-        // suppressing the next leader's vacuum scan. The executor itself is shut down and we
-        // wait boundedly for actual termination so a subsequent start() does not race a still-
-        // alive vacuum worker against a freshly created pool against the same metadata; if the
-        // pool does not terminate within the drain budget, start() will refuse to rebuild.
-        executorService.shutdownNow();
-        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        try {
-            if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-                LOG.warn("AutovacuumDaemon executorService did not terminate within drain timeout");
-            }
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            LOG.warn("Interrupted while waiting for AutovacuumDaemon executorService to terminate");
-        }
+        // Shut down the vacuum pool and wait until it actually terminates, so this worker does not clear
+        // isRunning (at the tail of loop()) until the vacuum tasks are quiescent - the re-activation gate
+        // reads isRunning as the single quiescence signal. Only then clear vacuumingPartitions (leader-
+        // session bookkeeping; tasks remove themselves in a finally block, but shutdownNow() cancels
+        // queued tasks that never ran) so stale partition ids cannot suppress the next leader's scan.
+        shutdownNowAndAwaitTermination("AutovacuumDaemon.executorService", executorService);
         vacuumingPartitions.clear();
     }
 

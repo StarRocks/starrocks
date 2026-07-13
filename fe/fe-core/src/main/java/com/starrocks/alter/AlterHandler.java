@@ -203,25 +203,13 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
-        // Refuse to overlap with a previous pool that has not finished draining. Mirrors the
-        // pattern used by BatchWriteMgr / RoutineLoadTaskScheduler / CoordinatorBackendAssigner:
-        // shutdownNow() in onStopped() is best-effort, so a worker thread that ignores the
-        // interrupt momentarily may still be alive when start() runs. Spinning up a fresh pool
-        // would put two AlterReplicaTask submission workers against the same alterJobsV2 +
-        // handler state.
-        if (executor != null && executor.isShutdown() && !executor.isTerminated()) {
-            throw new IllegalStateException(
-                    "AlterHandler " + getName() + " executor has not terminated; refuse to restart");
-        }
-        // Rebuild the executor if a previous demotion shut it down so handleFinishAlterTask
-        // submissions accepted by the new leader run on a fresh pool.
+        // The re-activation cleanliness gate verifies the previous executor terminated before start()
+        // runs (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here, and no reset either - onStopped() already reset the jobs on the worker's exit.
+        // Just rebuild the executor if a previous demotion shut it down (or on first start).
         if (executor == null || executor.isShutdown()) {
             executor = newExecutor();
         }
-        // Idempotent insurance for the onStopped() sweep: covers a stop path that never ran
-        // onStopped (e.g. a plain setStop() without join) and guarantees every job is reset
-        // before the first scheduling cycle can dispatch it by its in-memory state.
-        resetJobsToLastDurableState();
         super.start();
     }
 
@@ -232,11 +220,11 @@ public abstract class AlterHandler extends LeaderDaemon {
         // jobs from the same map. Subclasses can override onStopped() to drop derived caches
         // (e.g. tableNotFinalStateJobMap) that are recomputable from alterJobsV2; just
         // remember to call super.onStopped() so the executor shutdown still runs.
-        // shutdownNow() interrupts in-flight AlterReplicaTask submissions so threads exit
-        // promptly; no awaitTermination because the drain is bounded.
-        if (executor != null && !executor.isShutdown()) {
-            executor.shutdownNow();
-        }
+        // shutdownNow() interrupts in-flight AlterReplicaTask submissions; wait until the executor
+        // actually terminates so this worker does not clear isRunning while a finish-report task is
+        // still running (the re-activation gate reads isRunning as the single quiescence signal), and
+        // so the reset below cannot race an in-flight task's job-state mutation.
+        shutdownNowAndAwaitTermination("AlterHandler." + getName() + ".executor", executor);
         // The jobs themselves survive in memory across an in-place demote / re-elect cycle,
         // unlike a restart which reloads them from the image/journal. Reset each non-final
         // job to its last durable state (drop unlogged in-memory transitions and leader-

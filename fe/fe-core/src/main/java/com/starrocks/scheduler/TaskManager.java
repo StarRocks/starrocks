@@ -130,22 +130,9 @@ public class TaskManager implements MemoryTrackable {
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
-            // Refuse to overlap with previous schedulers that did not drain in stop():
-            // shutdownNow() does not wait for in-flight TaskRun checks to exit, so a fast
-            // demote/re-elect can put two scheduler generations against the same TaskRunManager
-            // and periodFutureMap. Mirrors the BatchWriteMgr / AlterHandler / LeaderTaskExecutor
-            // restart guard.
-            if (periodScheduler.isShutdown() && !periodScheduler.isTerminated()) {
-                isStart.set(false);
-                throw new IllegalStateException(
-                        "TaskManager periodScheduler has not terminated; refuse to restart");
-            }
-            if (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated()) {
-                isStart.set(false);
-                throw new IllegalStateException(
-                        "TaskManager dispatchScheduler has not terminated; refuse to restart");
-            }
-            // Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
+            // The re-activation cleanliness gate (GlobalStateMgr.assertLeaderSessionQuiescedOrExit)
+            // verifies both schedulers terminated before start() runs, so there is no restart guard
+            // here. Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
             // needs a fresh pool so the futures kept by periodFutureMap (which we cleared in
             // stop()) cannot reference cancelled futures from the previous leader session.
             if (periodScheduler.isShutdown()) {
@@ -235,6 +222,19 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("Interrupted while waiting for TaskManager schedulers to terminate");
             }
         }
+    }
+
+    /**
+     * Whether either leader-session scheduler was shut down by a previous demotion but has not finished
+     * terminating - i.e. a straggler dispatch iteration from the previous leader session is still running.
+     * Read by the re-activation cleanliness gate (TaskManager is not a LeaderDaemon, so it has no isRunning
+     * to cover its pools); a fresh/running scheduler is not shut down and so is not a straggler. taskRunPool
+     * is intentionally never stopped on demotion (running MV-refresh / INSERT task runs are re-driven by
+     * the next leader), so it is excluded here.
+     */
+    public boolean schedulersStoppedButNotTerminated() {
+        return (periodScheduler.isShutdown() && !periodScheduler.isTerminated())
+                || (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated());
     }
 
     private void registerPeriodicalTask() {

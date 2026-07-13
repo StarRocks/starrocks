@@ -165,6 +165,17 @@ public class AlterJobMgr {
         }
     }
 
+    /**
+     * Fire-and-forget stop for leader demotion: request stop on each handler without joining, so the
+     * single state-change thread is not blocked. Each handler's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence.
+     */
+    public void stopBestEffort() {
+        schemaChangeHandler.stopBestEffort();
+        materializedViewHandler.stopBestEffort();
+        clusterHandler.stopBestEffort();
+    }
+
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         // check db
         String dbName = stmt.getDbName();
