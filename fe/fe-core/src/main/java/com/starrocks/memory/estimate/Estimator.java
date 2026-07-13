@@ -492,6 +492,10 @@ public class Estimator {
         if (collection instanceof java.util.LinkedList) {
             return (long) size * LINKED_LIST_NODE_SIZE;
         }
+        if (collection instanceof java.util.concurrent.ConcurrentHashMap.KeySetView) {
+            // Backed by a ConcurrentHashMap; charge the same node + table overhead as the map itself.
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
         return 0;
     }
 
