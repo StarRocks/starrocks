@@ -55,6 +55,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 日志
 
+### `audit_loader_batch_max_bytes`
+
+- 默认值: 52428800
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 每个 FE 上内置审计导入缓冲区的字节上限，同时也是单次导入批次的最大字节数。缓冲达到上限会立即触发落表；若下游消化速度持续低于审计流入速度、缓冲保持占满，超出的审计事件将被丢弃并计数（FE 日志按分钟频控输出告警），以保护 FE 内存——该功能定位为运营与安全分析，不保证极端过载下审计零丢失。注意导入瞬时会额外持有约 3 倍批次大小的临时内存拷贝，调大该值前请确认 FE 堆内存充足。单条 SQL 语句文本入表前最长保留 1 MB，超长部分截断。仅在 `enable_audit_loader` 开启时生效。
+- 引入版本: v4.2
+
+### `audit_loader_load_interval_seconds`
+
+- 默认值: 60
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 内置审计导入两次落表之间的最大间隔。审计事件先在 FE 内存中攒批，每隔该间隔（或缓冲提前达到 `audit_loader_batch_max_bytes` 上限时）批量写入审计表，因此审计数据的可见延迟约为该间隔加导入耗时。调小可降低可见延迟，但会增加导入事务频率。仅在 `enable_audit_loader` 开启时生效。
+- 引入版本: v4.2
+
 ### `audit_log_delete_age`
 
 - 默认值: 30d
@@ -238,6 +256,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: JournalWriter 用于检测和记录慢速 edit-log 批量写入的阈值（单位为毫秒）。批量提交后，如果批量持续时间超过此值，JournalWriter 将发出 WARN 日志，其中包含批量大小、持续时间和当前 Journal 队列大小（以每约 2 秒一次的速率限制）。此设置仅控制 FE Leader 上潜在 IO 或复制延迟的日志记录/警报；它不改变提交或轮转行为（请参阅 `edit_log_roll_num` 和与提交相关的设置）。无论此阈值如何，指标更新仍会发生。
 - 引入版本: v3.2.3
+
+### `enable_audit_loader`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用内置审计导入功能。启用后，FE 会将审计事件（查询与连接）持久化到内部表 `_statistics_.starrocks_audit_tbl`，可直接使用 SQL 分析审计数据。审计表由 Leader FE 在功能开启后自动创建（按天分区，默认保留 30 天，可通过 `ALTER TABLE ... SET ("partition_live_number"="N")` 调整，系统不会覆盖该修改；表被误删后会自动重建为空表）。当集群已安装外部动态 AUDIT 插件（如 auditloader 插件）时，该功能自动保持失效以避免审计数据重复导入，外部插件卸载后自动恢复。该功能与 `fe.audit.log` 相互独立、可共存。注意：`ADMIN SET FRONTEND CONFIG` 仅对当前连接的 FE 生效且重启后失效，多 FE 集群需逐台开启；如需持久化，请写入各 FE 的 `fe.conf`。
+- 引入版本: v4.2
 
 ### `enable_audit_sql`
 
