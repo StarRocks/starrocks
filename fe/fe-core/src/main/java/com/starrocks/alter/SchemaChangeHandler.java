@@ -1171,6 +1171,33 @@ public class SchemaChangeHandler extends AlterHandler {
         if (newSchema.size() != targetIndexSchema.size()) {
             throw new DdlException("Reorder stmt should contains all columns");
         }
+        // A full-column ORDER BY on a cloud-native range-distribution table whose sort key is key-derived
+        // (no explicit ORDER BY at creation, so getSortKeyIdxes() == null) reorders the schema and thus the
+        // key-derived range sort key. But this plain schema-change job copies each shadow tablet's range
+        // verbatim, so the stored boundary tuples stay in the OLD key-column space while the new sort key
+        // is the new key order; RangeDistributionPruner (FE) and RangeRouter (BE) then compare new-order
+        // key tuples against old-order boundaries -> silent wrong pruning / mis-routed loads. Reject a
+        // reorder that permutes the key columns. Changing the sort key via a subset
+        // "ALTER TABLE ... ORDER BY (<sort-key columns>)" routes through the range-rewrite path, which
+        // re-samples the K-tablet boundaries and is safe.
+        if (targetIndexMetaId == olapTable.getBaseIndexMetaId()
+                && olapTable.isCloudNativeTable() && olapTable.isRangeDistribution()
+                && olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSortKeyIdxes() == null) {
+            List<String> newKeyOrder = newSchema.stream().filter(Column::isKey)
+                    .map(Column::getName).collect(Collectors.toList());
+            List<String> curKeyOrder = targetIndexSchema.stream().filter(Column::isKey)
+                    .map(Column::getName).collect(Collectors.toList());
+            boolean keyOrderChanged = newKeyOrder.size() != curKeyOrder.size();
+            for (int i = 0; !keyOrderChanged && i < newKeyOrder.size(); i++) {
+                keyOrderChanged = !newKeyOrder.get(i).equalsIgnoreCase(curKeyOrder.get(i));
+            }
+            if (keyOrderChanged) {
+                throw new DdlException("ALTER TABLE ORDER BY that reorders the key columns of a "
+                        + "range-distribution table is not supported: it would leave stale tablet range "
+                        + "boundaries. Change the sort key with ALTER TABLE ... ORDER BY (<sort-key "
+                        + "columns>) instead, which re-samples the tablet layout. Table: " + olapTable.getName());
+            }
+        }
         // replace the old column list
         indexMetaIdToSchema.put(targetIndexMetaId, newSchema);
     }
