@@ -64,12 +64,12 @@ public class OpenIdConnectVerifier {
     public static JWTClaimsSet verify(String idToken,
                                       String userName,
                                       JWKSource<SecurityContext> jwkSource,
-                                      String principalFiled,
+                                      String principalField,
                                       String[] requiredIssuer,
                                       String[] requiredAudience) throws AuthenticationException {
         try {
             SignedJWT signedJWT = verifySignature(idToken, jwkSource);
-            checkClaims(signedJWT, userName, principalFiled, requiredIssuer, requiredAudience);
+            checkClaims(signedJWT, userName, principalField, requiredIssuer, requiredAudience);
             // Handed back so a caller that also reads a claim (group resolution) works on the set
             // this method already parsed and verified, instead of parsing the token a second time.
             return signedJWT.getJWTClaimsSet();
@@ -98,10 +98,10 @@ public class OpenIdConnectVerifier {
     public static JWTClaimsSet verify(String idToken,
                                       String userName,
                                       JWKSet jwkSet,
-                                      String principalFiled,
+                                      String principalField,
                                       String[] requiredIssuer,
                                       String[] requiredAudience) throws AuthenticationException {
-        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalFiled, requiredIssuer,
+        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalField, requiredIssuer,
                 requiredAudience);
     }
 
@@ -111,11 +111,11 @@ public class OpenIdConnectVerifier {
      * security integration; the real signature check still runs afterwards in {@link #verify}, so a
      * forged token cannot benefit.
      */
-    public static String extractPrincipal(String idToken, String principalFiled) throws AuthenticationException {
+    public static String extractPrincipal(String idToken, String principalField) throws AuthenticationException {
         try {
-            String principal = resolveClaimValue(SignedJWT.parse(idToken).getJWTClaimsSet(), principalFiled);
+            String principal = resolveClaimValue(SignedJWT.parse(idToken).getJWTClaimsSet(), principalField);
             if (principal == null) {
-                throw new AuthenticationException("Can not get specified principal " + principalFiled)
+                throw new AuthenticationException("Can not get specified principal " + principalField)
                         .withReason(AuthFailureReason.CLAIM_MISMATCH);
             }
             return principal;
@@ -177,7 +177,7 @@ public class OpenIdConnectVerifier {
      */
     private static void checkClaims(SignedJWT signedJWT,
                                     String userName,
-                                    String principalFiled,
+                                    String principalField,
                                     String[] requiredIssuer,
                                     String[] requiredAudience) throws Exception {
         JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
@@ -200,9 +200,9 @@ public class OpenIdConnectVerifier {
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
 
-        String jwtUserName = resolveClaimValue(claims, principalFiled);
+        String jwtUserName = resolveClaimValue(claims, principalField);
         if (jwtUserName == null) {
-            throw new AuthenticationException("Can not get specified principal " + principalFiled)
+            throw new AuthenticationException("Can not get specified principal " + principalField)
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
         if (!jwtUserName.equalsIgnoreCase(userName)) {
