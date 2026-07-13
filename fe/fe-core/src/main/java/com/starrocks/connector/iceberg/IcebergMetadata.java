@@ -1838,8 +1838,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
             Map<String, String> result = new HashMap<>();
             int index = 0;
-            for (PartitionField field : spec.fields()) {
-                if (field.transform().isVoid()) {
+            List<PartitionField> fields = spec.fields();
+            for (int i = 0; i < fields.size(); i++) {
+                PartitionField field = fields.get(i);
+                // Stay aligned with getIcebergPartitionValues, which emits NO entry only for a void field whose
+                // slot is null. A void field with a non-null slot (possible under partition evolution) still has an
+                // entry, so it must consume one here; skipping it without consuming would shift every later value
+                // onto the wrong identity column and could prune a required delete file.
+                if (field.transform().isVoid() && partitionData.get(i) == null) {
                     continue;
                 }
                 if (index >= values.size()) {
