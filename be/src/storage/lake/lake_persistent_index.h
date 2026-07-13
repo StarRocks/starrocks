@@ -70,10 +70,10 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id);
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid);
 
-    // Use erase with `rowset_id` instead of this one.
+    // Use erase with `del_rssid` instead of this one.
     Status erase(size_t n, const Slice* keys, IndexValue* old_values) override {
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
@@ -83,9 +83,9 @@ public:
     // |keys|: key array as raw buffer
     // |filter| : used for filter keys that need to skip. `True` means need skip.
     // |version|: version of values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
     Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                        uint32_t rowset_id);
+                        uint32_t del_rssid);
 
     // batch replace
     // |n|: size of key/value array

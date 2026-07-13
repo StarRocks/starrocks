@@ -95,8 +95,9 @@ public:
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
-    // |rowset_id| The rowset that keys belong to. Used for setup rebuild point (cloud native index only).
-    Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t rowset_id);
+    // |del_rssid| rssid stamped for these deletes (rowset_id + op_offset). Used as the rebuild point
+    // (cloud native index only).
+    Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
 
     int32_t current_fileset_index() const;
 
