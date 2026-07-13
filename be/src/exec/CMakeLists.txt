@@ -22,6 +22,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
+    schema_scanner_factory.cpp
 )
 
 ADD_BE_LIB(ExecSchemaScannerCore
@@ -313,7 +314,6 @@ set(EXEC_NON_PIPELINE_FILES
     dict_decode_node.cpp
     repeat_node.cpp
     table_function_node.cpp
-    schema_scanner_factory.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
@@ -490,3 +490,18 @@ ADD_BE_LIB(Exec
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
+
+ADD_BE_LIB(SchemaScannerBuiltin
+    builtin_schema_scanner_factory.cpp
+)
+
+target_link_libraries(SchemaScannerBuiltin PUBLIC
+    ExecSchemaScannerCore
+)
+
+# Temporary PR1 dependency: concrete schema scanners are still compiled into
+# Exec and ExecSchemaScanners. PR2 will replace these with layered scanner targets.
+target_link_libraries(SchemaScannerBuiltin PRIVATE
+    Exec
+    ExecSchemaScanners
+)

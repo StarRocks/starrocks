@@ -12,20 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner_factory.h"
+#pragma once
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<SchemaScanner>> create_schema_scanner(const SchemaScannerFactory* factory,
-                                                               TSchemaTableType::type type) {
-    if (factory == nullptr) {
-        return Status::InternalError("schema scanner factory is not installed");
-    }
-    auto scanner = factory->create(type);
-    if (scanner == nullptr) {
-        return Status::InternalError("schema scanner factory returned nullptr");
-    }
-    return scanner;
-}
+class ExecEnv;
+class SchemaScannerFactory;
+
+const SchemaScannerFactory* resolve_schema_scanner_factory(const ExecEnv* exec_env);
 
 } // namespace starrocks

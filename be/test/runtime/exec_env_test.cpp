@@ -26,6 +26,8 @@
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/schema_scanner_factory.h"
+#include "exec/schema_scanner_factory_adapter.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
@@ -45,7 +47,35 @@ public:
                                        int, int64_t) override {}
 };
 
+class FakeSchemaScannerFactory final : public SchemaScannerFactory {
+public:
+    explicit FakeSchemaScannerFactory(bool* destroyed) : _destroyed(destroyed) {}
+    ~FakeSchemaScannerFactory() override { *_destroyed = true; }
+
+    std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const override { return nullptr; }
+
+private:
+    bool* _destroyed;
+};
+
 } // namespace
+
+TEST(ExecEnvTest, owns_schema_scanner_factory) {
+    bool destroyed = false;
+    auto factory = std::make_unique<FakeSchemaScannerFactory>(&destroyed);
+    auto* expected = factory.get();
+    ExecEnv env(std::move(factory));
+
+    EXPECT_EQ(expected, env.schema_scanner_factory());
+    EXPECT_EQ(expected, resolve_schema_scanner_factory(&env));
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(nullptr));
+    EXPECT_FALSE(destroyed);
+
+    env.destroy();
+    EXPECT_TRUE(destroyed);
+    EXPECT_EQ(nullptr, env.schema_scanner_factory());
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(&env));
+}
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;

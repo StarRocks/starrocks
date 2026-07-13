@@ -41,6 +41,7 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "data_workflows/data_workflows_env.h"
+#include "exec/builtin_schema_scanner_factory.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
@@ -227,7 +228,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->set_compute_env(compute_env.get());
     EXIT_IF_ERROR(runtime_env->init_lake_thread_pools(process_metrics));
-    EXIT_IF_ERROR(exec_env->init(process_metrics_registry, runtime_env));
+    EXIT_IF_ERROR(exec_env->init(process_metrics_registry, runtime_env, create_builtin_schema_scanner_factory()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
     EXIT_IF_ERROR(init_storage_env(runtime_env, platform_env, compute_env.get()));
