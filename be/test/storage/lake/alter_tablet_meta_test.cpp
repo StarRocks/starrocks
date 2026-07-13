@@ -16,9 +16,9 @@
 
 #include "agent/agent_task.h"
 #include "base/failpoint/fail_point.h"
-#include "base/utility/defer_op.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
@@ -706,112 +706,112 @@ TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
     ASSERT_EQ(12, flat_json_config_pb.flat_json_max_column_max());
     ASSERT_EQ(3, flat_json_config_pb.version());
 
-TEST_F(AlterTabletMetaTest, test_compaction_read_derive_uses_versioned_flat_json_config) {
-    // (id INT KEY, j JSON) tablet with two flat segments: key 'a' appears in both segments,
-    // key 'b' only in the first, so the source-level ratio of 'b' is 50%.
-    auto metadata = std::make_shared<TabletMetadata>();
-    metadata->set_id(next_id());
-    metadata->set_version(1);
-    metadata->set_next_rowset_id(1);
-    auto* schema_pb = metadata->mutable_schema();
-    schema_pb->set_keys_type(DUP_KEYS);
-    schema_pb->set_id(next_id());
-    schema_pb->set_num_short_key_columns(1);
-    schema_pb->set_num_rows_per_row_block(65535);
-    {
-        auto* c = schema_pb->add_column();
-        c->set_unique_id(next_id());
-        c->set_name("id");
-        c->set_type("INT");
-        c->set_is_key(true);
-        c->set_is_nullable(false);
-    }
-    {
-        auto* c = schema_pb->add_column();
-        c->set_unique_id(next_id());
-        c->set_name("j");
-        c->set_type("JSON");
-        c->set_is_key(false);
-        c->set_is_nullable(true);
-        c->set_aggregation("NONE");
-    }
-    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
-    int64_t tablet_id = metadata->id();
-    auto tablet_schema = TabletSchema::create(metadata->schema());
-    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
-
-    auto write_rows = [&](int64_t new_version, bool with_b) {
-        int64_t txn_id = next_id();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
-        ASSERT_OK(writer->open());
-        auto id_col = Int32Column::create();
-        auto json_col = JsonColumn::create();
-        auto null_col = NullColumn::create();
-        for (int i = 0; i < 100; i++) {
-            id_col->append(i);
-            auto jv = with_b ? JsonValue::parse(R"({"a": 1, "b": 2})") : JsonValue::parse(R"({"a": 1})");
-            ASSERT_TRUE(jv.ok());
-            json_col->append(&jv.value());
-            null_col->append(0);
+    TEST_F(AlterTabletMetaTest, test_compaction_read_derive_uses_versioned_flat_json_config) {
+        // (id INT KEY, j JSON) tablet with two flat segments: key 'a' appears in both segments,
+        // key 'b' only in the first, so the source-level ratio of 'b' is 50%.
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(next_id());
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        auto* schema_pb = metadata->mutable_schema();
+        schema_pb->set_keys_type(DUP_KEYS);
+        schema_pb->set_id(next_id());
+        schema_pb->set_num_short_key_columns(1);
+        schema_pb->set_num_rows_per_row_block(65535);
+        {
+            auto* c = schema_pb->add_column();
+            c->set_unique_id(next_id());
+            c->set_name("id");
+            c->set_type("INT");
+            c->set_is_key(true);
+            c->set_is_nullable(false);
         }
-        auto j_col = NullableColumn::create(std::move(json_col), std::move(null_col));
-        Chunk chunk({std::move(id_col), std::move(j_col)}, schema);
-        ASSERT_OK(writer->write(chunk));
-        ASSERT_OK(writer->finish());
-        auto txn_log = std::make_shared<TxnLog>();
-        txn_log->set_tablet_id(tablet_id);
-        txn_log->set_txn_id(txn_id);
-        auto* op_write = txn_log->mutable_op_write();
-        for (const auto& f : writer->segments()) {
-            op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+        {
+            auto* c = schema_pb->add_column();
+            c->set_unique_id(next_id());
+            c->set_name("j");
+            c->set_type("JSON");
+            c->set_is_key(false);
+            c->set_is_nullable(true);
+            c->set_aggregation("NONE");
         }
-        op_write->mutable_rowset()->set_num_rows(writer->num_rows());
-        op_write->mutable_rowset()->set_data_size(writer->data_size());
-        op_write->mutable_rowset()->set_overlapped(false);
-        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
-        writer->close();
-        ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id).status());
-    };
-    write_rows(2, true);
-    write_rows(3, false);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        int64_t tablet_id = metadata->id();
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
 
-    // v4 = v3 + a table-level flat_json config with a high sparsity factor: only keys present in
-    // >= 80% of the sources should be derived — 'a' (2/2) qualifies, 'b' (1/2) does not.
-    ASSIGN_OR_ABORT(auto v3, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
-    auto v4 = std::make_shared<TabletMetadata>(*v3);
-    v4->set_version(4);
-    auto* cfg = v4->mutable_flat_json_config();
-    cfg->set_flat_json_enable(true);
-    cfg->set_flat_json_null_factor(1);
-    cfg->set_flat_json_sparsity_factor(0.8);
-    cfg->set_flat_json_max_column_max(100);
-    // Persist v4 while keeping the latest-metadata cache stale (still v3, which carries no
-    // flat_json_config) — the state of a node whose cache no longer holds this tablet.
-    SyncPoint::GetInstance()->SetCallBack("TabletManager::skip_cache_latest_metadata",
-                                          [](void* arg) { *(bool*)arg = true; });
-    SyncPoint::GetInstance()->EnableProcessing();
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(v4));
-    SyncPoint::GetInstance()->ClearCallBack("TabletManager::skip_cache_latest_metadata");
-    SyncPoint::GetInstance()->DisableProcessing();
+        auto write_rows = [&](int64_t new_version, bool with_b) {
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSERT_OK(writer->open());
+            auto id_col = Int32Column::create();
+            auto json_col = JsonColumn::create();
+            auto null_col = NullColumn::create();
+            for (int i = 0; i < 100; i++) {
+                id_col->append(i);
+                auto jv = with_b ? JsonValue::parse(R"({"a": 1, "b": 2})") : JsonValue::parse(R"({"a": 1})");
+                ASSERT_TRUE(jv.ok());
+                json_col->append(&jv.value());
+                null_col->append(0);
+            }
+            auto j_col = NullableColumn::create(std::move(json_col), std::move(null_col));
+            Chunk chunk({std::move(id_col), std::move(j_col)}, schema);
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish());
+            auto txn_log = std::make_shared<TxnLog>();
+            txn_log->set_tablet_id(tablet_id);
+            txn_log->set_txn_id(txn_id);
+            auto* op_write = txn_log->mutable_op_write();
+            for (const auto& f : writer->segments()) {
+                op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+            }
+            op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+            op_write->mutable_rowset()->set_data_size(writer->data_size());
+            op_write->mutable_rowset()->set_overlapped(false);
+            ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+            writer->close();
+            ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id).status());
+        };
+        write_rows(2, true);
+        write_rows(3, false);
 
-    // A compaction-style read over v4 must derive flat_json paths from v4 itself, not from the
-    // best-effort latest-metadata cache.
-    TabletReader reader(_tablet_mgr.get(), v4, *schema);
-    ASSERT_OK(reader.prepare());
-    TabletReaderParams params;
-    params.reader_type = ReaderType::READER_BASE_COMPACTION;
-    params.chunk_size = 1024;
-    std::vector<ColumnAccessPathPtr> access_paths;
-    params.column_access_paths = &access_paths;
-    ASSERT_OK(reader.open(params));
-    reader.close();
+        // v4 = v3 + a table-level flat_json config with a high sparsity factor: only keys present in
+        // >= 80% of the sources should be derived — 'a' (2/2) qualifies, 'b' (1/2) does not.
+        ASSIGN_OR_ABORT(auto v3, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+        auto v4 = std::make_shared<TabletMetadata>(*v3);
+        v4->set_version(4);
+        auto* cfg = v4->mutable_flat_json_config();
+        cfg->set_flat_json_enable(true);
+        cfg->set_flat_json_null_factor(1);
+        cfg->set_flat_json_sparsity_factor(0.8);
+        cfg->set_flat_json_max_column_max(100);
+        // Persist v4 while keeping the latest-metadata cache stale (still v3, which carries no
+        // flat_json_config) — the state of a node whose cache no longer holds this tablet.
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::skip_cache_latest_metadata",
+                                              [](void* arg) { *(bool*)arg = true; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(v4));
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::skip_cache_latest_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
 
-    ASSERT_EQ(1, access_paths.size());
-    std::vector<ColumnAccessPath*> leafs;
-    access_paths[0]->get_all_leafs(&leafs);
-    ASSERT_EQ(1, leafs.size());
-    EXPECT_EQ("a", leafs[0]->path());
-}
+        // A compaction-style read over v4 must derive flat_json paths from v4 itself, not from the
+        // best-effort latest-metadata cache.
+        TabletReader reader(_tablet_mgr.get(), v4, *schema);
+        ASSERT_OK(reader.prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_BASE_COMPACTION;
+        params.chunk_size = 1024;
+        std::vector<ColumnAccessPathPtr> access_paths;
+        params.column_access_paths = &access_paths;
+        ASSERT_OK(reader.open(params));
+        reader.close();
+
+        ASSERT_EQ(1, access_paths.size());
+        std::vector<ColumnAccessPath*> leafs;
+        access_paths[0]->get_all_leafs(&leafs);
+        ASSERT_EQ(1, leafs.size());
+        EXPECT_EQ("a", leafs[0]->path());
+    }
 
 } // namespace starrocks::lake
