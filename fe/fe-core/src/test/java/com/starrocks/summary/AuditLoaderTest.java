@@ -98,4 +98,32 @@ public class AuditLoaderTest {
         Assertions.assertTrue(r.getBytes(StandardCharsets.UTF_8).length <= 4);
     }
 
+    @Test
+    public void testOfferEventByteCapAndClearBuffer() {
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origCap = Config.audit_loader_batch_max_bytes;
+        try {
+            mgr.offerEvent(baseEvent());
+            long oneRowBytes = mgr.bufferedBytes();
+            Assertions.assertTrue(oneRowBytes > 0);
+            Assertions.assertEquals(1, mgr.bufferedRows());
+            Assertions.assertEquals(0, mgr.droppedEvents());
+
+            // Shrink the cap so a second identical row exceeds it: the event must be dropped and
+            // counted, leaving the queue and the byte counter untouched.
+            Config.audit_loader_batch_max_bytes = oneRowBytes + 1;
+            mgr.offerEvent(baseEvent());
+            Assertions.assertEquals(1, mgr.bufferedRows());
+            Assertions.assertEquals(oneRowBytes, mgr.bufferedBytes());
+            Assertions.assertEquals(1, mgr.droppedEvents());
+
+            // clearBuffer drains the queue and subtracts exactly the drained bytes.
+            mgr.clearBuffer();
+            Assertions.assertEquals(0, mgr.bufferedRows());
+            Assertions.assertEquals(0, mgr.bufferedBytes());
+        } finally {
+            Config.audit_loader_batch_max_bytes = origCap;
+        }
+    }
+
 }

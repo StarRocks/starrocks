@@ -103,6 +103,21 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return disabledByConflict;
     }
 
+    @VisibleForTesting
+    long bufferedBytes() {
+        return bufferBytes.get();
+    }
+
+    @VisibleForTesting
+    int bufferedRows() {
+        return rowQueue.size();
+    }
+
+    @VisibleForTesting
+    long droppedEvents() {
+        return droppedCount.get();
+    }
+
     /**
      * Buffer one audit event. Must be lightweight and non-blocking: it only serializes the event to a
      * JSON row and appends it to the bounded queue. Called from the single audit-event worker thread.
@@ -170,7 +185,8 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return false;
     }
 
-    private void clearBuffer() {
+    @VisibleForTesting
+    void clearBuffer() {
         // Drain row by row and subtract exactly what is removed. A blanket clear()+set(0) could race
         // with a producer that offers a row in between, leaving bufferBytes permanently out of sync
         // with the queue (a negative counter would make the byte cap too lenient afterwards).
@@ -369,7 +385,8 @@ public class AuditLoaderMgr extends FrontendDaemon {
                 + "  `queryId` VARCHAR(64) COMMENT \"Unique query id\",\n"
                 + "  `timestamp` DATETIME NOT NULL COMMENT \"Query start time\",\n"
                 + "  `queryType` VARCHAR(12) COMMENT \"Query type: query, slow_query or connection\",\n"
-                + "  `clientIp` VARCHAR(32) COMMENT \"Client IP\",\n"
+                + "  `clientIp` VARCHAR(64) COMMENT \"Client host and port; an IPv6 host-port string "
+                + "can exceed 32 characters\",\n"
                 + "  `user` VARCHAR(64) COMMENT \"Login user\",\n"
                 + "  `authorizedUser` VARCHAR(64) COMMENT \"User identity\",\n"
                 + "  `resourceGroup` VARCHAR(64) COMMENT \"Resource group\",\n"
