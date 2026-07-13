@@ -25,6 +25,7 @@ set(SCHEMA_SCANNER_TEST_FILES
     schema_columns_scanner_test.cpp
     schema_fe_metrics_scanner_test.cpp
     schema_fe_tablet_schedules_scanner_test.cpp
+    schema_iceberg_maintenance_tasks_scanner_test.cpp
     schema_loads_scanner_test.cpp
     schema_materialized_view_refresh_jobs_scanner_test.cpp
     schema_materialized_views_scanner_test.cpp
@@ -32,6 +33,8 @@ set(SCHEMA_SCANNER_TEST_FILES
     schema_scanner_core_test.cpp
     schema_scanner_test.cpp
     schema_scanners_test.cpp
+    schema_table_bookmark_references_scanner_test.cpp
+    schema_table_bookmark_summary_scanner_test.cpp
     schema_task_runs_scanner_test.cpp
 )
 

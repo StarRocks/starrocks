@@ -42,22 +42,6 @@ set(EXEC_FILES
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
-<<<<<<< HEAD
-        ./exec/schema_columns_scanner_test.cpp
-        ./exec/schema_fe_tablet_schedules_scanner_test.cpp
-        ./exec/schema_iceberg_maintenance_tasks_scanner_test.cpp
-        ./exec/schema_loads_scanner_test.cpp
-        ./exec/schema_materialized_view_refresh_jobs_scanner_test.cpp
-        ./exec/schema_materialized_views_scanner_test.cpp
-        ./exec/schema_task_runs_scanner_test.cpp
-        ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
-        ./exec/schema_scanner/schema_scanner_test.cpp
-        ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
-        ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
-        ./exec/schema_scanner/schema_table_bookmark_references_scanner_test.cpp
-        ./exec/schema_scanner/schema_table_bookmark_summary_scanner_test.cpp
-=======
->>>>>>> 6a6543f879b... [Refactor] Extract schema scanners from the Exec module (#76285)
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp

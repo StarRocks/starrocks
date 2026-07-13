@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/schema_iceberg_maintenance_tasks_scanner.h"
+#include "schema_scanner/schema_iceberg_maintenance_tasks_scanner.h"
 
 #include "exec/schema_scanner.h"
-#include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
+#include "schema_scanner/schema_helper.h"
 #include "types/constexpr.h"
 #include "types/datetime_value.h"
 #include "types/json_value.h"

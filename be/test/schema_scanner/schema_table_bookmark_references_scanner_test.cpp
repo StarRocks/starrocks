@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/schema_table_bookmark_references_scanner.h"
+#include "schema_scanner/schema_table_bookmark_references_scanner.h"
 
 #include <gtest/gtest.h>
 

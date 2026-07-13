@@ -289,64 +289,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-<<<<<<< HEAD
     remote_scan_arrow_batch_reader.cpp
-    schema_scanner/schema_analyze_status.cpp
-    schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_schemata_scanner.cpp
-    schema_scanner/schema_variables_scanner.cpp
-    schema_scanner/schema_columns_scanner.cpp
-    schema_scanner/schema_column_stats_usage_scanner.cpp
-    schema_scanner/schema_views_scanner.cpp
-    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
-    schema_scanner/schema_materialized_views_scanner.cpp
-    schema_scanner/schema_tasks_scanner.cpp
-    schema_scanner/schema_task_runs_scanner.cpp
-    schema_scanner/schema_iceberg_maintenance_tasks_scanner.cpp
-    schema_scanner/schema_loads_scanner.cpp
-    schema_scanner/schema_load_tracking_logs_scanner.cpp
-    schema_scanner/schema_partitions_meta_scanner.cpp
-    schema_scanner/schema_table_bookmark_partitions_scanner.cpp
-    schema_scanner/schema_table_bookmark_references_scanner.cpp
-    schema_scanner/schema_table_bookmark_summary_scanner.cpp
-    schema_scanner/schema_user_privileges_scanner.cpp
-    schema_scanner/schema_schema_privileges_scanner.cpp
-    schema_scanner/schema_table_privileges_scanner.cpp
-    schema_scanner/schema_tables_config_scanner.cpp
-    schema_scanner/schema_be_tablets_scanner.cpp
-    schema_scanner/schema_be_txns_scanner.cpp
-    schema_scanner/schema_be_logs_scanner.cpp
-    schema_scanner/schema_be_metrics_scanner.cpp
-    schema_scanner/schema_fe_metrics_scanner.cpp
-    schema_scanner/schema_fe_threads_scanner.cpp
-    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
-    schema_scanner/schema_be_compactions_scanner.cpp
-    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
-    schema_scanner/schema_be_tablet_write_log_scanner.cpp
-    schema_scanner/schema_pipe_files.cpp
-    schema_scanner/schema_pipes.cpp
-    schema_scanner/schema_recyclebin_catalogs.cpp
-    schema_scanner/starrocks_role_edges_scanner.cpp
-    schema_scanner/starrocks_grants_to_scanner.cpp
-    schema_scanner/schema_helper.cpp
-    schema_scanner/schema_routine_load_jobs_scanner.cpp
-    schema_scanner/schema_stream_loads_scanner.cpp
-    schema_scanner/starrocks_policy_references_scanner.cpp
-    schema_scanner/schema_be_datacache_metrics_scanner.cpp
-    schema_scanner/sys_object_dependencies.cpp
-    schema_scanner/sys_fe_locks.cpp
-    schema_scanner/sys_fe_memory_usage.cpp
-    schema_scanner/schema_temp_tables_scanner.cpp
-    schema_scanner/sys_users_scanner.cpp
-    schema_scanner/schema_warehouse_metrics.cpp
-    schema_scanner/schema_warehouse_queries.cpp
-    schema_scanner/schema_cluster_snapshots_scanner.cpp
-    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
-    schema_scanner/schema_applicable_roles_scanner.cpp
-    schema_scanner/schema_keywords_scanner.cpp
-    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
-=======
->>>>>>> 6a6543f879b... [Refactor] Extract schema scanners from the Exec module (#76285)
     connector_scan_node.cpp
 )
 

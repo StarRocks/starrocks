@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/starrocks_policy_references_scanner.h"
+#include "schema_scanner/starrocks_policy_references_scanner.h"
 
-#include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
+#include "schema_scanner/schema_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

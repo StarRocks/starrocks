@@ -42,6 +42,7 @@ set(SCHEMA_SCANNER_FILES
     schema_fe_tablet_schedules_scanner.cpp
     schema_fe_threads_scanner.cpp
     schema_helper.cpp
+    schema_iceberg_maintenance_tasks_scanner.cpp
     schema_keywords_scanner.cpp
     schema_load_tracking_logs_scanner.cpp
     schema_loads_scanner.cpp
@@ -56,6 +57,9 @@ set(SCHEMA_SCANNER_FILES
     schema_schemata_scanner.cpp
     schema_statistics_scanner.cpp
     schema_stream_loads_scanner.cpp
+    schema_table_bookmark_partitions_scanner.cpp
+    schema_table_bookmark_references_scanner.cpp
+    schema_table_bookmark_summary_scanner.cpp
     schema_table_privileges_scanner.cpp
     schema_tables_config_scanner.cpp
     schema_tables_scanner.cpp
@@ -70,10 +74,12 @@ set(SCHEMA_SCANNER_FILES
     schema_warehouse_metrics.cpp
     schema_warehouse_queries.cpp
     starrocks_grants_to_scanner.cpp
+    starrocks_policy_references_scanner.cpp
     starrocks_role_edges_scanner.cpp
     sys_fe_locks.cpp
     sys_fe_memory_usage.cpp
     sys_object_dependencies.cpp
+    sys_users_scanner.cpp
 )
 
 ADD_BE_LIB(SchemaScanners

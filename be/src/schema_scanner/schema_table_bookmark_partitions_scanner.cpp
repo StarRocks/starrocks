@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/schema_table_bookmark_partitions_scanner.h"
+#include "schema_scanner/schema_table_bookmark_partitions_scanner.h"
 
 #include <fmt/format.h>
 
 #include "common/logging.h"
-#include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
+#include "schema_scanner/schema_helper.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 

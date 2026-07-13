@@ -19,19 +19,19 @@
 
 namespace starrocks {
 
-class StarrocksPolicyReferencesScanner : public SchemaScanner {
+class SysUsersScanner : public SchemaScanner {
 public:
-    StarrocksPolicyReferencesScanner();
-    ~StarrocksPolicyReferencesScanner() override;
+    SysUsersScanner();
+    ~SysUsersScanner() override;
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _policy_references_index{0};
-    TGetPolicyReferenceResponse _policy_references_result;
-    static SchemaScanner::ColumnDesc _s_policy_references_columns[];
+    size_t _index = 0;
+    TGetUsersResponse _result;
+    static SchemaScanner::ColumnDesc _s_columns[];
 };
 
 } // namespace starrocks

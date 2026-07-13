@@ -14,24 +14,17 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/schema_scanner/schema_scanner_test.cpp
-#include "exec/builtin_schema_scanner_factory.h"
-#include "exec/schema_scanner/schema_dummy_scanner.h"
-#include "exec/schema_scanner/schema_iceberg_maintenance_tasks_scanner.h"
-#include "exec/schema_scanner/schema_table_bookmark_partitions_scanner.h"
-#include "exec/schema_scanner/schema_table_bookmark_references_scanner.h"
-#include "exec/schema_scanner/schema_table_bookmark_summary_scanner.h"
-#include "exec/schema_scanner/schema_tables_scanner.h"
-#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
-#include "exec/schema_scanner/starrocks_policy_references_scanner.h"
-#include "exec/schema_scanner/sys_users_scanner.h"
-=======
->>>>>>> 6a6543f879b... [Refactor] Extract schema scanners from the Exec module (#76285):be/test/schema_scanner/schema_scanner_test.cpp
 #include "gen_cpp/Descriptors_types.h"
 #include "schema_scanner/builtin_schema_scanner_factory.h"
 #include "schema_scanner/schema_dummy_scanner.h"
+#include "schema_scanner/schema_iceberg_maintenance_tasks_scanner.h"
+#include "schema_scanner/schema_table_bookmark_partitions_scanner.h"
+#include "schema_scanner/schema_table_bookmark_references_scanner.h"
+#include "schema_scanner/schema_table_bookmark_summary_scanner.h"
 #include "schema_scanner/schema_tables_scanner.h"
 #include "schema_scanner/schema_tablet_reshard_jobs_scanner.h"
+#include "schema_scanner/starrocks_policy_references_scanner.h"
+#include "schema_scanner/sys_users_scanner.h"
 
 namespace starrocks {
 
