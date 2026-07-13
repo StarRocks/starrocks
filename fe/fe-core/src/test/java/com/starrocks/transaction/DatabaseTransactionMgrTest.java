@@ -718,6 +718,30 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(txnId1).getStatus());
     }
 
+    // Disabling the cache at runtime (after it already holds entries) must stop reads too, not just
+    // writes: a previously-cached VISIBLE outcome should no longer answer a re-commit/probe.
+    @Test
+    public void testTerminalCacheDisableAfterPopulatedStopsReads() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+
+        // Populate the cache via count-eviction while it is enabled.
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 50000;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertTrue(masterDbTransMgr.getTerminalStateCacheSize() > 0);
+        // While enabled, the evicted VISIBLE txn is answered from the cache.
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId1).getStatus());
+
+        // Disable at runtime: reads must now return nothing, even though entries remain.
+        Config.transaction_terminal_state_cache_num = 0;
+        assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(txnId1).getStatus());
+        assertThrows(TransactionNotFoundException.class,
+                () -> masterDbTransMgr.commitPreparedTransaction(txnId1));
+    }
+
     @Test
     public void testGetTableTransInfo() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr =
