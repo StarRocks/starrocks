@@ -435,8 +435,13 @@ void Analytor::close(RuntimeState* state) {
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
     _remove_unused_rows(state);
 
+    // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
+    // computation are checked against the BE memory limit, including the column data copied while upgrading
+    // BinaryColumn to LargeBinaryColumn in upgrade_if_overflow.
+    TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     return _check_has_error();
 }
@@ -639,7 +644,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                     ColumnHelper::ensure_large_binary_column(_agg_intput_columns[i][j]);
                 }
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                _append_column(chunk_size, _agg_intput_columns[i][j].get(), column);
 
                 // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
                 Column* agg_column = _agg_intput_columns[i][j].get();
@@ -656,7 +661,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                 ColumnHelper::ensure_large_binary_column(_partition_columns[i]);
             }
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            _append_column(chunk_size, _partition_columns[i].get(), column);
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
             ASSIGN_OR_RETURN(auto upgrade_col, _partition_columns[i]->upgrade_if_overflow());
@@ -671,7 +676,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                 ColumnHelper::ensure_large_binary_column(_order_columns[i]);
             }
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            _append_column(chunk_size, _order_columns[i].get(), column);
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
             ASSIGN_OR_RETURN(auto order_upgrade_col, _order_columns[i]->upgrade_if_overflow());
