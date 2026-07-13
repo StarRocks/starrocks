@@ -1167,39 +1167,40 @@
         "exec_primitive/data_sink.h"
       ],
       "allowed_target_deps": ["Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["schema_scanner_core_test"],
-      "allowed_test_link_deps": ["ExecSchemaScannerCore", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
     },
     {
       "id": "schemascannerbuiltin",
       "doc_label": "SchemaScannerBuiltin",
-      "summary": "Temporary top-level composition target for the builtin schema scanner factory while concrete scanners remain in Exec compatibility targets.",
+      "summary": "Builtin schema scanner factory composition above the concrete scanner module without full Exec coupling.",
       "owned_targets": ["SchemaScannerBuiltin"],
-      "allowed_include_prefixes": ["exec/builtin_schema_scanner_factory.h", "exec/schema_scanner.h", "exec/schema_scanner_factory.h", "exec/schema_scanner/", "gen_cpp/"],
-      "allowed_target_deps": ["Exec", "ExecSchemaScannerCore", "ExecSchemaScanners"],
-      "remediation": "Keep builtin scanner selection above Exec; PR2 must replace the temporary Exec dependency with explicit layered schema scanner targets."
+      "agents_path": "be/src/schema_scanner/AGENTS.md",
+      "allowed_include_prefixes": ["schema_scanner/", "exec/schema_scanner.h", "exec/schema_scanner_factory.h", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "service/", "http/", "agent/", "connector/", "data_workflows/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["SchemaScanners", "ExecSchemaScannerCore"],
+      "allowed_test_targets": ["schema_scanner_test"],
+      "allowed_test_link_deps": ["SchemaScannerBuiltin", "SchemaScanners", "ExecSchemaScannerCore", "Storage", "StoragePrimitive", "Cache", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep builtin scanner selection as composition over SchemaScanners and ExecSchemaScannerCore; do not link or include full Exec."
     },
     {
-      "id": "execschemascanners",
-      "doc_label": "ExecSchemaScanners",
-      "summary": "Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.",
-      "owned_targets": ["ExecSchemaScanners"],
+      "id": "schemascanners",
+      "doc_label": "SchemaScanners",
+      "summary": "Concrete schema scanner implementations over the Exec-owned core contract, FE RPC helpers, Storage, Cache, and Platform without full Exec coupling.",
+      "owned_targets": ["SchemaScanners"],
+      "agents_path": "be/src/schema_scanner/AGENTS.md",
       "additional_owned_globs": [
-        "be/src/exec/schema_scanner/schema_column_filler.h"
+        "be/src/schema_scanner/schema_column_filler.h"
       ],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "allowed_include_prefixes": ["schema_scanner/", "exec/schema_scanner.h", "storage/", "storage_primitive/", "cache/", "platform/", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "service/", "http/", "agent/", "connector/", "data_workflows/"],
       "forbidden_includes": [
-        "exec/schema_scanner/schema_helper.h",
         "exec/exec_env.h",
         "exec_primitive/exec_node.h",
         "exec_primitive/data_sink.h"
       ],
-      "allowed_target_deps": ["ExecSchemaScannerCore", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_schema_scanners_test"],
-      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
+      "allowed_target_deps": ["ExecSchemaScannerCore", "Storage", "StoragePrimitive", "Cache", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep concrete scanners in SchemaScanners over explicit lower module dependencies; route execution through the core contract and keep full Exec, service, and connector code out."
     },
     {
       "id": "execjoincore",
@@ -1316,7 +1317,7 @@
         "ExecPrimitive",
         "ExecRuntime",
         "ExecSchemaScannerCore",
-        "ExecSchemaScanners",
+        "SchemaScanners",
         "ExecJoinCore",
         "Exec",
         "ConnectorPrimitive",
