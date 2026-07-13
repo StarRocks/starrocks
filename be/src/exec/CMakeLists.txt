@@ -41,35 +41,6 @@ target_link_libraries(ExecSchemaScannerCore PUBLIC
     StarRocksGen
 )
 
-set(EXEC_SCHEMA_SCANNER_FILES
-    schema_scanner/schema_be_bvars_scanner.cpp
-    schema_scanner/schema_be_configs_scanner.cpp
-    schema_scanner/schema_be_threads_scanner.cpp
-    schema_scanner/schema_charsets_scanner.cpp
-    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
-    schema_scanner/schema_collations_scanner.cpp
-    schema_scanner/schema_dummy_scanner.cpp
-    schema_scanner/schema_events_scanner.cpp
-    schema_scanner/schema_statistics_scanner.cpp
-    schema_scanner/schema_triggers_scanner.cpp
-)
-
-ADD_BE_LIB(ExecSchemaScanners
-    ${EXEC_SCHEMA_SCANNER_FILES}
-)
-
-target_link_libraries(ExecSchemaScanners PUBLIC
-    ExecSchemaScannerCore
-    Runtime
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 set(EXEC_JOIN_CORE_FILES
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
@@ -318,6 +289,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
+<<<<<<< HEAD
     remote_scan_arrow_batch_reader.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
@@ -373,6 +345,8 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
+=======
+>>>>>>> 6a6543f879b... [Refactor] Extract schema scanners from the Exec module (#76285)
     connector_scan_node.cpp
 )
 
@@ -497,20 +471,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
-
-ADD_BE_LIB(SchemaScannerBuiltin
-    builtin_schema_scanner_factory.cpp
-)
-
-target_link_libraries(SchemaScannerBuiltin PUBLIC
-    ExecSchemaScannerCore
-)
-
-# Temporary PR1 dependency: concrete schema scanners are still compiled into
-# Exec and ExecSchemaScanners. PR2 will replace these with layered scanner targets.
-target_link_libraries(SchemaScannerBuiltin PRIVATE
-    Exec
-    ExecSchemaScanners
-)

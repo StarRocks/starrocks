@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gtest/gtest.h>
+
 #include <cstdio>
 
-#include "formats/orc/lzo_decompressor_registration.h"
-#include "schema_scanner/builtin_schema_scanner_factory.h"
-#include "testutil/init_test_env.h"
+#include "common/configbase.h"
+#include "types/time_types.h"
 
 int main(int argc, char** argv) {
-    auto lzo_status = starrocks::register_orc_lzo_decompressor();
-    if (!lzo_status.ok()) {
-        fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
+    if (!starrocks::config::init(nullptr)) {
+        std::fprintf(stderr, "failed to initialize config defaults\n");
         return 1;
     }
+    starrocks::date::init_date_cache();
 
-    return starrocks::init_test_env(argc, argv, starrocks::create_builtin_schema_scanner_factory());
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

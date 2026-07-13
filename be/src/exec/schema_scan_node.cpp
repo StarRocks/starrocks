@@ -20,7 +20,6 @@
 #include "common/runtime_profile.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
-#include "exec/schema_scanner/schema_helper.h"
 #include "exec/schema_scanner_factory.h"
 #include "exec/schema_scanner_factory_adapter.h"
 #include "exprs/chunk_predicate_evaluator.h"

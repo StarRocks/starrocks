@@ -42,6 +42,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
+<<<<<<< HEAD
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_iceberg_maintenance_tasks_scanner_test.cpp
@@ -55,6 +56,8 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
         ./exec/schema_scanner/schema_table_bookmark_references_scanner_test.cpp
         ./exec/schema_scanner/schema_table_bookmark_summary_scanner_test.cpp
+=======
+>>>>>>> 6a6543f879b... [Refactor] Extract schema scanners from the Exec module (#76285)
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
@@ -205,6 +208,7 @@ add_subdirectory(types)
 add_subdirectory(exec_primitive)
 add_subdirectory(connector_primitive)
 add_subdirectory(exec)
+add_subdirectory(schema_scanner)
 add_subdirectory(connector)
 add_subdirectory(formats)
 add_subdirectory(storage_primitive)
