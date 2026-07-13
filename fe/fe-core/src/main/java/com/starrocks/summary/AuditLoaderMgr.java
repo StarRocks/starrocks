@@ -303,18 +303,22 @@ public class AuditLoaderMgr extends FrontendDaemon {
 
     @VisibleForTesting
     String formatRowJson(AuditEvent event) {
+        // Every variable-length string is truncated to its column byte width (keep the widths in
+        // sync with buildCreateTableSql): a value exceeding the column width fails the whole
+        // stream-load batch, and since flush() retries the head batch until it succeeds, one
+        // oversized field would wedge the audit pipeline.
         JsonObject obj = new JsonObject();
-        obj.addProperty("queryId", event.queryId);
+        obj.addProperty("queryId", truncateToBytes(event.queryId, 64));
         obj.addProperty("timestamp", formatTimestamp(event.timestamp));
         obj.addProperty("queryType", resolveQueryType(event));
-        obj.addProperty("clientIp", event.clientIp);
-        obj.addProperty("user", event.user);
-        obj.addProperty("authorizedUser", event.authorizedUser);
-        obj.addProperty("resourceGroup", event.resourceGroup);
-        obj.addProperty("catalog", event.catalog);
-        obj.addProperty("db", event.db);
-        obj.addProperty("state", event.state);
-        obj.addProperty("errorCode", event.errorCode);
+        obj.addProperty("clientIp", truncateToBytes(event.clientIp, 64));
+        obj.addProperty("user", truncateToBytes(event.user, 64));
+        obj.addProperty("authorizedUser", truncateToBytes(event.authorizedUser, 64));
+        obj.addProperty("resourceGroup", truncateToBytes(event.resourceGroup, 64));
+        obj.addProperty("catalog", truncateToBytes(event.catalog, 32));
+        obj.addProperty("db", truncateToBytes(event.db, 96));
+        obj.addProperty("state", truncateToBytes(event.state, 8));
+        obj.addProperty("errorCode", truncateToBytes(event.errorCode, 512));
         obj.addProperty("queryTime", event.queryTime);
         obj.addProperty("scanBytes", event.scanBytes);
         obj.addProperty("scanRows", event.scanRows);
@@ -323,24 +327,24 @@ public class AuditLoaderMgr extends FrontendDaemon {
         obj.addProperty("memCostBytes", event.memCostBytes);
         obj.addProperty("stmtId", event.stmtId);
         obj.addProperty("isQuery", event.isQuery ? 1 : 0);
-        obj.addProperty("feIp", event.feIp);
+        obj.addProperty("feIp", truncateToBytes(event.feIp, 128));
         // Truncate to the stmt column byte capacity so an oversized statement is stored truncated
         // rather than dropped by the stream load (a value longer than the column width fails the row).
         obj.addProperty("stmt", truncateToBytes(event.stmt, STMT_MAX_BYTES));
-        obj.addProperty("digest", event.digest);
+        obj.addProperty("digest", truncateToBytes(event.digest, 32));
         obj.addProperty("planCpuCosts", event.planCpuCosts);
         obj.addProperty("planMemCosts", event.planMemCosts);
         obj.addProperty("pendingTimeMs", event.pendingTimeMs);
-        obj.addProperty("candidateMVs", event.candidateMvs);
-        obj.addProperty("hitMvs", event.hitMVs);
+        obj.addProperty("candidateMVs", truncateToBytes(event.candidateMvs, 65533));
+        obj.addProperty("hitMvs", truncateToBytes(event.hitMVs, 65533));
         JsonArray relations = new JsonArray();
         if (event.queriedRelations != null) {
             for (String r : event.queriedRelations) {
-                relations.add(r);
+                relations.add(truncateToBytes(r, 65533));
             }
         }
         obj.add("QueriedRelations", relations);
-        obj.addProperty("warehouse", event.warehouse);
+        obj.addProperty("warehouse", truncateToBytes(event.warehouse, 32));
         return obj.toString();
     }
 

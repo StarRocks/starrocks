@@ -47,7 +47,10 @@ public class LogUtil {
                 }
             }
         }
-        if (!enableConnectionLog) {
+        // The builtin audit loader persists connection events into the audit table, so the
+        // events must be generated while it is enabled even if the "connection" audit log
+        // module is off (the file logger of that module then simply stays silent).
+        if (!enableConnectionLog && !Config.enable_audit_loader) {
             return;
         }
         AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()

@@ -99,6 +99,19 @@ public class AuditLoaderTest {
     }
 
     @Test
+    public void testFieldsTruncatedToColumnWidth() {
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        AuditEvent event = baseEvent();
+        // Oversized variable-length fields must be truncated to their column byte width,
+        // otherwise one row would fail the whole stream-load batch and wedge the pipeline.
+        event.candidateMvs = "m".repeat(70000);
+        event.db = "d".repeat(200);
+        JsonObject obj = JsonParser.parseString(mgr.formatRowJson(event)).getAsJsonObject();
+        Assertions.assertEquals(65533, obj.get("candidateMVs").getAsString().length());
+        Assertions.assertEquals(96, obj.get("db").getAsString().length());
+    }
+
+    @Test
     public void testOfferEventByteCapAndClearBuffer() {
         AuditLoaderMgr mgr = new AuditLoaderMgr();
         long origCap = Config.audit_loader_batch_max_bytes;
