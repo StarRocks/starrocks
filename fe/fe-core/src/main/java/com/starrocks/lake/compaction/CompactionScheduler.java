@@ -182,7 +182,13 @@ public class CompactionScheduler extends Daemon {
                 job.finish();
                 history.offer(CompactionRecord.build(job));
                 long cost = job.getFinishTs() - job.getStartTs();
-                LOG.debug("Finished compaction. {}, cost={}s", job.getDebugString(), cost / 1000);
+                if (cost >= /*60 minutes=*/3600000) {
+                    LOG.info("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
+                            cost / 1000, runningCompactions.size());
+                } else if (LOG.isDebugEnabled()) {
+                    LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
+                            cost / 1000, runningCompactions.size());
+                }
                 if (MetricRepo.hasInit) {
                     // Mutually exclusive status counters: a partial-success commit lands
                     // only in PARTIAL_SUCCESS, not also in SUCCESS, so dashboards can sum
