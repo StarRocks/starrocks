@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -95,6 +96,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
@@ -141,12 +143,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // array<string> support:
     //  array<string> -> array<string>: array function
     //  array<string> -> string       : array element
+    // Only processed if the first argument (input array) is not constant. Any string or array<string> constant
+    // parameters will be encoded into the array's dictionary domain using dict_encode().
     public static final Set<String> LOW_CARD_ARRAY_FUNCTIONS = ImmutableSet.of(
             FunctionSet.ARRAY_MIN,  // ARRAY -> STRING
             FunctionSet.ARRAY_MAX, FunctionSet.ARRAY_DISTINCT, // ARRAY -> ARRAY
             FunctionSet.ARRAY_SORT, FunctionSet.REVERSE, FunctionSet.ARRAY_SLICE, FunctionSet.ARRAY_FILTER,
             FunctionSet.ARRAY_LENGTH, // ARRAY -> bigint, return direct
-            FunctionSet.CARDINALITY);
+            FunctionSet.CARDINALITY, FunctionSet.ARRAY_CONTAINS, FunctionSet.ARRAY_CONTAINS_ALL,
+            FunctionSet.ARRAY_CONTAINS_SEQ, FunctionSet.ARRAY_INTERSECT, FunctionSet.ARRAY_POSITION,
+            FunctionSet.ARRAY_REMOVE);
 
     private final SessionVariable sessionVariable;
     private final boolean isQuery;
@@ -1436,6 +1442,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return CONSTANTS;
         }
 
+        private static boolean isSupportedArrayFnConstantParameter(ScalarOperator op) {
+            return op.isConstantRef() || (!op.getType().isStringType() && !op.getType().isStringArrayType()) ||
+                    (op instanceof ArrayOperator arrayOp &&
+                            arrayOp.getChildren().stream().allMatch(ScalarOperator::isConstantRef));
+        }
+
         @Override
         public ScalarOperator visitCall(CallOperator call, Void context) {
             if (FunctionSet.nonDeterministicFunctions.contains(call.getFnName())) {
@@ -1457,7 +1469,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
             if (LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
                     LOW_CARD_AGGREGATE_FUNCTIONS.contains(call.getFnName())) {
-                return mergeWithArray(visitChildren(call, context), call);
+                List<ScalarOperator> newChildren = visitChildren(call, context);
+                boolean forbidden = newChildren.get(0).isConstant() ||
+                        IntStream.range(0, newChildren.size()).anyMatch(i -> newChildren.get(i).equals(CONSTANTS)
+                                && !isSupportedArrayFnConstantParameter(call.getChild(i)));
+                return forbidden ? forbidden(newChildren, call) : mergeWithArray(newChildren, call);
             }
             if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName())) {
                 return merge(visitChildren(call, context), call);
