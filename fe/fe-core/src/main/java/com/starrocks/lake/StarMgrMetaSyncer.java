@@ -378,6 +378,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
 
         long nextShardGroupId = 0;
+        // Whether we listed every page this run. If listing aborts partway, orphansThisRun is
+        // incomplete, so the trailing retainAll must be skipped -- otherwise it would drop the
+        // grace clocks of orphaned groups on the un-listed pages and restart their grace next run.
+        boolean listedCompletely = true;
         do {
             StarOSAgent.ListShardGroupResult result;
             try {
@@ -385,6 +389,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 nextShardGroupId = result.nextShardGroupId();
             } catch (DdlException exception) {
                 LOG.info("Fail to list shardgroup from starmgr: {}. Abort the clean up", exception.getMessage());
+                listedCompletely = false;
                 break;
             }
 
@@ -439,8 +444,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         } while (nextShardGroupId != 0);
 
         // Drop clocks for groups that are no longer orphaned (came back into the FE live set) so a
-        // group orphaned again later restarts its grace, and keep the map bounded.
-        orphanShardGroupFirstSeenMs.keySet().retainAll(orphansThisRun);
+        // group orphaned again later restarts its grace, and keep the map bounded. Skip this when the
+        // listing was incomplete: orphansThisRun would be missing groups on the un-listed pages, and
+        // pruning to it would wrongly reset their grace.
+        if (listedCompletely) {
+            orphanShardGroupFirstSeenMs.keySet().retainAll(orphansThisRun);
+        }
     }
 
     /**
