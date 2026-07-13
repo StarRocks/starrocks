@@ -1371,7 +1371,7 @@ public class GlobalStateMgr {
         // never activates.
         if (replayer != null) {
             replayer.setStop();
-            long replayerJoinTimeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+            long replayerJoinTimeoutMs = Math.max(1000L, Config.leader_activation_drain_timeout_sec * 1000L);
             try {
                 replayer.join(replayerJoinTimeoutMs);
             } catch (InterruptedException e) {
@@ -1615,6 +1615,8 @@ public class GlobalStateMgr {
             updateLeaderRoleState(LeaderRoleState.INACTIVE);
             leaderWalApplyFenceLock.notifyAll();
         }
+        // Reset the leader-session domination clock; this node is no longer the leader.
+        dominationStartTimeMs = 0L;
     }
 
     public <T> T runWithLeaderJournalAdmission(short op, Callable<T> action)
@@ -2248,7 +2250,6 @@ public class GlobalStateMgr {
         runDemotionStage("abandonInFlightAgentTasks", this::abandonInFlightAgentTasks);
         runDemotionStage("sealJournalWriter", this::sealJournalWriter);
         runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
-        runDemotionStage("flushLeaderSessionState", this::flushLeaderSessionState);
         runDemotionStage("switchFrontendType", () -> feType = targetType);
         runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
         LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
@@ -2301,16 +2302,6 @@ public class GlobalStateMgr {
             replayedJournalId.set(watermark);
             LOG.info("advanced replayedJournalId {} -> {} on leader demotion", current, watermark);
         }
-    }
-
-    @VisibleForTesting
-    void flushLeaderSessionState() {
-        try {
-            insertOverwriteJobMgr.cancelRunningJobs();
-        } catch (Throwable t) {
-            LOG.warn("failed to cancel insert overwrite jobs during leader demotion", t);
-        }
-        dominationStartTimeMs = 0L;
     }
 
     // The manager that loads meta from image must be a member of GlobalStateMgr and cannot be SINGLETON,

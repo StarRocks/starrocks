@@ -1456,13 +1456,22 @@ This topic introduces the following types of FE configurations:
 - Description: When StarRocks deserializes TaskRun history rows for `information_schema.task_runs`, a corrupted or invalid JSON row will normally cause deserialization to log a warning and throw a RuntimeException. If this item is set to `true`, the system will catch deserialization errors, skip the malformed record, and continue processing remaining rows instead of failing the query. This will make `information_schema.task_runs` queries tolerant of bad entries in the `_statistics_.task_run_history` table. Note that enabling it will silently drop corrupted history records (potential data loss) instead of surfacing an explicit error.
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
 
+### `leader_activation_drain_timeout_sec`
+
+- Default: 180
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Timeout for a follower activating as leader to wait for its metadata replay thread to drain and stop before the node starts writing the journal. If the replay thread does not stop within this time (for example, a replay applier pinned on a lock it cannot acquire), the FE process is terminated for a clean restart, because activating as leader while the replayer is still applying journal entries would double-apply and corrupt metadata. Catching up to the latest metadata happens separately during journal replay and is not bounded by this timeout.
+- Introduced in: v4.1
+
 ### `leader_demotion_drain_timeout_sec`
 
 - Default: 180
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Per-daemon timeout used during leader demotion to wait for each leader-only daemon worker thread to exit after being interrupted. If a worker is still alive when the timeout elapses, the FE process is terminated, because a stuck worker combined with a later re-election would run two workers against the same singleton state - strictly worse than a process restart. Increase this if you routinely see heartbeat/report/publish/tablet-scheduler daemons needing more than the default to drain.
+- Description: Timeout used during leader demotion to seal and stop the journal writer and to wait for in-flight leader WAL applies to drain. If the journal writer cannot be sealed within this time, the demotion stage fails and the FE process is terminated for a clean restart, rather than let a stale leader's write slip past the WAL-apply fence. Increase this if sealing the journal writer or draining in-flight applies routinely needs more than the default during demotion.
 - Introduced in: v4.1
 
 ### `lock_checker_interval_second`
