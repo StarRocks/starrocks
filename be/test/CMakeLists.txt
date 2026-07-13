@@ -91,6 +91,7 @@ set(EXEC_FILES
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/table_function/java_udtf_factory_test.cpp
         ./exprs/dict_expr_test.cpp
+        ./exprs/dict_functions_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
