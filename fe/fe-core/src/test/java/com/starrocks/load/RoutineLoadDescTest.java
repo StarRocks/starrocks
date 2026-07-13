@@ -105,4 +105,25 @@ public class RoutineLoadDescTest {
                         " PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
         Assertions.assertEquals("from", reservedReparsed.getMetadata().getItems().get(0).getAlias());
     }
+
+    @Test
+    public void testIncludeMetadataAliasOptional() throws Exception {
+        RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD job ON tbl " +
+                        "INCLUDE METADATA(topic, KEY AS k), " +
+                        "COLUMNS(topic, k) " +
+                        "PROPERTIES (\"format\"=\"json\") " +
+                        "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+
+        Assertions.assertNotNull(originLoad.getMetadata());
+        Assertions.assertEquals(2, originLoad.getMetadata().getItems().size());
+        Assertions.assertEquals("topic", originLoad.getMetadata().getItems().get(0).getKey());
+        Assertions.assertEquals("topic", originLoad.getMetadata().getItems().get(0).getAlias());
+        Assertions.assertEquals("KEY", originLoad.getMetadata().getItems().get(1).getKey());
+        Assertions.assertEquals("k", originLoad.getMetadata().getItems().get(1).getAlias());
+
+        RoutineLoadDesc desc = new RoutineLoadDesc();
+        desc.setMetadata(originLoad.getMetadata());
+        Assertions.assertEquals("INCLUDE METADATA(topic AS `topic`, KEY AS `k`)", desc.toSql());
+    }
 }

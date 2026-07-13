@@ -32,10 +32,10 @@ import java.util.Map;
 import java.util.Set;
 
 // Routine-load source metadata (INCLUDE METADATA clause).
-// INCLUDE METADATA (<KEY> AS <alias>, ...) binds per-message Kafka/Pulsar metadata to hidden source
+// INCLUDE METADATA (<KEY> [AS <alias>], ...) binds per-message Kafka/Pulsar metadata to hidden source
 // columns the BE scanner fills from the message rather than the payload, so a payload field named
-// like a metadata field is never shadowed. Each alias becomes a source column referenced by COLUMNS
-// exprs. The kinds mirror TStreamSourceMetaKind in PlanNodes.thrift.
+// like a metadata field is never shadowed. Each alias, or the metadata key when no alias is specified,
+// becomes a source column referenced by COLUMNS exprs. The kinds mirror TStreamSourceMetaKind in PlanNodes.thrift.
 public class RoutineLoadMetadata {
     private RoutineLoadMetadata() {
     }
@@ -140,7 +140,7 @@ public class RoutineLoadMetadata {
             }
             String alias = item.getAlias();
             if (alias == null || alias.isEmpty()) {
-                throw new DdlException("INCLUDE METADATA requires an alias (AS <name>) for key " + item.getKey());
+                throw new DdlException("INCLUDE METADATA has an empty alias for key " + item.getKey());
             }
             if (!seen.add(alias)) {
                 throw new DdlException("duplicate INCLUDE METADATA alias: " + alias);
