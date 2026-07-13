@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
@@ -80,6 +82,8 @@ public:
     // Delete the remote spill parent directory (e.g. <remote_spill_path>/<load_id>).
     // Called in destructor after all spill blocks have been released, so that individual
     // container destructors only delete their own files and this method cleans up the directory.
+    // No-op (no remote acquire_dir/delete_dir) when no remote block was ever acquired, since a
+    // purely local spill never creates the remote parent directory.
     Status clear_parent_path();
 
     // acquire Block from BlockManager
@@ -101,6 +105,10 @@ private:
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.
     bool _initialized = false;                                 // Whether the manager is initialized.
+    // Set once any remote block is acquired. When it stays false, no remote parent directory was
+    // ever created, so clear_parent_path() can skip the remote acquire_dir + delete_dir calls.
+    // Atomic because blocks may be acquired concurrently by parallel flush threads.
+    std::atomic<bool> _used_remote_block{false};
 };
 
 } // namespace lake
