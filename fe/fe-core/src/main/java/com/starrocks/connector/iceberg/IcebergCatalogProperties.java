@@ -46,7 +46,8 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
-<<<<<<< HEAD
+    public static final String ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO = "iceberg_partition_cache_memory_usage_ratio";
+
     public static final String ENABLE_ICEBERG_AUTO_MAINTENANCE = "enable_iceberg_auto_maintenance";
     public static final String ICEBERG_AUTO_CLEANUP_INTERVAL_HOURS = "iceberg_auto_cleanup_interval_hours";
     public static final String ICEBERG_AUTO_OPTIMIZE_INTERVAL_HOURS = "iceberg_auto_optimize_interval_hours";
@@ -58,9 +59,6 @@ public class IcebergCatalogProperties {
     public static final long AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS = 5L * 24 * 60 * 60 * 1000;
     public static final int AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP = 10;
     public static final long AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES = 8L * 1024 * 1024;
-=======
-    public static final String ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO = "iceberg_partition_cache_memory_usage_ratio";
->>>>>>> 893d8887834... [BugFix] Bound and expose the Iceberg partition cache memory (#76165)
 
     // internal config
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
