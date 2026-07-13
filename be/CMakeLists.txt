@@ -540,6 +540,30 @@ endif()
 
 include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
 
+# Concrete connectors reach the BE binary only as transitive PRIVATE deps of
+# ModuleBootstrap/Exec, which CMake places after the thirdparty group. List every
+# connector ModuleBootstrap pulls (guarded by the same options) ahead of it.
+set (DIRECT_CONNECTOR_LINK_LIBS
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+    ConnectorCacheStats
+)
+if (WITH_CONNECTOR_BENCHMARK)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorBenchmark)
+endif()
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorElasticsearch)
+endif()
+if (WITH_CONNECTOR_JDBC)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorJDBC)
+endif()
+if (WITH_CONNECTOR_MYSQL)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorMySQL)
+endif()
+
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     HttpService
@@ -554,6 +578,10 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
     Storage
+    # Connectors depend on the format libs and thirdparty archives below; keep ahead.
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
     # The concrete format libraries must be linked ahead of the thirdparty
     # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
     # the Formats aggregate lets CMake append its concrete members after that
@@ -875,17 +903,6 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
 if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
-
-# Broad test and benchmark executables directly exercise concrete connector implementations.
-# Keep these explicit: PRIVATE dependencies of shared BE modules are intentionally not propagated
-# when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
-set (DIRECT_CONNECTOR_LINK_LIBS
-    Connector
-    ConnectorLake
-    ConnectorFile
-    ConnectorHive
-    ConnectorIceberg
-)
 
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
