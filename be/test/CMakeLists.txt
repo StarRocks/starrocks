@@ -191,6 +191,7 @@ set(EXEC_FILES
         ./exprs/min_max_predicate_test.cpp
         ./exprs/in_const_predicate_test.cpp
         ./exprs/dict_expr_test.cpp
+        ./exprs/dict_functions_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp

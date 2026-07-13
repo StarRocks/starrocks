@@ -14,6 +14,8 @@
 
 #include "runtime/global_dict/parser.h"
 
+#include <limits>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
@@ -508,6 +510,26 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
             slot_desc = newSlot;
         }
     }
+}
+
+StatusOr<DictId> DictOptimizeParser::lookup_dict_code(SlotId slot_id, const Slice& value) {
+    if (_mutable_dict_maps == nullptr) {
+        return Status::InternalError("dict_encode: dict maps not initialized");
+    }
+    auto it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    if (it == _mutable_dict_maps->end()) {
+        RETURN_IF_ERROR(eval_dict_expr(slot_id));
+        it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    }
+    if (it == _mutable_dict_maps->end()) {
+        return Status::InternalError(fmt::format("dict_encode: global dictionary not found for slot {}", slot_id));
+    }
+
+    const GlobalDictMap& forward = it->second.first;
+    if (auto f = forward.find(value); f != forward.end()) {
+        return f->second;
+    }
+    return std::numeric_limits<DictId>::max();
 }
 
 } // namespace starrocks

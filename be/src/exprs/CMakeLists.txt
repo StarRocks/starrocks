@@ -55,6 +55,7 @@ set(EXPR_FILES
   column_ref.cpp
   placeholder_ref.cpp
   dictmapping_expr.cpp
+  dict_functions.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp

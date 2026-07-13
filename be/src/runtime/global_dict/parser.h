@@ -24,6 +24,7 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "runtime/global_dict/types.h"
 
 namespace starrocks {
@@ -69,6 +70,11 @@ public:
     void close() noexcept;
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+
+    // Look up `value`'s global-dict code for `slot_id`.
+    // Returns std::numeric_limits<DictId>::max() when `value` is not present,
+    // valid for equality/membership only.
+    StatusOr<DictId> lookup_dict_code(SlotId slot_id, const Slice& value);
 
     // For global dictionary optimized columns,
     // the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
