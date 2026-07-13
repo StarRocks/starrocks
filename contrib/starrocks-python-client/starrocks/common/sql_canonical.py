@@ -54,7 +54,8 @@ def is_available() -> bool:
 def _canonicalize_node(node: "exp.Expression", remove_qualifiers: bool) -> "exp.Expression":
     """Per-node normalization applied bottom-up by ``Expression.transform``. Every rewrite
     is semantics-preserving, so it can only erase syntactic noise, never a real change."""
-    # Unquote + case-fold identifiers (string literals are exp.Literal, so left untouched).
+    # Case-fold + unquote *quoted* identifiers: tree.sql(normalize=True) lowers unquoted
+    # ids and keywords but leaves `Foo` verbatim, so this is what makes `Foo` == foo.
     if isinstance(node, exp.Identifier):
         name = node.this
         if isinstance(name, str):
@@ -62,19 +63,16 @@ def _canonicalize_node(node: "exp.Expression", remove_qualifiers: bool) -> "exp.
         node.set("quoted", False)
         return node
 
-    # Strip catalog/db/table qualifiers ("db.t.col" -> "col").
-    if remove_qualifiers and isinstance(node, exp.Column):
-        for key in ("table", "db", "catalog"):
-            if node.args.get(key) is not None:
-                node.set(key, None)
-        return node
-    if remove_qualifiers and isinstance(node, exp.Table):
+    # Strip only the catalog/db qualifier StarRocks injects ("db.t.col" -> "t.col"),
+    # keeping the table/alias so distinct join columns (`a.id` vs `b.id`) don't collapse.
+    if remove_qualifiers and isinstance(node, (exp.Column, exp.Table)):
         for key in ("db", "catalog"):
             if node.args.get(key) is not None:
                 node.set(key, None)
         return node
 
-    # "INNER JOIN" -> "JOIN"; "<dir> OUTER JOIN" -> "<dir> JOIN".
+    # "INNER JOIN" -> "JOIN"; "<dir> OUTER JOIN" -> "<dir> JOIN". tree.sql(normalize=True)
+    # renders these verbatim (doesn't collapse them), so apply the equivalence here.
     if isinstance(node, exp.Join):
         kind = (node.args.get("kind") or "").upper()
         side = (node.args.get("side") or "").upper()
@@ -100,7 +98,9 @@ def canonicalize_sql(sql: Optional[str], remove_qualifiers: bool = False) -> Opt
     """Return a canonical rendering of ``sql`` for definition comparison, or None when
     sqlglot is unavailable, the input is empty, or the statement cannot be parsed.
 
-    When True, ``remove_qualifiers`` drops catalog/db/table qualifiers from references.
+    When True, ``remove_qualifiers`` drops the catalog/db qualifier StarRocks injects
+    into stored definitions (``db.t.col`` -> ``t.col``); the table/alias qualifier is
+    kept so columns from different tables stay distinct.
     """
     if not _SQLGLOT_AVAILABLE or not sql or not sql.strip():
         return None

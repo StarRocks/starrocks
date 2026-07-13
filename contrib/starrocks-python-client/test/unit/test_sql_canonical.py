@@ -67,8 +67,17 @@ class TestSemanticEquivalence:
     def test_keyword_and_identifier_case(self):
         _equiv("SELECT A FROM T", "select a from t")
 
-    def test_qualifiers_removed_when_requested(self):
+    def test_catalog_db_qualifier_removed_when_requested(self):
+        # StarRocks stores `db`.`t`.`col`; the model writes `t`.`col` -> must reconcile.
         _equiv("select db.t.a from db.t", "select t.a from t", remove_qualifiers=True)
+
+    def test_three_part_alias_qualifier_matches_two_part(self):
+        # StarRocks db-qualifies even join aliases (`db`.`a`.`id`) -> must reconcile.
+        _equiv(
+            "select db.a.id as x from db.t1 a join db.t2 b on db.a.id = db.b.id",
+            "select a.id as x from t1 a join t2 b on a.id = b.id",
+            remove_qualifiers=True,
+        )
 
 
 class TestRealChangesDetected:
@@ -104,6 +113,20 @@ class TestRealChangesDetected:
 
     def test_qualifiers_kept_distinct_columns(self):
         _distinct("select t.a from t", "select t.b from t", remove_qualifiers=True)
+
+    def test_table_alias_qualifier_not_collapsed(self):
+        # Regression: over-stripping turned `a.id` and `b.id` both into `id`, collapsing
+        # two different join conditions -> silent missed migration.
+        _distinct(
+            "select x from t1 a join t2 b on a.id = 1",
+            "select x from t1 a join t2 b on b.id = 1",
+            remove_qualifiers=True,
+        )
+
+    def test_bare_column_differs_from_table_qualified(self):
+        # sqlglot can't resolve bare `id` to its table without a schema, so a safe
+        # spurious diff is preferred over a silent false match.
+        _distinct("select id from t", "select t.id from t", remove_qualifiers=True)
 
 
 class TestFallbackSignalling:
