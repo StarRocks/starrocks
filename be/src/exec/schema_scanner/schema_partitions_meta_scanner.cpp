@@ -16,10 +16,10 @@
 
 #include <fmt/format.h>
 
+#include "base/string/parse_util.h"
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/utils.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -266,7 +266,7 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
         }
         case 22: {
             // DATA_SIZE
-            int64_t data_size_bytes = parse_data_size(info.data_size);
+            int64_t data_size_bytes = ParseUtil::parse_data_size(info.data_size);
             fill_column_with_slot<TYPE_BIGINT>(column, (void*)&data_size_bytes);
             break;
         }

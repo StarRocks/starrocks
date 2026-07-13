@@ -69,4 +69,30 @@ TEST_F(SchemaPartitionsMetaScannerTest, fill_vector_index_built_version_columns)
     EXPECT_EQ(7, chunk->get_column_by_slot_id(33)->get(0).get_int64());
 }
 
+TEST_F(SchemaPartitionsMetaScannerTest, fill_data_size_column) {
+    SchemaPartitionsMetaScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    ASSERT_OK(scanner.init(&params, &pool));
+
+    TPartitionMetaInfo info;
+    info.__set_data_size("1.5 KB");
+    set_rows(scanner, {info});
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto* slot : scanner.get_slot_descs()) {
+        if (slot->id() == 22) {
+            chunk->append_column(ColumnHelper::create_column(slot->type(), slot->is_nullable()), slot->id());
+        }
+    }
+    ASSERT_EQ(1, chunk->num_columns());
+
+    ASSERT_OK(fill_chunk(scanner, &chunk));
+
+    EXPECT_EQ(1536, chunk->get_column_by_slot_id(22)->get(0).get_int64());
+}
+
 } // namespace starrocks
