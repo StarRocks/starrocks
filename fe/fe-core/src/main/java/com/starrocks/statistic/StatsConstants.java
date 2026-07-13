@@ -113,6 +113,9 @@ public class StatsConstants {
     // Durable per-partition LAST_ACCESS_TIME table
     public static final String PARTITION_ACCESS_TIME_TABLE_NAME = "partition_access_time";
 
+    // Builtin audit loader table (in the STATISTICS_DB_NAME database).
+    public static final String AUDIT_LOADER_TABLE_NAME = "starrocks_audit_tbl";
+
     /**
      * Deprecated stats properties
      */
