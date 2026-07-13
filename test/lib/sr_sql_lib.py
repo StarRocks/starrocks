@@ -3371,6 +3371,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_not_contains(self, query, *expects):
+        """
+        assert query result does not contain expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) < 0,
+                "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
+            )
+
     def assert_query_contains_times(self, query, expect, expected_times: int):
         """
         Assert query result contains `expect` exactly `expected_times` times.
