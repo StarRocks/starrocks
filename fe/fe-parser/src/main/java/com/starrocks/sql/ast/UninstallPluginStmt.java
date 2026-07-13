@@ -20,18 +20,28 @@ import com.starrocks.sql.parser.NodePosition;
 public class UninstallPluginStmt extends DdlStmt {
 
     private final String pluginName;
+    private final boolean ifExists;
 
     public UninstallPluginStmt(String pluginName) {
-        this(pluginName, NodePosition.ZERO);
+        this(pluginName, false, NodePosition.ZERO);
     }
 
     public UninstallPluginStmt(String pluginName, NodePosition pos) {
+        this(pluginName, false, pos);
+    }
+
+    public UninstallPluginStmt(String pluginName, boolean ifExists, NodePosition pos) {
         super(pos);
         this.pluginName = pluginName;
+        this.ifExists = ifExists;
     }
 
     public String getPluginName() {
         return pluginName;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     @Override
