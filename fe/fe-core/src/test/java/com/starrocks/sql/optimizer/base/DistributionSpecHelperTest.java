@@ -31,8 +31,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for {@link DistributionSpecHelper#buildRangeDistributionSpecSkeleton}.
@@ -260,5 +262,34 @@ class DistributionSpecHelperTest {
         assertEquals(map.get(colB).getId(), spec.getColocateColumns().get(1).getColId());
         assertEquals(TABLE_ID, spec.getEquivalentDescriptor().getTableId());
         assertEquals(DistributionSpec.DistributionType.RANGE_LOCAL, spec.getType());
+    }
+
+    @Test
+    void supportColocateTrueForRange() {
+        // Range-colocate is scan-local by invariant, so a range required property is always colocate.
+        EquivalentDescriptor descriptor = new EquivalentDescriptor(TABLE_ID, List.of(1L));
+        List<DistributionCol> cols = List.of(new DistributionCol(1, true));
+        descriptor.initDistributionUnionFind(cols);
+        assertTrue(DistributionSpecHelper.supportColocate(new RangeDistributionSpec(cols, descriptor)));
+    }
+
+    @Test
+    void supportColocateForHashDependsOnSourceType() {
+        List<DistributionCol> cols = List.of(new DistributionCol(1, true));
+        HashDistributionSpec local = new HashDistributionSpec(
+                new HashDistributionDesc(cols, HashDistributionDesc.SourceType.LOCAL));
+        HashDistributionSpec shuffleJoin = new HashDistributionSpec(
+                new HashDistributionDesc(cols, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+        assertTrue(DistributionSpecHelper.supportColocate(local), "hash-LOCAL is classic colocate");
+        assertFalse(DistributionSpecHelper.supportColocate(shuffleJoin),
+                "hash SHUFFLE_JOIN needs an exchange, not colocate");
+    }
+
+    @Test
+    void supportColocateFalseForNonColocateSpecs() {
+        assertFalse(DistributionSpecHelper.supportColocate(new RoundRobinDistributionSpec()));
+        assertFalse(DistributionSpecHelper.supportColocate(new ReplicatedDistributionSpec()));
+        assertFalse(DistributionSpecHelper.supportColocate(new GatherDistributionSpec()));
+        assertFalse(DistributionSpecHelper.supportColocate(AnyDistributionSpec.INSTANCE));
     }
 }
