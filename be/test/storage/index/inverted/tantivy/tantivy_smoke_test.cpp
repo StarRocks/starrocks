@@ -71,8 +71,7 @@ std::vector<uint32_t> array_to_vector(const tb::RustU32Array& arr) {
 }
 
 // Build a writer at `index_path`, append `docs` in order, commit, and free.
-void build_index(const std::string& index_path, const std::string& field,
-                 const std::vector<std::string>& docs) {
+void build_index(const std::string& index_path, const std::string& field, const std::vector<std::string>& docs) {
     tb::RustResult cw =
             tb::tantivy_create_index_writer(index_path.c_str(), field.c_str(), "english", true, true, 0, 0, "default");
     RustResultGuard g_cw{cw};
@@ -265,8 +264,8 @@ TEST(TantivySmoke, NullPlaceholdersPreserveAlignment) {
 
 TEST(TantivySmoke, CreateWriterReportsError) {
     // /proc is read-only on Linux, so create_dir_all + index init should fail.
-    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title",
-                                                       "english", true, true, 0, 0, "default");
+    tb::RustResult r = tb::tantivy_create_index_writer("/proc/sr_tantivy_should_fail", "title", "english", true, true,
+                                                       0, 0, "default");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     EXPECT_NE(r.error, nullptr);
@@ -286,8 +285,8 @@ TEST(TantivySmoke, UnsupportedTokenizerReportsError) {
         }
     } cleanup{index_path};
 
-    tb::RustResult r =
-            tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer", true, true, 0, 0, "default");
+    tb::RustResult r = tb::tantivy_create_index_writer(index_path.c_str(), "f", "definitely_not_a_tokenizer", true,
+                                                       true, 0, 0, "default");
     RustResultGuard g{r};
     EXPECT_FALSE(r.success);
     ASSERT_NE(r.error, nullptr);

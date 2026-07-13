@@ -350,8 +350,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         query_type = InvertedIndexQueryType::MATCH_PHRASE_QUERY;
     } else if (vaild_match && expr->op() == TExprOpcode::MATCH) {
         // MATCH should use MATCH_ALL (AND semantics) so that all tokens produced by the analyzer must be present.
-        query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY
-                                  : InvertedIndexQueryType::MATCH_ALL_QUERY;
+        query_type =
+                has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::MATCH_ALL_QUERY;
     } else {
         query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
     }

@@ -723,10 +723,9 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         } else {
             result_ids.resize(_vector_index_ctx->k);
             result_distances.resize(_vector_index_ctx->k);
-            st = _vector_index_ctx->ann_reader->search(_vector_index_ctx->query_view, _vector_index_ctx->k,
-                                                       (result_ids.data()),
-                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
-                                                       &del_id_filter);
+            st = _vector_index_ctx->ann_reader->search(
+                    _vector_index_ctx->query_view, _vector_index_ctx->k, (result_ids.data()),
+                    reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
         }
     }
 

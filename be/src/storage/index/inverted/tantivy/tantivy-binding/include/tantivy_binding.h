@@ -105,17 +105,17 @@ struct RustStringArray {
  * Submit a joinable task to the BE pool. Takes ownership of `task` (opaque
  * boxed closure). Returns an opaque handle to be passed to the join callback.
  */
-using TantivyPoolSubmitFn = void*(*)(void *task);
+using TantivyPoolSubmitFn = void* (*)(void* task);
 
 /**
  * Submit a fire-and-forget task to the BE pool. Takes ownership of `task`.
  */
-using TantivyPoolSubmitDetachedFn = void(*)(void *task);
+using TantivyPoolSubmitDetachedFn = void (*)(void* task);
 
 /**
  * Block until the joinable task behind `handle` completes, then free `handle`.
  */
-using TantivyPoolJoinFn = void(*)(void *handle);
+using TantivyPoolJoinFn = void (*)(void* handle);
 
 extern "C" {
 
@@ -253,14 +253,9 @@ void tantivy_free_index_reader(void* reader);
  * SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
  * C strings. `merge_policy` may be NULL.
  */
-RustResult tantivy_create_index_writer(const char *path,
-                                       const char *field_name,
-                                       const char *tokenizer,
-                                       bool support_phrase,
-                                       bool support_bm25,
-                                       uintptr_t memory_budget_bytes,
-                                       uintptr_t num_threads,
-                                       const char *merge_policy);
+RustResult tantivy_create_index_writer(const char* path, const char* field_name, const char* tokenizer,
+                                       bool support_phrase, bool support_bm25, uintptr_t memory_budget_bytes,
+                                       uintptr_t num_threads, const char* merge_policy);
 
 /**
  * Append a batch of UTF-8 strings as documents in order. `values_ptr` is an
@@ -334,7 +329,7 @@ RustResult tantivy_tokenize(const char* tokenizer_name, const uint8_t* text_ptr,
  * SAFETY: `task` must be a pointer produced by this crate's spawner and not
  * previously run or dropped.
  */
-void tantivy_binding_run_pool_task(void *task);
+void tantivy_binding_run_pool_task(void* task);
 
 /**
  * Drop a queued task without running it. Called by the BE pool for tasks still
@@ -342,7 +337,7 @@ void tantivy_binding_run_pool_task(void *task);
  *
  * SAFETY: same as [`tantivy_binding_run_pool_task`].
  */
-void tantivy_binding_drop_pool_task(void *task);
+void tantivy_binding_drop_pool_task(void* task);
 
 /**
  * Install the BE thread pool as tantivy's global spawner. Call once at BE
@@ -352,11 +347,10 @@ void tantivy_binding_drop_pool_task(void *task);
  * SAFETY: the three callbacks must be valid for the entire process lifetime
  * and implement the ownership contract described in this module.
  */
-void tantivy_binding_init_thread_pool(TantivyPoolSubmitFn submit,
-                                      TantivyPoolSubmitDetachedFn submit_detached,
+void tantivy_binding_init_thread_pool(TantivyPoolSubmitFn submit, TantivyPoolSubmitDetachedFn submit_detached,
                                       TantivyPoolJoinFn join);
 
-}  // extern "C"
+} // extern "C"
 
 } // namespace starrocks::tantivy_binding
 
