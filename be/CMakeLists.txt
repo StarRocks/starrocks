@@ -550,14 +550,6 @@ set(STARROCKS_LINK_LIBS
     Orchestration
     DataWorkflows
     ${WL_START_GROUP}
-    Connector
-    ConnectorLake
-    ConnectorFile
-    ConnectorHive
-    ConnectorIceberg
-    # Keep legacy connector registration in the static library group so its
-    # concrete file connector registration is retained by static linking.
-    ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
@@ -884,21 +876,37 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
+# Broad test and benchmark executables directly exercise concrete connector implementations.
+# Keep these explicit: PRIVATE dependencies of shared BE modules are intentionally not propagated
+# when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
+set (DIRECT_CONNECTOR_LINK_LIBS
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+)
+
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
 set (TEST_LINK_LIBS
     Orchestration
     ${STARROCKS_LINK_LIBS}
-    ConnectorBuiltinRegistry
     TestUtil
     ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
     gmock
     gtest
     ${WL_END_GROUP}
 )
 
-set (BENCH_LINK_LIBS ${STARROCKS_LINK_LIBS})
+set (BENCH_LINK_LIBS
+    ${STARROCKS_LINK_LIBS}
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
+)
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)

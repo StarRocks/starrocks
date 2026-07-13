@@ -49,9 +49,7 @@
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/builtin_connector_registry.h"
 #include "connector/common/connector_sink_executor.h"
-#include "connector/connector_registry.h"
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/query_context.h"
@@ -193,7 +191,6 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     if (_compute_env == nullptr) {
         return Status::InternalError("ComputeEnv is not attached");
     }
-    RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();

@@ -489,4 +489,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
