@@ -18,16 +18,30 @@ namespace starrocks {
 
 class ThreadPool;
 
-// Register the shared BE thread pool as tantivy's background-work executor.
+// Register the BE thread pools that back tantivy's background-work executor.
 //
-// Call exactly once at BE startup, after `pool` is built and before any tantivy
-// index writer is created. This installs C submit/join callbacks into the Rust
-// binding (via `tantivy_binding_init_thread_pool`) so tantivy's indexing
-// workers, serial segment-updater queue, and merges all run on `pool` instead
-// of tantivy-spawned threads. Each task runs with the submitting thread's mem
-// tracker restored, keeping `consume`/`release` on the same tracker.
+// Call exactly once at BE startup, after both pools are built and before any
+// tantivy index writer is created. This installs C submit/join callbacks into
+// the Rust binding (via `tantivy_binding_init_thread_pool`) so tantivy's
+// background work runs on these pools instead of tantivy-spawned threads. Each
+// task runs with the submitting thread's mem tracker restored, keeping
+// `consume`/`release` on the same tracker.
 //
-// `pool` must outlive all tantivy index writing (it is owned by ExecEnv).
-void register_tantivy_index_thread_pool(ThreadPool* pool);
+// Two pools are required because tantivy mixes two incompatible task classes:
+//
+//   * `build_pool` runs the RESIDENT indexing workers (joinable submits) that
+//     turn documents into in-memory segments. Each worker holds its thread from
+//     writer creation until commit and blocks on a maintenance task, so it must
+//     be an ELASTIC pool that grows a thread per worker on demand — putting these
+//     on a bounded pool deadlocks once the number of live workers reaches the
+//     pool size (a queued worker never runs, so the commit that joins it, and
+//     the flush that feeds it, hang forever).
+//
+//   * `merge_pool` runs the TRANSIENT segment-updater serial queue (add_segment)
+//     and merges (detached submits). These never block on another task in the
+//     pool, so a bounded pool always drains and safely caps merge concurrency.
+//
+// Both pools must outlive all tantivy index writing (they are owned by ExecEnv).
+void register_tantivy_index_thread_pool(ThreadPool* build_pool, ThreadPool* merge_pool);
 
 } // namespace starrocks

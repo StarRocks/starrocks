@@ -1771,11 +1771,28 @@ CONF_mString(tantivy_writer_merge_policy, "default");
 // because the BE row id is stored in an explicit tantivy FAST field.
 CONF_mInt32(tantivy_writer_num_threads, "1");
 
-// Size (max threads) of the shared thread pool that runs all tantivy index
-// build work (indexing workers, segment-updater serial queue, and merges). 0
-// means adaptive sizing based on CPU cores. This bounds the total number of
-// tantivy background threads across all concurrent writers, preventing the
-// thread explosion of tantivy spawning its own threads per writer.
+// Max threads of the *elastic* build pool that runs tantivy indexing workers
+// (the tasks that turn incoming documents into in-memory segments). Indexing
+// workers are RESIDENT: each blocks on its document channel from writer creation
+// until commit, holding its thread the whole time, and blocks on a maintenance
+// task (add_segment) submitted to the separate merge pool. A resident task that
+// never gets a running thread deadlocks any thread that joins it (commit) or
+// feeds it (flush) — so this pool grows a thread per worker on demand (queue
+// size 0) and must never reject in practice. 0 means adaptive:
+// max(1024, cpu_cores * 16). Idle threads are reaped, so the resting thread
+// count returns to zero when no import is running. Raise only if the number of
+// concurrent (flush_threads * indexed_columns * tantivy_writer_num_threads) live
+// workers could exceed the adaptive cap.
 CONF_Int32(tantivy_index_build_thread_pool_num_threads, "0");
+
+// Size (max threads) of the bounded *merge* pool that runs tantivy's segment
+// lifecycle maintenance: the segment-updater serial queue (registering built
+// segments via add_segment) and background merges. 0 means adaptive sizing based
+// on CPU cores. These tasks are transient — each releases its slot on completion
+// and never blocks on another task in this pool — so a bounded pool always makes
+// progress while capping merge concurrency. Indexing workers are NOT run here;
+// see tantivy_index_build_thread_pool_num_threads above and the two-pool
+// rationale in tantivy_ffi_pool_bridge.cpp.
+CONF_Int32(tantivy_index_merge_thread_pool_num_threads, "0");
 
 } // namespace starrocks::config

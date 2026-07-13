@@ -28,8 +28,16 @@ namespace tb = ::starrocks::tantivy_binding;
 
 namespace {
 
-// Shared pool the tantivy tasks run on. Owned by ExecEnv; borrowed here.
-ThreadPool* g_tantivy_index_pool = nullptr;
+// The two pools the tantivy tasks run on. Owned by ExecEnv; borrowed here.
+//
+// `g_tantivy_build_pool` runs the resident indexing workers (joinable submits);
+// it is an elastic pool that grows a thread per worker on demand.
+// `g_tantivy_merge_pool` runs the transient segment-updater serial queue and
+// merges (detached submits) on a bounded pool. Splitting the two task classes is
+// what prevents the "resident worker starves the maintenance task it waits on"
+// deadlock — see register_tantivy_index_thread_pool in the header.
+ThreadPool* g_tantivy_build_pool = nullptr;
+ThreadPool* g_tantivy_merge_pool = nullptr;
 
 // Join handle backing a joinable submit. A single-count latch flipped when the
 // task finishes; `sr_tantivy_pool_join` waits on it and frees the handle.
@@ -47,20 +55,26 @@ void run_with_tracker(void* task, MemTracker* tracker) {
     tb::tantivy_binding_run_pool_task(task);
 }
 
-// Submit a joinable task. Matches `tantivy_binding::TantivyPoolSubmitFn`.
+// Submit a joinable task (a resident indexing worker). Matches
+// `tantivy_binding::TantivyPoolSubmitFn`. Routed to the elastic build pool so
+// every worker gets a running thread immediately and never sits queued.
 void* sr_tantivy_pool_submit(void* task) {
     MemTracker* tracker = CurrentThread::mem_tracker();
     auto* handle = new PoolJoinHandle();
-    if (g_tantivy_index_pool != nullptr) {
-        auto st = g_tantivy_index_pool->submit_func([task, tracker, handle]() {
+    if (g_tantivy_build_pool != nullptr) {
+        auto st = g_tantivy_build_pool->submit_func([task, tracker, handle]() {
             run_with_tracker(task, tracker);
             handle->latch.count_down();
         });
         if (st.ok()) {
             return handle;
         }
-        LOG(WARNING) << "tantivy: submit joinable task to pool failed: " << st.to_string()
-                     << ", running inline";
+        // Rejection means the elastic pool hit its max_threads cap. Running a
+        // resident worker inline on the caller (a flush thread) would hang that
+        // thread forever, so this path signals a misconfigured cap far more than
+        // it recovers — surface it loudly.
+        LOG(WARNING) << "tantivy: submit worker task to build pool failed: " << st.to_string()
+                     << ", running inline (raise tantivy_index_build_thread_pool_num_threads)";
     }
     // Fallback (pool absent or submit rejected): run inline on the caller thread
     // so tantivy keeps making progress. The caller's tracker is already active.
@@ -69,15 +83,17 @@ void* sr_tantivy_pool_submit(void* task) {
     return handle;
 }
 
-// Submit a fire-and-forget task. Matches `TantivyPoolSubmitDetachedFn`.
+// Submit a fire-and-forget maintenance task (segment-updater serial queue or a
+// merge). Matches `TantivyPoolSubmitDetachedFn`. Routed to the bounded merge
+// pool.
 void sr_tantivy_pool_submit_detached(void* task) {
     MemTracker* tracker = CurrentThread::mem_tracker();
-    if (g_tantivy_index_pool != nullptr) {
-        auto st = g_tantivy_index_pool->submit_func([task, tracker]() { run_with_tracker(task, tracker); });
+    if (g_tantivy_merge_pool != nullptr) {
+        auto st = g_tantivy_merge_pool->submit_func([task, tracker]() { run_with_tracker(task, tracker); });
         if (st.ok()) {
             return;
         }
-        LOG(WARNING) << "tantivy: submit detached task to pool failed: " << st.to_string()
+        LOG(WARNING) << "tantivy: submit maintenance task to merge pool failed: " << st.to_string()
                      << ", running inline";
     }
     tb::tantivy_binding_run_pool_task(task);
@@ -96,8 +112,9 @@ void sr_tantivy_pool_join(void* handle) {
 
 } // namespace
 
-void register_tantivy_index_thread_pool(ThreadPool* pool) {
-    g_tantivy_index_pool = pool;
+void register_tantivy_index_thread_pool(ThreadPool* build_pool, ThreadPool* merge_pool) {
+    g_tantivy_build_pool = build_pool;
+    g_tantivy_merge_pool = merge_pool;
     tb::tantivy_binding_init_thread_pool(&sr_tantivy_pool_submit, &sr_tantivy_pool_submit_detached,
                                          &sr_tantivy_pool_join);
 }
