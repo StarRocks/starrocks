@@ -60,7 +60,7 @@ CONF_mBool(use_default_dop_when_shared_scan, "true");
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
 CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
 
-// Default is 16384*64, where 16384 is the chunk size in pipeline.
+// Default is 16384*64. (Note: 16384 == 4 * vector_chunk_size(4096), i.e. 4 pipeline chunks, not one.)
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 
 // Default is 512MB.

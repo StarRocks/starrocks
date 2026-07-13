@@ -208,6 +208,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
 
+    // Effective (post duplicate-lake-table gate) prepared physical split scan usage for this lake scan,
+    // stamped by ExecPlan for EXPLAIN visibility. Per-scan so future per-scan split strategies can differ.
+    private boolean usePreparedPhysicalSplitScan = false;
+
     boolean enableTopnFilterBackPressure = false;
     long backPressureThrottleTimeUpperBound = -1;
     int backPressureMaxRounds = -1;
@@ -955,7 +959,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         return result;
     }
 
-    @Override
+    public void setUsePreparedPhysicalSplitScan(boolean usePreparedPhysicalSplitScan) {
+        this.usePreparedPhysicalSplitScan = usePreparedPhysicalSplitScan;
+    }
+
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
@@ -1112,6 +1119,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("MaterializedView: true\n");
         }
 
+        if (usePreparedPhysicalSplitScan) {
+            output.append(prefix).append("Prepared Physical Split Scan: true\n");
+        }
+
         if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
             output.append(prefix).append("Short Circuit Scan: true\n");
         }
@@ -1213,6 +1224,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             if (topnFilterBackPressureDisabled) {
                 msg.lake_scan_node.setTopn_filter_back_pressure_disabled(true);
+            }
+            if (usePreparedPhysicalSplitScan) {
+                msg.lake_scan_node.setUse_prepared_physical_split_scan(true);
             }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));

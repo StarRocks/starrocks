@@ -136,7 +136,8 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
+                                      CompoundNodeType pred_relation,
+                                      const SparseRange<>* scan_range = nullptr) override;
 
     std::string name() const override { return "JsonFlatColumnIterator"; }
 
@@ -332,7 +333,7 @@ Status JsonFlatColumnIterator::seek_to_ordinal(ordinal_t ord) {
 Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                           const ColumnPredicate* del_predicate,
                                                           SparseRange<>* row_ranges, CompoundNodeType pred_relation,
-                                                          const Range<>* src_range) {
+                                                          const SparseRange<>* scan_range) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
@@ -367,7 +368,8 @@ public:
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
+                                      CompoundNodeType pred_relation,
+                                      const SparseRange<>* scan_range = nullptr) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -469,8 +471,8 @@ Status JsonDynamicFlatIterator::seek_to_ordinal(ordinal_t ord) {
 Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                            const ColumnPredicate* del_predicate,
                                                            SparseRange<>* row_ranges, CompoundNodeType pred_relation,
-                                                           const Range<>* src_range) {
-    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, src_range);
+                                                           const SparseRange<>* scan_range) {
+    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, scan_range);
 }
 
 class JsonMergeIterator final : public ColumnIterator {
@@ -504,7 +506,7 @@ public:
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
                                                     CompoundNodeType pred_relation,
-                                                    const Range<>* src_range = nullptr) override;
+                                                    const SparseRange<>* scan_range = nullptr) override;
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -649,7 +651,7 @@ Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                     CompoundNodeType pred_relation, const Range<>* src_range) {
+                                                     CompoundNodeType pred_relation, const SparseRange<>* scan_range) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
