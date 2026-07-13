@@ -15,12 +15,14 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.function.Executable;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -102,6 +105,20 @@ public class RangeDistributionGuardTest {
         }
         fail("Expected DdlException in cause chain of " + thrown);
         return null; // unreachable
+    }
+
+    /**
+     * Build (but do not register/run) the {@link AlterJobV2} for {@code alterSql} by calling
+     * {@code analyzeAndCreateJob} directly. This surfaces synchronous, creation-time rejections
+     * as a thrown exception (and returns the job when the alter is accepted) without scheduling
+     * the asynchronous schema-change job.
+     */
+    private static AlterJobV2 createJob(String tableName, String alterSql) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
     }
 
     @Test
@@ -350,5 +367,38 @@ public class RangeDistributionGuardTest {
         // widen, so the relaxation must not apply and it must stay rejected.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_flip modify column k1 varchar(40)");
+    }
+
+    /**
+     * A FULL-column ORDER BY that permutes the key columns of a key-derived range table (created
+     * without an explicit ORDER BY, so its range sort key is derived from KEY(k1, k2)) reorders the
+     * schema and thus the key-derived range sort key, but the plain schema-change job copies each
+     * tablet's range verbatim -- leaving the stored boundary tuples in the old key-column space while
+     * the new sort key is the new key order. It must be rejected. The subset
+     * "ALTER TABLE ... ORDER BY (&lt;sort-key columns&gt;)" form is the supported way to re-sort.
+     */
+    @Test
+    public void testFullReorderPermutingKeyColumnsRejectedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable("create table t_guard_fullreorder (k1 int, k2 int, v1 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        DdlException e = assertThrowsDdlException(() ->
+                createJob("t_guard_fullreorder", "alter table t_guard_fullreorder order by (k2, k1, v1)"));
+        assertTrue(e.getMessage().contains("reorders the key columns"),
+                "Expected key-reorder rejection in: " + e.getMessage());
+    }
+
+    /**
+     * A full-column ORDER BY that keeps the key order (reorders only value columns) does not shift
+     * the key-derived range sort key, so it is allowed -- the guard must not fire.
+     */
+    @Test
+    public void testFullReorderKeepingKeyOrderAllowedOnRangeDistribution() throws Exception {
+        starRocksAssert.withTable("create table t_guard_fullreorder_vals (k1 int, k2 int, v1 int, v2 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        assertNotNull(createJob("t_guard_fullreorder_vals",
+                        "alter table t_guard_fullreorder_vals order by (k1, k2, v2, v1)"),
+                "value-only full reorder must not be rejected");
     }
 }
