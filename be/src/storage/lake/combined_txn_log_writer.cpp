@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/write_combined_txn_log.h"
+#include "storage/lake/combined_txn_log_writer.h"
 
+#include <atomic>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "base/concurrency/countdown_latch.h"
-#include "exec/exec_env.h"
+#include "common/thread/threadpool.h"
 #include "runtime/runtime_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_env.h"
@@ -28,6 +34,8 @@ Status write_combined_txn_log(const CombinedTxnLogPB& logs) {
     auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     return tablet_mgr->put_combined_txn_log(logs);
 }
+
+namespace {
 
 void mark_failure(const Status& status, std::atomic<bool>* has_error, Status* final_status) {
     if (!has_error->load()) {
@@ -55,6 +63,8 @@ std::function<void()> create_txn_log_task(const CombinedTxnLogPB* logs, lake::Ta
         latch->count_down();
     };
 }
+
+} // namespace
 
 Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map) {
     CountDownLatch latch(txn_log_map.size());

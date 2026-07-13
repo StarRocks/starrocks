@@ -253,12 +253,12 @@ Core expression infrastructure, UDF runtime helpers, builtin aggregate registry,
 - Remediation: Keep Expr limited to core expression infrastructure, UDF runtime helpers, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers.
 
 ### ExecPrimitive (`execprimitive`)
-Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
+Primitive execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
 - Targets: `ExecPrimitive`
 - Allowed internal include prefixes: `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `exec_primitive_test`
-- Remediation: Keep ExecPrimitive limited to execution contracts, the DataSink base contract, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward.
+- Remediation: Keep ExecPrimitive limited to execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward.
 
 ### ExecRuntime (`execruntime`)
 Operator-tree execution framework for query and fragment contexts, driver lifecycle, execution groups, and scheduling-adjacent behavior above ComputeEnv and ExecPrimitive without concrete operators, storage, service, connector, cache, or broad Exec coupling.

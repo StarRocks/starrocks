@@ -40,8 +40,7 @@
 #include "base/time/time.h"
 #include "column/column.h"
 #include "common/runtime_profile.h"
-#include "exec/exec_env.h"
-#include "exec/plain_text_builder.h"
+#include "data_sink/file/plain_text_builder.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -54,6 +53,8 @@ namespace starrocks {
 
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _t_output_expr(t_exprs) {}
+
+ExportSink::~ExportSink() = default;
 
 Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::init(t_sink, state));

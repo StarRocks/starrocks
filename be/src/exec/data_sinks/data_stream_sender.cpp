@@ -57,7 +57,6 @@
 #include "common/util/thrift_client.h"
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
-#include "exec/exec_env.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -68,6 +67,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 

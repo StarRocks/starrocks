@@ -50,7 +50,6 @@ class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
 class MemTracker;
-class FileWriter;
 class Status;
 class FileBuilder;
 
@@ -59,7 +58,7 @@ class ExportSink : public DataSink {
 public:
     ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
 
-    ~ExportSink() override = default;
+    ~ExportSink() override;
 
     Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
 

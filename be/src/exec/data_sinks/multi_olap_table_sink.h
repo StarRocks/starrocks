@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/data_sinks/async_data_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
+#include "exec_primitive/async_data_sink.h"
 
 namespace starrocks {
 

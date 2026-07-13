@@ -14,33 +14,28 @@
 
 #pragma once
 
-#include <arrow/io/api.h>
-#include <arrow/io/file.h>
-#include <arrow/io/interfaces.h>
-#include <parquet/api/reader.h>
-#include <parquet/api/writer.h>
-#include <parquet/arrow/reader.h>
-#include <parquet/arrow/writer.h>
-#include <parquet/exception.h>
-
 #include <cstdint>
-#include <map>
-#include <string>
+#include <memory>
+#include <vector>
 
-#include "common/status.h"
-#include "exec/file_builder.h"
-#include "formats/parquet/file_writer.h"
-#include "fs/fs.h"
-#include "gen_cpp/DataSinks_types.h"
-#include "gen_cpp/PlanNodes_types.h"
-#include "gen_cpp/Types_types.h"
-#include "gen_cpp/parquet_types.h"
+#include "data_sink/file/file_builder.h"
+#include "fs/fs_fwd.h"
 #include "runtime/runtime_fwd.h"
+
+namespace parquet {
+class WriterProperties;
+namespace schema {
+class GroupNode;
+}
+} // namespace parquet
 
 namespace starrocks {
 
 class ExprContext;
-class FileWriter;
+
+namespace parquet {
+class SyncFileWriter;
+}
 
 class ParquetBuilder : public FileBuilder {
 public:
@@ -49,7 +44,7 @@ public:
                    const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size, int64_t max_file_size,
                    RuntimeState* state);
 
-    ~ParquetBuilder() override = default;
+    ~ParquetBuilder() override;
 
     Status init();
 

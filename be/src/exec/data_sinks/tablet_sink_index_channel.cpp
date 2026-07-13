@@ -31,9 +31,8 @@
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "exec/data_sinks/tablet_sink.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/query_context.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
@@ -43,6 +42,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
