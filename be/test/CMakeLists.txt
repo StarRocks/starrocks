@@ -6,11 +6,8 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-<<<<<<< HEAD
         ./connector/changes_connector_test.cpp
-=======
         ./connector/lake/lake_global_late_materialization_context_test.cpp
->>>>>>> 7789d01a92f... [Refactor] Move lake late-materialization context to connector (#76236)
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
