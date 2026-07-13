@@ -139,10 +139,18 @@ Rowset::~Rowset() {
 
 StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
     const TabletRangePB* range_pb = nullptr;
+    // _tablet_schema is this rowset's own schema, which for an old rowset may be an archived
+    // historical schema with fewer sort-key columns than the current tablet schema. The explicit
+    // per-rowset range was encoded with the rowset's schema, but the tablet-level fallback range is
+    // encoded with the current tablet sort key, so it must be decoded with the current schema. This
+    // keeps an old rowset readable after a metadata-only trailing sort-key add (N -> N+1), where the
+    // fallback range gains a value while the archived schema still has N sort keys.
+    TabletSchemaPtr range_schema = _tablet_schema;
     if (_metadata->has_range()) {
         range_pb = &_metadata->range();
     } else if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
         range_pb = &_tablet_metadata->range();
+        range_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
     }
 
     if (range_pb == nullptr) {
@@ -151,7 +159,7 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
 
     // Do not use mem_pool here. SeekRange will reference the data owned by protobuf metadata,
     // and metadata lifetime is guaranteed to outlive rowset iterators.
-    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr));
+    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, range_schema, nullptr));
     return std::optional<SeekRange>(std::move(range));
 }
 
