@@ -35,16 +35,16 @@ public class OpenIdConnectVerifier {
     public static void verify(String idToken,
                               String userName,
                               JWKSet jwkSet,
-                              String principalFiled,
+                              String principalField,
                               String[] requiredIssuer,
                               String[] requiredAudience) throws AuthenticationException {
         try {
             SignedJWT signedJWT = verifyJWT(idToken, jwkSet);
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
-            String jwtUserName = resolveClaimValue(claims, principalFiled);
+            String jwtUserName = resolveClaimValue(claims, principalField);
 
             if (jwtUserName == null) {
-                throw new AuthenticationException("Can not get specified principal " + principalFiled);
+                throw new AuthenticationException("Can not get specified principal " + principalField);
             }
 
             if (!jwtUserName.equalsIgnoreCase(userName)) {
