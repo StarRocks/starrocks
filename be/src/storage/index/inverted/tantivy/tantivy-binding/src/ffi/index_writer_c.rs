@@ -16,7 +16,7 @@
 //!
 //! Surface:
 //!   - tantivy_create_index_writer(path, field_name, tokenizer, support_phrase,
-//!     support_bm25, memory_budget_bytes, merge_policy)
+//!     support_bm25, memory_budget_bytes, num_threads, merge_policy)
 //!   - tantivy_index_add_strings_batch(writer, values_ptr, count)
 //!   - tantivy_commit_index(writer)
 //!   - tantivy_free_index_writer(writer)
@@ -60,6 +60,9 @@ macro_rules! cstr_or_err {
 /// `memory_budget_bytes`: memory budget for the IndexWriter. 0 uses the
 /// compile-time default (256 MB).
 ///
+/// `num_threads`: number of tantivy indexing worker threads. 0 uses the
+/// compile-time default (1). Workers run on the shared BE thread pool.
+///
 /// `merge_policy`: NUL-terminated C string selecting the merge policy.
 /// `"no_merge"` disables merging; anything else uses `LogMergePolicy`.
 /// NULL is treated as `"default"`.
@@ -74,6 +77,7 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
     support_phrase: bool,
     support_bm25: bool,
     memory_budget_bytes: usize,
+    num_threads: usize,
     merge_policy: *const c_char,
 ) -> RustResult {
     catch_ffi(|| {
@@ -95,6 +99,7 @@ pub unsafe extern "C" fn tantivy_create_index_writer(
             support_phrase,
             support_bm25,
             memory_budget_bytes,
+            num_threads,
             merge_policy_str,
         ) {
             Ok(w) => RustResult::ok_ptr(create_binding(w)),

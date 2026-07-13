@@ -86,6 +86,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service/staros_worker.h"
+#include "storage/index/inverted/tantivy/tantivy_ffi_pool_bridge.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
@@ -818,6 +819,25 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
+    {
+        // Shared pool for all tantivy inverted-index build work. Bounds the
+        // total tantivy background thread count (indexing workers + merges +
+        // segment-updater queue) across every concurrent writer. An unbounded
+        // queue guarantees submit never blocks/fails, so tantivy never stalls
+        // waiting for a slot; concurrency is capped by max_threads.
+        int nproc = CpuInfo::num_cores();
+        int configured = config::tantivy_index_build_thread_pool_num_threads;
+        int pool_threads = configured > 0 ? configured : std::max(4, nproc);
+        LOG(INFO) << "tantivy index build thread pool: nproc=" << nproc << " threads=" << pool_threads;
+        RETURN_IF_ERROR(ThreadPoolBuilder("tantivy_index_build")
+                                .set_min_threads(0)
+                                .set_max_threads(pool_threads)
+                                .set_max_queue_size(std::numeric_limits<int>::max())
+                                .build(&_tantivy_index_build_thread_pool));
+        register_tantivy_index_thread_pool(_tantivy_index_build_thread_pool.get());
+    }
+    REGISTER_THREAD_POOL_METRICS(tantivy_index_build, _tantivy_index_build_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
@@ -895,6 +915,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pipeline_sink_io_pool->shutdown();
         component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
+    }
+
+    if (_tantivy_index_build_thread_pool) {
+        start = MonotonicMillis();
+        _tantivy_index_build_thread_pool->shutdown();
+        component_times.emplace_back("tantivy_index_build_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -1077,6 +1103,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _tantivy_index_build_thread_pool.reset();
     _metrics = nullptr;
 }
 

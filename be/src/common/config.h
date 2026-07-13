@@ -1742,7 +1742,7 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
-// Whether to swallow per-row tantivy write errors stored in
+// Whether to swallow per-row tantivy write errors stoeed in
 // `TantivyInvertedWriter::_error_status` so finish_compound still proceeds to
 // commit. Default false: a real tantivy add/commit failure should fail the
 // segment fast (and surface a clear error) instead of being silently
@@ -1762,4 +1762,20 @@ CONF_mInt64(tantivy_writer_memory_budget_bytes, "268435456");
 // into a compound .idx immediately after commit, so merging is pure overhead
 // unless query-time multi-segment perf is critical).
 CONF_mString(tantivy_writer_merge_policy, "default");
+
+// Number of tantivy indexing worker threads per IndexWriter. 0 uses tantivy's
+// built-in default (1). Workers are submitted to the shared
+// `tantivy_index_build` thread pool rather than dedicated OS threads, so
+// raising this increases per-writer indexing concurrency while the total thread
+// count stays bounded by the pool. Row-id alignment is preserved at any value
+// because the BE row id is stored in an explicit tantivy FAST field.
+CONF_mInt32(tantivy_writer_num_threads, "1");
+
+// Size (max threads) of the shared thread pool that runs all tantivy index
+// build work (indexing workers, segment-updater serial queue, and merges). 0
+// means adaptive sizing based on CPU cores. This bounds the total number of
+// tantivy background threads across all concurrent writers, preventing the
+// thread explosion of tantivy spawning its own threads per writer.
+CONF_Int32(tantivy_index_build_thread_pool_num_threads, "0");
+
 } // namespace starrocks::config

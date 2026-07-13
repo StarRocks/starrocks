@@ -86,6 +86,7 @@ Status TantivyInvertedWriter::init() {
     tb::RustResult r = tb::tantivy_create_index_writer(
             _temp_dir.c_str(), _field_name.c_str(), _tokenizer.c_str(), _support_phrase, _support_bm25,
             static_cast<uintptr_t>(config::tantivy_writer_memory_budget_bytes),
+            static_cast<uintptr_t>(config::tantivy_writer_num_threads),
             config::tantivy_writer_merge_policy.value().c_str());
     TantivyResultGuard guard(r);
     if (!r.success) {

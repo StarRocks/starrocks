@@ -269,6 +269,7 @@ set(STORAGE_FILES
     index/inverted/tantivy/tantivy_inverted_writer.cpp
     index/inverted/tantivy/tantivy_inverted_reader.cpp
     index/inverted/tantivy/random_access_bridge.cpp
+    index/inverted/tantivy/tantivy_ffi_pool_bridge.cpp
     index/vector/empty_index_reader.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp

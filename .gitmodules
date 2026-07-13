@@ -1,4 +1,4 @@
 [submodule "contrib/tantivy"]
 	path = contrib/tantivy
-        url = https://github.com/quickwit-oss/tantivy.git
-	branch = branch-0.25.0
+        url = https://github.com/zenoyang/tantivy.git
+	branch = dev/0.25.0-opt-thread-pool

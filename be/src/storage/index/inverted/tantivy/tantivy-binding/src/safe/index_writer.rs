@@ -38,12 +38,16 @@ use crate::safe::tokenizer::{self, TOKENIZER_NAME};
 /// from the C++ config `tantivy_writer_memory_budget_bytes`.
 const DEFAULT_WRITER_MEMORY_BUDGET_BYTES: usize = 256 * 1024 * 1024;
 
-/// Hardcode the tantivy writer to a single indexing worker thread for now.
-/// Write concurrency is controlled by StarRocks-side parameters instead, so
-/// we can avoid introducing the extra complexity of multi-threaded writes in
-/// this binding layer. If higher per-writer throughput is needed in the
-/// future, make this value configurable.
-const WRITER_NUM_THREADS: usize = 1;
+/// Number of tantivy indexing worker threads per writer. `0` means fall back to
+/// this compile-time default. The actual value is supplied at runtime from the
+/// C++ config `tantivy_writer_num_threads`. Workers no longer map to dedicated
+/// OS threads: they are submitted to the shared BE thread pool via the injected
+/// `tantivy::executor` spawner, so raising this only raises indexing
+/// concurrency, not the total thread count. Row ids stay correct at any worker
+/// count because the BE row id is stored explicitly in the `row_id` FAST field
+/// (assigned on the caller thread before dispatch), not inferred from tantivy
+/// DocId ordering.
+const DEFAULT_WRITER_NUM_THREADS: usize = 1;
 
 /// Merge policy names accepted from the C++ config layer.
 const MERGE_POLICY_NO_MERGE: &str = "no_merge";
@@ -80,6 +84,11 @@ impl IndexWriterWrapper {
     /// `memory_budget_bytes` controls the memory budget for the IndexWriter.
     /// When `0`, the compile-time default is used.
     ///
+    /// `num_threads` controls the number of tantivy indexing worker threads.
+    /// When `0`, [`DEFAULT_WRITER_NUM_THREADS`] is used. Workers run on the
+    /// shared BE thread pool, so this bounds indexing concurrency, not OS
+    /// threads.
+    ///
     /// `merge_policy` selects the segment merge policy applied after commit.
     /// `"no_merge"` disables merging entirely; any other value (including
     /// `"default"`) uses tantivy's built-in `LogMergePolicy`.
@@ -90,6 +99,7 @@ impl IndexWriterWrapper {
         support_phrase: bool,
         support_bm25: bool,
         memory_budget_bytes: usize,
+        num_threads: usize,
         merge_policy: &str,
     ) -> Result<Self> {
         std::fs::create_dir_all(path)?;
@@ -120,8 +130,13 @@ impl IndexWriterWrapper {
         } else {
             DEFAULT_WRITER_MEMORY_BUDGET_BYTES
         };
+        let num_threads = if num_threads > 0 {
+            num_threads
+        } else {
+            DEFAULT_WRITER_NUM_THREADS
+        };
         let writer: IndexWriter =
-            index.writer_with_num_threads(WRITER_NUM_THREADS, budget)?;
+            index.writer_with_num_threads(num_threads, budget)?;
 
         if merge_policy == MERGE_POLICY_NO_MERGE {
             writer.set_merge_policy(Box::new(NoMergePolicy));
