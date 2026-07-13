@@ -19,6 +19,7 @@
 #include "base/string/slice.h"
 #include "column/chunk.h"
 #include "exec/schema_scanner.h"
+#include "exec/schema_scanner_factory.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -30,6 +31,21 @@ public:
     TestSchemaScanner(ColumnDesc* columns, int column_num) : SchemaScanner(columns, column_num) {}
 
     const SchemaScannerState& scanner_state() const { return _ss_state; }
+};
+
+class RecordingSchemaScannerFactory final : public SchemaScannerFactory {
+public:
+    std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const override {
+        last_type = type;
+        return std::make_unique<SchemaScanner>(nullptr, 0);
+    }
+
+    mutable TSchemaTableType::type last_type = static_cast<TSchemaTableType::type>(-1);
+};
+
+class NullSchemaScannerFactory final : public SchemaScannerFactory {
+public:
+    std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const override { return nullptr; }
 };
 
 TEST(SchemaScannerCoreTest, InitRejectsInvalidParameters) {
@@ -118,6 +134,34 @@ TEST(SchemaScannerCoreTest, InitSchemaScannerStateRejectsMissingEndpoint) {
 
     RuntimeState state;
     ASSERT_FALSE(scanner.init_schema_scanner_state(&state).ok());
+}
+
+TEST(SchemaScannerCoreTest, FactoryHelperDelegatesRequestedType) {
+    RecordingSchemaScannerFactory factory;
+
+    auto scanner = create_schema_scanner(&factory, TSchemaTableType::SCH_TABLES);
+
+    ASSERT_TRUE(scanner.ok()) << scanner.status().to_string();
+    EXPECT_NE(nullptr, scanner.value().get());
+    EXPECT_EQ(TSchemaTableType::SCH_TABLES, factory.last_type);
+}
+
+TEST(SchemaScannerCoreTest, FactoryHelperRejectsMissingFactory) {
+    auto scanner = create_schema_scanner(nullptr, TSchemaTableType::SCH_TABLES);
+
+    ASSERT_FALSE(scanner.ok());
+    EXPECT_TRUE(scanner.status().is_internal_error());
+    EXPECT_EQ("schema scanner factory is not installed", scanner.status().message());
+}
+
+TEST(SchemaScannerCoreTest, FactoryHelperRejectsNullScanner) {
+    NullSchemaScannerFactory factory;
+
+    auto scanner = create_schema_scanner(&factory, TSchemaTableType::SCH_TABLES);
+
+    ASSERT_FALSE(scanner.ok());
+    EXPECT_TRUE(scanner.status().is_internal_error());
+    EXPECT_EQ("schema scanner factory returned nullptr", scanner.status().message());
 }
 
 } // namespace starrocks

@@ -295,10 +295,17 @@ Default BE module bootstrap composition for built-in module registration, includ
 ### ExecSchemaScannerCore (`execschemascannercore`)
 Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
 - Targets: `ExecSchemaScannerCore`
-- Allowed internal include prefixes: `exec/schema_scanner.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `exec/schema_scanner.h`, `exec/schema_scanner_factory.h`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `schema_scanner_core_test`
 - Remediation: Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules.
+
+### SchemaScannerBuiltin (`schemascannerbuiltin`)
+Temporary top-level composition target for the builtin schema scanner factory while concrete scanners remain in Exec compatibility targets.
+- Targets: `SchemaScannerBuiltin`
+- Allowed internal include prefixes: `exec/builtin_schema_scanner_factory.h`, `exec/schema_scanner.h`, `exec/schema_scanner_factory.h`, `exec/schema_scanner/`, `gen_cpp/`
+- Allowed target deps: `Exec`, `ExecSchemaScannerCore`, `ExecSchemaScanners`
+- Remediation: Keep builtin scanner selection above Exec; PR2 must replace the temporary Exec dependency with explicit layered schema scanner targets.
 
 ### ExecSchemaScanners (`execschemascanners`)
 Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.

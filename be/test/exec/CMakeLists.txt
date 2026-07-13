@@ -85,6 +85,7 @@ set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     gtest
     ${WL_END_GROUP}
 )
+list(REMOVE_ITEM SCHEMA_SCANNER_CORE_TEST_LINK_LIBS arrow_testing)
 
 add_library(starrocks_schema_scanner_core_test_objs OBJECT ${SCHEMA_SCANNER_CORE_TEST_FILES})
 target_link_libraries(starrocks_schema_scanner_core_test_objs PRIVATE StarRocksPCH)

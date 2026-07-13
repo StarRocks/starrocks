@@ -41,6 +41,7 @@
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/schema_scanner_factory.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "gtest/gtest.h"
 #include "module/connector_bootstrap.h"
@@ -64,7 +65,7 @@ namespace starrocks {
 
 extern void shutdown_tracer();
 
-int init_test_env(int argc, char** argv) {
+int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> schema_scanner_factory = nullptr) {
     ::testing::InitGoogleTest(&argc, argv);
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -182,7 +183,7 @@ int init_test_env(int argc, char** argv) {
     exec_env->set_compute_env(compute_env.get());
     st = runtime_env->init_lake_thread_pools(process_metrics);
     CHECK(st.ok()) << st;
-    st = exec_env->init(process_metrics_registry, runtime_env);
+    st = exec_env->init(process_metrics_registry, runtime_env, std::move(schema_scanner_factory));
     CHECK(st.ok()) << st;
 
     StorageEnvOptions storage_env_options;
