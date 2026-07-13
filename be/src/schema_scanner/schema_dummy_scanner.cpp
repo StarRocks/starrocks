@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdio>
+#include "schema_scanner/schema_dummy_scanner.h"
 
-#include "formats/orc/lzo_decompressor_registration.h"
-#include "schema_scanner/builtin_schema_scanner_factory.h"
-#include "testutil/init_test_env.h"
+namespace starrocks {
 
-int main(int argc, char** argv) {
-    auto lzo_status = starrocks::register_orc_lzo_decompressor();
-    if (!lzo_status.ok()) {
-        fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
-        return 1;
-    }
+SchemaDummyScanner::SchemaDummyScanner() : SchemaScanner(nullptr, 0) {}
 
-    return starrocks::init_test_env(argc, argv, starrocks::create_builtin_schema_scanner_factory());
+SchemaDummyScanner::~SchemaDummyScanner() = default;
+
+Status SchemaDummyScanner::start(RuntimeState* state) {
+    return Status::OK();
 }
+
+Status SchemaDummyScanner::get_next(ChunkPtr* chunk, bool* eos) {
+    *eos = true;
+    return Status::OK();
+}
+
+} // namespace starrocks
