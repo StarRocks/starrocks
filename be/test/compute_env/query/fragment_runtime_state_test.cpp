@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/query/fragment_runtime_state.h"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
 
 #include "base/time/time.h"
-#include "exec/runtime/fragment_runtime_state.h"
 
 namespace starrocks::pipeline {
 

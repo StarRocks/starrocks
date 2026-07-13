@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/deletion_vector/deletion_vector.h"
+#include "formats/delta/deletion_vector.h"
 
 #include <gtest/gtest.h>
 
 #include "base/string/base85.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 class DeletionVectorTest : public testing::Test {
 public:
-    void SetUp() override { dv = std::make_shared<DeletionVector>(params); }
+    void SetUp() override { dv = std::make_shared<DeletionVector>(options); }
 
-    HdfsScannerContext params;
+    DeletionVectorOptions options;
     std::shared_ptr<DeletionVector> dv;
 };
 
@@ -47,23 +47,20 @@ TEST_F(DeletionVectorTest, inlineDeletionVectorTest) {
 
 TEST_F(DeletionVectorTest, absolutePathTest) {
     // test relative path
-    params.table_specific.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
-    params.table_specific.deletion_vector_descriptor->__set_storageType("u");
-    params.table_specific.deletion_vector_descriptor->__set_pathOrInlineDv("ab^-aqEH.-t@S}K{vb[*k^");
-    dv = std::make_shared<DeletionVector>(params);
+    options.descriptor.__set_storageType("u");
+    options.descriptor.__set_pathOrInlineDv("ab^-aqEH.-t@S}K{vb[*k^");
+    dv = std::make_shared<DeletionVector>(options);
 
     std::string table_location = "s3://mytable";
     StatusOr<std::string> absolute_path = dv->get_absolute_path(table_location);
     ASSERT_TRUE(absolute_path.ok());
     ASSERT_EQ("s3://mytable/ab/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin", absolute_path.value());
     // test absolute path
-    params.table_specific.deletion_vector_descriptor = std::make_shared<TDeletionVectorDescriptor>();
-    params.table_specific.deletion_vector_descriptor->__set_storageType("p");
-    params.table_specific.deletion_vector_descriptor->__set_pathOrInlineDv(
-            "s3://mytable/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin");
-    dv = std::make_shared<DeletionVector>(params);
+    options.descriptor.__set_storageType("p");
+    options.descriptor.__set_pathOrInlineDv("s3://mytable/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin");
+    dv = std::make_shared<DeletionVector>(options);
     absolute_path = dv->get_absolute_path(table_location);
     ASSERT_TRUE(absolute_path.ok());
     ASSERT_EQ("s3://mytable/deletion_vector_d2c639aa-8816-431a-aaf6-d3fe2512ff61.bin", absolute_path.value());
 }
-} // namespace starrocks
+} // namespace starrocks::formats

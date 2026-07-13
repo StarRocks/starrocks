@@ -20,13 +20,14 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "connector/deletion_vector/deletion_vector.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "formats/delta/deletion_vector.h"
 #include "formats/file_input_stream.h"
 #include "formats/reserved_columns.h"
 #include "fs/hdfs_metrics.h"
+#include "runtime/runtime_state.h"
 #include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
@@ -148,7 +149,7 @@ Status HdfsScanner::_build_scanner_context() {
     opts.runtime_state = _runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
-    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = _runtime_state->fragment_runtime_state()->pred_tree_params();
 
     ctx.predicates.conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(ctx.predicates.conjuncts_manager->parse_conjuncts());
@@ -302,7 +303,7 @@ void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent
     if (_app_stats.deletion_vector_build_count == 0) {
         return;
     }
-    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    const std::string DV_TIMER = formats::DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 
     RuntimeProfile::Counter* delete_build_timer =
@@ -317,7 +318,7 @@ void HdfsScanner::do_update_deletion_vector_build_counter(RuntimeProfile* parent
 }
 
 void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile) {
-    const std::string DV_TIMER = DeletionVector::DELETION_VECTOR;
+    const std::string DV_TIMER = formats::DeletionVector::DELETION_VECTOR;
     ADD_COUNTER(parent_profile, DV_TIMER, TUnit::NONE);
 
     RuntimeProfile::Counter* delete_file_build_filter_timer =

@@ -15,13 +15,14 @@
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 
 #include "common/runtime_profile.h"
-#include "connector/deletion_vector/deletion_vector.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_deletion_vector_reader.h"
-#include "exec/pipeline/fragment_context.h"
+#include "formats/delta/deletion_vector.h"
 #include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -68,8 +69,14 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         _skip_rows_ctx->deletion_bitmap = std::move(deletion_bitmap);
     } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
-        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(*_scanner_ctx);
-        RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
+        formats::DeletionVector dv(formats::DeletionVectorOptions{
+                .descriptor = *_scanner_ctx->table_specific.deletion_vector_descriptor,
+                .fs = _scanner_ctx->fs,
+                .table_location = _scanner_ctx->table_location,
+                .datacache_options = _scanner_ctx->datacache_options,
+                .runtime_profile = _scanner_ctx->profile.runtime_profile,
+        });
+        RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;
     } else if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
@@ -247,7 +254,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScannerProfile* profile) {
     COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats.bloom_filter_tried_counter);
     COUNTER_UPDATE(bloom_filter_success_counter, _app_stats.bloom_filter_success_counter);
 
-    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+    if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter",
                               _scanner_ctx->predicates.predicate_tree.root().debug_string());
     }

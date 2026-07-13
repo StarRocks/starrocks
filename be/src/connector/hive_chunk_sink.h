@@ -26,10 +26,6 @@
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 
-namespace starrocks::pipeline {
-class FragmentContext;
-} // namespace starrocks::pipeline
-
 namespace starrocks::connector {
 
 class HiveChunkSink : public PartitionedConnectorChunkSink {
@@ -57,7 +53,7 @@ struct HiveChunkSinkContext : public ConnectorSinkContext {
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
-    pipeline::FragmentContext* fragment_context = nullptr;
+    RuntimeState* runtime_state = nullptr;
 };
 
 class HiveChunkSinkProvider : public ConnectorSinkProvider {

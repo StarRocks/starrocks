@@ -14,31 +14,47 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "cache/cache_options.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
+#include "formats/scan_context.h"
 #include "fs/fs.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 
 class CacheInputStream;
+class RuntimeProfile;
 class SharedBufferedInputStream;
+
+namespace formats {
 
 struct DeletionVectorBuildStats {
     int64_t bitmap_deserialize_ns = 0;
 };
 
+struct DeletionVectorOptions {
+    TDeletionVectorDescriptor descriptor;
+    FileSystem* fs = nullptr;
+    std::string table_location;
+    DataCacheOptions datacache_options;
+    RuntimeProfile* runtime_profile = nullptr;
+};
+
 class DeletionVector {
 public:
-    DeletionVector(const HdfsScannerContext& ctx)
-            : _deletion_vector_descriptor(ctx.table_specific.deletion_vector_descriptor), _ctx(ctx) {}
+    explicit DeletionVector(DeletionVectorOptions options) : _options(std::move(options)) {}
 
     Status fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx);
-    Status deserialized_inline_dv(std::string& encoded_bitmap_data, const SkipRowsContextPtr& skip_rows_ctx);
+    Status deserialized_inline_dv(const std::string& encoded_bitmap_data, const SkipRowsContextPtr& skip_rows_ctx);
     StatusOr<std::string> get_absolute_path(const std::string& table_location) const;
 
-    const bool is_inline() {
-        return _deletion_vector_descriptor->__isset.storageType && _deletion_vector_descriptor->storageType == "i";
-    }
+    bool is_inline() const { return _options.descriptor.__isset.storageType && _options.descriptor.storageType == "i"; }
 
     static const int32_t DV_SIZE_LENGTH = 4;
     static const int32_t MAGIC_NUMBER_LENGTH = 4;
@@ -57,7 +73,7 @@ private:
                                         int64_t serialized_bitmap_length, const SkipRowsContextPtr& skip_rows_ctx);
 
     std::string assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
-                                              std::string& prefix) const;
+                                              const std::string& prefix) const;
 
     void update_dv_file_io_counter(RuntimeProfile* parent_profile, const FormatScannerStats& app_stats,
                                    const FormatScannerStats& fs_stats,
@@ -66,8 +82,8 @@ private:
 
     void update_dv_build_counter(RuntimeProfile* parent_profile, const DeletionVectorBuildStats& build_stats);
 
-    const std::shared_ptr<TDeletionVectorDescriptor> _deletion_vector_descriptor;
-    const HdfsScannerContext& _ctx;
+    const DeletionVectorOptions _options;
     DeletionVectorBuildStats _build_stats;
 };
+} // namespace formats
 } // namespace starrocks

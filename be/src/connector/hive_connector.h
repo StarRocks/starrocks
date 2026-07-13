@@ -20,7 +20,6 @@
 #include "column/vectorized_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector_primitive/connector.h"
-#include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 
 namespace starrocks {
@@ -49,8 +48,8 @@ class HiveDataSourceProvider final : public DataSourceProvider {
 public:
     ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
-    HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node);
+    explicit HiveDataSourceProvider(const TPlanNode& plan_node);
+    HiveDataSourceProvider(int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
@@ -61,7 +60,6 @@ public:
 
 protected:
     int32_t _plan_node_id;
-    ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;

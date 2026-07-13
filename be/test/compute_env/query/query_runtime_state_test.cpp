@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/query/query_runtime_state.h"
+
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -19,7 +21,6 @@
 #include <thread>
 
 #include "common/object_pool.h"
-#include "exec/runtime/query_runtime_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 
@@ -75,7 +76,7 @@ TEST(QueryRuntimeStateTest, StoresQueryScopedServiceReferences) {
     QueryRuntimeState state;
     ObjectPool pool;
     MemTracker connector_scan_tracker(-1);
-    // Opaque to ExecRuntime: only the pointer round-trip is observable here.
+    // Opaque to ComputeEnv: only the pointer round-trip is observable here.
     auto* arbitrator = reinterpret_cast<ConnectorScanOperatorMemShareArbitrator*>(0x10);
     auto* glm_ctx_mgr = reinterpret_cast<GlobalLateMaterilizationContextMgr*>(0x20);
 

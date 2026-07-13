@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
         column_evaluator.cpp
+        delta/deletion_vector.cpp
         deletion_bitmap.cpp
         disk_range.hpp
         file_input_stream.cpp

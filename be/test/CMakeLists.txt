@@ -8,7 +8,6 @@ set(EXEC_FILES
         ./common/uri_test.cpp
         ./connector/changes_connector_test.cpp
         ./connector/hive_connector_test.cpp
-        ./connector/deletion_vector/deletion_vector_test.cpp
         ./exec/iceberg/iceberg_deletion_vector_reader_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
