@@ -547,6 +547,7 @@ include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
 set (DIRECT_CONNECTOR_LINK_LIBS
     Connector
     ConnectorLake
+    ConnectorChanges
     ConnectorFile
     ConnectorHive
     ConnectorIceberg
@@ -905,21 +906,6 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
-<<<<<<< HEAD
-# Broad test and benchmark executables directly exercise concrete connector implementations.
-# Keep these explicit: PRIVATE dependencies of shared BE modules are intentionally not propagated
-# when ENABLE_MULTI_DYNAMIC_LIBS is enabled.
-set (DIRECT_CONNECTOR_LINK_LIBS
-    Connector
-    ConnectorLake
-    ConnectorChanges
-    ConnectorFile
-    ConnectorHive
-    ConnectorIceberg
-)
-
-=======
->>>>>>> 5db2040aa8c... [Tool] fix connector library link order for thirdparty deps (#76292)
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
