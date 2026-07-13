@@ -32,6 +32,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -548,6 +549,85 @@ public class RangeDistributionPrunerTest {
         // signed-byte compare inverts that range and orders every tablet above the query, so the
         // pruner returns empty (misses tablet 3) -- this assertion is the RED/GREEN guard.
         Assertions.assertEquals(Collections.singleton(3L), new HashSet<>(pruner.prune()));
+    }
+
+    @Test
+    public void testArityMismatchOnFirstTabletReturnsAllTabletsNotPrefix() {
+        Column k1 = new Column("k1", IntegerType.INT, false);
+
+        List<Tablet> tablets = Lists.newArrayList();
+        // Tablet 1's range has 2 columns while rangeDistributionColumns only has 1: arity mismatch.
+        tablets.add(createTablet(1L, Lists.newArrayList("0", "0"), Lists.newArrayList("9", "9"),
+                Lists.newArrayList(k1, k1)));
+        tablets.add(createTablet(2L, "10", "19", k1));
+        tablets.add(createTablet(3L, "20", "29", k1));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new StringLiteral("15"), true);
+        filter.setUpperBound(new StringLiteral("15"), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k1), filters);
+
+        Collection<Long> result = pruner.prune();
+        Assertions.assertEquals(
+                new HashSet<>(Lists.newArrayList(1L, 2L, 3L)),
+                new HashSet<>(result));
+    }
+
+    @Test
+    public void testArityMismatchOnMiddleTabletReturnsAllTablets() {
+        Column k1 = new Column("k1", IntegerType.INT, false);
+
+        List<Tablet> tablets = Lists.newArrayList();
+        tablets.add(createTablet(1L, "0", "9", k1));
+        // Tablet 2 (middle) has a 2-column range while rangeDistributionColumns only has 1: arity mismatch.
+        tablets.add(createTablet(2L, Lists.newArrayList("10", "10"), Lists.newArrayList("19", "19"),
+                Lists.newArrayList(k1, k1)));
+        tablets.add(createTablet(3L, "20", "29", k1));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new StringLiteral("25"), true);
+        filter.setUpperBound(new StringLiteral("25"), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k1), filters);
+
+        Collection<Long> result = pruner.prune();
+        Assertions.assertEquals(
+                new HashSet<>(Lists.newArrayList(1L, 2L, 3L)),
+                new HashSet<>(result));
+    }
+
+    @Test
+    public void testCaptureRangeOnceIgnoresDifferentReferenceOnSecondCall() {
+        Column k1 = new Column("k1", IntegerType.INT, false);
+
+        Tablet mockedTablet = Mockito.mock(Tablet.class);
+        Mockito.when(mockedTablet.getId()).thenReturn(1L);
+        TabletRange firstSnapshot = new TabletRange(Range.of(
+                new Tuple(Lists.newArrayList(Variant.of(k1.getType(), "0"))),
+                new Tuple(Lists.newArrayList(Variant.of(k1.getType(), "9"))),
+                true, true));
+        // Every call after the first returns null: if the pruner ever re-fetches the range instead of
+        // using its first captured snapshot, this would surface as a crash rather than a wrong result.
+        Mockito.when(mockedTablet.getRange()).thenReturn(firstSnapshot, (TabletRange) null);
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new StringLiteral("5"), true);
+        filter.setUpperBound(new StringLiteral("5"), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(Lists.newArrayList(mockedTablet), Lists.newArrayList(k1), filters);
+
+        Collection<Long> result = pruner.prune();
+        Assertions.assertEquals(Collections.singleton(1L), new HashSet<>(result));
     }
 
     private Tablet createTablet(long id, String lower, String upper, Column column) {

@@ -35,8 +35,14 @@ import java.util.Set;
 import java.util.TreeMap;
 
 public class RangeDistributionPruner implements DistributionPruner {
-    // tablets in range order
+    // tablets in range order; unused (empty) when degradeToFullScan is true
     private final TreeMap<Range<Tuple>, Long> tabletInOrder;
+    // all tablet ids captured from the input, in input order; used as the full-scan fallback result
+    private final List<Long> allTabletIds;
+    // true when a captured tablet range's arity doesn't match rangeDistributionColumns; a concurrent
+    // metadata-only flip can transiently mix old-arity and new-arity tablet ranges, so we fall back to
+    // scanning every tablet instead of asserting or silently dropping tablets
+    private final boolean degradeToFullScan;
     // range distribution columns
     private final List<Column> rangeDistributionColumns;
     // distribution column filters
@@ -45,30 +51,53 @@ public class RangeDistributionPruner implements DistributionPruner {
     public RangeDistributionPruner(List<Tablet> tabletsInOrder,
                                    List<Column> rangeDistributionColumns,
                                    Map<String, PartitionColumnFilter> distributionColumnFilters) {
-        this.tabletInOrder = new TreeMap<>();
+        this.rangeDistributionColumns = rangeDistributionColumns;
+        this.distributionColumnFilters = distributionColumnFilters;
+
+        // Capture each tablet's id and range exactly once (never call Tablet#getRange() twice) and
+        // validate arity only after every tablet has been captured, so a concurrent flip can't swap the
+        // range reference between validation and TreeMap construction, and a mismatch found partway
+        // through never truncates the tablet id list already captured.
+        List<Long> ids = new ArrayList<>(tabletsInOrder.size());
+        List<Range<Tuple>> ranges = new ArrayList<>(tabletsInOrder.size());
+        boolean degrade = false;
         for (Tablet tablet : tabletsInOrder) {
             TabletRange tabletRange = tablet.getRange();
             Preconditions.checkState(tabletRange != null && tabletRange.getRange() != null, "Tablet range is null");
             Range<Tuple> range = tabletRange.getRange();
-            this.tabletInOrder.put(range, tablet.getId());
-            
-            int rangeColumnCount = 0;
-            if (!range.isMinimum()) {
-                rangeColumnCount = range.getLowerBound().getValues().size();
-            } else if (!range.isMaximum()) {
-                rangeColumnCount = range.getUpperBound().getValues().size();
-            }
+            ids.add(tablet.getId());
+            ranges.add(range);
 
             if (!range.isAll()) {
-                Preconditions.checkState(rangeColumnCount == rangeDistributionColumns.size(), "Range column count mismatch");
+                int rangeColumnCount = 0;
+                if (!range.isMinimum()) {
+                    rangeColumnCount = range.getLowerBound().getValues().size();
+                } else if (!range.isMaximum()) {
+                    rangeColumnCount = range.getUpperBound().getValues().size();
+                }
+                if (rangeColumnCount != rangeDistributionColumns.size()) {
+                    degrade = true;
+                }
             }
         }
-        this.rangeDistributionColumns = rangeDistributionColumns;
-        this.distributionColumnFilters = distributionColumnFilters;
+
+        this.allTabletIds = ids;
+        this.degradeToFullScan = degrade;
+        TreeMap<Range<Tuple>, Long> tree = new TreeMap<>();
+        if (!degrade) {
+            for (int i = 0; i < ids.size(); i++) {
+                tree.put(ranges.get(i), ids.get(i));
+            }
+        }
+        this.tabletInOrder = tree;
     }
 
     @Override
     public Collection<Long> prune() {
+        if (degradeToFullScan) {
+            return new ArrayList<>(allTabletIds);
+        }
+
         if (distributionColumnFilters == null || distributionColumnFilters.isEmpty() ||
             (tabletInOrder.size() == 1 && tabletInOrder.firstEntry().getKey().isAll())) {
             return new ArrayList<>(tabletInOrder.values());
