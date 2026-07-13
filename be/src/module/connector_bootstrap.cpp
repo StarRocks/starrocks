@@ -19,6 +19,7 @@
 
 #include "connector/cache_stats/cache_stats_connector.h"
 #include "connector/connector_registry.h"
+#include "connector/file/file_connector.h"
 #include "connector/hive/hive_connector.h"
 #include "connector/lake/lake_connector.h"
 #include "connector_primitive/connector.h"
@@ -61,6 +62,7 @@ Status bootstrap_builtin_connectors() {
     auto* registry = ConnectorRegistry::default_instance();
     DCHECK(registry != nullptr);
     install_if_absent<HiveConnector>(registry, Connector::HIVE);
+    install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
 #ifndef __APPLE__
