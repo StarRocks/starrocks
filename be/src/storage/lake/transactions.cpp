@@ -476,6 +476,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                         return new_version_metadata_or_error(missig_txn_log_meta.status());
                     } else {
                         base_metadata = std::move(missig_txn_log_meta).value();
+                        // Keep base_version in sync with base_metadata.
+                        base_version = base_metadata->version();
                         continue;
                     }
                 } else if (txns[i].force_publish()) {
@@ -494,6 +496,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
         if (log_applier == nullptr) {
             // init log_applier
+            DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
                                               new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
