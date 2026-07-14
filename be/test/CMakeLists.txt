@@ -75,6 +75,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/fragment_context_morsel_uaf_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
