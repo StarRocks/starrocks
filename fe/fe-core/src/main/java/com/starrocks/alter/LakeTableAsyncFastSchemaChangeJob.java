@@ -223,6 +223,16 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
+    protected void runFinishedRewritingJob() throws AlterCancelException {
+        super.runFinishedRewritingJob();
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.LEGACY_FAST_SCHEMA_EVOLUTION,
+                    finishedTimeMs - createTimeMs);
+        }
+    }
+
+    @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
         boolean expiredByHistorySchema = true;
