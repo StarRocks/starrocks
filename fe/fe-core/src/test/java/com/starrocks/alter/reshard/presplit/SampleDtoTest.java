@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -97,5 +99,113 @@ public class SampleDtoTest {
 
         Assertions.assertEquals(1, sampleSet.getTuples().size());
         Assertions.assertEquals(new Estimates(4096L, 1L), sampleSet.getEstimates());
+    }
+
+    @Test
+    public void testSampleRequestDefaultConstructorsHaveEmptySecondaryIndexSortKeys() {
+        SampleRequest fourArg = new SampleRequest(DUMMY_CONTEXT, List.of(varcharColumn("k")), 1024L, 0L);
+        SampleRequest fiveArg = new SampleRequest(
+                DUMMY_CONTEXT, List.of(varcharColumn("k")), List.of(), 1024L, 0L);
+
+        Assertions.assertTrue(fourArg.getSecondaryIndexSortKeys().isEmpty());
+        Assertions.assertTrue(fiveArg.getSecondaryIndexSortKeys().isEmpty());
+    }
+
+    @Test
+    public void testSampleRequestWithQueryTimeoutSecondsPreservesSecondaryIndexSortKeys() {
+        SecondaryIndexSpec secondarySpec = new SecondaryIndexSpec(7L, List.of(varcharColumn("r")));
+        SampleRequest request = new SampleRequest(
+                DUMMY_CONTEXT, List.of(varcharColumn("k")), List.of(secondarySpec), List.of(), 1024L, 0L);
+
+        SampleRequest withTimeout = request.withQueryTimeoutSeconds(30);
+
+        Assertions.assertEquals(List.of(secondarySpec), withTimeout.getSecondaryIndexSortKeys());
+        Assertions.assertEquals(30, withTimeout.getQueryTimeoutSeconds());
+    }
+
+    @Test
+    public void testSampleRowOfSortKeyHasEmptySecondaryTuples() {
+        SampleRow row = SampleRow.ofSortKey(List.of(Variant.of(IntegerType.BIGINT, "1")));
+
+        Assertions.assertNotNull(row.secondaryIndexTuples());
+        Assertions.assertTrue(row.secondaryIndexTuples().isEmpty());
+        Assertions.assertTrue(row.partitionSourceTuple().isEmpty());
+    }
+
+    @Test
+    public void testSampleRowTwoArgConstructorDefaultsEmptySecondaryTuples() {
+        List<Variant> sortKeyTuple = List.of(Variant.of(IntegerType.BIGINT, "1"));
+        List<Variant> partitionSourceTuple = List.of(Variant.of(IntegerType.BIGINT, "2"));
+
+        SampleRow row = new SampleRow(sortKeyTuple, partitionSourceTuple);
+
+        Assertions.assertNotNull(row.secondaryIndexTuples());
+        Assertions.assertTrue(row.secondaryIndexTuples().isEmpty());
+        Assertions.assertEquals(sortKeyTuple, row.sortKeyTuple());
+        Assertions.assertEquals(partitionSourceTuple, row.partitionSourceTuple());
+    }
+
+    @Test
+    public void testSampleSetBaseOnlyGetSecondaryIndexTuplesAndMetaIdsEmpty() {
+        SampleSet twoArg = new SampleSet(List.of(bigintTuple(1L)), new Estimates(100L, 1L));
+        SampleSet threeArg = new SampleSet(List.of(bigintTuple(1L)), List.of(), new Estimates(100L, 1L));
+
+        Assertions.assertTrue(twoArg.getSecondaryIndexTuples().isEmpty());
+        Assertions.assertTrue(twoArg.getSecondaryIndexMetaIds().isEmpty());
+        Assertions.assertTrue(threeArg.getSecondaryIndexTuples().isEmpty());
+        Assertions.assertTrue(threeArg.getSecondaryIndexMetaIds().isEmpty());
+    }
+
+    @Test
+    public void testSampleSetWithSecondariesMetaIdsMatchSpecOrder() {
+        IndexTuple indexTupleA = new IndexTuple(5L, List.of(Variant.of(IntegerType.BIGINT, "10")));
+        IndexTuple indexTupleB = new IndexTuple(9L, List.of(Variant.of(IntegerType.BIGINT, "20")));
+        SampleSet sampleSet = new SampleSet(
+                List.of(bigintTuple(1L)), List.of(),
+                List.of(5L, 9L), List.of(List.of(indexTupleA, indexTupleB)),
+                new Estimates(100L, 1L));
+
+        Assertions.assertEquals(List.of(5L, 9L), sampleSet.getSecondaryIndexMetaIds());
+        Assertions.assertEquals(1, sampleSet.getSecondaryIndexTuples().size());
+        Assertions.assertEquals(List.of(indexTupleA, indexTupleB), sampleSet.getSecondaryIndexTuples().get(0));
+    }
+
+    @Test
+    public void testSampleSetWithSecondariesMetaIdsPresentEvenForZeroRowSample() {
+        SampleSet sampleSet = new SampleSet(List.of(), List.of(), List.of(5L), List.of(), Estimates.ZERO);
+
+        Assertions.assertTrue(sampleSet.isEmpty());
+        Assertions.assertEquals(List.of(5L), sampleSet.getSecondaryIndexMetaIds());
+        Assertions.assertTrue(sampleSet.getSecondaryIndexTuples().isEmpty());
+    }
+
+    @Test
+    public void testSampleSetMalformedSecondaryRowRejected() {
+        IndexTuple idFive = new IndexTuple(5L, List.of(Variant.of(IntegerType.BIGINT, "10")));
+
+        // Row is missing id 9 entirely (authoritative ids are {5, 9}).
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new SampleSet(
+                List.of(bigintTuple(1L)), List.of(),
+                List.of(5L, 9L), List.of(List.of(idFive)),
+                new Estimates(100L, 1L)));
+
+        // Row carries an id (42) outside the authoritative set ({5}).
+        IndexTuple unknownId = new IndexTuple(42L, List.of(Variant.of(IntegerType.BIGINT, "10")));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new SampleSet(
+                List.of(bigintTuple(1L)), List.of(),
+                List.of(5L), List.of(List.of(unknownId)),
+                new Estimates(100L, 1L)));
+
+        // Row carries id 5 twice (duplicate within one row).
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new SampleSet(
+                List.of(bigintTuple(1L)), List.of(),
+                List.of(5L), List.of(List.of(idFive, idFive)),
+                new Estimates(100L, 1L)));
+
+        // Outer secondaryIndexTuples list is shorter than tuples (a missing row).
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new SampleSet(
+                List.of(bigintTuple(1L), bigintTuple(2L)), List.of(),
+                List.of(5L), List.of(List.of(idFive)),
+                new Estimates(100L, 1L)));
     }
 }
