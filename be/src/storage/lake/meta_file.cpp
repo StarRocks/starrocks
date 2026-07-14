@@ -377,6 +377,9 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         //    that a pinned schema_id exists in historical_schemas, so the archive
         //    and the repoint must happen together. Guarded on historical_schemas so
         //    replay is idempotent (on replay schema()->id() already == new id).
+        //    If every pin moved off old_schema_id, its historical_schemas entry is
+        //    left unreferenced here; the next compaction's historical_schemas GC
+        //    (see apply_opcompaction below) reclaims such entries.
         if (!_tablet_meta->rowset_to_schema().empty() && _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
             (*_tablet_meta->mutable_historical_schemas())[new_schema_id].CopyFrom(*schema);
             for (auto& entry : *_tablet_meta->mutable_rowset_to_schema()) {
@@ -388,11 +391,15 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         // Best-effort persist the new schema as a standalone SCHEMA_{id} file so
         // any by-id cold reader (get_tablet_schema_by_id) resolves the indexed
         // schema. Non-fatal on failure: loads/compaction resolve via
-        // metadata->schema() whose id now equals new_schema_id.
-        if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
-            auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
-            LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet " << _tablet_meta->id()
-                                      << " schema_id " << schema->id() << ": " << st;
+        // metadata->schema() whose id now equals new_schema_id. Gated on the id
+        // actually changing in THIS apply so re-applying the same op (metadata
+        // replay on restart) does not repeat the remote object-store write.
+        if (old_schema_id != new_schema_id) {
+            if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
+                auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
+                LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet "
+                                          << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
+            }
         }
     }
 }
