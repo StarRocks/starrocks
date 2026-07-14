@@ -28,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/types.h"
+#include "storage/variant_tuple.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "storage_primitive/schema_helper.h"
 #include "types/storage_type_traits.h"
@@ -303,6 +304,152 @@ bool tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const Tup
     return tuple_pb_equal(lhs, rhs);
 }
 } // namespace
+
+namespace {
+// Defensive caps applied to an untrusted range before any per-value decoding, to bound allocation.
+constexpr int kMaxRangeSortKeyArity = 128;
+constexpr int64_t kMaxRangeValueBytes = 16LL * 1024 * 1024;  // per value
+constexpr int64_t kMaxRangeTotalBytes = 64LL * 1024 * 1024;  // whole range (both bounds)
+} // namespace
+
+Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, const TabletSchema& new_schema) {
+    // Half-open flags + bound presence: lower inclusive / upper exclusive when set.
+    RETURN_IF_ERROR(validate_tablet_range(range));
+
+    // A fully unbounded range (Range.all) is always well-formed.
+    if (!range.has_lower_bound() && !range.has_upper_bound()) {
+        return Status::OK();
+    }
+
+    const auto& sort_key_idxes = new_schema.sort_key_idxes();
+    const int arity = static_cast<int>(sort_key_idxes.size());
+    if (arity <= 0) {
+        return Status::Corruption("range validation requires a non-empty sort key");
+    }
+
+    int64_t total_bytes = 0;
+    auto check_bound = [&](const TuplePB& tuple, const char* which) -> Status {
+        // Size caps are checked before decoding any value.
+        if (tuple.values_size() > kMaxRangeSortKeyArity) {
+            return Status::Corruption(fmt::format("range {} bound arity {} exceeds cap {}", which, tuple.values_size(),
+                                                  kMaxRangeSortKeyArity));
+        }
+        if (tuple.values_size() != arity) {
+            return Status::Corruption(fmt::format("range {} bound arity {} != effective sort-key arity {}", which,
+                                                  tuple.values_size(), arity));
+        }
+        for (int i = 0; i < arity; ++i) {
+            const auto& v = tuple.values(i);
+            if (v.value().size() > static_cast<size_t>(kMaxRangeValueBytes)) {
+                return Status::Corruption(fmt::format("range {} value {} size {} exceeds cap {}", which, i,
+                                                      v.value().size(), kMaxRangeValueBytes));
+            }
+            total_bytes += static_cast<int64_t>(v.value().size());
+            if (total_bytes > kMaxRangeTotalBytes) {
+                return Status::Corruption(
+                        fmt::format("range total value bytes exceed cap {}", kMaxRangeTotalBytes));
+            }
+            if (!v.has_type()) {
+                return Status::Corruption(fmt::format("range {} value {} is missing a type", which, i));
+            }
+            const auto type_desc = TypeDescriptor::from_protobuf(v.type());
+            const auto& col = new_schema.column(sort_key_idxes[i]);
+            if (type_desc.type != col.type()) {
+                return Status::Corruption(fmt::format("range {} value {} type {} != sort-key column type {}", which, i,
+                                                      static_cast<int>(type_desc.type), static_cast<int>(col.type())));
+            }
+        }
+        return Status::OK();
+    };
+
+    if (range.has_lower_bound()) {
+        RETURN_IF_ERROR(check_bound(range.lower_bound(), "lower"));
+    }
+    if (range.has_upper_bound()) {
+        RETURN_IF_ERROR(check_bound(range.upper_bound(), "upper"));
+    }
+
+    // Typed lower < upper when both bounds are present.
+    if (range.has_lower_bound() && range.has_upper_bound()) {
+        VariantTuple lower;
+        VariantTuple upper;
+        RETURN_IF_ERROR(lower.from_proto(range.lower_bound()));
+        RETURN_IF_ERROR(upper.from_proto(range.upper_bound()));
+        if (lower.compare(upper) >= 0) {
+            return Status::Corruption("range lower bound must be strictly less than upper bound");
+        }
+    }
+    return Status::OK();
+}
+
+Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
+                                                    const TabletRangePB& new_range) {
+    // 1. The schema change must be exactly a trailing sort-key ADD: the existing effective sort key
+    //    is preserved by unique id/type/order and exactly one new trailing sort key is appended.
+    auto old_schema = TabletSchema::create(old_meta.schema());
+    const auto& old_sk = old_schema->sort_key_idxes();
+    const auto& new_sk = new_schema.sort_key_idxes();
+    if (new_sk.size() != old_sk.size() + 1) {
+        return Status::Corruption(
+                fmt::format("trailing sort-key ADD requires exactly one new sort key: old sort key size {}, new {}",
+                            old_sk.size(), new_sk.size()));
+    }
+    for (size_t i = 0; i < old_sk.size(); ++i) {
+        const auto& oc = old_schema->column(old_sk[i]);
+        const auto& nc = new_schema.column(new_sk[i]);
+        if (oc.unique_id() != nc.unique_id() || oc.type() != nc.type()) {
+            return Status::Corruption(
+                    fmt::format("existing sort key {} changed across the trailing ADD (unique id/type)", i));
+        }
+    }
+
+    // 2. Each present bound of new_range == the corresponding bound of old_meta.range() with exactly
+    //    one trailing typed NULL_VALUE appended; bound presence and inclusivity are unchanged; and a
+    //    fully unbounded range (Range.all) stays fully unbounded.
+    const auto& old_range = old_meta.range();
+    if (old_range.has_lower_bound() != new_range.has_lower_bound() ||
+        old_range.has_upper_bound() != new_range.has_upper_bound()) {
+        return Status::Corruption("range bound presence changed across the trailing ADD");
+    }
+    if (old_range.has_lower_bound() && old_range.lower_bound_included() != new_range.lower_bound_included()) {
+        return Status::Corruption("range lower bound inclusivity changed across the trailing ADD");
+    }
+    if (old_range.has_upper_bound() && old_range.upper_bound_included() != new_range.upper_bound_included()) {
+        return Status::Corruption("range upper bound inclusivity changed across the trailing ADD");
+    }
+
+    const auto& new_trailing_col = new_schema.column(new_sk[new_sk.size() - 1]);
+    auto check_bound = [&](bool has, const TuplePB& old_tuple, const TuplePB& new_tuple, const char* which) -> Status {
+        if (!has) {
+            return Status::OK();
+        }
+        if (new_tuple.values_size() != old_tuple.values_size() + 1) {
+            return Status::Corruption(fmt::format("range {} bound must gain exactly one trailing value", which));
+        }
+        for (int i = 0; i < old_tuple.values_size(); ++i) {
+            if (!google::protobuf::util::MessageDifferencer::Equals(new_tuple.values(i), old_tuple.values(i))) {
+                return Status::Corruption(fmt::format("range {} bound prefix changed across the trailing ADD", which));
+            }
+        }
+        const auto& trailing = new_tuple.values(new_tuple.values_size() - 1);
+        if (trailing.variant_type() != VariantTypePB::NULL_VALUE) {
+            return Status::Corruption(fmt::format("range {} bound trailing value must be the NULL sentinel", which));
+        }
+        if (!trailing.has_type()) {
+            return Status::Corruption(fmt::format("range {} bound trailing value is missing a type", which));
+        }
+        const auto type_desc = TypeDescriptor::from_protobuf(trailing.type());
+        if (type_desc.type != new_trailing_col.type()) {
+            return Status::Corruption(fmt::format("range {} bound trailing NULL type {} != new sort-key column type {}",
+                                                  which, static_cast<int>(type_desc.type),
+                                                  static_cast<int>(new_trailing_col.type())));
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(check_bound(old_range.has_lower_bound(), old_range.lower_bound(), new_range.lower_bound(), "lower"));
+    RETURN_IF_ERROR(check_bound(old_range.has_upper_bound(), old_range.upper_bound(), new_range.upper_bound(), "upper"));
+    return Status::OK();
+}
 
 Status TabletRangeHelper::validate_new_tablet_ranges(
         const TabletRangePB& old_tablet_range,

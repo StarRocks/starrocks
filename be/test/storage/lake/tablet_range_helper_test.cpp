@@ -966,4 +966,310 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_happy_path_unbounded_pare
     ASSERT_TRUE(s.ok()) << s;
 }
 
+// =============================================================================
+// validate_range_structural / validate_range_transition: schema-aware validators
+// for the metadata-only trailing sort-key ADD.
+// =============================================================================
+
+namespace {
+
+// Builds a DUP schema whose first `num_sort_keys` INT columns are the (contiguous) sort key,
+// followed by a single INT value column. Unique ids are stable (100, 101, ...) so a transition
+// schema can share the prefix uids. The trailing sort-key column is nullable to allow a NULL
+// boundary sentinel.
+static TabletSchemaSPtr make_range_schema(int num_sort_keys, int64_t schema_id = 1) {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(schema_id);
+    pb.set_num_short_key_columns(1);
+    for (int i = 0; i < num_sort_keys; ++i) {
+        auto* c = pb.add_column();
+        c->set_unique_id(100 + i);
+        c->set_name("k" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(i == num_sort_keys - 1);
+        c->set_aggregation("NONE");
+        pb.add_sort_key_idxes(i);
+    }
+    auto* v = pb.add_column();
+    v->set_unique_id(200);
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(true);
+    v->set_aggregation("NONE");
+    return TabletSchema::create(pb);
+}
+
+static void add_int_val(TuplePB* t, int32_t v) {
+    auto* pb = t->add_values();
+    TypeDescriptor td(TYPE_INT);
+    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->set_value(std::to_string(v));
+    pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
+}
+
+static void add_typed_val(TuplePB* t, LogicalType lt, const std::string& v) {
+    auto* pb = t->add_values();
+    TypeDescriptor td(lt);
+    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->set_value(v);
+    pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
+}
+
+static void add_null_val(TuplePB* t, LogicalType lt = TYPE_INT) {
+    auto* pb = t->add_values();
+    TypeDescriptor td(lt);
+    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->set_variant_type(VariantTypePB::NULL_VALUE);
+}
+
+} // namespace
+
+TEST(TabletRangeHelperTest, validate_range_structural_accepts_well_formed) {
+    auto schema = make_range_schema(2);
+    // [(1, NULL), (2, NULL))
+    TabletRangePB range;
+    add_int_val(range.mutable_lower_bound(), 1);
+    add_null_val(range.mutable_lower_bound());
+    add_int_val(range.mutable_upper_bound(), 2);
+    add_null_val(range.mutable_upper_bound());
+    range.set_lower_bound_included(true);
+    range.set_upper_bound_included(false);
+    ASSERT_OK(TabletRangeHelper::validate_range_structural(range, *schema));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_accepts_range_all) {
+    auto schema = make_range_schema(2);
+    TabletRangePB range; // both bounds unbounded
+    ASSERT_OK(TabletRangeHelper::validate_range_structural(range, *schema));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_rejects_wrong_arity) {
+    auto schema = make_range_schema(2);
+    TabletRangePB range;
+    add_int_val(range.mutable_lower_bound(), 1); // only 1 value, schema wants 2
+    range.set_lower_bound_included(true);
+    auto s = TabletRangeHelper::validate_range_structural(range, *schema);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("arity"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_rejects_wrong_variant_type) {
+    auto schema = make_range_schema(2);
+    TabletRangePB range;
+    add_int_val(range.mutable_lower_bound(), 1);
+    add_typed_val(range.mutable_lower_bound(), TYPE_BIGINT, "5"); // should be INT
+    add_int_val(range.mutable_upper_bound(), 2);
+    add_null_val(range.mutable_upper_bound());
+    range.set_lower_bound_included(true);
+    range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_structural(range, *schema);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("type"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_rejects_reversed_bounds) {
+    auto schema = make_range_schema(2);
+    // lower=(5,NULL) > upper=(2,NULL)
+    TabletRangePB range;
+    add_int_val(range.mutable_lower_bound(), 5);
+    add_null_val(range.mutable_lower_bound());
+    add_int_val(range.mutable_upper_bound(), 2);
+    add_null_val(range.mutable_upper_bound());
+    range.set_lower_bound_included(true);
+    range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_structural(range, *schema);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("less than"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_rejects_missing_half_open_flag) {
+    auto schema = make_range_schema(2);
+    TabletRangePB range;
+    add_int_val(range.mutable_lower_bound(), 1);
+    add_null_val(range.mutable_lower_bound());
+    // lower_bound present but lower_bound_included flag omitted.
+    auto s = TabletRangeHelper::validate_range_structural(range, *schema);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("lower_bound_included is required"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_structural_rejects_oversized_arity) {
+    auto schema = make_range_schema(2);
+    TabletRangePB range;
+    for (int i = 0; i < 200; ++i) { // far beyond the arity cap
+        add_int_val(range.mutable_lower_bound(), i);
+    }
+    range.set_lower_bound_included(true);
+    auto s = TabletRangeHelper::validate_range_structural(range, *schema);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("cap"));
+}
+
+// ---- validate_range_transition (apply only) ----
+
+namespace {
+
+// old_meta = schema with `old_sort_keys` sort keys + range [(lo..),(hi..)) using leading INT value
+// `lo`/`hi` and trailing NULLs to fill the remaining sort-key positions.
+static TabletMetadataPB make_old_meta(int old_sort_keys, std::optional<int32_t> lo, std::optional<int32_t> hi) {
+    TabletMetadataPB meta;
+    auto schema = make_range_schema(old_sort_keys, /*schema_id=*/7);
+    schema->to_schema_pb(meta.mutable_schema());
+    auto* range = meta.mutable_range();
+    if (lo.has_value()) {
+        add_int_val(range->mutable_lower_bound(), *lo);
+        for (int i = 1; i < old_sort_keys; ++i) add_null_val(range->mutable_lower_bound());
+        range->set_lower_bound_included(true);
+    }
+    if (hi.has_value()) {
+        add_int_val(range->mutable_upper_bound(), *hi);
+        for (int i = 1; i < old_sort_keys; ++i) add_null_val(range->mutable_upper_bound());
+        range->set_upper_bound_included(false);
+    }
+    return meta;
+}
+
+} // namespace
+
+TEST(TabletRangeHelperTest, validate_range_transition_accepts_trailing_null_add) {
+    // old: 1 sort key, range [(1),(2)); new: 2 sort keys, range [(1,NULL),(2,NULL)).
+    auto old_meta = make_old_meta(1, 1, 2);
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+    ASSERT_OK(TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_accepts_range_all_stays_all) {
+    auto old_meta = make_old_meta(1, std::nullopt, std::nullopt); // Range.all()
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range; // still all
+    ASSERT_OK(TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_altered_prefix) {
+    auto old_meta = make_old_meta(1, 1, 2);
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 9); // prefix changed (was 1)
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("prefix"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_changed_inclusivity) {
+    auto old_meta = make_old_meta(1, 1, 2);
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(false); // old was inclusive
+    new_range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("inclusiv"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_range_all_to_non_all) {
+    auto old_meta = make_old_meta(1, std::nullopt, std::nullopt); // Range.all()
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range; // becomes bounded
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_null_val(new_range.mutable_lower_bound());
+    new_range.set_lower_bound_included(true);
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("presence"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_non_trailing_add) {
+    // new schema changes the existing sort key's unique id -> not a trailing ADD.
+    auto old_meta = make_old_meta(1, 1, 2);
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(8);
+    pb.set_num_short_key_columns(1);
+    {
+        auto* c = pb.add_column();
+        c->set_unique_id(999); // changed from 100
+        c->set_name("k0");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+        c->set_aggregation("NONE");
+        pb.add_sort_key_idxes(0);
+    }
+    {
+        auto* c = pb.add_column();
+        c->set_unique_id(101);
+        c->set_name("k1");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(true);
+        c->set_aggregation("NONE");
+        pb.add_sort_key_idxes(1);
+    }
+    {
+        auto* v = pb.add_column();
+        v->set_unique_id(200);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(true);
+        v->set_aggregation("NONE");
+    }
+    auto new_schema = TabletSchema::create(pb);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("sort key"));
+}
+
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_trailing_not_null) {
+    // new trailing value is a normal value instead of the NULL sentinel.
+    auto old_meta = make_old_meta(1, 1, 2);
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_int_val(new_range.mutable_lower_bound(), 7); // should be NULL
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("NULL"));
+}
+
 } // namespace starrocks::lake

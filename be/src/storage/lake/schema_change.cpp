@@ -32,6 +32,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -42,6 +43,7 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
+#include "storage/tablet_schema.h"
 #include "storage_primitive/flat_json_config.h"
 
 namespace starrocks::lake {
@@ -535,7 +537,21 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
     auto timer = MonotonicStopWatch{};
     timer.start();
-    LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
+    if (tablet_meta_info.__isset.range) {
+        // A populated range carries raw user boundary values; do not log them. Log the other fields
+        // as before, and describe the range only by tablet id and per-bound arity.
+        TTabletMetaInfo redacted = tablet_meta_info;
+        redacted.__isset.range = false;
+        const int lower_arity =
+                tablet_meta_info.range.__isset.lower_bound ? tablet_meta_info.range.lower_bound.values.size() : -1;
+        const int upper_arity =
+                tablet_meta_info.range.__isset.upper_bound ? tablet_meta_info.range.upper_bound.values.size() : -1;
+        LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(redacted)
+                  << " tablet_id: " << tablet_meta_info.tablet_id << " range lower arity: " << lower_arity
+                  << " range upper arity: " << upper_arity;
+    } else {
+        LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
+    }
 
     auto tablet_id = tablet_meta_info.tablet_id;
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));
@@ -561,6 +577,19 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         if (tablet_meta_info.create_schema_file) {
             RETURN_IF_ERROR(_tablet_manager->create_schema_file(tablet_id, *new_schema));
         }
+    }
+
+    if (tablet_meta_info.__isset.range) {
+        // A range must always travel with the schema it is to be interpreted against.
+        if (!tablet_meta_info.__isset.tablet_schema) {
+            return Status::Corruption("tablet meta update carries a range without a tablet schema");
+        }
+        ASSIGN_OR_RETURN(auto pb_range, TabletRangeHelper::convert_t_range_to_pb_range(tablet_meta_info.range));
+        // Build has no authoritative base metadata version, so only structural checks are possible
+        // here; the exact trailing-ADD transition is validated at apply.
+        auto new_schema = TabletSchema::create(metadata_update_info->tablet_schema());
+        RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(pb_range, *new_schema));
+        metadata_update_info->mutable_range()->CopyFrom(pb_range);
     }
 
     // TODO(zhangqiang)

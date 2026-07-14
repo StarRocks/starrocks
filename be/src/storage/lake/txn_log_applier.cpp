@@ -36,9 +36,11 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
@@ -71,12 +73,43 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // Try to remove the index from the index cache
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
+        // A range-carrying update is a metadata-only trailing sort-key ADD: the schema arity grows by
+        // one and every tablet bound gains a trailing NULL sentinel. Validate the change against the
+        // metadata as it stands (old schema + old range), archive the pre-alter schema without
+        // clearing existing history, then install the new schema and range. This path is independent
+        // of `lake_enable_alter_struct` and must not touch the clearing branch below.
+        if (alter_meta.has_range()) {
+            if (!alter_meta.has_tablet_schema()) {
+                return Status::Corruption("alter metadata carries a range without a tablet schema");
+            }
+            auto new_schema = TabletSchema::create(alter_meta.tablet_schema());
+            RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(alter_meta.range(), *new_schema));
+            RETURN_IF_ERROR(TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.range()));
+
+            // Non-clearing archival of the pre-alter schema: map every currently-unmapped rowset to
+            // the current schema id, and record the current schema in history only if it is absent.
+            auto& old_schema = metadata->schema();
+            bool record_old_schema_in_history = false;
+            for (const auto& rowset : metadata->rowsets()) {
+                if (metadata->rowset_to_schema().count(rowset.id()) <= 0) {
+                    record_old_schema_in_history = true;
+                    metadata->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
+                }
+            }
+            if (record_old_schema_in_history && metadata->historical_schemas().count(old_schema.id()) <= 0) {
+                auto& item = (*metadata->mutable_historical_schemas())[old_schema.id()];
+                item.CopyFrom(old_schema);
+            }
+
+            metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
+            metadata->mutable_range()->CopyFrom(alter_meta.range());
+        }
         // update tablet meta
         // 1. rowset_to_schema is empty, maybe upgrade from old version or first time to do fast ddl. So we will
         //    add the tablet schema before alter into historical schema.
         // 2. rowset_to_schema is not empty, no need to update historical schema because we historical schema already
         //    keep the tablet schema before alter.
-        if (alter_meta.has_tablet_schema()) {
+        else if (alter_meta.has_tablet_schema()) {
             VLOG(2) << "old schema: " << metadata->schema().DebugString()
                     << " new schema: " << alter_meta.tablet_schema().DebugString();
             // add/drop field for struct column is under testing, To avoid impacting the existing logic, add the

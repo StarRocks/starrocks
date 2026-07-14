@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/sst_seek_range.h"
 #include "storage/seek_range.h"
@@ -73,6 +74,27 @@ public:
     static Status validate_new_tablet_ranges(
             const TabletRangePB& old_tablet_range,
             const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges);
+
+    // Schema-aware structural validation of a single tablet range against the schema it will be
+    // interpreted with. Used at BOTH build (before the txn log is written) and apply. Checks, in
+    // order: half-open flags (lower inclusive / upper exclusive when set); defensive size caps
+    // (per-bound arity, per-value bytes, total range bytes) applied before any value decoding; the
+    // per-bound arity equals the schema's effective sort-key count; each value's logical type equals
+    // its sort-key column's type; and, when both bounds are present, the lower bound is strictly less
+    // than the upper bound under type-aware comparison. A fully unbounded range (Range.all) is
+    // accepted. Callers must ensure a schema is present whenever a range is present.
+    static Status validate_range_structural(const TabletRangePB& range, const TabletSchema& new_schema);
+
+    // Apply-only validation that the schema/range change is exactly a trailing sort-key ADD relative
+    // to the currently-installed metadata. Requires: the new effective sort key equals the old
+    // effective sort key plus exactly one new trailing column (existing sort-key unique-ids, types and
+    // order unchanged); each present bound of `new_range` equals the corresponding bound of
+    // `old_meta.range()` with exactly one trailing typed NULL_VALUE appended; bound presence and
+    // inclusivity are unchanged; and a fully unbounded (Range.all) range stays fully unbounded.
+    // Rejections return Status::Corruption. `new_schema` is the resolved new schema; the old schema
+    // and old range are read from `old_meta`.
+    static Status validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
+                                            const TabletRangePB& new_range);
 };
 
 } // namespace starrocks::lake
