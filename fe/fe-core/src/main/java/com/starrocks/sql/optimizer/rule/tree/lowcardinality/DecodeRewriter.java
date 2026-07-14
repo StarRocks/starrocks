@@ -278,8 +278,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Projection newProjection = rewriteProjection(join.getProjection(), info.inputStringColumns);
 
         PhysicalHashJoinOperator newJoin = new PhysicalHashJoinOperator(
-                join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate, newProjection,
-                join.getSkewColumn(), join.getSkewValues());
+                join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate,
+                join.getPredicateCommonOperators(), newProjection, join.getSkewColumn(), join.getSkewValues());
         newJoin.setSkewJoinFriend(join.getSkewJoinFriend().orElse(null));
 
         return rewriteOptExpression(optExpression, newJoin, info.outputStringColumns);
