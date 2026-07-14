@@ -741,6 +741,77 @@ TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
     ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
 }
 
+// Regression: after a metadata-only trailing sort-key add (N -> N+1), a reshard that runs later
+// stamps a per-rowset range in the CURRENT (N+1) sort key onto an old rowset that still carries its
+// archived (N) schema. get_seek_range must decode that range with the current schema (whose sort-key
+// arity matches the range), not the archived rowset schema, otherwise the read fails with an arity
+// mismatch ("expected N, actual N+1").
+TEST_F(LakeRowsetTest, test_rowset_range_uses_current_schema_on_arity_mismatch) {
+    auto add_int_col = [](TabletSchemaPB* s, int uid, const std::string& name, bool is_key, bool nullable) {
+        auto* c = s->add_column();
+        c->set_unique_id(uid);
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_nullable(nullable);
+        c->set_is_key(is_key);
+        if (!is_key) {
+            c->set_aggregation("NONE");
+        }
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+
+    // Current schema: 2 sort keys (k1, k2) + value v; k2 is the trailing added key.
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(200);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    add_int_col(schema, 1, "k1", true, false);
+    add_int_col(schema, 2, "k2", true, true);
+    add_int_col(schema, 3, "v", false, true);
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+
+    // Archived pre-add schema: 1 sort key (k1) + value v.
+    constexpr int64_t kArchivedId = 100;
+    auto& archived = (*metadata->mutable_historical_schemas())[kArchivedId];
+    archived.set_id(kArchivedId);
+    archived.set_keys_type(DUP_KEYS);
+    archived.set_num_short_key_columns(1);
+    archived.set_num_rows_per_row_block(65535);
+    add_int_col(&archived, 1, "k1", true, false);
+    add_int_col(&archived, 3, "v", false, true);
+    archived.add_sort_key_idxes(0);
+
+    // One rowset mapped to the archived (arity-1) schema, carrying a current-arity (2-value) range.
+    auto* rs = metadata->add_rowsets();
+    rs->set_id(10);
+    rs->set_overlapped(false);
+    rs->set_num_rows(0);
+    rs->set_data_size(0);
+    (*metadata->mutable_rowset_to_schema())[10] = kArchivedId;
+    {
+        auto* range = rs->mutable_range();
+        auto* lo = range->mutable_lower_bound();
+        *lo->add_values() = make_int_variant_pb(1);
+        *lo->add_values() = make_int_variant_pb(10);
+        range->set_lower_bound_included(true);
+        auto* hi = range->mutable_upper_bound();
+        *hi->add_values() = make_int_variant_pb(100);
+        *hi->add_values() = make_int_variant_pb(20);
+        range->set_upper_bound_included(false);
+    }
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    // Without the fix this returns an arity-mismatch error (archived arity-1 schema vs arity-2 range).
+    ASSIGN_OR_ABORT(auto seek_range, rowset->get_seek_range());
+    ASSERT_TRUE(seek_range.has_value());
+}
+
 TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
     create_rowsets_for_testing();
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
