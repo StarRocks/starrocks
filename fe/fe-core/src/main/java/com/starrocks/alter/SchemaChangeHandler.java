@@ -5030,6 +5030,14 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        // The metadata-only route adds exactly one column: the trailing sort key. A single ADD COLUMNS
+        // clause that co-adds other new columns (e.g. a value column needing materialization such as an
+        // AUTO_INCREMENT, generated, or non-constant-default column) must fall through to the data-rewrite
+        // path, which materializes them; classifying it as metadata-only would install the new schema
+        // without materializing those columns' values for existing rows.
+        if (newSchema.size() != oldSchema.size() + 1) {
+            return false;
+        }
         Set<Integer> oldUniqueIds = new HashSet<>();
         for (Column column : oldSchema) {
             oldUniqueIds.add(column.getUniqueId());

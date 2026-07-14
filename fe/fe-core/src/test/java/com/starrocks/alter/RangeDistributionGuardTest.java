@@ -991,6 +991,59 @@ public class RangeDistributionGuardTest {
         assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
+    /**
+     * A single ADD COLUMNS clause that co-adds the trailing key AND another brand-new (value) column
+     * must NOT be classified as metadata-only: the extra column may need materialization (e.g.
+     * AUTO_INCREMENT / generated / non-constant default) that the metadata-only path does not perform.
+     * The batch must fall through to the data-rewrite path, which materializes it.
+     */
+    @Test
+    public void testCoAddedValueColumnNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_coadd"));
+        OlapTable table = getTable("t_meta_coadd");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        // A second brand-new column co-added in the same clause: a value column.
+        Column newValueColumn = new Column("v_new", IntegerType.INT);
+        newValueColumn.setIsKey(false);
+        newValueColumn.setUniqueId(table.getMaxColUniqueId() + 2000);
+        newValueColumn.setDefaultValue("0");
+
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newValueColumn);
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(newKeyColumn.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
     @Test
     public void testMultiIndexTableNotMetadataOnly() throws Exception {
         starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_multi"));
