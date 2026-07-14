@@ -271,6 +271,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.2.4
 
+### cbo_cte_force_reuse_limit_without_order_by
+
+* **Description**: Controls how the optimizer handles a Common Table Expression (CTE) whose definition contains a `LIMIT` without an `ORDER BY`. When `true` (default), the optimizer (`ForceCTEReuseRule`) forces reuse of such a CTE so that every consumer reads the same rows, avoiding non-deterministic results caused by re-evaluating an unordered `LIMIT`. When `false`, the optimizer may inline the CTE instead, which can produce inconsistent results across consumers.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.10, v4.0.3, v4.1.0
+
 ### cbo_cte_force_reuse_node_count
 
 * **Description**: Session-scoped threshold that controls an optimizer shortcut for Common Table Expressions (CTEs). In RelationTransformer.visitCTE the planner counts nodes in a CTE producer tree (cteContext.getCteNodeCount). If that count is greater than or equal to this threshold and the threshold is greater than 0, the transformer forces reuse of the CTE: it skips inlining/transforming the producer plan, builds a consume operator with precomputed expression mappings (no inputs) and uses generated column refs instead. This reduces optimizer time for very large CTE producer trees at the cost of potentially less optimal physical plans. Setting the value to `0` disables the force-reuse optimization. This variable has a getter/setter in SessionVariable and is applied per session.
@@ -279,12 +287,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: int
 * **Introduced in**: v3.5.3
 
+### cbo_cte_max_limit
+
+* **Description**: Limits the number of Common Table Expressions (CTEs) in a query that the optimizer will consider for CTE reuse. The value is passed to the CTE transformer (`CTETransformerContext`) during planning; queries containing more CTEs than this limit fall back to inlining rather than the reuse-based plan. Raising the value lets the optimizer apply CTE reuse to queries with more CTEs, at the cost of longer planning time.
+* **Scope**: Session
+* **Default**: `10`
+* **Data Type**: int
+* **Introduced in**: v2.5.0
+
 ### cbo_cte_reuse
 
 * **Description**: Controls whether the optimizer may rewrite multi-distinct aggregate queries by reusing a Common Table Expression (CTE) (the CBO CTE‑reuse rewrite). When enabled, the planner (RewriteMultiDistinctRule) may choose a CTE-based rewrite for multi-column distincts, skewed aggregations, or when statistics indicate the CTE rewrite is more efficient; it also respects the `prefer_cte_rewrite` hint. When disabled, CTE-based rewrite is not allowed and the planner will attempt the multi-function rewrite; if a query requires CTE (for example, multi-column DISTINCT or functions that cannot be handled by multi-function rewrite) the planner will raise a user error. Note: the effective setting checked by the optimizer is the logical AND of this flag and the pipeline engine flag — i.e. `isCboCteReuse()` returns this variable AND `enablePipelineEngine`, so CTE reuse is only effective when `enablePipelineEngine` is on.
 * **Default**: `true`
 * **Data Type**: Boolean
 * **Introduced in**: `v3.2.0`
+
+### cbo_cte_reuse_rate
+
+* **Description**: Controls the cost ratio the optimizer uses to decide whether reusing a Common Table Expression (CTE) is cheaper than inlining it. When cost-based, a larger value raises the estimated cost of CTE reuse (the CTE anchor memory cost is estimated as `produce_size * (1 + rate)` in `CostModel`), making the optimizer less likely to reuse the CTE. The value also has two special cases:
+  * `< 0`: disable CTE reuse and always inline the CTE.
+  * `0`: always reuse the CTE.
+  * `> 0`: choose reuse or inline based on cost, weighted by this ratio.
+
+  The internal implementation name is `cbo_cte_reuse_rate_v2`; `cbo_cte_reuse_rate` is the name shown in `SHOW VARIABLES` and used to set the variable.
+* **Scope**: Session
+* **Default**: `1.15`
+* **Data Type**: double
+* **Introduced in**: v2.2.0
 
 ### cbo_disabled_rules
 
@@ -1571,6 +1600,14 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
   * `never`: Never cache the data.
 * **Default**: auto
 * **Introduced in**: v3.3.2
+
+### prefer_cte_rewrite
+
+* **Description**: Controls whether the optimizer prefers a Common Table Expression (CTE) based rewrite for multi-distinct aggregate queries. When `true` and `cbo_cte_reuse` is also enabled, `RewriteMultiDistinctRule` chooses the CTE-based rewrite over the multi-function rewrite for queries with multiple distinct aggregates. When `false` (default), the optimizer relies on its normal cost/statistics heuristics to decide between the CTE and multi-function rewrites.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: Boolean
+* **Introduced in**: v3.2.0
 
 ### query_cache_agg_cardinality_limit
 

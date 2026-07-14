@@ -254,6 +254,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v3.2.4
 
+### cbo_cte_force_reuse_limit_without_order_by
+
+* **描述**: 控制优化器如何处理定义中包含 `LIMIT` 但没有 `ORDER BY` 的公用表表达式（CTE）。为 `true`（默认）时，优化器（`ForceCTEReuseRule`）会强制重用此类 CTE，使每个消费者读取相同的行，从而避免因重新计算无序的 `LIMIT` 而产生的不确定结果。为 `false` 时，优化器可能会内联该 CTE，这可能导致各消费者之间结果不一致。
+* **范围**: Session
+* **默认值**: `true`
+* **数据类型**: Boolean
+* **引入版本**: v3.5.10、v4.0.3、v4.1.0
+
 ### cbo_cte_force_reuse_node_count
 
 * **描述**: 会话级阈值，用于控制优化器对公用表表达式（CTE）的一种快捷处理。在 RelationTransformer.visitCTE 中，规划器会统计 CTE 生产者树中的节点数（cteContext.getCteNodeCount）。如果该计数大于或等于此阈值且阈值大于 0，则 transformer 强制重用该 CTE：跳过对生产者计划的内联/转换，构建一个带有预计算表达式映射（无输入）的 consume 操作符，并改用生成的列引用。这样可以在面对非常大的 CTE 生产者树时减少优化器时间，但可能以生成的物理计划不是最优为代价。将该值设置为 `0` 可禁用强制重用优化。此变量在 SessionVariable 中有 getter/setter，并按会话应用。
@@ -262,12 +270,33 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: int
 * **引入版本**: v3.5.3
 
+### cbo_cte_max_limit
+
+* **描述**: 限制优化器在一个查询中考虑进行 CTE 重用的公用表表达式（CTE）数量。规划期间该值会传递给 CTE transformer（`CTETransformerContext`）；当查询包含的 CTE 数量超过此限制时，会回退到内联而不是基于重用的计划。提高该值可让优化器对包含更多 CTE 的查询应用 CTE 重用，但会增加规划时间。
+* **范围**: Session
+* **默认值**: `10`
+* **数据类型**: int
+* **引入版本**: v2.5.0
+
 ### cbo_cte_reuse
 
 * **描述**: 控制优化器是否可以通过重用 Common Table Expression (CTE) 重写 multi-distinct 聚合查询（CBO 的 CTE‑reuse 重写）。启用时，Planner ）可能会为多列 DISTINCT、偏斜聚合或当统计信息表明 CTE 重写更高效时选择基于 CTE 的重写；此配置项也会尊重 `prefer_cte_rewrite` hint。禁用时，不允许基于 CTE 的重写，Planner 将尝试 multi-function 重写；如果查询需要 CTE（例如，多列 DISTINCT 或 multi-function 重写无法处理的函数），Planner 将抛出错误。注意：只有在 Pipeline Engine 打开时 CTE 重用才生效。
 * **默认值**: `true`
 * **数据类型**: Boolean
 * **引入版本**: v3.2.0
+
+### cbo_cte_reuse_rate
+
+* **描述**: 控制优化器用于判断重用公用表表达式（CTE）是否比内联更划算的成本比率。在基于成本判断时，该值越大，CTE 重用的估算成本越高（在 `CostModel` 中，CTE anchor 的内存成本估算为 `produce_size * (1 + rate)`），优化器越不倾向于重用该 CTE。该值还有两个特殊取值：
+  * `< 0`：禁用 CTE 重用，始终内联 CTE。
+  * `0`：始终重用 CTE。
+  * `> 0`：根据成本（按此比率加权）在重用与内联之间选择。
+
+  内部实现名称为 `cbo_cte_reuse_rate_v2`；`cbo_cte_reuse_rate` 是 `SHOW VARIABLES` 中显示以及用于设置该变量的名称。
+* **范围**: Session
+* **默认值**: `1.15`
+* **数据类型**: double
+* **引入版本**: v2.2.0
 
 ### cbo_disabled_rules
 
@@ -1336,6 +1365,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
+
+### prefer_cte_rewrite
+
+* **描述**: 控制优化器是否优先对 multi-distinct 聚合查询采用基于公用表表达式（CTE）的重写。为 `true` 且同时启用了 `cbo_cte_reuse` 时，`RewriteMultiDistinctRule` 会为包含多个 distinct 聚合的查询选择基于 CTE 的重写，而不是 multi-function 重写。为 `false`（默认）时，优化器依据常规的成本/统计信息启发式规则在 CTE 重写与 multi-function 重写之间做出选择。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: Boolean
+* **引入版本**: v3.2.0
 
 ### query_cache_agg_cardinality_limit
 
