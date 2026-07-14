@@ -1738,6 +1738,26 @@ public class OlapTable extends Table {
         }
 
         lastSchemaUpdateTime = new AtomicLong(-1);
+
+        // Keep the FE metadata of shared-data primary-key tables on the cloud-native persistent
+        // index after an image load (mirrors the BE normalization). See the method for details.
+        normalizeCloudNativePersistentIndex();
+    }
+
+    // Shared-data primary-key tables only support the cloud-native persistent index; the local-disk
+    // and in-memory indexes are deprecated (enforced on CREATE/ALTER by OlapTableFactory and
+    // SchemaChangeHandler, and on the BE by normalize_tablet_metadata_after_load). Upgrade any table
+    // created before that restriction so the FE metadata matches what the BE actually runs, keeping
+    // SHOW CREATE TABLE and FE-driven tablet tasks consistent. Idempotent; touches shared-data
+    // primary-key tables only. Invoked both on image load (gsonPostProcess) and on lake alter-meta
+    // replay (LakeTableAlterMetaJob.updateCatalog), so a legacy alter log cannot leave the table on
+    // a deprecated index type after startup.
+    public void normalizeCloudNativePersistentIndex() {
+        if (tableProperty != null && isCloudNativeTable() && getKeysType() == KeysType.PRIMARY_KEYS
+                && (!enablePersistentIndex() || getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE)) {
+            setEnablePersistentIndex(true);
+            setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
+        }
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
