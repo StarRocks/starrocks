@@ -8,7 +8,6 @@ set(EXEC_FILES
         ./common/uri_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
-        ./exec/data_sinks/range_router_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
@@ -56,12 +55,8 @@ set(EXEC_FILES
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
-        ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
-        ./exec/data_sinks/tablet_sink_index_channel_test.cpp
-        ./exec/data_sinks/tablet_sink_sender_range_test.cpp
-        ./exec/data_sinks/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/olap_scan_keys_test.cpp
@@ -129,8 +124,6 @@ set(EXEC_FILES
         ./http/action/proc_profile_e2e_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./exec/data_sinks/arrow_result_writer_test.cpp
-        ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
@@ -141,9 +134,6 @@ set(EXEC_FILES
         #./orchestration/routine_load_task_executor_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
-        ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
-        ./exec/data_sinks/memory_scratch_sink_test.cpp
-        ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp

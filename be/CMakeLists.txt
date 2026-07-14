@@ -577,6 +577,14 @@ set(STARROCKS_LINK_LIBS
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
+    # Concrete data sinks are PRIVATE dependencies of Exec. Keep them in the
+    # main link list ahead of Storage, format, and thirdparty provider archives
+    # so one-pass static linkers see their unresolved references first.
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkTablet
+    DataSinkFile
     Storage
     # Connectors depend on the format libs and thirdparty archives below; keep ahead.
     ${WL_START_GROUP}

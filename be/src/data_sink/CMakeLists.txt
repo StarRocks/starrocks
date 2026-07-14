@@ -33,3 +33,122 @@ target_link_libraries(DataSinkFile PRIVATE
     Expr
     Gutil
 )
+
+ADD_BE_LIB(DataSinkResult
+    result/arrow_result_writer.cpp
+    result/buffer_control_result_writer.cpp
+    result/customized_result_writer.cpp
+    result/file_result_writer.cpp
+    result/http_result_writer.cpp
+    result/memory_scratch_sink.cpp
+    result/metadata_result_writer.cpp
+    result/mysql_result_writer.cpp
+    result/result_sink.cpp
+    result/statistic_result_writer.cpp
+    result/variable_result_writer.cpp
+)
+
+target_link_libraries(DataSinkResult PUBLIC
+    ComputeEnv
+    ExecPrimitive
+    FormatParquet
+    Runtime
+    FileSystem
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkResult PRIVATE
+    DataSinkFile
+    FormatCore
+    FormatCsv
+    Expr
+    Platform
+    Gutil
+)
+
+ADD_BE_LIB(DataSinkExchange
+    exchange/data_stream_sender.cpp
+    exchange/multi_cast_data_stream_sink.cpp
+)
+
+target_link_libraries(DataSinkExchange PUBLIC
+    ExecPrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkExchange PRIVATE
+    ComputeEnv
+    Expr
+    Gutil
+)
+
+ADD_BE_LIB(DataSinkExternal
+    external/blackhole_table_sink.cpp
+    external/export_sink.cpp
+    external/mysql_table_sink.cpp
+    external/mysql_table_writer.cpp
+    external/schema_table_sink.cpp
+)
+
+target_link_libraries(DataSinkExternal PUBLIC
+    ExecPrimitive
+    FormatCore
+    FormatCsv
+    Runtime
+    FileSystem
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkExternal PRIVATE
+    DataSinkFile
+    StoragePrimitive
+    Expr
+    Platform
+    Gutil
+)
+
+ADD_BE_LIB(DataSinkTablet
+    tablet/multi_olap_table_sink.cpp
+    tablet/range_router.cpp
+    tablet/range_tablet_sink_sender.cpp
+    tablet/tablet_sink.cpp
+    tablet/tablet_sink_colocate_sender.cpp
+    tablet/tablet_sink_index_channel.cpp
+    tablet/tablet_sink_sender.cpp
+)
+
+target_link_libraries(DataSinkTablet PUBLIC
+    StoragePrimitive
+    ExecPrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkTablet PRIVATE
+    Storage
+    ComputeEnv
+    Expr
+    Platform
+    Gutil
+)
