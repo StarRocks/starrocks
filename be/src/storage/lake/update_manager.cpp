@@ -235,7 +235,8 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
 
 DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
 
-StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata) {
+StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
+                                                             int64_t generation_version) {
     // Test-only escape hatch: reshard unit tests build hand-crafted metadata with no real
     // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
     // they exercise the metadata merge/split logic without materializing a real index.
@@ -283,7 +284,12 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     // mutable_metadata->sstable_meta(). builder.finalize() is NOT called
     // here — this flush does not produce its own metadata version; the
     // returned metadata is consumed by the surrounding reshard publish.
-    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder));
+    // This flush runs at base_version, but its freshly-flushed sstables first become
+    // visible to the split/merge children at the reshard publish version, so pass that
+    // as generation_version to commit(): it stamps those (new) sstables with it while
+    // inherited sstables (already present in the pre-commit sstable_meta) keep their
+    // recorded versions. The metadata version is left untouched.
+    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder, generation_version));
 
     // Success: dismiss the failure cleanup and release the cache entry.
     // write_guard is released when it goes out of scope at function return.

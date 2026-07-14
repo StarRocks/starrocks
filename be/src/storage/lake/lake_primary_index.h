@@ -67,7 +67,7 @@ public:
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
+    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t generation_version = 0);
 
     // Force any in-memory memtables of the cloud-native persistent index to
     // be flushed into sstables on shared storage. A no-op for LOCAL /

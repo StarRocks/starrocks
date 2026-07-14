@@ -1547,7 +1547,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     // the "reshard inputs must have full sstable coverage" invariant; merge
     // does the post-split half in merge_sstables.
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
-                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata));
+                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
 
     // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the
     // K-1 boundaries externally (external boundaries / external boundaries); BE computes
