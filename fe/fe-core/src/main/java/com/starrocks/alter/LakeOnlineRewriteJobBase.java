@@ -333,11 +333,11 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * Seam invoked lock-free after the shadow index tablets are built (PENDING stage 2) and before the
      * PENDING -&gt; WAITING_TXN commit, so a subclass can write each shadow tablet's version-1 metadata on
-     * the compute nodes. Default no-op: the replace-flavored range rewrite lets the compute node lazily
-     * materialize version-1 metadata on first read. The additive rollup overrides this: its shadow shards
-     * share the base index's per-partition storage path, so without an explicit CreateReplicaTask the
-     * compute node would lazily materialize a rollup tablet's version-1 metadata from the base index's
-     * shared initial-metadata template and read the BASE schema (wrong sort-key arity). Runs while the job
+     * the compute nodes. Default no-op. Both the range rewrite and the additive rollup override this:
+     * their shadow shards share the base index's per-partition storage path, so without an explicit
+     * CreateReplicaTask the compute node would lazily materialize a shadow tablet's version-1 metadata
+     * from the base index's shared initial-metadata template and read the BASE schema (a stale sort-key
+     * arity), which breaks the reshard/pre-split boundary validation. Runs while the job
      * is still PENDING (before the WAITING_TXN journal), so a failure leaves the job re-runnable: the
      * runPendingJob cleanup drops the orphaned shards and a retry rebuilds the shadow fresh. Must throw
      * AlterCancelException on failure.
@@ -406,8 +406,8 @@ public abstract class LakeOnlineRewriteJobBase
                 planPartitionShadow(plan, table, cachedDbName);
             }
 
-            // Write each shadow tablet's version-1 metadata on the compute nodes (default no-op; the
-            // additive rollup persists its own schema here). Still lock-free and still PENDING, so on any
+            // Write each shadow tablet's version-1 metadata on the compute nodes (default no-op; the range
+            // rewrite and the additive rollup persist their own schema here). Still lock-free and still PENDING, so on any
             // failure the finally below drops the orphaned shards and a retry rebuilds the shadow fresh.
             createShadowTabletMetadata(pendingPlans);
 
