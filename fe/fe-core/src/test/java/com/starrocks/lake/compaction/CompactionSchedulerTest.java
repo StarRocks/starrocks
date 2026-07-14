@@ -925,10 +925,10 @@ public class CompactionSchedulerTest {
     /**
      * Drive runOneCycle through scheduleNewCompaction and assert that
      * GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER is updated when a compaction job lands in
-     * runningCompactions. The gauge holds the centiscore of the most recent trigger, so after
-     * two partitions are scheduled it equals one of {4200, 9900} — whichever ran last. Uses
+     * runningCompactions. The gauge holds the rounded score of the most recent trigger, so after
+     * two partitions are scheduled it equals one of {42, 99} — whichever ran last. Uses
      * the same pattern as testCompactionWarehouseLimit but threads a real Quantiles through
-     * to the CompactionJob so the score-before getter is non-null and the centiscore update
+     * to the CompactionJob so the score-before getter is non-null and the score update
      * path is exercised.
      */
     @Test
@@ -992,11 +992,11 @@ public class CompactionSchedulerTest {
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
         // The two partitions feed Quantiles(42d) and Quantiles(99d); max() of a one-element
-        // list is that element, so the centiscore must be 4200 or 9900 depending on which
+        // list is that element, so the rounded score must be 42 or 99 depending on which
         // partition the scheduler scheduled last in this cycle.
         long gaugeAfter = MetricRepo.GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER.getValueLeader();
-        Assertions.assertTrue(gaugeAfter == 4200L || gaugeAfter == 9900L,
-                "Gauge should hold the centiscore of the most recent trigger; actual=" + gaugeAfter);
+        Assertions.assertTrue(gaugeAfter == 42L || gaugeAfter == 99L,
+                "Gauge should hold the rounded score of the most recent trigger; actual=" + gaugeAfter);
     }
 
     /**

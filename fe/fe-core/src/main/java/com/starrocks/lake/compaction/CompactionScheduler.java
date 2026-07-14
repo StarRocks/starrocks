@@ -249,13 +249,12 @@ public class CompactionScheduler extends Daemon {
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
             if (MetricRepo.hasInit) {
-                // Centiscore (score * 100) preserves two decimal places of precision in a long-valued gauge;
-                // Math.round avoids the systematic under-reporting introduced by a plain (long) truncation.
                 // Feed the partition's MAX tablet score because the trigger logic itself selects
-                // partitions by max score, so this metric reflects the same criterion.
+                // partitions by max score, so this metric reflects the same criterion. Rounded to
+                // the nearest integer for the long-valued gauge; sub-integer precision is not needed.
                 Quantiles scoreBefore = job.getScoreBefore();
                 if (scoreBefore != null) {
-                    MetricRepo.recordCompactionScoreAtTrigger(Math.round(scoreBefore.getMax() * 100));
+                    MetricRepo.recordCompactionScoreAtTrigger(Math.round(scoreBefore.getMax()));
                 }
             }
             LOG.debug("Started compaction, {}", job.getDebugString());
