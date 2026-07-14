@@ -152,6 +152,9 @@ ADD_BE_LIB(FormatParquet
         parquet/iceberg_row_id_reader.cpp
         parquet/row_source_reader.cpp
         parquet/parquet_pos_reader.cpp
+        puffin/deletion_vector_blob.cpp
+        puffin/puffin_writer.cpp
+        puffin/iceberg_dv_writer.cpp
         )
 
 target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)

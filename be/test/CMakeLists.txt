@@ -6,6 +6,9 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
+        ./formats/puffin/deletion_vector_blob_test.cpp
+        ./formats/puffin/puffin_writer_test.cpp
+        ./formats/puffin/iceberg_dv_writer_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp

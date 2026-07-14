@@ -14,38 +14,35 @@
 
 #include "formats/iceberg/iceberg_deletion_vector_reader.h"
 
-#include <zlib.h>
-
 #include <cstring>
 #include <vector>
 
 #include "common/runtime_profile.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/puffin/deletion_vector_format.h"
 #include "fs/fs.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::formats {
 
-const uint8_t IcebergDeletionVectorReader::MAGIC[4] = {0xD1, 0xD3, 0x39, 0x64};
-
 StatusOr<roaring64_bitmap_t*> IcebergDeletionVectorReader::parse_dv_blob(const uint8_t* data, int64_t size,
                                                                          int64_t record_count,
                                                                          IcebergDVBuildStats* stats) {
-    const int64_t min_size = LENGTH_PREFIX_BYTES + MAGIC_BYTES + CRC_BYTES;
+    const int64_t min_size = kDvLengthPrefixBytes + kDvMagicBytes + kDvCrcBytes;
     if (size < min_size) {
         return Status::Corruption(strings::Substitute("Iceberg DV blob too small: $0 bytes", size));
     }
 
     // 1) length prefix == size - 8 (length covers magic + body, excludes the 4B prefix and 4B crc).
     uint32_t length = BigEndian::Load32(data);
-    if (static_cast<int64_t>(length) != size - LENGTH_PREFIX_BYTES - CRC_BYTES) {
+    if (static_cast<int64_t>(length) != size - kDvLengthPrefixBytes - kDvCrcBytes) {
         return Status::Corruption(strings::Substitute("Iceberg DV length prefix mismatch: prefix=$0 expected=$1",
-                                                      length, size - LENGTH_PREFIX_BYTES - CRC_BYTES));
+                                                      length, size - kDvLengthPrefixBytes - kDvCrcBytes));
     }
 
     // 2) magic.
-    if (memcmp(data + LENGTH_PREFIX_BYTES, MAGIC, MAGIC_BYTES) != 0) {
+    if (memcmp(data + kDvLengthPrefixBytes, kDvBlobMagic, kDvMagicBytes) != 0) {
         return Status::Corruption("Iceberg DV magic mismatch");
     }
 
@@ -54,13 +51,11 @@ StatusOr<roaring64_bitmap_t*> IcebergDeletionVectorReader::parse_dv_blob(const u
         int64_t crc_ns = 0;
         {
             SCOPED_RAW_TIMER(&crc_ns);
-            uint32_t crc_expected = BigEndian::Load32(data + size - CRC_BYTES);
-            uLong crc = crc32(0L, Z_NULL, 0);
-            crc = crc32(crc, reinterpret_cast<const Bytef*>(data + LENGTH_PREFIX_BYTES),
-                        static_cast<uInt>(size - LENGTH_PREFIX_BYTES - CRC_BYTES));
-            if (static_cast<uint32_t>(crc) != crc_expected) {
-                return Status::Corruption(strings::Substitute("Iceberg DV crc mismatch: actual=$0 expected=$1",
-                                                              static_cast<uint32_t>(crc), crc_expected));
+            uint32_t crc_expected = BigEndian::Load32(data + size - kDvCrcBytes);
+            uint32_t crc = dv_blob_crc32(data + kDvLengthPrefixBytes, size - kDvLengthPrefixBytes - kDvCrcBytes);
+            if (crc != crc_expected) {
+                return Status::Corruption(
+                        strings::Substitute("Iceberg DV crc mismatch: actual=$0 expected=$1", crc, crc_expected));
             }
         }
         if (stats != nullptr) {
@@ -69,8 +64,8 @@ StatusOr<roaring64_bitmap_t*> IcebergDeletionVectorReader::parse_dv_blob(const u
     }
 
     // 4) deserialize the roaring64 portable body (between magic and crc).
-    const char* body = reinterpret_cast<const char*>(data + LENGTH_PREFIX_BYTES + MAGIC_BYTES);
-    int64_t body_len = size - LENGTH_PREFIX_BYTES - MAGIC_BYTES - CRC_BYTES;
+    const char* body = reinterpret_cast<const char*>(data + kDvLengthPrefixBytes + kDvMagicBytes);
+    int64_t body_len = size - kDvLengthPrefixBytes - kDvMagicBytes - kDvCrcBytes;
     roaring64_bitmap_t* bitmap = nullptr;
     {
         int64_t deser_ns = 0;

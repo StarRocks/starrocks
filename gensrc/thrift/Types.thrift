@@ -615,6 +615,24 @@ struct TIcebergDataFile {
     8: optional string partition_null_fingerprint;
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
+
+    // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    50: optional i64 content_offset
+    51: optional i64 content_size_in_bytes
+}
+
+// A previously-existing delete for a data file, handed to / returned by the BE
+// deletion-vector write path. `format` selects the BE reader ("puffin" | "parquet" | "orc").
+// content_offset / content_size_in_bytes are set only for PUFFIN (DV blob coordinates).
+struct TIcebergPreviousDeleteFile {
+    1: optional string path
+    2: optional string format
+    3: optional string referenced_data_file
+    4: optional i64 content_offset
+    5: optional i64 content_size_in_bytes
+    6: optional i64 record_count
+    7: optional bool file_scoped
 }
 
 struct THiveFileInfo {
@@ -627,11 +645,14 @@ struct THiveFileInfo {
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
-    // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
+
+    // Enterprise-only fields start at 150, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    150: optional list<TIcebergPreviousDeleteFile> rewritten_delete_files
 }
 
 struct TSnapshotInfo {

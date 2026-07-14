@@ -292,6 +292,13 @@ struct TIcebergTableSink {
     //   IcebergDeleteSink   (delete only) → delete_compression_type
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
+
+    // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // Iceberg table format version. BE selects the DV write sub-mode when >= 3.
+    50: optional i32 format_version
+    // Per-data-file previous deletes (old DV / position deletes) to merge into the new DV.
+    51: optional list<Types.TIcebergPreviousDeleteFile> previous_delete_files
 }
 
 struct THiveTableSink {

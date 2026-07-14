@@ -61,11 +61,6 @@ public:
     static StatusOr<roaring64_bitmap_t*> parse_dv_blob(const uint8_t* data, int64_t size, int64_t record_count,
                                                        IcebergDVBuildStats* stats);
 
-    static constexpr int32_t LENGTH_PREFIX_BYTES = 4;
-    static constexpr int32_t MAGIC_BYTES = 4;
-    static constexpr int32_t CRC_BYTES = 4;
-    static const uint8_t MAGIC[4];
-
 private:
     void update_counter(RuntimeProfile* parent_profile);
 
