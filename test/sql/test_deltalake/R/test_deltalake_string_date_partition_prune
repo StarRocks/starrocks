@@ -1,0 +1,42 @@
+-- name: test_deltalake_string_date_partition_prune
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part order by c1;
+-- result:
+1	2020-01-02
+2	2020-06-08
+3	2020-06-14
+4	2020-06-15
+5	2020-06-22
+-- !result
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = cast('2020-06-15' as date) - interval 1 day order by c1;
+-- result:
+3	2020-06-14
+-- !result
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = date_sub(cast('2020-06-15' as date), interval 1 day) order by c1;
+-- result:
+3	2020-06-14
+-- !result
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 >= cast('2020-06-15' as date) - interval 1 day order by c1;
+-- result:
+3	2020-06-14
+4	2020-06-15
+5	2020-06-22
+-- !result
+select c1, c2 from delta_test_${uuid0}.delta_oss_db.delta_str_date_part where c2 = '2020-06-14' order by c1;
+-- result:
+3	2020-06-14
+-- !result
+drop catalog delta_test_${uuid0};
+-- result:
+-- !result
