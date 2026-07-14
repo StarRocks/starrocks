@@ -96,40 +96,6 @@ set(EXPR_FILES
   match_expr.cpp
   ngram.cpp
   placeholder_ref.cpp
-  regexp_split.cpp
-  struct_functions.cpp
-  subfield_expr.cpp
-  table_function/json_each.cpp
-  time_functions.cpp
-  variant_path_reader.cpp
-  variant_functions.cpp
-)
-
-if(STARROCKS_JIT_ENABLE)
-  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
-      jit/ir_helper.cpp
-      jit/expr_jit_codegen.cpp)
-endif()
-
-ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore ColumnSortCore)
-
-set(EXPR_FILES
-  ds_theta_functions.cpp
-  agg/combinator/agg_state_utils.cpp
-  agg/aggregate_factory_exprs_extension.cpp
-  binary_functions.cpp
-  expr_factory_exprs_extension.cpp
-  table_function/table_function_factory.cpp
-  table_function/list_rowsets.cpp
-  array_functions.cpp
-  arrow_function_call.cpp
-  dictmapping_expr.cpp
-  find_in_set.cpp
-  function_call_expr.cpp
-  geo_functions.cpp
-  inet_aton.cpp
-  locate.cpp
   percentile_functions.cpp
   regexp_split.cpp
   split.cpp
@@ -158,6 +124,7 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
+  ds_theta_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
