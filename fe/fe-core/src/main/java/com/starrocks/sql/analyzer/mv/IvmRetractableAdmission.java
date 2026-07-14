@@ -39,21 +39,28 @@ final class IvmRetractableAdmission {
     static boolean admitRowIdOnOutput(CreateMaterializedViewStatement statement, SelectRelation selectRelation,
                                       boolean isAggregate) {
         if (isAggregate) {
-            // Aggregate over a PK base needs per-group recompute under retraction (a later PR); reject until then.
+            // Aggregate over a cloud-native PK base is maintained by per-group recompute in
+            // IvmDeltaAggregateRule.transformRetractable; a mixed PK/non-PK join is rejected there, not here.
             if (IvmBaseTableValidator.hasCloudNativePrimaryKeyBase(selectRelation)) {
-                throw new SemanticException("IVMAnalyzer does not yet support an aggregate materialized view over a "
-                        + "cloud-native PRIMARY KEY base");
+                rejectOrderBy(statement);
             }
             return true;
         }
         boolean retractable = IvmRowIdInjector.injectRowId(statement, selectRelation);
-        // __ROW_ID__ must stay the sole MV key: a user ORDER BY folds into the key and would let a value
-        // update leave a stale row (sort-only: a later PR). statement is null on the refresh path -- skip.
-        if (retractable && statement != null && CollectionUtils.isNotEmpty(statement.getOrderByElements())) {
+        if (retractable) {
+            rejectOrderBy(statement);
+        }
+        return retractable;
+    }
+
+    // __ROW_ID__ must stay the sole MV key: a user ORDER BY folds into the key, but net-collapse keys only
+    // on __ROW_ID__, so an update that changes a value or aggregate output leaves the old sort-keyed row
+    // stale (sort-only: a later PR). statement is null on the refresh path -- skip.
+    private static void rejectOrderBy(CreateMaterializedViewStatement statement) {
+        if (statement != null && CollectionUtils.isNotEmpty(statement.getOrderByElements())) {
             throw new SemanticException("IVMAnalyzer does not yet support ORDER BY for a materialized view "
                     + "over a cloud-native PRIMARY KEY base");
         }
-        return retractable;
     }
 
     /**

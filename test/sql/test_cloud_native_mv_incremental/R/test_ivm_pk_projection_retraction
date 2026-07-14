@@ -150,11 +150,6 @@ CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_rej_agg DISTRIBUTED BY HASH(g) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_pk GROUP BY g;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not yet support an aggregate materialized view over a cloud-native PRIMARY KEY base.')
--- !result
 CREATE MATERIALIZED VIEW mv_rej_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a JOIN rej_pk2 b ON a.id = b.id;
 -- result:
@@ -172,6 +167,11 @@ E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_orderby DISTRIBUTED BY HASH(id) BUCKETS 2 ORDER BY (v) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not yet support ORDER BY for a materialized view over a cloud-native PRIMARY KEY base.')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_agg_orderby DISTRIBUTED BY HASH(g) BUCKETS 2 ORDER BY (sv) REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_pk GROUP BY g;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not yet support ORDER BY for a materialized view over a cloud-native PRIMARY KEY base.')
 -- !result

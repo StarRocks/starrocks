@@ -1,0 +1,159 @@
+-- name: test_ivm_pk_agg_retraction @cloud
+-- Aggregate (GROUP BY) IVM MV over a single cloud-native PRIMARY KEY base, retractable refresh.
+-- Each affected group is recomputed from the FROM/TO snapshots, so delete/update/emptied-group all
+-- maintain correctly -- including MIN/MAX, which an additive state merge cannot subtract.
+-- Oracle: after every incremental refresh the MV must equal (SELECT g, SUM/MAX/MIN/COUNT ... GROUP BY g),
+-- diff=0 both ways.
+CREATE TABLE pk_agg_base (id INT NOT NULL, g INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_agg_base VALUES (1,10,100),(2,10,200),(3,20,300),(4,20,400),(5,30,500),(7,NULL,700);
+CREATE MATERIALIZED VIEW mv_pk_agg
+DISTRIBUTED BY HASH(g) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT g, SUM(v) AS sv, MAX(v) AS mx, MIN(v) AS mn, COUNT(*) AS c FROM pk_agg_base GROUP BY g;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- value update within a group: group 10 sum/max recompute
+UPDATE pk_agg_base SET v = 250 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- delete the current MAX row of group 20: MAX must fall back 400 -> 300 (additive merge cannot)
+DELETE FROM pk_agg_base WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- empty a whole group (its only row): group 30 must disappear from the MV
+DELETE FROM pk_agg_base WHERE id = 5;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- empty the NULL group (exercises the EQ_FOR_NULL affected-keys semi-join)
+DELETE FROM pk_agg_base WHERE id = 7;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- insert a brand new group
+INSERT INTO pk_agg_base VALUES (6,40,600);
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- migrate a row across groups (g is not the PK, so a direct UPDATE is allowed): id 1 from g10 to g20.
+-- Both the old (10) and new (20) group are in affectedKeys and recompute.
+UPDATE pk_agg_base SET g = 20 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- oracle: MV exactly equals full recompute over the base
+SELECT COUNT(*) AS diff FROM (SELECT g,sv,mx,mn,c FROM mv_pk_agg EXCEPT SELECT g,SUM(v),MAX(v),MIN(v),COUNT(*) FROM pk_agg_base GROUP BY g) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT g,SUM(v),MAX(v),MIN(v),COUNT(*) FROM pk_agg_base GROUP BY g EXCEPT SELECT g,sv,mx,mn,c FROM mv_pk_agg) t;
+DROP MATERIALIZED VIEW mv_pk_agg;
+DROP TABLE pk_agg_base;
+
+-- name: test_ivm_pk_agg_over_join @cloud
+-- Aggregate over an inner join of two cloud-native PRIMARY KEY bases. The recompute path resolves
+-- FROM/TO snapshots of the whole join, so deleting a build-side row drops the matching fact rows out
+-- of the inner join and the affected group recomputes smaller.
+CREATE TABLE pk_fact (id INT NOT NULL, cust INT, amt BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_cust (cid INT NOT NULL, region INT)
+PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_fact VALUES (1,10,100),(2,10,200),(3,20,300);
+INSERT INTO pk_cust VALUES (10,1),(20,2);
+CREATE MATERIALIZED VIEW mv_pk_aggjoin
+DISTRIBUTED BY HASH(region) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT c.region AS region, SUM(f.amt) AS sv, COUNT(*) AS c
+   FROM pk_fact f JOIN pk_cust c ON f.cust = c.cid GROUP BY c.region;
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- delete a fact row: its region's sum shrinks
+DELETE FROM pk_fact WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- delete a customer (build side): all its fact rows drop out of the inner join, region 2 disappears
+DELETE FROM pk_cust WHERE cid = 20;
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- oracle
+SELECT COUNT(*) AS diff FROM (SELECT region,sv,c FROM mv_pk_aggjoin EXCEPT SELECT c.region,SUM(f.amt),COUNT(*) FROM pk_fact f JOIN pk_cust c ON f.cust=c.cid GROUP BY c.region) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT c.region,SUM(f.amt),COUNT(*) FROM pk_fact f JOIN pk_cust c ON f.cust=c.cid GROUP BY c.region EXCEPT SELECT region,sv,c FROM mv_pk_aggjoin) t;
+DROP MATERIALIZED VIEW mv_pk_aggjoin;
+DROP TABLE pk_fact;
+DROP TABLE pk_cust;
+
+-- name: test_ivm_pk_agg_avg_filter @cloud
+-- AVG (a two-component sum/count state) + a composite GROUP BY + a WHERE filter over a cloud-native
+-- PRIMARY KEY base under delete/update. A value update can move a row in or out of the filter set,
+-- recomputing the affected composite group.
+CREATE TABLE pk_avg (id INT NOT NULL, k1 INT, k2 INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_avg VALUES (1,1,1,100),(2,1,1,200),(3,1,2,300),(4,2,1,400),(5,2,1,-5);
+CREATE MATERIALIZED VIEW mv_pk_avg
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k1, k2, AVG(v) AS av, SUM(v) AS sv, COUNT(*) AS c FROM pk_avg WHERE v >= 0 GROUP BY k1, k2;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- value update within a composite group: AVG recomputes
+UPDATE pk_avg SET v = 250 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- update a row out of the filter (v<0): it leaves group (1,1)
+UPDATE pk_avg SET v = -1 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- update a row back into the filter (v>=0): it re-enters group (2,1)
+UPDATE pk_avg SET v = 60 WHERE id = 5;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- delete a row: AVG recomputes
+DELETE FROM pk_avg WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- migrate across composite groups (k2 is not the PK): move id 4 from (2,1) to (2,2)
+UPDATE pk_avg SET k2 = 2 WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- oracle: MV equals a full recompute over the base (WHERE v>=0)
+SELECT COUNT(*) AS diff FROM (SELECT k1,k2,ROUND(av,4),sv,c FROM mv_pk_avg EXCEPT SELECT k1,k2,ROUND(AVG(v),4),SUM(v),COUNT(*) FROM pk_avg WHERE v>=0 GROUP BY k1,k2) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k1,k2,ROUND(AVG(v),4),SUM(v),COUNT(*) FROM pk_avg WHERE v>=0 GROUP BY k1,k2 EXCEPT SELECT k1,k2,ROUND(av,4),sv,c FROM mv_pk_avg) t;
+DROP MATERIALIZED VIEW mv_pk_avg;
+DROP TABLE pk_avg;
+
+-- name: test_ivm_pk_agg_metric_union @cloud
+-- bitmap/hll/percentile union over a cloud-native PRIMARY KEY base under delete/update: the recompute
+-- rebuilds each affected group's metric state from the FROM/TO snapshots, so a deleted row drops from the
+-- distinct count and an emptied group disappears.
+CREATE TABLE pk_metric (id INT NOT NULL, g INT, uid INT, val INT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_metric VALUES (1,10,100,10),(2,10,200,20),(3,10,100,30),(4,20,300,40),(5,20,400,50);
+CREATE MATERIALIZED VIEW mv_pk_metric
+DISTRIBUTED BY HASH(g) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT g, bitmap_union(to_bitmap(uid)) AS b, hll_union(hll_hash(uid)) AS h,
+          percentile_union(percentile_hash(val)) AS p
+   FROM pk_metric GROUP BY g;
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- delete a row whose uid is unique in its group: distinct count drops
+DELETE FROM pk_metric WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- update a uid (distinct set of the group changes)
+UPDATE pk_metric SET uid = 999 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- delete the last row of group 20: the group disappears
+DELETE FROM pk_metric WHERE g = 20;
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- oracle: MV metrics equal a full recompute over the base (HLL is exact for these tiny sets)
+SELECT COUNT(*) AS diff FROM (
+    SELECT g, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pk_metric
+    EXCEPT
+    SELECT g, COUNT(DISTINCT uid), COUNT(DISTINCT uid), ROUND(percentile_approx_raw(percentile_union(percentile_hash(val)), 0.5), 3) FROM pk_metric GROUP BY g) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT g, COUNT(DISTINCT uid), COUNT(DISTINCT uid), ROUND(percentile_approx_raw(percentile_union(percentile_hash(val)), 0.5), 3) FROM pk_metric GROUP BY g
+    EXCEPT
+    SELECT g, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pk_metric) t;
+DROP MATERIALIZED VIEW mv_pk_metric;
+DROP TABLE pk_metric;

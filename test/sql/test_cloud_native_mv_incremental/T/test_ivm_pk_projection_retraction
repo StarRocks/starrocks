@@ -70,9 +70,6 @@ CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
--- aggregate over a PK base (needs per-group recompute -- a later PR)
-CREATE MATERIALIZED VIEW mv_rej_agg DISTRIBUTED BY HASH(g) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_pk GROUP BY g;
 -- join over PK bases
 CREATE MATERIALIZED VIEW mv_rej_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a JOIN rej_pk2 b ON a.id = b.id;
@@ -85,6 +82,9 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION AL
 -- MV-level ORDER BY folds the sort column into the key, widening the PK past __ROW_ID__ (sort-only: a later PR)
 CREATE MATERIALIZED VIEW mv_rej_orderby DISTRIBUTED BY HASH(id) BUCKETS 2 ORDER BY (v) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk;
+-- aggregate over a PK base with MV-level ORDER BY on a mutable aggregate output folds it into the key too
+CREATE MATERIALIZED VIEW mv_rej_agg_orderby DISTRIBUTED BY HASH(g) BUCKETS 2 ORDER BY (sv) REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_pk GROUP BY g;
 -- LIMIT over a PK base: no IVM delta rule for limit, so the CREATE-time trial rewrite rejects it
 CREATE MATERIALIZED VIEW mv_rej_limit DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk LIMIT 1;

@@ -92,6 +92,11 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         if (aggOp.getPredicate() != null) {
             return false;
         }
+        // The retractable cloud-native PK path is handled by IvmDeltaRetractableAggregateRule; the two
+        // rules' checks are mutually exclusive on subtreeHasRetractablePkScan so exactly one fires.
+        if (IvmDeltaRetractableAggregateRule.subtreeHasRetractablePkScan(input.inputAt(0).inputAt(0))) {
+            return false;
+        }
         // Must be able to load the target MV for state merge
         MaterializedView mv = IvmRewriter.loadTargetMv(context);
         return mv != null && mv.getColumn(IvmOpUtils.COLUMN_ROW_ID) != null;

@@ -1,0 +1,289 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.rule.ivm;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
+import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Enterprise-only IVM rewrite rule that maintains an aggregate materialized view over a cloud-native
+ * PRIMARY KEY base under delete/update by recomputing every affected group from the FROM/TO snapshots,
+ * rather than the additive {@code state_union} merge (which cannot subtract a delete).
+ *
+ * <p>It shares the {@code Delta -> Aggregate} pattern with the append-only {@link IvmDeltaAggregateRule};
+ * the two checks are mutually exclusive on {@link #subtreeHasRetractablePkScan} (this rule matches a
+ * retractable PK base, that rule matches everything else). Kept as a separate enterprise file so the
+ * retraction logic (delete-CDC is enterprise-only) stays off the community sync surface.
+ */
+public class IvmDeltaRetractableAggregateRule extends TransformationRule {
+    public IvmDeltaRetractableAggregateRule() {
+        super(RuleType.TF_IVM_DELTA_RETRACTABLE_AGGREGATE,
+                Pattern.create(OperatorType.LOGICAL_DELTA)
+                        .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF)));
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalDeltaOperator delta = (LogicalDeltaOperator) input.getOp();
+        if (!delta.isRootDelta()) {
+            return false;
+        }
+        LogicalAggregationOperator aggOp = input.inputAt(0).getOp().cast();
+        if (aggOp.getGroupingKeys().isEmpty()) {
+            return false;
+        }
+        if (aggOp.getAggregations().values().stream().anyMatch(CallOperator::isDistinct)) {
+            return false;
+        }
+        if (aggOp.getPredicate() != null) {
+            return false;
+        }
+        return subtreeHasRetractablePkScan(input.inputAt(0).inputAt(0));
+    }
+
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalDeltaOperator delta = (LogicalDeltaOperator) input.getOp();
+        LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
+        OptExpression child = input.inputAt(0).inputAt(0);
+        return transformRetractable(context, delta, agg, child);
+    }
+
+    private static boolean isRetractablePkScan(OptExpression root) {
+        if (root.getOp() instanceof LogicalOlapScanOperator scan) {
+            Table table = scan.getTable();
+            return table instanceof OlapTable ot
+                    && ot.isCloudNativeTableOrMaterializedView()
+                    && ot.getKeysType() == KeysType.PRIMARY_KEYS;
+        }
+        return false;
+    }
+
+    /**
+     * True iff the subtree reads from a cloud-native PRIMARY KEY base -- the one base kind whose delta
+     * may carry deletes/updates. Decided by the scan's TABLE (not its delta trait) so the answer is
+     * stable in both the CREATE-time trial and the real refresh, and so this rule's check is the exact
+     * complement of {@link IvmDeltaAggregateRule}'s.
+     */
+    static boolean subtreeHasRetractablePkScan(OptExpression root) {
+        if (isRetractablePkScan(root)) {
+            return true;
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (subtreeHasRetractablePkScan(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True iff every leaf (input-less) operator in the subtree is a retractable cloud-native PRIMARY KEY
+     * scan. The recompute-over-join path reads FROM/TO version snapshots of the whole child and assumes
+     * every base supports retractable versioning, so a mixed join (a PK base joined to a non-PK / iceberg
+     * base) is out of scope and must be rejected rather than read a snapshot the non-PK side can't honor.
+     */
+    static boolean allLeafScansAreRetractablePk(OptExpression root) {
+        if (root.getInputs().isEmpty()) {
+            return isRetractablePkScan(root);
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!allLeafScansAreRetractablePk(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Recompute every affected group from scratch and express the change as a retract of the old
+     * aggregate plus an insert of the new one.
+     *
+     * <pre>
+     *   CTEAnchor
+     *     ├── affectedKeys = DISTINCT(group keys) over Delta(child)        which groups changed
+     *     └── Aggregate(group keys, __ACTION__) partitionBy group keys
+     *           └── UNION ALL
+     *                 ├── Version(TO,  child) ⋉ affectedKeys, __ACTION__=UPSERT    new aggregate
+     *                 └── Version(FROM, child) ⋉ affectedKeys, __ACTION__=DELETE    old aggregate
+     * </pre>
+     *
+     * <p>An emptied group yields only the DELETE row; a new group only the UPSERT row; a changed group
+     * both (the PK sink applies DELETE before UPSERT, netting the new value). Works for every aggregate
+     * function — including MIN/MAX — because each group's state is rebuilt by re-running the original
+     * {@code _combine} aggregations over the snapshot rather than merged from the prior state.
+     */
+    private static List<OptExpression> transformRetractable(OptimizerContext context, LogicalDeltaOperator delta,
+                                                            LogicalAggregationOperator agg, OptExpression child) {
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        // A mixed join (a PK base joined to a non-PK base) can't honor the whole-child FROM/TO snapshot
+        // recompute, so reject it rather than silently mis-maintain (see allLeafScansAreRetractablePk).
+        if (!allLeafScansAreRetractablePk(child)) {
+            throw new SemanticException(
+                    "IVM retractable aggregate requires every base to be a cloud-native PRIMARY KEY table");
+        }
+        List<ColumnRefOperator> childOutputs = child.getOutputColumns().getColumnRefOperators(factory);
+        List<ColumnRefOperator> groupingKeys = agg.getGroupingKeys();
+        if (groupingKeys.stream().anyMatch(k -> !childOutputs.contains(k))) {
+            return List.of();
+        }
+
+        // Full FROM/TO snapshots of the child, each tagged with a constant UPSERT/DELETE action.
+        SnapshotInfo toSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
+                LogicalVersionOperator.VersionRefType.TO_VERSION, IvmRuleUtils.INSERT_ACTION);
+        SnapshotInfo fromSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
+                LogicalVersionOperator.VersionRefType.FROM_VERSION, IvmRuleUtils.DELETE_ACTION);
+
+        // The group keys touched by the delta, published once as a CTE and semi-joined into both
+        // snapshots so only affected groups are recomputed. The per-row delta action is irrelevant here.
+        SnapshotInfo affectedChild = cloneChild(context, groupingKeys, child, childOutputs);
+        ColumnRefOperator affectedAction =
+                factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+        OptExpression affectedKeysExpr = OptExpression.create(
+                new LogicalAggregationOperator(AggType.GLOBAL, affectedChild.groupingKeys, Maps.newHashMap()),
+                OptExpression.create(new LogicalDeltaOperator(false, affectedAction), affectedChild.optExpression));
+        int cteId = context.getCteContext().getNextCteId();
+        OptExpression affectedKeysProducer =
+                OptExpression.create(new LogicalCTEProduceOperator(cteId), affectedKeysExpr);
+
+        OptExpression toJoin = createLeftSemiJoin(factory, cteId, affectedChild.groupingKeys, toSnapshot);
+        OptExpression fromJoin = createLeftSemiJoin(factory, cteId, affectedChild.groupingKeys, fromSnapshot);
+        if (toJoin == null || fromJoin == null) {
+            return List.of();
+        }
+
+        List<ColumnRefOperator> unionOutputs = Lists.newArrayList(childOutputs);
+        unionOutputs.add(delta.getActionColumn());
+        OptExpression union = OptExpression.create(
+                new LogicalUnionOperator(unionOutputs,
+                        List.of(toSnapshot.outputColumns, fromSnapshot.outputColumns), true),
+                toJoin, fromJoin);
+
+        // Re-aggregate per (group keys, action): the UPSERT row carries the new group state, the DELETE
+        // row the old. Reuse the original aggregate so the output refs match what the row-id project expects.
+        List<ColumnRefOperator> newGroupingKeys = Lists.newArrayList(groupingKeys);
+        newGroupingKeys.add(delta.getActionColumn());
+        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder()
+                .withOperator(agg)
+                .setGroupingKeys(newGroupingKeys)
+                .setPartitionByColumns(groupingKeys)
+                .build();
+        OptExpression newAggExpr = OptExpression.create(newAgg, union);
+
+        return List.of(OptExpression.create(
+                new LogicalCTEAnchorOperator(cteId), affectedKeysProducer, newAggExpr));
+    }
+
+    private static SnapshotInfo cloneChild(OptimizerContext context, List<ColumnRefOperator> oldGroupingKeys,
+                                           OptExpression child, List<ColumnRefOperator> oldOutputs) {
+        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
+        OptExpression newChild = duplicator.duplicate(child);
+        return new SnapshotInfo(newChild, duplicator.getMappedColumns(oldOutputs),
+                duplicator.getMappedColumns(oldGroupingKeys));
+    }
+
+    private static SnapshotInfo createSnapshotChild(OptimizerContext context, List<ColumnRefOperator> groupingKeys,
+                                                    OptExpression child, List<ColumnRefOperator> oldOutputs,
+                                                    LogicalVersionOperator.VersionRefType versionRefType,
+                                                    byte actionValue) {
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        SnapshotInfo cloned = cloneChild(context, groupingKeys, child, oldOutputs);
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        for (ColumnRefOperator out : cloned.outputColumns) {
+            projectMap.put(out, out);
+        }
+        ColumnRefOperator actionColumn =
+                factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+        projectMap.put(actionColumn, ConstantOperator.createTinyInt(actionValue));
+        OptExpression optExpr = OptExpression.create(new LogicalVersionOperator(versionRefType),
+                OptExpression.create(new LogicalProjectOperator(projectMap), cloned.optExpression));
+        List<ColumnRefOperator> outputs = Lists.newArrayList(cloned.outputColumns);
+        outputs.add(actionColumn);
+        return new SnapshotInfo(optExpr, outputs, cloned.groupingKeys);
+    }
+
+    private static OptExpression createLeftSemiJoin(ColumnRefFactory factory, int cteId,
+                                                    List<ColumnRefOperator> producerOutputColumns,
+                                                    SnapshotInfo leftSnapshot) {
+        List<ColumnRefOperator> consumerOutputs = Lists.newArrayList();
+        Map<ColumnRefOperator, ColumnRefOperator> consumerMap = Maps.newHashMap();
+        for (ColumnRefOperator producerCol : producerOutputColumns) {
+            ColumnRefOperator consumerCol =
+                    factory.create(producerCol.getName(), producerCol.getType(), producerCol.isNullable());
+            consumerMap.put(consumerCol, producerCol);
+            consumerOutputs.add(consumerCol);
+        }
+        OptExpression consumer = OptExpression.create(new LogicalCTEConsumeOperator(cteId, consumerMap));
+        ScalarOperator onPredicate = buildSemiJoinPredicate(leftSnapshot.groupingKeys, consumerOutputs);
+        if (onPredicate == null) {
+            return null;
+        }
+        return OptExpression.create(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, onPredicate),
+                leftSnapshot.optExpression, consumer);
+    }
+
+    private static ScalarOperator buildSemiJoinPredicate(List<ColumnRefOperator> leftKeys,
+                                                         List<ColumnRefOperator> rightKeys) {
+        if (leftKeys.size() != rightKeys.size()) {
+            return null;
+        }
+        List<ScalarOperator> conjuncts = Lists.newArrayListWithCapacity(leftKeys.size());
+        for (int i = 0; i < leftKeys.size(); i++) {
+            // EQ_FOR_NULL (<=>): a NULL group key is a real group and must match its affected-keys row,
+            // otherwise the NULL group is never recomputed and its MV row goes stale.
+            conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, leftKeys.get(i), rightKeys.get(i)));
+        }
+        return Utils.compoundAnd(conjuncts);
+    }
+
+    private record SnapshotInfo(OptExpression optExpression, List<ColumnRefOperator> outputColumns,
+                                List<ColumnRefOperator> groupingKeys) {
+    }
+}

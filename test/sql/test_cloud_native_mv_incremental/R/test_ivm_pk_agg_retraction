@@ -1,0 +1,315 @@
+-- name: test_ivm_pk_agg_retraction @cloud
+CREATE TABLE pk_agg_base (id INT NOT NULL, g INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_agg_base VALUES (1,10,100),(2,10,200),(3,20,300),(4,20,400),(5,30,500),(7,NULL,700);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_agg
+DISTRIBUTED BY HASH(g) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT g, SUM(v) AS sv, MAX(v) AS mx, MIN(v) AS mn, COUNT(*) AS c FROM pk_agg_base GROUP BY g;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+None	700	700	700	1
+10	300	200	100	2
+20	700	400	300	2
+30	500	500	500	1
+-- !result
+UPDATE pk_agg_base SET v = 250 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+None	700	700	700	1
+10	350	250	100	2
+20	700	400	300	2
+30	500	500	500	1
+-- !result
+DELETE FROM pk_agg_base WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+None	700	700	700	1
+10	350	250	100	2
+20	300	300	300	1
+30	500	500	500	1
+-- !result
+DELETE FROM pk_agg_base WHERE id = 5;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+None	700	700	700	1
+10	350	250	100	2
+20	300	300	300	1
+-- !result
+DELETE FROM pk_agg_base WHERE id = 7;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+10	350	250	100	2
+20	300	300	300	1
+-- !result
+INSERT INTO pk_agg_base VALUES (6,40,600);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+10	350	250	100	2
+20	300	300	300	1
+40	600	600	600	1
+-- !result
+UPDATE pk_agg_base SET g = 20 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_agg WITH SYNC MODE;
+SELECT g, sv, mx, mn, c FROM mv_pk_agg ORDER BY g;
+-- result:
+10	250	250	250	1
+20	400	300	100	2
+40	600	600	600	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT g,sv,mx,mn,c FROM mv_pk_agg EXCEPT SELECT g,SUM(v),MAX(v),MIN(v),COUNT(*) FROM pk_agg_base GROUP BY g) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT g,SUM(v),MAX(v),MIN(v),COUNT(*) FROM pk_agg_base GROUP BY g EXCEPT SELECT g,sv,mx,mn,c FROM mv_pk_agg) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_agg;
+-- result:
+-- !result
+DROP TABLE pk_agg_base;
+-- result:
+-- !result
+-- name: test_ivm_pk_agg_over_join @cloud
+CREATE TABLE pk_fact (id INT NOT NULL, cust INT, amt BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_cust (cid INT NOT NULL, region INT)
+PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_fact VALUES (1,10,100),(2,10,200),(3,20,300);
+-- result:
+-- !result
+INSERT INTO pk_cust VALUES (10,1),(20,2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_aggjoin
+DISTRIBUTED BY HASH(region) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT c.region AS region, SUM(f.amt) AS sv, COUNT(*) AS c
+   FROM pk_fact f JOIN pk_cust c ON f.cust = c.cid GROUP BY c.region;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- result:
+1	300	2
+2	300	1
+-- !result
+DELETE FROM pk_fact WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- result:
+1	200	1
+2	300	1
+-- !result
+DELETE FROM pk_cust WHERE cid = 20;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_aggjoin WITH SYNC MODE;
+SELECT region, sv, c FROM mv_pk_aggjoin ORDER BY region;
+-- result:
+1	200	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT region,sv,c FROM mv_pk_aggjoin EXCEPT SELECT c.region,SUM(f.amt),COUNT(*) FROM pk_fact f JOIN pk_cust c ON f.cust=c.cid GROUP BY c.region) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT c.region,SUM(f.amt),COUNT(*) FROM pk_fact f JOIN pk_cust c ON f.cust=c.cid GROUP BY c.region EXCEPT SELECT region,sv,c FROM mv_pk_aggjoin) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_aggjoin;
+-- result:
+-- !result
+DROP TABLE pk_fact;
+-- result:
+-- !result
+DROP TABLE pk_cust;
+-- result:
+-- !result
+-- name: test_ivm_pk_agg_avg_filter @cloud
+CREATE TABLE pk_avg (id INT NOT NULL, k1 INT, k2 INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_avg VALUES (1,1,1,100),(2,1,1,200),(3,1,2,300),(4,2,1,400),(5,2,1,-5);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_avg
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k1, k2, AVG(v) AS av, SUM(v) AS sv, COUNT(*) AS c FROM pk_avg WHERE v >= 0 GROUP BY k1, k2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	150.0	300	2
+1	2	300.0	300	1
+2	1	400.0	400	1
+-- !result
+UPDATE pk_avg SET v = 250 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	175.0	350	2
+1	2	300.0	300	1
+2	1	400.0	400	1
+-- !result
+UPDATE pk_avg SET v = -1 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	250.0	250	1
+1	2	300.0	300	1
+2	1	400.0	400	1
+-- !result
+UPDATE pk_avg SET v = 60 WHERE id = 5;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	250.0	250	1
+1	2	300.0	300	1
+2	1	230.0	460	2
+-- !result
+DELETE FROM pk_avg WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	250.0	250	1
+2	1	230.0	460	2
+-- !result
+UPDATE pk_avg SET k2 = 2 WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_avg WITH SYNC MODE;
+SELECT k1, k2, ROUND(av, 4) AS av, sv, c FROM mv_pk_avg ORDER BY k1, k2;
+-- result:
+1	1	250.0	250	1
+2	1	60.0	60	1
+2	2	400.0	400	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k1,k2,ROUND(av,4),sv,c FROM mv_pk_avg EXCEPT SELECT k1,k2,ROUND(AVG(v),4),SUM(v),COUNT(*) FROM pk_avg WHERE v>=0 GROUP BY k1,k2) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k1,k2,ROUND(AVG(v),4),SUM(v),COUNT(*) FROM pk_avg WHERE v>=0 GROUP BY k1,k2 EXCEPT SELECT k1,k2,ROUND(av,4),sv,c FROM mv_pk_avg) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_avg;
+-- result:
+-- !result
+DROP TABLE pk_avg;
+-- result:
+-- !result
+-- name: test_ivm_pk_agg_metric_union @cloud
+CREATE TABLE pk_metric (id INT NOT NULL, g INT, uid INT, val INT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_metric VALUES (1,10,100,10),(2,10,200,20),(3,10,100,30),(4,20,300,40),(5,20,400,50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_metric
+DISTRIBUTED BY HASH(g) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT g, bitmap_union(to_bitmap(uid)) AS b, hll_union(hll_hash(uid)) AS h,
+          percentile_union(percentile_hash(val)) AS p
+   FROM pk_metric GROUP BY g;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- result:
+10	2	2	20.0
+20	2	2	45.0
+-- !result
+DELETE FROM pk_metric WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- result:
+10	2	2	20.0
+20	1	1	50.0
+-- !result
+UPDATE pk_metric SET uid = 999 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- result:
+10	3	3	20.0
+20	1	1	50.0
+-- !result
+DELETE FROM pk_metric WHERE g = 20;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_metric WITH SYNC MODE;
+SELECT g, bitmap_count(b) AS bc, hll_cardinality(h) AS hc, ROUND(percentile_approx_raw(p, 0.5), 3) AS med FROM mv_pk_metric ORDER BY g;
+-- result:
+10	3	3	20.0
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT g, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pk_metric
+    EXCEPT
+    SELECT g, COUNT(DISTINCT uid), COUNT(DISTINCT uid), ROUND(percentile_approx_raw(percentile_union(percentile_hash(val)), 0.5), 3) FROM pk_metric GROUP BY g) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT g, COUNT(DISTINCT uid), COUNT(DISTINCT uid), ROUND(percentile_approx_raw(percentile_union(percentile_hash(val)), 0.5), 3) FROM pk_metric GROUP BY g
+    EXCEPT
+    SELECT g, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pk_metric) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_metric;
+-- result:
+-- !result
+DROP TABLE pk_metric;
+-- result:
+-- !result
