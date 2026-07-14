@@ -221,7 +221,7 @@ public:
     // exclusion between publish_resharding_tablet and publish_version, so
     // the cached _data_version cannot advance past metadata->version()
     // during this call.
-    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,

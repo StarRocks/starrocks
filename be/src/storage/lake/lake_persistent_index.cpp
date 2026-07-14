@@ -14,6 +14,8 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <unordered_map>
+
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
@@ -246,6 +248,10 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     sstable_pb.set_filesize(sst_meta.size());
     sstable_pb.set_shared_rssid(rssid);
     sstable_pb.set_shared_version(version);
+    // Record the generation version (PersistentIndexSstablePB.generation_version):
+    // the version at which this ingested sstable becomes visible in this tablet.
+    // Coexists with shared_version (read-time projection) and does not affect it.
+    sstable_pb.set_generation_version(version);
     sstable_pb.set_encryption_meta(sst_meta.encryption_meta());
     // Preserve the shared flag from sst_meta. During tablet split cross-publish,
     // newly-ingested SSTs may be shared with sibling split tablets; losing this flag
@@ -873,7 +879,32 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
     return Status::OK();
 }
 
-Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
+void LakePersistentIndex::assign_generation_versions(PersistentIndexSstableMetaPB* new_meta,
+                                                     const PersistentIndexSstableMetaPB& prev_meta,
+                                                     int64_t generation_version) {
+    // Callers resolve |generation_version| to a real publish/reshard version first; a new file must
+    // never be stamped 0 ("unknown"). Benign if it ever slips through in release -- 0 is the
+    // conservative value consumers treat as retain -- so a debug assert suffices.
+    DCHECK_GT(generation_version, 0);
+    std::unordered_map<std::string, int64_t> prev_versions;
+    prev_versions.reserve(prev_meta.sstables_size());
+    for (const auto& s : prev_meta.sstables()) {
+        prev_versions.emplace(s.filename(), s.generation_version());
+    }
+    for (auto& s : *new_meta->mutable_sstables()) {
+        if (s.generation_version() != 0) {
+            continue;
+        }
+        auto it = prev_versions.find(s.filename());
+        if (it != prev_versions.end()) {
+            s.set_generation_version(it->second);
+        } else {
+            s.set_generation_version(generation_version);
+        }
+    }
+}
+
+Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_version) {
     if ((too_many_rebuild_files() || too_many_rebuild_rows()) && !_memtable->empty()) {
         // If we have too many files or rows need to be rebuilt,
         // we need to do flush to reduce index rebuild cost later.
@@ -896,6 +927,14 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
             new_sstable_pb->CopyFrom(sstable_pb);
         }
     }
+    // generation_version == 0 means "use this publish's version"; a non-zero override is passed by
+    // the reshard flush (see UpdateManager::flush_pk_memtable). The builder still holds the
+    // previous persisted sstable_meta here (before finalize_sstable_meta below), which
+    // assign_generation_versions uses to carry existing versions forward.
+    if (generation_version == 0) {
+        generation_version = builder->tablet_meta()->version();
+    }
+    assign_generation_versions(&sstable_meta, builder->tablet_meta()->sstable_meta(), generation_version);
     builder->finalize_sstable_meta(sstable_meta);
     auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
     _need_rebuild_file_cnt = file_cnt;

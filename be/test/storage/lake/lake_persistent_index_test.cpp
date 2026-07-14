@@ -1338,6 +1338,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
         if (sst.filename() == sst_filename) {
             match_count++;
             EXPECT_TRUE(sst.shared()) << "sst_meta.shared=true must be preserved in committed sstable_meta";
+            EXPECT_EQ(1, sst.generation_version()) << "ingest_sst stamps the generation version (the ingest version)";
         }
     }
     EXPECT_EQ(match_count, 1);
@@ -1578,6 +1579,103 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
     ASSERT_EQ(serial.size(), parallel.size());
     for (size_t i = 0; i < serial.size(); ++i) {
         EXPECT_EQ(serial[i], parallel[i]) << "mismatch at key " << keys[i];
+    }
+}
+
+TEST(AssignGenerationVersionsTest, stamps_new_preserves_existing_and_legacy) {
+    PersistentIndexSstableMetaPB prev;
+    {
+        auto* s = prev.add_sstables();
+        s->set_filename("existing_v3.sst");
+        s->set_generation_version(3);
+    }
+    {
+        auto* s = prev.add_sstables();
+        s->set_filename("legacy_zero.sst"); // version unset == 0
+    }
+
+    PersistentIndexSstableMetaPB cur;
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("existing_v3.sst"); // reappears, version dropped by copy
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("legacy_zero.sst"); // legacy, still unset
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("fresh_new.sst"); // brand new this publish
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("ingested.sst");
+        s->set_generation_version(9); // producer already stamped, absent from prev
+    }
+    {
+        auto* s = cur.add_sstables();
+        s->set_filename("existing_v3.sst");
+        s->set_generation_version(7); // same filename as prev@3 but already non-zero
+    }
+
+    LakePersistentIndex::assign_generation_versions(&cur, prev, /*generation_version=*/100);
+
+    ASSERT_EQ(5, cur.sstables_size());
+    EXPECT_EQ(3, cur.sstables(0).generation_version());   // existing, local 0 -> carried from prev (3)
+    EXPECT_EQ(0, cur.sstables(1).generation_version());   // legacy 0 -> STAYS 0 (present in prev); vacuum retains
+    EXPECT_EQ(100, cur.sstables(2).generation_version()); // new (absent from prev) -> new version
+    EXPECT_EQ(9, cur.sstables(3).generation_version());   // producer-stamped non-zero -> preserved (absent from prev)
+    EXPECT_EQ(7, cur.sstables(4).generation_version());   // non-zero -> NEVER overwritten, even though prev has @3
+}
+
+TEST_F(LakePersistentIndexTest, test_commit_stamps_version) {
+    const int N = 100;
+    const int64_t publish_version = 7;
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    using Key = uint64_t;
+    std::vector<Key> keys(N);
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    key_slices.reserve(N);
+    values.reserve(N);
+    for (int j = 0; j < N; j++) {
+        keys[j] = j;
+        key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+        values.emplace_back(j * 2);
+    }
+    index->prepare(EditVersion(publish_version, 0), 0);
+    std::vector<IndexValue> old_values(N);
+    ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
+    ASSERT_OK(index->flush_memtable(true));
+    ASSERT_OK(index->sync_flush_all_memtables(10000000));
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto meta = std::make_shared<TabletMetadata>();
+    meta->CopyFrom(*_tablet_metadata);
+    meta->set_version(publish_version);
+    MetaFileBuilder builder(tablet, meta);
+    ASSERT_OK(index->commit(&builder));
+
+    // A freshly-flushed sstable is stamped with the publish version.
+    ASSERT_GE(meta->sstable_meta().sstables_size(), 1);
+    for (const auto& s : meta->sstable_meta().sstables()) {
+        EXPECT_EQ(publish_version, s.generation_version()) << "freshly-flushed sstable must carry its publish version";
+    }
+
+    // Re-commit at a later version WITHOUT new data: existing sstables must keep
+    // their original version (no re-stamp), because they are present in
+    // the previous sstable_meta the builder carries forward.
+    auto meta2 = std::make_shared<TabletMetadata>();
+    meta2->CopyFrom(*meta); // carries the publish_version sstable_meta forward
+    meta2->set_version(publish_version + 10);
+    MetaFileBuilder builder2(tablet, meta2);
+    ASSERT_OK(index->commit(&builder2));
+    ASSERT_GE(meta2->sstable_meta().sstables_size(), 1);
+    for (const auto& s : meta2->sstable_meta().sstables()) {
+        EXPECT_EQ(publish_version, s.generation_version()) << "re-commit must not re-stamp an existing sstable";
     }
 }
 
