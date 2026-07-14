@@ -1610,7 +1610,7 @@ includeMetadata
     ;
 
 metadataItem
-    : metaKey AS alias=identifier
+    : metaKey (AS alias=identifier)?
     ;
 
 metaKey

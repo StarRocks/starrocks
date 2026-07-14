@@ -415,10 +415,10 @@ StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRo
 #### 语法
 
 ```SQL
-INCLUDE METADATA ( <metadata_key> AS <alias> [, <metadata_key> AS <alias> ...] )
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
 ```
 
-`INCLUDE METADATA` 是一个导入属性；将它与其他导入属性（如 `COLUMNS` 和 `WHERE`）一起放置（顺序任意），位于 `PROPERTIES` 和 `FROM` 子句之前。`AS <alias>` 是必需的，别名在子句内必须唯一，且不能与消息体字段、目标表列或保留列名冲突。
+`INCLUDE METADATA` 是一个导入属性；将它与其他导入属性（如 `COLUMNS` 和 `WHERE`）一起放置（顺序任意），位于 `PROPERTIES` 和 `FROM` 子句之前。`AS <alias>` 是可选的；如果省略，别名默认为 `<metadata_key>`。别名在子句内必须唯一，且不能与消息体字段、目标表列或保留列名冲突。
 
 #### 元数据键
 
@@ -445,7 +445,7 @@ INCLUDE METADATA ( <metadata_key> AS <alias> [, <metadata_key> AS <alias> ...] )
 #### 使用说明
 
 - `INCLUDE METADATA` 适用于 `format = json`（Kafka 和 Pulsar）以及 `format = avro`（仅 Kafka；Pulsar Routine Load 不支持 Avro）。不支持 CSV，因为一条消息可能展开为多行，每条消息的元数据会产生歧义。
-- 元数据别名是普通的源列：可在 `COLUMNS` 表达式的任何位置引用。由于别名是显式选择的，同名的消息体字段不会被遮蔽。
+- 元数据别名是普通的源列：可在 `COLUMNS` 表达式的任何位置引用。如果消息体字段与元数据键同名，请通过 `AS <alias>` 指定不同的别名以避免歧义。
 - `OFFSET` 仅适用于 Kafka，`MESSAGE_ID` 仅适用于 Pulsar；对数据源使用不支持的键会报错，错误信息会列出该数据源支持的键。
 - `HEADERS`/`PROPERTIES` 的类型是 `MAP\<VARCHAR, VARCHAR>`。源端的 header/property 是一个有序列表，键可能重复；重复键折叠进 map 时最后的值生效（`element_at(map, 'name')` 查找同样是最后值生效，键不存在时返回 `NULL`）。值以原始字节按原样存入 VARCHAR——不做 UTF-8 校验或解码。
 
