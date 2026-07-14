@@ -227,7 +227,8 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return table != null;
     }
 
-    private void maybeFlush() {
+    @VisibleForTesting
+    void maybeFlush() {
         long now = System.currentTimeMillis();
         boolean intervalReached = now - lastFlushMs >= Config.audit_loader_load_interval_seconds * 1000;
         boolean bufferLarge = bufferBytes.get() >= Config.audit_loader_batch_max_bytes;
@@ -243,7 +244,8 @@ public class AuditLoaderMgr extends FrontendDaemon {
      * the queue head, stream load it, and only on success remove those rows from the queue. On failure
      * stop and retry on the next cycle (the rows stay queued).
      */
-    private void flush() {
+    @VisibleForTesting
+    void flush() {
         long batchMaxBytes = Config.audit_loader_batch_max_bytes;
         while (!rowQueue.isEmpty()) {
             // Collect one batch by copying references from the head, without removing yet.
