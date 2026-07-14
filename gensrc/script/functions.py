@@ -423,6 +423,11 @@ vectorized_functions = [
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
 
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. BE-only.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
+
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
     [50009, 'year', True, False, 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
