@@ -48,12 +48,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-=======
 import java.util.function.Function;
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -229,93 +226,6 @@ public class RewriteManifestsProcedureTest {
     }
 
     @Test
-<<<<<<< HEAD
-    void testScanManifestsWithCalledWhenExecutorServiceProvided() {
-        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
-
-        ManifestFile m1 = Mockito.mock(ManifestFile.class);
-        ManifestFile m2 = Mockito.mock(ManifestFile.class);
-        when(m1.length()).thenReturn(10 * 1024 * 1024L);
-        when(m2.length()).thenReturn(10 * 1024 * 1024L);
-
-        Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
-
-        Table table = Mockito.mock(Table.class);
-        when(table.currentSnapshot()).thenReturn(snapshot);
-        when(table.properties()).thenReturn(Collections.emptyMap());
-        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
-
-        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
-        when(rewriteManifests.scanManifestsWith(any(ExecutorService.class))).thenReturn(rewriteManifests);
-        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
-        doNothing().when(rewriteManifests).commit();
-
-        Transaction txn = Mockito.mock(Transaction.class);
-        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
-
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        try {
-            IcebergTableProcedureContext context = createContext(table, txn, executor);
-            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
-
-            verify(rewriteManifests).scanManifestsWith(executor);
-            verify(rewriteManifests).clusterBy(any());
-            verify(rewriteManifests).commit();
-        } finally {
-            executor.shutdown();
-        }
-    }
-
-    @Test
-    void testScanManifestsWithNotCalledWhenExecutorServiceNull() {
-        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
-
-        ManifestFile m1 = Mockito.mock(ManifestFile.class);
-        ManifestFile m2 = Mockito.mock(ManifestFile.class);
-        when(m1.length()).thenReturn(10 * 1024 * 1024L);
-        when(m2.length()).thenReturn(10 * 1024 * 1024L);
-
-        Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
-
-        Table table = Mockito.mock(Table.class);
-        when(table.currentSnapshot()).thenReturn(snapshot);
-        when(table.properties()).thenReturn(Collections.emptyMap());
-        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
-
-        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
-        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
-        doNothing().when(rewriteManifests).commit();
-
-        Transaction txn = Mockito.mock(Transaction.class);
-        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
-
-        IcebergTableProcedureContext context = createContext(table, txn, null);
-        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
-
-        verify(rewriteManifests, never()).scanManifestsWith(any());
-        verify(rewriteManifests).clusterBy(any());
-        verify(rewriteManifests).commit();
-    }
-
-    @Test
-    void testStatsFilledOnRewrite() {
-        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
-
-        ManifestFile m1 = Mockito.mock(ManifestFile.class);
-        ManifestFile m2 = Mockito.mock(ManifestFile.class);
-        when(m1.length()).thenReturn(10 * 1024 * 1024L);
-        when(m2.length()).thenReturn(10 * 1024 * 1024L);
-
-        Snapshot snapshot = Mockito.mock(Snapshot.class);
-        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
-
-        Table table = Mockito.mock(Table.class);
-        when(table.currentSnapshot()).thenReturn(snapshot);
-        when(table.properties()).thenReturn(Collections.emptyMap());
-        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
-=======
     void testPartitionedManifestsClusteredByOrderPreservingRange() throws Exception {
         // 200 distinct partitions, cluster count capped at MAX_MANIFEST_CLUSTERS(=100),
         // so the order-preserving assignment is bucket = rank * 100 / 200 = rank / 2.
@@ -367,31 +277,107 @@ public class RewriteManifestsProcedureTest {
         assertThrows(StarRocksConnectorException.class, () -> clusterFn.apply(unknownSpecFile));
     }
 
-    // Builds a real partitioned table with `numPartitions` single-file partitions, runs the
-    // procedure against it, and returns the clustering Function it hands to RewriteManifests.
-    // The manifest target size is forced to 1 byte so the cluster count is pinned to the cap.
-    private Function<DataFile, Object> runAndCaptureClusterFunction(int numPartitions) throws Exception {
-        TestTables.TestTable table = TestTables.create(warehouse, "t_range_" + numPartitions, SCHEMA, SPEC, 2);
-        AppendFiles append = table.newAppend();
-        for (int i = 0; i < numPartitions; i++) {
-            append.appendFile(dataFileForPartition(i));
+    @Test
+    void testScanManifestsWithCalledWhenExecutorServiceProvided() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m1.content()).thenReturn(ManifestContent.DATA);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.content()).thenReturn(ManifestContent.DATA);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.scanManifestsWith(any(ExecutorService.class))).thenReturn(rewriteManifests);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            IcebergTableProcedureContext context = createContext(table, txn, executor);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            verify(rewriteManifests).scanManifestsWith(executor);
+            verify(rewriteManifests).clusterBy(any());
+            verify(rewriteManifests).commit();
+        } finally {
+            executor.shutdown();
         }
-        append.commit();
-        table.updateProperties().set(TableProperties.MANIFEST_TARGET_SIZE_BYTES, "1").commit();
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
+    }
+
+    @Test
+    void testScanManifestsWithNotCalledWhenExecutorServiceNull() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m1.content()).thenReturn(ManifestContent.DATA);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.content()).thenReturn(ManifestContent.DATA);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
 
         RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
         when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
         doNothing().when(rewriteManifests).commit();
-<<<<<<< HEAD
 
-=======
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        IcebergTableProcedureContext context = createContext(table, txn, null);
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        verify(rewriteManifests, never()).scanManifestsWith(any());
+        verify(rewriteManifests).clusterBy(any());
+        verify(rewriteManifests).commit();
+    }
+
+    @Test
+    void testStatsFilledOnRewrite() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m1.content()).thenReturn(ManifestContent.DATA);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.content()).thenReturn(ManifestContent.DATA);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+
         Transaction txn = Mockito.mock(Transaction.class);
         when(txn.rewriteManifests()).thenReturn(rewriteManifests);
 
         IcebergTableProcedureContext context = createContext(table, txn);
-<<<<<<< HEAD
         assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
 
         assertEquals(IcebergTableOperation.REWRITE_MANIFESTS, context.stats().getOperation());
@@ -407,6 +393,7 @@ public class RewriteManifestsProcedureTest {
         RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
         ManifestFile smallManifest = Mockito.mock(ManifestFile.class);
         when(smallManifest.length()).thenReturn(100L);
+        when(smallManifest.content()).thenReturn(ManifestContent.DATA);
 
         Snapshot snapshot = Mockito.mock(Snapshot.class);
         when(snapshot.allManifests(any())).thenReturn(List.of(smallManifest));
@@ -426,7 +413,74 @@ public class RewriteManifestsProcedureTest {
         assertFalse(context.stats().isExecuted());
         // single small manifest is a no-op: no material change, not recorded
         assertFalse(context.stats().hasMaterialChange());
-=======
+    }
+
+    @Test
+    void testPartitionedPrescanParallelMatchesSequential() throws Exception {
+        // The parallel pre-scan (ParallelIterable) must yield the same order-preserving mapping.
+        int numPartitions = 60;
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            Function<DataFile, Object> clusterFn = runAndCaptureClusterFunction(numPartitions, executor);
+            for (int i = 0; i < numPartitions; i++) {
+                Object bucket = clusterFn.apply(dataFileForPartition(i));
+                assertNotNull(bucket);
+                assertEquals(i * 100 / numPartitions, ((Number) bucket).intValue(),
+                        "partition k2=" + i + " landed in an unexpected bucket");
+            }
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    // Builds a real partitioned table with `numPartitions` single-file partitions, runs the
+    // procedure against it, and returns the clustering Function it hands to RewriteManifests.
+    // The manifest target size is forced to 1 byte so the cluster count is pinned to the cap.
+    private Function<DataFile, Object> runAndCaptureClusterFunction(int numPartitions) throws Exception {
+        TestTables.TestTable table = TestTables.create(warehouse, "t_range_" + numPartitions, SCHEMA, SPEC, 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < numPartitions; i++) {
+            append.appendFile(dataFileForPartition(i));
+        }
+        append.commit();
+        table.updateProperties().set(TableProperties.MANIFEST_TARGET_SIZE_BYTES, "1").commit();
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        IcebergTableProcedureContext context = createContext(table, txn);
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Function<DataFile, Object>> captor = ArgumentCaptor.forClass(Function.class);
+        verify(rewriteManifests).clusterBy(captor.capture());
+        verify(rewriteManifests).commit();
+        return captor.getValue();
+    }
+
+    // Executor-aware variant: drives the parallel pre-scan path by supplying a scan executor.
+    private Function<DataFile, Object> runAndCaptureClusterFunction(int numPartitions, ExecutorService executor)
+            throws Exception {
+        TestTables.TestTable table = TestTables.create(warehouse, "t_range_" + numPartitions, SCHEMA, SPEC, 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < numPartitions; i++) {
+            append.appendFile(dataFileForPartition(i));
+        }
+        append.commit();
+        table.updateProperties().set(TableProperties.MANIFEST_TARGET_SIZE_BYTES, "1").commit();
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.scanManifestsWith(any(ExecutorService.class))).thenReturn(rewriteManifests);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        IcebergTableProcedureContext context = createContext(table, txn, executor);
         RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
         assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
 
@@ -444,11 +498,14 @@ public class RewriteManifestsProcedureTest {
                 .withPartitionPath("k2=" + k2)
                 .withRecordCount(1)
                 .build();
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
     }
 
     private IcebergTableProcedureContext createContext(Table table, Transaction transaction) {
-        return createContext(table, transaction, null);
+        IcebergHiveCatalog catalog = Mockito.mock(IcebergHiveCatalog.class);
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause);
     }
 
     private IcebergTableProcedureContext createContext(Table table, Transaction transaction,

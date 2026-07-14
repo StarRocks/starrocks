@@ -31,12 +31,9 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.PartitionUtil;
@@ -44,11 +41,8 @@ import org.apache.iceberg.util.PropertyUtil;
 
 import java.io.IOException;
 import java.util.Collections;
-<<<<<<< HEAD
-=======
 import java.util.Comparator;
 import java.util.List;
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -94,25 +88,15 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
             return null;
         }
 
-<<<<<<< HEAD
-        // stream the manifest list instead of materializing it via allManifests():
-        // only the count and lengths are needed to decide whether to rewrite
-=======
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
         long manifestCount = 0;
         long totalManifestsSize = 0;
         try (CloseableIterable<ManifestFile> manifests =
                 IcebergUtil.readManifests(currentSnapshot, icebergTable.io())) {
             for (ManifestFile manifest : manifests) {
-<<<<<<< HEAD
-                manifestCount++;
-                totalManifestsSize += manifest.length();
-=======
                 if (manifest.content() == ManifestContent.DATA) {
                     manifestCount++;
                     totalManifestsSize += manifest.length();
                 }
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException(
@@ -134,10 +118,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         if (manifestCount == 1 && totalManifestsSize < manifestTargetSizeBytes) {
             return null;
         }
-<<<<<<< HEAD
-=======
 
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
         // Having too many open manifest writers can potentially cause OOM on the coordinator
         long targetManifestClusters = Math.min(
                 ((totalManifestsSize + manifestTargetSizeBytes - 1) / manifestTargetSizeBytes),
@@ -153,19 +134,15 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         NavigableMap<Object, Integer> partitionValueToCluster;
         if (icebergTable.spec().isPartitioned() && targetManifestClusters > 1) {
             partitionValueToCluster = buildClusteredPartitionValues(
-                    icebergTable, currentSnapshot, (int) targetManifestClusters, null);
+                    icebergTable, currentSnapshot, (int) targetManifestClusters, context.executorService());
         } else {
             partitionValueToCluster = Collections.emptyNavigableMap();
         }
 
         RewriteManifests rewriteManifests = context.transaction().rewriteManifests();
-<<<<<<< HEAD
         if (context.executorService() != null) {
             rewriteManifests = rewriteManifests.scanManifestsWith(context.executorService());
         }
-        Types.StructType structType = icebergTable.spec().partitionType();
-=======
->>>>>>> b21288323bf... [Enhancement] Cluster iceberg rewrite_manifests output by order-preserving partition ranges (#76193)
 
         rewriteManifests
                 .clusterBy(file -> {
