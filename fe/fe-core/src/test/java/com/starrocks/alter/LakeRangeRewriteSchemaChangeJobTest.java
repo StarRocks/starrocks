@@ -1775,6 +1775,38 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         @Override
         protected void validateRewriteConfig() {
         }
+
+        // This stub never builds shadow tablets (planPartitionShadow is a no-op), so createShadowTabletMetadata
+        // early-returns and the shadow-config getters below are never actually read.
+        @Override
+        protected List<Column> getShadowSchema() {
+            return List.of();
+        }
+
+        @Override
+        protected KeysType getShadowKeysType() {
+            return KeysType.DUP_KEYS;
+        }
+
+        @Override
+        protected List<Integer> getShadowSortKeyIdxes() {
+            return List.of();
+        }
+
+        @Override
+        protected List<Integer> getShadowSortKeyUniqueIds() {
+            return List.of();
+        }
+
+        @Override
+        protected short getShadowShortKeyColumnCount() {
+            return (short) 0;
+        }
+
+        @Override
+        protected String shadowKindLabel() {
+            return "optimize";
+        }
     }
 
     @Test

@@ -33,9 +33,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -43,23 +41,13 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
-import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletSchema;
-import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -247,132 +235,34 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         plan.shadowIndex = shadowIndex;
     }
 
-    /**
-     * Write each range-rewrite shadow tablet's version-1 metadata on its compute node, carrying the NEW
-     * (rewritten) schema and its sort key, so the reshard/pre-split boundary validation reads the new
-     * sort-key arity rather than the base index's. The rewrite shadow shares the base index's
-     * per-partition storage path, so without this the compute node would lazily materialize the tablet's
-     * version-1 metadata from the base index's shared initial-metadata template and read the BASE schema
-     * (stale sort-key arity), which makes a subsequent load's pre-split fall back to identical.
-     *
-     * <p>Mirrors {@link LakeRangeRollupJob}: build one CreateReplicaTask per shadow tablet under a READ
-     * lock, then send and wait outside the lock (a network round-trip must not be held across the
-     * database lock). Tablet-creation optimization is forced off so each tablet writes its OWN per-tablet
-     * version-1 metadata instead of the shared initial-metadata template that belongs to the base index.
-     */
     @Override
-    protected void createShadowTabletMetadata(List<PendingPartitionPlan> plans) throws AlterCancelException {
-        long shadowTabletCount = plans.stream()
-                .filter(plan -> plan.shadowIndex != null)
-                .mapToLong(plan -> plan.shadowIndex.getTablets().size())
-                .sum();
-        if (shadowTabletCount == 0) {
-            return;
-        }
-
-        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>((int) shadowTabletCount);
-        AgentBatchTask batchTask;
-        // Build the tasks under a READ lock (stable table metadata + compute-node resolution), then send
-        // and wait outside the lock (a network round-trip must not be held across the database lock).
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
-            OlapTable table = getTableOrThrow();
-            batchTask = buildShadowTabletCreateTasks(table, plans, countDownLatch);
-        }
-
-        LakeRollupJob.sendAgentTaskAndWait(batchTask, countDownLatch,
-                Config.tablet_create_timeout_second * shadowTabletCount);
+    protected List<Column> getShadowSchema() {
+        return newSchema;
     }
 
-    /**
-     * Build one {@link CreateReplicaTask} per range-rewrite shadow tablet, each carrying the new index's
-     * own tablet schema (its sort key) and its per-tablet range. The caller holds the database read lock.
-     * Split out so a unit test can assert the emitted tablet schema without a compute-node round-trip.
-     */
-    @VisibleForTesting
-    AgentBatchTask buildShadowTabletCreateTasks(@NotNull OlapTable table, List<PendingPartitionPlan> plans,
-                                                MarkedCountDownLatch<Long, Long> countDownLatch)
-            throws AlterCancelException {
-        AgentBatchTask batchTask = new AgentBatchTask();
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        long gtid = getNextGtid();
+    @Override
+    protected KeysType getShadowKeysType() {
+        return newKeysType;
+    }
 
-        // The shadow index meta is not registered on the table until PENDING stage 3, so build the
-        // MaterializedIndexMeta from this job's new-schema config -- identical to what
-        // registerShadowIndexMeta will register -- and derive the tablet schema (with the new sort key)
-        // from it.
-        MaterializedIndexMeta newIndexMeta = new MaterializedIndexMeta(
-                shadowIndexMetaId, newSchema, 0 /* schemaVersion */, 0 /* schemaHash */,
-                shadowShortKeyColumnCount, TStorageType.COLUMN, newKeysType, null /* defineStmt */,
-                newSortKeyIdxes, newSortKeyUniqueIds);
-        TTabletSchema tabletSchema =
-                SchemaInfo.fromMaterializedIndex(table, shadowIndexMetaId, newIndexMeta).toTabletSchema();
+    @Override
+    protected List<Integer> getShadowSortKeyIdxes() {
+        return newSortKeyIdxes;
+    }
 
-        for (PendingPartitionPlan plan : plans) {
-            if (plan.shadowIndex == null) {
-                continue;
-            }
-            PhysicalPartition physicalPartition = table.getPhysicalPartition(plan.physicalPartitionId);
-            if (physicalPartition == null) {
-                throw new AlterCancelException("partition " + plan.physicalPartitionId
-                        + " was dropped while creating range-rewrite shadow tablets");
-            }
-            TStorageMedium storageMedium = table.getPartitionInfo()
-                    .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+    @Override
+    protected List<Integer> getShadowSortKeyUniqueIds() {
+        return newSortKeyUniqueIds;
+    }
 
-            // The schema file is created once per partition, with the first tablet.
-            boolean createSchemaFile = true;
-            for (Tablet shadowTablet : plan.shadowIndex.getTablets()) {
-                long shadowTabletId = shadowTablet.getId();
-                ComputeNode computeNode = null;
-                try {
-                    computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, shadowTabletId);
-                } catch (ErrorReportException e) {
-                    // computeNode stays null -> handled below.
-                }
-                if (computeNode == null) {
-                    throw new AlterCancelException(
-                            "no alive compute node to create range-rewrite shadow tablet " + shadowTabletId);
-                }
-                countDownLatch.addMark(computeNode.getId(), shadowTabletId);
+    @Override
+    protected short getShadowShortKeyColumnCount() {
+        return shadowShortKeyColumnCount;
+    }
 
-                CreateReplicaTask task = CreateReplicaTask.newBuilder()
-                        .setNodeId(computeNode.getId())
-                        .setDbId(dbId)
-                        .setTableId(tableId)
-                        .setPartitionId(plan.physicalPartitionId)
-                        .setIndexId(shadowIndexMetaId)
-                        .setTabletId(shadowTabletId)
-                        .setVersion(Partition.PARTITION_INIT_VERSION)
-                        .setStorageMedium(storageMedium)
-                        .setLatch(countDownLatch)
-                        .setEnablePersistentIndex(table.enablePersistentIndex())
-                        .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
-                        // Carry the table's flat-json config: this per-tablet metadata replaces the shared
-                        // base template (which had it), so without this a flat-json-enabled table's shadow
-                        // tablets would lose the derivation -- as every other create-replica path sets it.
-                        .setFlatJsonConfig(table.getFlatJsonConfig())
-                        .setTabletType(TTabletType.TABLET_TYPE_LAKE)
-                        .setCompressionType(table.getCompressionType())
-                        // The compute node overwrites the tablet schema's compression level with this
-                        // request field (defaults to 0), so set it explicitly to preserve a table's
-                        // configured non-default compression level -- as every other create-replica path does.
-                        .setCompressionLevel(table.getCompressionLevel())
-                        .setCreateSchemaFile(createSchemaFile)
-                        .setTabletSchema(tabletSchema)
-                        // Force per-tablet version-1 metadata: with the optimization on the compute node
-                        // would write the shared initial-metadata template, which belongs to the base index
-                        // sharing this partition storage path. Per-tablet metadata both fixes the stale
-                        // schema read and avoids clobbering the base template.
-                        .setEnableTabletCreationOptimization(false)
-                        .setGtid(gtid)
-                        .setCompactionStrategy(table.getCompactionStrategy())
-                        .setRange(shadowTablet.getRange())
-                        .build();
-                createSchemaFile = false;
-                batchTask.addTask(task);
-            }
-        }
-        return batchTask;
+    @Override
+    protected String shadowKindLabel() {
+        return "range-rewrite";
     }
 
     /**
