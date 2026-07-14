@@ -624,7 +624,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Minimum interval before a partition that failed to publish its version is retried by PublishVersionDaemon in shared-data (lake) mode. Applies to both the single-transaction and the batch publish paths: on retry, a partition that already published successfully is skipped, and a partition that recently failed is not re-attempted until this interval has elapsed since its last failure. Only failed partitions are affected; a partition that publishes on its first attempt is never delayed.
+- Description: Minimum interval before a partition that failed to publish its version is retried by PublishVersionDaemon in shared-data (lake) mode. Applies to both the single-transaction and the batch publish paths: on retry, a partition that already published successfully is skipped, and a partition that recently failed is not re-attempted until this interval has elapsed since its last failure. Only failed partitions are affected; a partition that publishes on its first attempt is never delayed. Exception: for tables with `file_bundling = true`, already-published partitions are NOT skipped on retry. Each publish rewrites a whole-partition bundle against the currently visible index set, so file-bundling partitions are always re-published to keep that bundle current (and may be delayed by this interval if a re-publish fails). This setting therefore does not eliminate re-publishes for file-bundling tables.
 - Introduced in: v4.1
 
 ### `lake_enable_batch_publish_version`
