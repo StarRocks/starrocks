@@ -428,10 +428,10 @@ This is useful for auditing (which topic/partition/offset a row came from), even
 #### Syntax
 
 ```SQL
-INCLUDE METADATA ( <metadata_key> AS <alias> [, <metadata_key> AS <alias> ...] )
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
 ```
 
-`INCLUDE METADATA` is a load property; place it among the other load properties (such as `COLUMNS` and `WHERE`), in any order, before the `PROPERTIES` and `FROM` clauses. `AS <alias>` is required, the alias must be unique within the clause, and it must not collide with a payload field, a destination-table column, or a reserved column name.
+`INCLUDE METADATA` is a load property; place it among the other load properties (such as `COLUMNS` and `WHERE`), in any order, before the `PROPERTIES` and `FROM` clauses. `AS <alias>` is optional. If it is omitted, the alias defaults to `<metadata_key>`. The alias must be unique within the clause, and it must not collide with a payload field, a destination-table column, or a reserved column name.
 
 #### Metadata keys
 
@@ -458,7 +458,7 @@ To read a single header/property value, use `element_at(<headers_alias>, '<name>
 #### Usage notes
 
 - `INCLUDE METADATA` is available for `format = json` (Kafka and Pulsar) and `format = avro` (Kafka only; Pulsar Routine Load does not support Avro). It is not supported for CSV, where one message can expand into many rows and per-message metadata would be ambiguous.
-- A metadata alias is an ordinary source column: reference it anywhere in the `COLUMNS` expressions. A payload field with the same name is never shadowed, because the alias is chosen explicitly.
+- A metadata alias is an ordinary source column: reference it anywhere in the `COLUMNS` expressions. If a payload field has the same name as a metadata key, specify a different alias with `AS <alias>` to avoid ambiguity.
 - `OFFSET` is Kafka-only and `MESSAGE_ID` is Pulsar-only; using a key unsupported by the source raises an error that lists the keys supported for that source.
 - `HEADERS`/`PROPERTIES` is a `MAP\<VARCHAR, VARCHAR>`. The source headers/properties are an ordered list that may repeat a key; duplicates collapse into the map with the last value winning (an `element_at(map, 'name')` lookup is likewise last-wins, and returns `NULL` when the key is absent). Values are raw bytes stored in VARCHAR as-is — there is no UTF-8 validation or decoding.
 

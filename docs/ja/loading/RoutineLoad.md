@@ -428,10 +428,10 @@ JSON または Avro 形式のデータをロードする際、メッセージの
 #### 構文
 
 ```SQL
-INCLUDE METADATA ( <metadata_key> AS <alias> [, <metadata_key> AS <alias> ...] )
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
 ```
 
-`INCLUDE METADATA` はロードプロパティです。`COLUMNS` や `WHERE` などの他のロードプロパティと一緒に（順序は任意で）、`PROPERTIES` および `FROM` 句の前に配置します。`AS <alias>` は必須で、エイリアスは句内で一意であり、ペイロードフィールド、ターゲットテーブルのカラム、予約カラム名と衝突してはいけません。
+`INCLUDE METADATA` はロードプロパティです。`COLUMNS` や `WHERE` などの他のロードプロパティと一緒に（順序は任意で）、`PROPERTIES` および `FROM` 句の前に配置します。`AS <alias>` は任意です。省略した場合、エイリアスは `<metadata_key>` になります。エイリアスは句内で一意であり、ペイロードフィールド、ターゲットテーブルのカラム、予約カラム名と衝突してはいけません。
 
 #### メタデータキー
 
@@ -458,7 +458,7 @@ INCLUDE METADATA ( <metadata_key> AS <alias> [, <metadata_key> AS <alias> ...] )
 #### 使用上の注意
 
 - `INCLUDE METADATA` は `format = json`（Kafka および Pulsar）と `format = avro`（Kafka のみ。Pulsar Routine Load は Avro 非対応）で使用できます。1 つのメッセージが複数行に展開される場合があり、メッセージごとのメタデータが曖昧になるため、CSV ではサポートされません。
-- メタデータのエイリアスは通常のソースカラムです。`COLUMNS` 式の任意の場所で参照できます。エイリアスは明示的に選択されるため、同名のペイロードフィールドが隠されることはありません。
+- メタデータのエイリアスは通常のソースカラムです。`COLUMNS` 式の任意の場所で参照できます。ペイロードフィールドがメタデータキーと同じ名前の場合は、曖昧さを避けるために `AS <alias>` で別のエイリアスを指定してください。
 - `OFFSET` は Kafka 専用、`MESSAGE_ID` は Pulsar 専用です。ソースがサポートしないキーを使用すると、そのソースがサポートするキーを列挙したエラーが発生します。
 - `HEADERS`/`PROPERTIES` の型は `MAP\<VARCHAR, VARCHAR>` です。ソースの header/property は順序付きリストでキーが重複する場合があり、重複はマップに折りたたまれて最後の値が有効になります（`element_at(map, 'name')` ルックアップも同様に最後の値が有効で、キーが存在しない場合は `NULL` を返します）。値は生バイトとしてそのまま VARCHAR に格納され、UTF-8 の検証やデコードは行われません。
 
