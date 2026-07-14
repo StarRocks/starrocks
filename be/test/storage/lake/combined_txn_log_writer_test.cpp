@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/write_combined_txn_log.h"
+#include "storage/lake/combined_txn_log_writer.h"
 
 #include <gtest/gtest.h>
 

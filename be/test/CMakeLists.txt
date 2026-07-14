@@ -9,7 +9,6 @@ set(EXEC_FILES
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
-        ./exec/plain_text_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
@@ -188,6 +187,7 @@ add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(exec_primitive)
 add_subdirectory(connector_primitive)
+add_subdirectory(data_sink)
 add_subdirectory(exec)
 add_subdirectory(schema_scanner)
 add_subdirectory(connector)
@@ -323,7 +323,7 @@ SET(DW_TEST_FILES
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
-    ./storage/lake/write_combined_txn_log_test.cpp
+    ./storage/lake/combined_txn_log_writer_test.cpp
     ./storage/lake/lake_persistent_index_fileset_test.cpp
     ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp

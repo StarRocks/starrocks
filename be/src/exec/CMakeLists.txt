@@ -236,9 +236,6 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    write_combined_txn_log.cpp
-    local_file_writer.cpp
-    plain_text_builder.cpp
     agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
@@ -275,7 +272,6 @@ set(EXEC_NON_PIPELINE_FILES
     except_hash_set.cpp
     except_node.cpp
     parquet_writer.cpp
-    parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
     enforce_unique_row_locator_node.cpp
@@ -412,4 +408,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
+target_link_libraries(Exec PRIVATE DataSinkFile Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)

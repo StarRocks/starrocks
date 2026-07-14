@@ -41,7 +41,6 @@
 
 #include "column/chunk.h"
 #include "common/logging.h"
-#include "exec/exec_env.h"
 #include "exec_primitive/arrow/result_to_arrow_converter.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -49,6 +48,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 

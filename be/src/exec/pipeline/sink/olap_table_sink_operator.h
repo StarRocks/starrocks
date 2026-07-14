@@ -16,8 +16,8 @@
 
 #include <utility>
 
-#include "exec/data_sinks/async_data_sink.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec_primitive/async_data_sink.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks {

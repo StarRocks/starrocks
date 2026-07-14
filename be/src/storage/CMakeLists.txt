@@ -186,6 +186,7 @@ set(STORAGE_FILES
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
@@ -321,3 +322,4 @@ ADD_BE_LIB(Storage
 )
 
 target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
+target_link_libraries(Storage PRIVATE Runtime)

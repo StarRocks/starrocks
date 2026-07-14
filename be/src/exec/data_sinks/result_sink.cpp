@@ -38,7 +38,6 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/result/buffer_control_block.h"
-#include "exec/exec_env.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -53,6 +52,7 @@
 #include "exec/data_sinks/variable_result_writer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
