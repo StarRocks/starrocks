@@ -213,7 +213,8 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
-StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata) {
+StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
+                                                             int64_t generation_version) {
     if (!is_primary_key(*metadata) || !metadata->enable_persistent_index() ||
         metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return metadata;
@@ -257,7 +258,9 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     // mutable_metadata->sstable_meta(). builder.finalize() is NOT called
     // here — this flush does not produce its own metadata version; the
     // returned metadata is consumed by the surrounding reshard publish.
-    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder));
+    // Pass the reshard publish version as generation_version so freshly-flushed sstables are
+    // stamped with it (this flush runs at base_version); the metadata version is left untouched.
+    RETURN_IF_ERROR(index_entry->value().commit(metadata, &builder, generation_version));
 
     // Success: dismiss the failure cleanup and release the cache entry.
     // write_guard is released when it goes out of scope at function return.
