@@ -21,6 +21,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
@@ -90,7 +91,14 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
                                                       String label,
                                                       long timeoutMillis) throws StarRocksException {
         long dbId = db.getId();
-        TransactionState txnState = getTxnState(dbId, label);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (txnState == null) {
+            // The full transaction state may have been evicted (count-based eviction ignores age).
+            // Resolve the terminal outcome from the cache by label so a savepoint/resume recommit is
+            // answered definitively instead of "no transaction found".
+            return commitEvictedTransactionByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -120,7 +128,12 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
     private TransactionResult handleRollbackTransaction(Database db,
                                                         String label) throws StarRocksException {
         long dbId = db.getId();
-        TransactionState txnState = getTxnState(dbId, label);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (txnState == null) {
+            // Evicted (see handleCommitTransaction); resolve the terminal outcome from the cache.
+            return rollbackEvictedTransactionByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -147,13 +160,47 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         return result;
     }
 
-    private static TransactionState getTxnState(long dbId, String label) throws StarRocksException {
-        TransactionState txnState = GlobalStateMgr.getCurrentState()
-                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
-        if (null == txnState) {
-            throw new StarRocksException(String.format("No transaction found by label %s", label));
+    // Resolve a commit for a transaction whose full state has been evicted, from the terminal-state
+    // cache (by label). VISIBLE/COMMITTED -> idempotent success; ABORTED -> cannot-commit; otherwise
+    // genuinely unknown -> not found. Mirrors the in-map status branches in handleCommitTransaction.
+    private static TransactionResult commitEvictedTransactionByLabel(long dbId, String label) throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case COMMITTED:
+            case VISIBLE:
+                result.setOKMsg(String.format("Transaction has already committed, label is %s", label));
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case ABORTED:
+                throw new StarRocksException(
+                        String.format("Can not commit ABORTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
         }
-        return txnState;
+        return result;
+    }
+
+    // Rollback counterpart of commitEvictedTransactionByLabel.
+    private static TransactionResult rollbackEvictedTransactionByLabel(long dbId, String label)
+            throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case ABORTED:
+                result.setOKMsg(String.format("Transaction has already aborted, label is %s", label));
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case COMMITTED:
+            case VISIBLE:
+                throw new StarRocksException(
+                        String.format("Can not abort COMMITTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+        }
+        return result;
     }
 
 }

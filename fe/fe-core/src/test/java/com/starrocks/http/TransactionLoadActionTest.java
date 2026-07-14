@@ -47,6 +47,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Utils;
@@ -415,6 +416,70 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
         }
 
+    }
+
+    // Label-based HTTP 2PC commit of a transaction whose full state was evicted (count-based eviction
+    // ignores age): the FE must resolve the terminal outcome from the terminal-state cache by label
+    // instead of returning "no transaction found". This is the Flink savepoint/resume recommit path.
+    private void mockEvictedLabel(TransactionStatus terminalStatus) {
+        new Expectations() {
+            {
+                // Full state has been evicted.
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                result = null;
+                minTimes = 0;
+                // But the terminal outcome is still known via the terminal-state cache.
+                globalTransactionMgr.getLabelStatus(anyLong, anyString);
+                result = new TransactionStateSnapshot(terminalStatus, null);
+                minTimes = 0;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String name) {
+                return new Database(testDbId, DB_NAME);
+            }
+        };
+    }
+
+    private Response commitByLabel(String label) throws Exception {
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        Request request = newRequest(TransactionOperation.TXN_COMMIT, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        return networkClient.newCall(request).execute();
+    }
+
+    @Test
+    public void commitEvictedVisibleTxnByLabelReturnsIdempotentSuccess() throws Exception {
+        mockEvictedLabel(TransactionStatus.VISIBLE);
+        try (Response response = commitByLabel(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already committed"));
+        }
+    }
+
+    @Test
+    public void commitEvictedAbortedTxnByLabelFails() throws Exception {
+        mockEvictedLabel(TransactionStatus.ABORTED);
+        try (Response response = commitByLabel(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("Can not commit"));
+        }
+    }
+
+    @Test
+    public void commitTrulyUnknownTxnByLabelReturnsNotFound() throws Exception {
+        mockEvictedLabel(TransactionStatus.UNKNOWN);
+        try (Response response = commitByLabel(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("No transaction found"));
+        }
     }
 
     @Test
