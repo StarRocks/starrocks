@@ -340,10 +340,10 @@ public abstract class MVRefreshProcessor {
                 continue;
             }
             final TvrVersionRange pinned = TvrTableSnapshot.of(tvr.end());
-            // Must key by Table#getTableIdentifier() to match every consumer (MVPCTRefreshPlanBuilder,
-            // PartitionDiffer#pinnedRangeFor). For native OLAP BaseTableInfo#getTableIdentifier() yields
-            // the table id but Table yields the name, so the old key silently missed every lookup.
-            pinnedMap.put(info.getBaseTable().getTableIdentifier(), pinned);
+            // Key by getUUID() — cross-db-unique and identical at every consumer
+            // (MVPCTRefreshPlanBuilder, PartitionDiffer#pinnedRangeFor). A bare table
+            // name would collide across databases.
+            pinnedMap.put(info.getBaseTable().getUUID(), pinned);
 
             if (info instanceof PCTTableSnapshotInfo) {
                 ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);
