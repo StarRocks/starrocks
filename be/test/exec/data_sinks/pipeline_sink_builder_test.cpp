@@ -21,7 +21,9 @@
 #include "exec/pipeline/fragment_execution_params.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 #include "exec/runtime/pipeline.h"
+#include "exec/runtime/query_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -30,9 +32,10 @@ namespace starrocks {
 namespace {
 
 struct PipelineSinkTestRequest {
-    explicit PipelineSinkTestRequest(const TDataSink& sink) {
+    explicit PipelineSinkTestRequest(const TDataSink& sink, int32_t pipeline_sink_dop) {
         TPlanFragmentExecParams params;
         params.__set_sender_id(0);
+        params.__set_pipeline_sink_dop(pipeline_sink_dop);
 
         TPlanFragment fragment;
         fragment.__set_output_sink(sink);
@@ -53,18 +56,25 @@ struct PipelineSinkTestRequest {
 
 class PipelineSinkBuilderTest : public ::testing::Test {
 protected:
-    Status build(const TDataSink& sink) {
+    Status build(const TDataSink& sink, size_t upstream_dop = 1, int32_t pipeline_sink_dop = 1) {
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
+        _query_context = std::make_shared<pipeline::QueryContext>();
+        auto runtime_state = std::make_shared<RuntimeState>();
+        runtime_state->set_query_ctx(_query_context.get(), &_query_context->query_runtime_state(),
+                                     _query_context->object_pool());
+        _fragment_context->set_runtime_state(std::move(runtime_state));
         _context = std::make_unique<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
 
-        PipelineSinkTestRequest request(sink);
+        PipelineSinkTestRequest request(sink, pipeline_sink_dop);
         pipeline::UnifiedExecPlanFragmentParams unified(request.common, request.unique);
-        pipeline::OpFactories upstream{std::make_shared<pipeline::EmptySetOperatorFactory>(0, 0)};
+        auto source = std::make_shared<pipeline::EmptySetOperatorFactory>(0, 0);
+        source->set_degree_of_parallelism(upstream_dop);
+        pipeline::OpFactories upstream{std::move(source)};
         return PipelineSinkBuilder::build(_context.get(), std::move(upstream), unified, _row_desc);
     }
 
     RowDescriptor _row_desc;
+    std::shared_ptr<pipeline::QueryContext> _query_context;
     std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     std::unique_ptr<pipeline::PipelineBuilderContext> _context;
 };
@@ -93,6 +103,72 @@ TEST_F(PipelineSinkBuilderTest, ReportsUnknownSinkTypeByValue) {
     auto status = build(sink);
     EXPECT_FALSE(status.ok());
     EXPECT_NE(status.message().find("999"), std::string::npos);
+}
+
+TEST_F(PipelineSinkBuilderTest, RejectsMissingSinkDescriptors) {
+    for (auto type :
+         {TDataSinkType::RESULT_SINK, TDataSinkType::DATA_STREAM_SINK, TDataSinkType::MULTI_CAST_DATA_STREAM_SINK,
+          TDataSinkType::SPLIT_DATA_STREAM_SINK, TDataSinkType::OLAP_TABLE_SINK, TDataSinkType::MULTI_OLAP_TABLE_SINK,
+          TDataSinkType::EXPORT_SINK, TDataSinkType::MYSQL_TABLE_SINK, TDataSinkType::MEMORY_SCRATCH_SINK,
+          TDataSinkType::DICTIONARY_CACHE_SINK}) {
+        TDataSink sink;
+        sink.__set_type(type);
+
+        auto status = build(sink);
+        EXPECT_FALSE(status.ok()) << type;
+        EXPECT_NE(status.message().find("Missing"), std::string::npos) << type << ": " << status;
+    }
+}
+
+TEST_F(PipelineSinkBuilderTest, RejectsMismatchedStreamSinkCounts) {
+    TMultiCastDataStreamSink multicast;
+    multicast.__set_sinks({TDataStreamSink()});
+    multicast.__set_destinations({});
+    TDataSink multicast_sink;
+    multicast_sink.__set_type(TDataSinkType::MULTI_CAST_DATA_STREAM_SINK);
+    multicast_sink.__set_multi_cast_stream_sink(multicast);
+    auto multicast_status = build(multicast_sink);
+    EXPECT_FALSE(multicast_status.ok());
+    EXPECT_NE(multicast_status.message().find("counts do not match"), std::string::npos);
+
+    TSplitDataStreamSink split;
+    split.__set_sinks({TDataStreamSink()});
+    split.__set_destinations({});
+    TDataSink split_sink;
+    split_sink.__set_type(TDataSinkType::SPLIT_DATA_STREAM_SINK);
+    split_sink.__set_split_stream_sink(split);
+    auto split_status = build(split_sink);
+    EXPECT_FALSE(split_status.ok());
+    EXPECT_NE(split_status.message().find("counts do not match"), std::string::npos);
+}
+
+TEST_F(PipelineSinkBuilderTest, RejectsInvalidSinkDop) {
+    TOlapTableSink olap;
+    TDataSink olap_sink;
+    olap_sink.__set_type(TDataSinkType::OLAP_TABLE_SINK);
+    olap_sink.__set_olap_table_sink(olap);
+    auto olap_status = build(olap_sink, 1, 0);
+    EXPECT_FALSE(olap_status.ok());
+    EXPECT_NE(olap_status.message().find("DOP must be positive"), std::string::npos);
+
+    TMemoryScratchSink memory_scratch;
+    TDataSink memory_sink;
+    memory_sink.__set_type(TDataSinkType::MEMORY_SCRATCH_SINK);
+    memory_sink.__set_memory_scratch_sink(memory_scratch);
+    auto memory_status = build(memory_sink, 2);
+    EXPECT_FALSE(memory_status.ok());
+    EXPECT_NE(memory_status.message().find("requires DOP 1"), std::string::npos);
+}
+
+TEST_F(PipelineSinkBuilderTest, BuildsBlackholeSinkAndMarksFinalSink) {
+    TDataSink sink;
+    sink.__set_type(TDataSinkType::BLACKHOLE_TABLE_SINK);
+
+    ASSERT_TRUE(build(sink).ok());
+    auto* pipeline = const_cast<pipeline::Pipeline*>(_context->last_pipeline());
+    auto* factory = pipeline->sink_operator_factory();
+    EXPECT_NE(dynamic_cast<pipeline::BlackHoleTableSinkOperatorFactory*>(factory), nullptr);
+    EXPECT_TRUE(_query_context->is_final_sink());
 }
 
 } // namespace starrocks

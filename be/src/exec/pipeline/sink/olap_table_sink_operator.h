@@ -80,6 +80,13 @@ public:
               _cur_sender_id(start_sender_id),
               _sinks(std::move(tablet_sinks)) {}
 
+    OlapTableSinkOperatorFactory(int32_t id, FragmentContext* const fragment_ctx, int32_t start_sender_id,
+                                 std::vector<std::unique_ptr<AsyncDataSink>> tablet_sinks)
+            : OperatorFactory(id, "olap_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+              _fragment_ctx(fragment_ctx),
+              _cur_sender_id(start_sender_id),
+              _sinks(std::move(tablet_sinks)) {}
+
     ~OlapTableSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
@@ -91,7 +98,8 @@ public:
 private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
 
-    AsyncDataSink* _sink0;
+    // Kept until the legacy DataSink decomposition path is removed.
+    AsyncDataSink* _sink0 = nullptr;
     FragmentContext* const _fragment_ctx;
     std::atomic<int32_t> _num_sinkers = 0;
     int32_t _cur_sender_id;

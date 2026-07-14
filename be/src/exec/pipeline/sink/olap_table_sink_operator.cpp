@@ -169,13 +169,15 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     _increment_num_sinkers_no_barrier();
-    if (driver_sequence == 0) {
+    if (_sink0 != nullptr) {
+        AsyncDataSink* sink = driver_sequence == 0 ? _sink0 : _sinks[driver_sequence - 1].get();
         return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
-                                                       _sink0, _fragment_ctx, _num_sinkers);
-    } else {
-        return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
-                                                       _sinks[driver_sequence - 1].get(), _fragment_ctx, _num_sinkers);
+                                                       sink, _fragment_ctx, _num_sinkers);
     }
+
+    DCHECK_LT(driver_sequence, _sinks.size());
+    return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
+                                                   _sinks[driver_sequence].get(), _fragment_ctx, _num_sinkers);
 }
 
 Status OlapTableSinkOperatorFactory::prepare(RuntimeState* state) {
