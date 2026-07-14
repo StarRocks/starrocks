@@ -347,6 +347,10 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                         .setLatch(countDownLatch)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        // Carry the table's flat-json config: this per-tablet metadata replaces the shared
+                        // base template (which had it), so without this a flat-json-enabled table's shadow
+                        // tablets would lose the derivation -- as every other create-replica path sets it.
+                        .setFlatJsonConfig(table.getFlatJsonConfig())
                         .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                         .setCompressionType(table.getCompressionType())
                         // The compute node overwrites the tablet schema's compression level with this
