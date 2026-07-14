@@ -84,7 +84,8 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             }
             auto new_schema = TabletSchema::create(alter_meta.tablet_schema());
             RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(alter_meta.tablet_range(), *new_schema));
-            RETURN_IF_ERROR(TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.tablet_range()));
+            RETURN_IF_ERROR(
+                    TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.tablet_range()));
 
             // Non-clearing archival of the pre-alter schema: map every currently-unmapped rowset to
             // the current schema id, and record the current schema in history only if it is absent.

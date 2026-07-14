@@ -542,10 +542,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         // as before, and describe the range only by tablet id and per-bound arity.
         TTabletMetaInfo redacted = tablet_meta_info;
         redacted.__isset.tablet_range = false;
-        const int lower_arity =
-                tablet_meta_info.tablet_range.__isset.lower_bound ? tablet_meta_info.tablet_range.lower_bound.values.size() : -1;
-        const int upper_arity =
-                tablet_meta_info.tablet_range.__isset.upper_bound ? tablet_meta_info.tablet_range.upper_bound.values.size() : -1;
+        const int lower_arity = tablet_meta_info.tablet_range.__isset.lower_bound
+                                        ? tablet_meta_info.tablet_range.lower_bound.values.size()
+                                        : -1;
+        const int upper_arity = tablet_meta_info.tablet_range.__isset.upper_bound
+                                        ? tablet_meta_info.tablet_range.upper_bound.values.size()
+                                        : -1;
         LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(redacted)
                   << " tablet_id: " << tablet_meta_info.tablet_id << " range lower arity: " << lower_arity
                   << " range upper arity: " << upper_arity;
