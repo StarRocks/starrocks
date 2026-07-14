@@ -46,6 +46,25 @@ namespace starrocks::lake {
 
 namespace {
 
+// Non-clearing archival of the tablet's current schema before a new schema is installed: map every
+// currently-unmapped rowset to the current schema id, and record the current schema in
+// historical_schemas only if it is absent. Must be called BEFORE the caller overwrites
+// metadata->schema() with the new schema.
+void archive_current_schema_into_history(TabletMetadataPB* metadata) {
+    const auto& old_schema = metadata->schema();
+    bool record_old_schema_in_history = false;
+    for (const auto& rowset : metadata->rowsets()) {
+        if (metadata->rowset_to_schema().count(rowset.id()) <= 0) {
+            record_old_schema_in_history = true;
+            metadata->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
+        }
+    }
+    if (record_old_schema_in_history && metadata->historical_schemas().count(old_schema.id()) <= 0) {
+        auto& item = (*metadata->mutable_historical_schemas())[old_schema.id()];
+        item.CopyFrom(old_schema);
+    }
+}
+
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
@@ -87,20 +106,8 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             RETURN_IF_ERROR(
                     TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.tablet_range()));
 
-            // Non-clearing archival of the pre-alter schema: map every currently-unmapped rowset to
-            // the current schema id, and record the current schema in history only if it is absent.
-            auto& old_schema = metadata->schema();
-            bool record_old_schema_in_history = false;
-            for (const auto& rowset : metadata->rowsets()) {
-                if (metadata->rowset_to_schema().count(rowset.id()) <= 0) {
-                    record_old_schema_in_history = true;
-                    metadata->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
-                }
-            }
-            if (record_old_schema_in_history && metadata->historical_schemas().count(old_schema.id()) <= 0) {
-                auto& item = (*metadata->mutable_historical_schemas())[old_schema.id()];
-                item.CopyFrom(old_schema);
-            }
+            // Archive the pre-alter schema (non-clearing) before installing the new one.
+            archive_current_schema_into_history(metadata);
 
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
             metadata->mutable_range()->CopyFrom(alter_meta.tablet_range());
@@ -188,17 +195,7 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
               << new_schema->schema_version() << ", old schema id/version: " << old_schema.id() << "/"
               << old_schema.schema_version();
 
-    bool record_old_schema_in_history = false;
-    for (auto& rowset : tablet_meta->rowsets()) {
-        if (tablet_meta->rowset_to_schema().count(rowset.id()) <= 0) {
-            record_old_schema_in_history = true;
-            tablet_meta->mutable_rowset_to_schema()->insert({rowset.id(), old_schema.id()});
-        }
-    }
-    if (record_old_schema_in_history && tablet_meta->historical_schemas().count(old_schema.id()) <= 0) {
-        auto& item = (*tablet_meta->mutable_historical_schemas())[old_schema.id()];
-        item.CopyFrom(old_schema);
-    }
+    archive_current_schema_into_history(tablet_meta.get());
     tablet_meta->mutable_schema()->Clear();
     new_schema->to_schema_pb(tablet_meta->mutable_schema());
     return Status::OK();

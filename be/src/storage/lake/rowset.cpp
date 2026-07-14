@@ -146,22 +146,20 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
         range_pb = &_metadata->range();
     } else if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
         range_pb = &_tablet_metadata->range();
-        range_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
     }
 
     if (range_pb == nullptr) {
         return std::optional<SeekRange>{};
     }
 
-    // A tablet range is expressed in whatever tablet sort key was current when the range was
-    // written, which can differ from this rowset's own (possibly archived) schema after a
-    // metadata-only trailing sort-key add (N -> N+1). Two cases both leave a bound arity that does
-    // not match _tablet_schema: the tablet-level fallback range is always in the current (N+1) sort
-    // key (handled above by switching to the current schema), and a reshard that runs AFTER the add
-    // stamps a per-rowset range in the current (N+1) sort key onto an old rowset that still carries
-    // its archived (N) schema. Decode with whichever available schema's sort-key arity matches the
-    // range's bound arity; the current sort key is a prefix-preserving superset of the archived one,
-    // so the leading column types agree.
+    // A tablet range is expressed in whatever tablet sort key was current when the range was written,
+    // which can differ from this rowset's own (possibly archived) schema after a metadata-only trailing
+    // sort-key add (N -> N+1): the tablet-level fallback range is always in the current sort key, and a
+    // reshard that runs AFTER the add stamps a per-rowset range in the current sort key onto an old
+    // rowset that still carries its archived (N) schema. When the range's bound arity does not match
+    // this rowset's schema, decode with the current tablet schema instead -- its arity matches, and the
+    // current sort key is a prefix-preserving superset of the archived one, so the leading column types
+    // agree. A same-arity range decodes identically under either schema.
     if (_tablet_metadata != nullptr) {
         const int range_arity = range_pb->has_lower_bound()
                                         ? range_pb->lower_bound().values_size()
