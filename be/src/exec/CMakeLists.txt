@@ -290,6 +290,7 @@ set(EXEC_NON_PIPELINE_FILES
 set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/data_sink_factory.cpp
     data_sinks/data_sink_pipeline.cpp
+    data_sinks/pipeline_sink_builder.cpp
     data_sinks/dictionary_cache_sink.cpp
     data_sinks/hive_table_sink.cpp
     data_sinks/iceberg_table_sink.cpp
