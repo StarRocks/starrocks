@@ -20,6 +20,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_reader_params.h"
 #include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
 #include "types_fwd.h"
 
 namespace starrocks {
@@ -35,11 +36,18 @@ class SeekTuple;
 class Segment;
 class TabletSchema;
 class TabletMetadataPB;
+class RowsetReadOptions;
 
 namespace lake {
 
+struct PreparedTabletReadState;
 class Rowset;
 class TabletManager;
+
+// Set difference lhs - rhs over two sorted, internally non-overlapping sparse ranges. Used by the
+// prepared-split refine path to compute the REFINED coverage (pruned - already-allocated-coarse).
+// Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
+SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -109,7 +117,15 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+    Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
+                                                                RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
+    Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
+                                              LakeIOOptions* lake_io_opts);
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
@@ -128,6 +144,7 @@ private:
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
+    std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;
