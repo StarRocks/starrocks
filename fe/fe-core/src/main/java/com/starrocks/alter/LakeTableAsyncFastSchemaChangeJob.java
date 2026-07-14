@@ -134,7 +134,20 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
      * tests) can set it when constructing the job for a metadata-only trailing sort-key ADD.
      */
     void setTargetRanges(Map<Long, TabletRange> targetRanges) {
-        this.targetRanges = targetRanges;
+        if (targetRanges == null) {
+            this.targetRanges = null;
+            return;
+        }
+        // Defensively copy and freeze so the must-not-fail catalog callback cannot observe a
+        // caller-mutated map or a null key/value (which would throw mid-flip after the FINISHED
+        // record is journaled).
+        Map<Long, TabletRange> copy = new HashMap<>();
+        for (Map.Entry<Long, TabletRange> entry : targetRanges.entrySet()) {
+            Preconditions.checkArgument(entry.getKey() != null && entry.getValue() != null,
+                    "target range map must not contain null keys or values");
+            copy.put(entry.getKey(), entry.getValue());
+        }
+        this.targetRanges = Collections.unmodifiableMap(copy);
     }
 
     Map<Long, TabletRange> getTargetRanges() {
@@ -315,6 +328,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         if (targetRanges == null) {
             return;
         }
+        // Everything the must-not-fail catalog callback (updateCatalogUnprotected range path)
+        // depends on is validated HERE, before the FINISHED record is journaled, so the callback
+        // cannot throw mid-flip and leave a durable FINISHED record with a partial catalog update.
+        if (schemaInfos.size() != 1) {
+            throw new AlterCancelException("range flip target only supports a single index, got " + schemaInfos.size());
+        }
         Set<Long> liveTabletIds = new HashSet<>();
         for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
             long indexMetaId = indexSchemaInfo.getIndexMetaId();
@@ -328,13 +347,18 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                         + indexSchemaInfo.getSchemaInfo().getVersion() + " is older than current "
                         + indexMeta.getSchemaVersion());
             }
+            // Mirror the callback's keysType precondition so it cannot throw post-journal.
+            if (!Objects.equals(indexMeta.getKeysType(), indexSchemaInfo.getSchemaInfo().getKeysType())) {
+                throw new AlterCancelException("range flip keysType mismatch for indexMetaId " + indexMetaId);
+            }
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
                 if (index == null) {
                     continue;
                 }
                 for (Tablet tablet : index.getTablets()) {
-                    if (!targetRanges.containsKey(tablet.getId())) {
+                    // Non-null value check (not just containsKey) — the callback dereferences the target.
+                    if (targetRanges.get(tablet.getId()) == null) {
                         throw new AlterCancelException("missing target range for tablet " + tablet.getId());
                     }
                     liveTabletIds.add(tablet.getId());

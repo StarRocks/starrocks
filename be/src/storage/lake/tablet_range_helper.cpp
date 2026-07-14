@@ -269,7 +269,20 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
             if (t_val.variant_type == TVariantType::MINIMUM || t_val.variant_type == TVariantType::MAXIMUM) {
                 return Status::InvalidArgument("MINIMUM/MAXIMUM variant is not supported in tablet range");
             }
-            pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
+            // Thrift permits any i32 for an enum field, so map only the values we support instead of
+            // blindly casting into VariantTypePB (an out-of-range cast is an invalid proto enum that
+            // aborts on assertion-enabled builds).
+            switch (t_val.variant_type) {
+            case TVariantType::NORMAL_VALUE:
+                pb_val->set_variant_type(VariantTypePB::NORMAL_VALUE);
+                break;
+            case TVariantType::NULL_VALUE:
+                pb_val->set_variant_type(VariantTypePB::NULL_VALUE);
+                break;
+            default:
+                return Status::InvalidArgument(
+                        fmt::format("unsupported TVariant variant_type: {}", static_cast<int>(t_val.variant_type)));
+            }
         }
         return Status::OK();
     };

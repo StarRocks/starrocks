@@ -5057,6 +5057,12 @@ public class SchemaChangeHandler extends AlterHandler {
         if (newSortKey.size() != oldSortKey.size() + 1) {
             return false;
         }
+        // Keep the metadata-only route within the arity the BE range channel supports (kMaxRangeSortKeyArity
+        // = 128 in be/src/storage/lake/tablet_range_helper.cpp); a larger sort key must fall through to the
+        // K-tablet rewrite instead of being rejected at BE apply.
+        if (newSortKey.size() > 128) {
+            return false;
+        }
         for (int i = 0; i < oldSortKey.size(); i++) {
             if (oldSortKey.get(i).getUniqueId() != newSortKey.get(i).getUniqueId()) {
                 return false;
