@@ -69,6 +69,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -2580,6 +2581,12 @@ public class SchemaChangeHandler extends AlterHandler {
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
         Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames = new HashMap<>();
+        // Set when an ADD COLUMN of a key column on a shared-data range table is routed
+        // (needsRangeRewriteSchemaChange). Instead of early-returning the K-tablet rewrite job here,
+        // clause processing continues through finalAnalyze so the resolved schema + short-key count are
+        // available; the dispatch tail then classifies it as either a metadata-only trailing sort-key
+        // add (async schema-evolution job) or the rewrite fallback.
+        boolean rangeKeyAddPending = false;
         // NOTE: be very careful with the order of processing alter clauses and early return!!!
         // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
@@ -2610,14 +2617,14 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
-                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                    rangeKeyAddPending = true;
                 }
             } else if (alterClause instanceof AddColumnsClause) {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
                 if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
-                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                    rangeKeyAddPending = true;
                 }
             } else if (alterClause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
@@ -2866,6 +2873,17 @@ public class SchemaChangeHandler extends AlterHandler {
         if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
+        }
+
+        if (rangeKeyAddPending) {
+            // A routed ADD of a key column on a shared-data range table: if the resolved change is a
+            // metadata-only trailing sort-key add, run the async schema-evolution job that reprojects
+            // tablet ranges in place; otherwise fall back to the K-tablet data-rewrite job.
+            AlterJobV2 metadataOnlyJob = tryCreateMetadataOnlyTrailingKeyAddJob(olapTable, schemaChangeData);
+            if (metadataOnlyJob != null) {
+                return metadataOnlyJob;
+            }
+            return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
         }
 
         if (!fastSchemaEvolution) {
@@ -4478,6 +4496,77 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         job.setComputeResource(schemaChangeData.getComputeResource());
         return job;
+    }
+
+    /**
+     * If {@code schemaChangeData} describes a metadata-only trailing sort-key key-column ADD on a
+     * shared-data range-distribution table (see {@link #isMetadataOnlyTrailingKeyAdd}), build the async
+     * schema-evolution job carrying the per-tablet target range map -- each existing tablet boundary
+     * reprojected with a trailing NULL sentinel for the new column. Returns null when the change is not
+     * metadata-only or the async job could not be built, so the caller falls back to the K-tablet
+     * data-rewrite job.
+     */
+    private AlterJobV2 tryCreateMetadataOnlyTrailingKeyAddJob(OlapTable olapTable, SchemaChangeData schemaChangeData) {
+        if (!isMetadataOnlyTrailingKeyAdd(schemaChangeData)) {
+            return null;
+        }
+        Column newTrailingColumn = findNewTrailingKeyColumn(olapTable, schemaChangeData);
+        if (newTrailingColumn == null) {
+            return null;
+        }
+        AlterJobV2 job = createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
+        if (!(job instanceof LakeTableAsyncFastSchemaChangeJob)) {
+            return null;
+        }
+        LakeTableAsyncFastSchemaChangeJob asyncJob = (LakeTableAsyncFastSchemaChangeJob) job;
+        asyncJob.setTargetRanges(computeTargetRanges(olapTable, newTrailingColumn));
+        return asyncJob;
+    }
+
+    /**
+     * The single brand-new key column of a metadata-only trailing key-column ADD: the resolved base
+     * schema column whose unique id is absent from the live pre-add base schema. {@link
+     * #isMetadataOnlyTrailingKeyAdd} has already verified there is exactly one such key column.
+     */
+    private static Column findNewTrailingKeyColumn(OlapTable olapTable, SchemaChangeData schemaChangeData) {
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        List<Column> newSchema = schemaChangeData.getNewIndexMetaIdToSchema().get(baseIndexMetaId);
+        if (newSchema == null) {
+            return null;
+        }
+        Set<Integer> oldUniqueIds = new HashSet<>();
+        for (Column column : olapTable.getSchemaByIndexMetaId(baseIndexMetaId)) {
+            oldUniqueIds.add(column.getUniqueId());
+        }
+        for (Column column : newSchema) {
+            if (column.isKey() && !oldUniqueIds.contains(column.getUniqueId())) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reproject every base-index tablet's current boundary with a trailing NULL sentinel for {@code
+     * newTrailingColumn}, keyed by tablet id, over every tablet of every visible physical partition.
+     * Mirrors the job's in-place flip / coverage-validation iteration so the target map covers exactly
+     * the live tablet set.
+     */
+    private static Map<Long, TabletRange> computeTargetRanges(OlapTable olapTable, Column newTrailingColumn) {
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        Map<Long, TabletRange> targetRanges = new HashMap<>();
+        for (PhysicalPartition physicalPartition : olapTable.getPhysicalPartitions()) {
+            MaterializedIndex index = physicalPartition.getLatestIndex(baseIndexMetaId);
+            if (index == null) {
+                continue;
+            }
+            for (Tablet tablet : index.getTablets()) {
+                targetRanges.put(tablet.getId(), new TabletRange(
+                        TrailingSortKeyRangeReprojection.appendTrailing(
+                                tablet.getRange().getRange(), newTrailingColumn)));
+            }
+        }
+        return targetRanges;
     }
 
     private AlterJobV2 createJob(@NotNull SchemaChangeData schemaChangeData) throws StarRocksException {

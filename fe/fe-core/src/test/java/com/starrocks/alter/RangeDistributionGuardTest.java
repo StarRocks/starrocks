@@ -20,10 +20,17 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DefaultExpr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -374,13 +381,13 @@ public class RangeDistributionGuardTest {
      * On an AGG range-distribution table, adding a column with no aggregate
      * function is auto-promoted to a key column by the schema-change handler
      * (no explicit KEY keyword needed). The added column joins the (key-derived)
-     * range sort key, so it is now routed to {@link LakeRangeRewriteSchemaChangeJob}
-     * instead of rejected -- the routing predicate's auto-promote handling must
+     * range sort key -- a trailing sort-key add -- so it now runs the metadata-only
+     * async schema-evolution job (the routing predicate's auto-promote handling must
      * catch this path too; an earlier draft checked isKey() before promotion and
-     * would have missed it.
+     * would have missed it).
      */
     @Test
-    public void testAddNoAggregateColumnOnAggRangeTableRoutedToRangeRewrite() throws Exception {
+    public void testAddNoAggregateColumnOnAggRangeTableRunsMetadataOnly() throws Exception {
         starRocksAssert.withTable(
                 "create table t_guard_addagg (k1 int, v1 int sum)\n" +
                 "AGGREGATE KEY(k1)\n" +
@@ -395,8 +402,7 @@ public class RangeDistributionGuardTest {
         AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
                 .analyzeAndCreateJob(stmt.getAlterClauseList(),
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
-        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
-                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
+        assertMetadataOnlyJob(job);
     }
 
     /**
@@ -1080,5 +1086,300 @@ public class RangeDistributionGuardTest {
                 schema, List.of(), List.of());
         assertEquals(List.of("a", "b"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // End-to-end ADD COLUMN dispatch: a qualifying trailing key-column add on a shared-data range
+    // table is routed to the async metadata-only schema-evolution job (in-place range reprojection),
+    // NOT the K-tablet data-rewrite job. Jobs are built (not run) via analyzeAndCreateJob.
+    // ------------------------------------------------------------------------------------------
+
+    // DUP range table with a key-derived sort key (no explicit ORDER BY): the new key column joins
+    // the derived sort key, so the add is metadata-only.
+    private static String dupRangeKeyDerivedDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static AlterJobV2 buildAlterJob(String tableName, String alterSql) throws Exception {
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        OlapTable table = getTable(tableName);
+        return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+    }
+
+    private static LakeTableAsyncFastSchemaChangeJob assertMetadataOnlyJob(AlterJobV2 job) {
+        assertNotNull(job, "expected a job to be built");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "must NOT be the K-tablet data-rewrite job, got: " + job);
+        assertTrue(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                "expected the async metadata-only job, got: " + job);
+        LakeTableAsyncFastSchemaChangeJob aj = (LakeTableAsyncFastSchemaChangeJob) job;
+        assertNotNull(aj.getTargetRanges(), "targetRanges must be set");
+        assertFalse(aj.getTargetRanges().isEmpty(), "targetRanges must be non-empty");
+        return aj;
+    }
+
+    private static void assertContiguousKeyPrefix(List<Column> columns) {
+        boolean sawValue = false;
+        for (Column column : columns) {
+            if (column.isKey()) {
+                assertFalse(sawValue, "key column after a value column breaks the prefix: " + column.getName());
+            } else {
+                sawValue = true;
+            }
+        }
+    }
+
+    private static int countBaseTablets(OlapTable table) {
+        long baseId = table.getBaseIndexMetaId();
+        int count = 0;
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex idx = pp.getLatestIndex(baseId);
+            if (idx != null) {
+                count += idx.getTablets().size();
+            }
+        }
+        return count;
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyDup() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_dup"));
+        OlapTable table = getTable("t_add_meta_dup");
+        long baseId = table.getBaseIndexMetaId();
+        short oldShortKey = table.getIndexMetaByMetaId(baseId).getShortKeyColumnCount();
+        long oldKeyCount = table.getSchemaByIndexMetaId(baseId).stream().filter(Column::isKey).count();
+        int tabletCount = countBaseTablets(table);
+
+        AlterJobV2 job = buildAlterJob("t_add_meta_dup",
+                "alter table t_add_meta_dup add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+        assertEquals(tabletCount, aj.getTargetRanges().size(), "one target range per base tablet");
+
+        SchemaInfo si = aj.getSchemaInfoList().get(0);
+        Column added = si.getColumns().stream().filter(c -> c.getName().equalsIgnoreCase("c"))
+                .findFirst().orElseThrow();
+        assertTrue(added.isKey(), "added column c must be a key");
+        // DUP key-derived sort key == key columns, so the sort-key arity grows with the key count.
+        long newKeyCount = si.getColumns().stream().filter(Column::isKey).count();
+        assertEquals(oldKeyCount + 1, newKeyCount, "sort/key arity grew by one");
+        assertTrue(si.getShortKeyColumnCount() > oldShortKey, "short key count grew");
+        assertContiguousKeyPrefix(si.getColumns());
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyAgg() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_add_meta_agg"));
+        assertOrderByRangeTrailingKeyAddMetadataOnly("t_add_meta_agg");
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyUnique() throws Exception {
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_add_meta_uniq"));
+        assertOrderByRangeTrailingKeyAddMetadataOnly("t_add_meta_uniq");
+    }
+
+    // AGG/UNIQUE range tables carry an explicit sort key (sortKeyIdxes); the new key column is appended
+    // to it in lockstep, so both the sort-key arity and the short-key count grow.
+    private void assertOrderByRangeTrailingKeyAddMetadataOnly(String tableName) throws Exception {
+        OlapTable table = getTable(tableName);
+        long baseId = table.getBaseIndexMetaId();
+        int oldSortKeyArity = table.getIndexMetaByMetaId(baseId).getSortKeyIdxes().size();
+        short oldShortKey = table.getIndexMetaByMetaId(baseId).getShortKeyColumnCount();
+
+        AlterJobV2 job = buildAlterJob(tableName,
+                "alter table " + tableName + " add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+
+        SchemaInfo si = aj.getSchemaInfoList().get(0);
+        assertEquals(oldSortKeyArity + 1, si.getSortKeyIndexes().size(), "sort key arity grew by one");
+        int lastIdx = si.getSortKeyIndexes().get(si.getSortKeyIndexes().size() - 1);
+        assertEquals("c", si.getColumns().get(lastIdx).getName(), "new column is the trailing sort key");
+        assertTrue(si.getColumns().get(lastIdx).isKey());
+        assertTrue(si.getShortKeyColumnCount() > oldShortKey, "short key count grew");
+        assertContiguousKeyPrefix(si.getColumns());
+    }
+
+    /**
+     * The resolved schema of a metadata-only AGG/UNIQUE trailing key add keeps the key columns a
+     * contiguous leading prefix and points {@code sort_key_idxes} exactly at those prefix positions --
+     * the FE obligation the BE merge/aggregate path relies on (design's AGG/UNIQUE lockstep rule).
+     */
+    @Test
+    public void testAggUniqueAddContiguousKeyPrefixAndSortKeyIdxes() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_add_meta_ck_agg"));
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_add_meta_ck_uniq"));
+        for (String tableName : new String[] {"t_add_meta_ck_agg", "t_add_meta_ck_uniq"}) {
+            AlterJobV2 job = buildAlterJob(tableName,
+                    "alter table " + tableName + " add column c int key default '0'");
+            LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+            SchemaInfo si = aj.getSchemaInfoList().get(0);
+            assertContiguousKeyPrefix(si.getColumns());
+            List<Integer> sortKeyIdxes = si.getSortKeyIndexes();
+            long keyCount = si.getColumns().stream().filter(Column::isKey).count();
+            assertEquals(keyCount, sortKeyIdxes.size(), "sort key covers exactly the key columns");
+            for (int i = 0; i < sortKeyIdxes.size(); i++) {
+                assertEquals(i, sortKeyIdxes.get(i).intValue(), "sort key idx matches key prefix position");
+                assertTrue(si.getColumns().get(sortKeyIdxes.get(i)).isKey());
+            }
+        }
+    }
+
+    /**
+     * A tablet with a bounded (non-all) range is reprojected in place: each existing boundary tuple
+     * gains one trailing NULL sentinel for the new column, its prefix values preserved.
+     */
+    @Test
+    public void testAddTrailingKeyColReprojectsBoundedRangeWithNullSentinel() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_bounded"));
+        OlapTable table = getTable("t_add_meta_bounded");
+        long baseId = table.getBaseIndexMetaId();
+        long tabletId = -1;
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            for (Tablet t : pp.getLatestIndex(baseId).getTablets()) {
+                t.setRange(new TabletRange(Range.of(
+                        new Tuple(List.of(Variant.of(IntegerType.INT, "10"), Variant.of(IntegerType.INT, "20"))),
+                        new Tuple(List.of(Variant.of(IntegerType.INT, "30"), Variant.of(IntegerType.INT, "40"))),
+                        true, false)));
+                tabletId = t.getId();
+            }
+        }
+
+        AlterJobV2 job = buildAlterJob("t_add_meta_bounded",
+                "alter table t_add_meta_bounded add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+
+        Range<Tuple> reprojected = aj.getTargetRanges().get(tabletId).getRange();
+        assertEquals(3, reprojected.getLowerBound().getValues().size(), "lower bound arity grew to 3");
+        assertEquals(3, reprojected.getUpperBound().getValues().size(), "upper bound arity grew to 3");
+        assertTrue(reprojected.getLowerBound().getValues().get(2) instanceof NullVariant,
+                "trailing lower sentinel is NULL");
+        assertTrue(reprojected.getUpperBound().getValues().get(2) instanceof NullVariant,
+                "trailing upper sentinel is NULL");
+        assertEquals("10", reprojected.getLowerBound().getValues().get(0).getStringValue(),
+                "existing prefix values preserved");
+        assertEquals("40", reprojected.getUpperBound().getValues().get(1).getStringValue(),
+                "existing prefix values preserved");
+    }
+
+    /**
+     * A PRIMARY KEY range table's ADD COLUMN KEY is rejected during statement analysis (a PK key column
+     * cannot carry the aggregate the analyzer assigns), so it never reaches the metadata-only
+     * classifier -- existing behavior, not the async job.
+     */
+    @Test
+    public void testPkRangeAddKeyColNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(primaryKeyRangeTableWithValueDdl("t_add_meta_pk"));
+        assertThrows(Throwable.class, () ->
+                buildAlterJob("t_add_meta_pk", "alter table t_add_meta_pk add column c int key default '0'"));
+    }
+
+    /**
+     * Promoting an existing value column to a key is a MODIFY (keyness flip), not an ADD, so it is
+     * never diverted to the metadata-only ADD job; it stays on the MODIFY path and is rejected on
+     * range tables.
+     */
+    @Test
+    public void testPromoteExistingColumnToKeyNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_add_meta_promote"));
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_promote", "alter table t_add_meta_promote modify column v1 int key"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * Colocate range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY is not
+     * diverted and the existing range-distribution rejection applies (unaffected by the diversion).
+     */
+    @Test
+    public void testColocateRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo"));
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_colo", "alter table t_add_meta_colo add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * AUTO_INCREMENT range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY stays
+     * on the existing range-distribution rejection (unaffected by the diversion).
+     */
+    @Test
+    public void testAutoIncrementRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable("create table t_add_meta_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_autoinc",
+                        "alter table t_add_meta_autoinc add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * With temp partitions present, the schema-change loop rejects early (unchanged), so an ADD COLUMN
+     * KEY never reaches the metadata-only diversion.
+     */
+    @Test
+    public void testTempPartitionRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_temp"));
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean existTempPartitions() {
+                return true;
+            }
+        };
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_temp", "alter table t_add_meta_temp add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("temp partition"),
+                "Expected 'temp partition' in: " + e.getMessage());
+    }
+
+    /**
+     * Regression: adding a VALUE column (not a key) to a range DUP table is unaffected by the
+     * diversion -- it is applied as an ordinary fast-schema-evolution change, never the metadata-only
+     * trailing-key job.
+     */
+    @Test
+    public void testDupValueColumnAddUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_val"));
+        AlterJobV2 job = buildAlterJob("t_add_meta_val",
+                "alter table t_add_meta_val add column c int default '0'");
+        assertFalse(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                "value-column add must not be the metadata-only job, got: " + job);
+    }
+
+    /**
+     * Regression: an ordinary (non-range) table's ADD COLUMN KEY is unaffected -- it stays on the
+     * standard schema-change path, never the metadata-only trailing-key job.
+     */
+    @Test
+    public void testNonRangeAddKeyColUnaffected() throws Exception {
+        boolean saved = Config.enable_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            starRocksAssert.withTable("create table t_add_meta_hash (k1 int, k2 int, v1 int)\n"
+                    + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 2\n"
+                    + "properties('replication_num' = '1');");
+            AlterJobV2 job = buildAlterJob("t_add_meta_hash",
+                    "alter table t_add_meta_hash add column c int key default '0'");
+            assertFalse(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                    "non-range add key must not be metadata-only, got: " + job);
+        } finally {
+            Config.enable_range_distribution = saved;
+        }
     }
 }
