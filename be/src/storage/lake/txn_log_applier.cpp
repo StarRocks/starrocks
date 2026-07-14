@@ -50,7 +50,6 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         if (alter_meta.has_enable_persistent_index()) {
             auto update_mgr = tablet_mgr->update_mgr();
             metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
-            update_mgr->set_enable_persistent_index(metadata->id(), alter_meta.enable_persistent_index());
             // Try remove index from index cache
             // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
             // because the primary index is available in cache

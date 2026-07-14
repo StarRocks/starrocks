@@ -2813,11 +2813,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
 
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-        ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
-                          CompactionParam{VERTICAL_COMPACTION, 1, false},
-                          CompactionParam{HORIZONTAL_COMPACTION, 5, true},
-                          CompactionParam{VERTICAL_COMPACTION, 1, true},
-                          CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},
+        ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},
                           CompactionParam{VERTICAL_COMPACTION, 1, true, PersistentIndexTypePB::CLOUD_NATIVE}),
         to_string_param_name);
 

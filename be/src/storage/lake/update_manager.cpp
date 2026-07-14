@@ -233,7 +233,13 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
+DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
+
 StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata) {
+    // Test-only escape hatch: reshard unit tests build hand-crafted metadata with no real
+    // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
+    // they exercise the metadata merge/split logic without materializing a real index.
+    FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_flush, { return metadata; });
     if (!is_primary_key(*metadata) || !metadata->enable_persistent_index() ||
         metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return metadata;
@@ -2348,15 +2354,6 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
                   << "ms, trace: " << trace_guard->MetricsAsJSON();
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
-}
-
-void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        index.set_enable_persistent_index(enable_persistent_index);
-        _index_cache.release(index_entry);
-    }
 }
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {

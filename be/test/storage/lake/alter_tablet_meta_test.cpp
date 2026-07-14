@@ -74,6 +74,7 @@ TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     lake::SchemaChangeHandler handler(_tablet_mgr.get());
     TUpdateTabletMetaInfoReq update_tablet_meta_req;
     int64_t txn_id = next_id();

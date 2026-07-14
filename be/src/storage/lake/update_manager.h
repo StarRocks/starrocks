@@ -239,8 +239,6 @@ public:
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
-    void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
-
     Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }

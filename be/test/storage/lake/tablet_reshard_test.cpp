@@ -21,6 +21,7 @@
 #include <limits>
 #include <set>
 
+#include "base/failpoint/fail_point.h"
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -95,9 +96,16 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+
+        // These reshard tests use hand-crafted metadata with no real in-memory PK memtable, so
+        // the cloud-native index flush that split/merge trigger has nothing to flush. Skip it so
+        // the tests exercise the metadata merge/split logic without loading a real index from the
+        // (intentionally fake) segment/del/sstable files.
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
     }
 
     void TearDown() override {
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
         // Only remove this test's own subdirectory. Removing the entire
         // config::storage_root_path would wipe out DataDir's persistent /tmp/
         // subdirectory (created once at StorageEngine init) and break any later
@@ -105,6 +113,15 @@ public:
         // LakePrimaryKeyPublishTest.test_individual_index_compaction).
         auto status = fs::remove_all(_test_dir);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+    }
+
+    static void set_failpoint_mode(const std::string& name, FailPointTriggerModeType mode) {
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(mode);
+        auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
+        if (fp != nullptr) {
+            fp->setMode(trigger_mode);
+        }
     }
 
 protected:
