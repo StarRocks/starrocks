@@ -171,4 +171,142 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     ASSERT_NE(*stub3, *stub1);
 }
 
+<<<<<<< HEAD:be/test/util/brpc_stub_cache_test.cpp
+=======
+// Regression test: destroying BrpcStubCache while a cleanup task is scheduled
+// (and possibly firing) must join the task before the cache state is torn down.
+TEST_F(BrpcStubCacheTest, test_destructor_joins_inflight_cleanup_tasks) {
+    config::brpc_stub_expire_s = 1;
+    auto cache = std::make_unique<BrpcStubCache>(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache->get_stub(address);
+    ASSERT_NE(nullptr, stub);
+
+    // Trigger ~BrpcStubCache() while the cleanup task is (or will be) in flight.
+    // Drain the cache and assert the unique_ptr release returns cleanly.
+    cache.reset();
+
+    // Reacquire the endpoint through a fresh cache; the slot must have been
+    // cleanly torn down without leaking the previous task.
+    auto cache2 = std::make_unique<BrpcStubCache>(_timer.get());
+    auto fresh_stub = cache2->get_stub(address);
+    ASSERT_NE(nullptr, fresh_stub);
+    cache2.reset();
+}
+
+// Regression test for the lazy-reschedule fix: while an endpoint is being
+// accessed within the expire window, the timer fires, sees the stub is still
+// active (idle < brpc_stub_expire_s), and reschedules instead of evicting, so the
+// stub must survive across multiple timer periods.
+TEST_F(BrpcStubCacheTest, test_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+
+    // Repeatedly access within the window; each access refreshes the last-access
+    // time, and the single scheduled timer reschedules instead of evicting.
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(address);
+        ASSERT_EQ(stub1, stub) << "stub must not be evicted while being accessed";
+    }
+}
+
+TEST_F(BrpcStubCacheTest, test_http_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    HttpBrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_http_stub(address);
+        ASSERT_NE(nullptr, *stub);
+        ASSERT_EQ(*stub1, *stub) << "http stub must not be evicted while being accessed";
+    }
+}
+
+#ifndef __APPLE__
+TEST_F(BrpcStubCacheTest, test_lake_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    LakeServiceBrpcStubCache cache(_timer.get());
+    std::string hostname = "127.0.0.1";
+    int32_t port = 123;
+    auto stub1 = cache.get_stub(hostname, port);
+    ASSERT_TRUE(stub1.ok());
+    ASSERT_NE(nullptr, *stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(hostname, port);
+        ASSERT_TRUE(stub.ok());
+        ASSERT_NE(nullptr, *stub);
+        ASSERT_EQ(*stub1, *stub) << "lake stub must not be evicted while being accessed";
+    }
+}
+#endif
+
+TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
+    auto timer2 = std::make_unique<BthreadTimer>();
+    ASSERT_OK(timer2->start());
+
+    HttpBrpcStubCache::initialize(_timer.get());
+    auto* cache = HttpBrpcStubCache::getInstance();
+    ASSERT_NE(nullptr, cache);
+
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache->get_http_stub(address);
+    ASSERT_TRUE(stub.ok());
+    ASSERT_NE(nullptr, *stub);
+
+    cache->shutdown();
+    ASSERT_FALSE(cache->get_http_stub(address).ok());
+
+    HttpBrpcStubCache::initialize(timer2.get());
+
+    auto rebound_stub = cache->get_http_stub(address);
+    ASSERT_TRUE(rebound_stub.ok());
+    ASSERT_NE(nullptr, *rebound_stub);
+
+    cache->shutdown();
+}
+
+#ifndef __APPLE__
+TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
+    auto timer2 = std::make_unique<BthreadTimer>();
+    ASSERT_OK(timer2->start());
+
+    LakeServiceBrpcStubCache::initialize(_timer.get());
+    auto* cache = LakeServiceBrpcStubCache::getInstance();
+    ASSERT_NE(nullptr, cache);
+
+    auto stub = cache->get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(stub.ok());
+    ASSERT_NE(nullptr, *stub);
+
+    cache->shutdown();
+    ASSERT_FALSE(cache->get_stub("127.0.0.1", 123).ok());
+
+    LakeServiceBrpcStubCache::initialize(timer2.get());
+
+    auto rebound_stub = cache->get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(rebound_stub.ok());
+    ASSERT_NE(nullptr, *rebound_stub);
+
+    cache->shutdown();
+}
+#endif
+
+>>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/test/common/brpc/brpc_stub_cache_test.cpp
 } // namespace starrocks
