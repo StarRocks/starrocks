@@ -163,9 +163,9 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
     // range's bound arity; the current sort key is a prefix-preserving superset of the archived one,
     // so the leading column types agree.
     if (_tablet_metadata != nullptr) {
-        const int range_arity = range_pb->has_lower_bound()  ? range_pb->lower_bound().values_size()
-                                : range_pb->has_upper_bound() ? range_pb->upper_bound().values_size()
-                                                             : 0;
+        const int range_arity = range_pb->has_lower_bound()
+                                        ? range_pb->lower_bound().values_size()
+                                        : range_pb->has_upper_bound() ? range_pb->upper_bound().values_size() : 0;
         if (range_arity > 0 && static_cast<int>(range_schema->sort_key_idxes().size()) != range_arity) {
             auto current_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
             if (static_cast<int>(current_schema->sort_key_idxes().size()) == range_arity) {
