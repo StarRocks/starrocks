@@ -418,6 +418,11 @@ struct TQueryOptions {
   222: optional i64 topn_back_pressure_num_rows = 1024;
   223: optional i64 topn_back_pressure_throttle_time_ms = 8;
   224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
+
+  // Per-session override for the lake prepared-physical-split skew gate: a tablet is treated as a
+  // long-tail straggler (and split even when the scan-range count already reaches pipeline_dop) once
+  // its rows exceed this ratio times the per-driver ideal share. Default 1.5.
+  226: optional double lake_tablet_internal_parallel_skew_split_ratio = 1.5;
 }
 
 // A scan range plus the parameters needed to execute that scan.

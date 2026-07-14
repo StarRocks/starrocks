@@ -97,7 +97,8 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
+                                      CompoundNodeType pred_relation,
+                                      const SparseRange<>* scan_range = nullptr) override;
 
     bool all_page_dict_encoded() const override { return false; }
 

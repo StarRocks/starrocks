@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -179,6 +180,14 @@ public class LogicalProperty implements Property {
             if (node instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
                 if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
+                    ConnectContext connectContext = ConnectContext.get();
+                    long maxTabletRows = connectContext == null ? -1
+                            : connectContext.getSessionVariable().getOneTabletAggOptMaxTabletRows();
+                    if (Utils.isSelectedSingleTabletTooLarge(olapScanOperator.getTable(),
+                            olapScanOperator.getSelectedIndexMetaId(), olapScanOperator.getSelectedPartitionId(),
+                            olapScanOperator.getSelectedTabletId(), maxTabletRows)) {
+                        return OneTabletProperty.notSupport();
+                    }
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {

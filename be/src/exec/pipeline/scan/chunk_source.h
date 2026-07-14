@@ -79,6 +79,12 @@ public:
     virtual bool reach_limit() { return false; }
 
     virtual void update_chunk_exec_stats(RuntimeState* state) {}
+    virtual bool has_reusable_state() const { return false; }
+    virtual bool can_reuse_with(Morsel& morsel) const { return false; }
+    virtual Status reuse(RuntimeState* state, MorselPtr&& morsel) {
+        return Status::NotSupported("chunk source reuse is not supported");
+    }
+    virtual void release_for_reuse(RuntimeState* state) { close(state); }
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }
