@@ -143,10 +143,21 @@ public class AutovacuumDaemon extends LeaderDaemon {
         // exactly once per instance across demote/re-elect cycles (mirrors PublishVersionDaemon).
         ThreadPoolExecutor executor = executorService;
         if (executor != null) {
-            executor.shutdownNow();
             executorService = null;
+            // shutdownNow() interrupts running tasks but does not wait for them: a task stuck in a
+            // non-interruptible section can outlive demotion and even re-election. Its entry in
+            // vacuumingPartitions must survive so the next leader session keeps skipping the
+            // partition until the task's finally releases it; clearing the set wholesale would
+            // permit two concurrent vacuums of the same partition (and the straggler's late
+            // finally would then drop the new session's live entry, permitting a third). Only
+            // reservations of drained tasks that never ran are released here, so every entry is
+            // released exactly once: either by its task's finally or by this loop.
+            for (Runnable task : executor.shutdownNow()) {
+                if (task instanceof VacuumTask) {
+                    vacuumingPartitions.remove(((VacuumTask) task).partitionId);
+                }
+            }
         }
-        vacuumingPartitions.clear();
         pendingCandidates.clear();
         nextCollectTimeMs = 0;
     }
@@ -213,8 +224,8 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
             if (vacuumingPartitions.add(partitionId)) {
                 try {
-                    getExecutorService().execute(
-                            () -> vacuumPartition(candidate.db, candidate.table, partition));
+                    getExecutorService().execute(new VacuumTask(partitionId,
+                            () -> vacuumPartition(candidate.db, candidate.table, partition)));
                 } catch (RuntimeException e) {
                     // Submission failed (e.g. RejectedExecutionException when the pool queue is saturated).
                     // The task never runs, so vacuumPartition's finally never removes the id; roll it back
@@ -302,6 +313,23 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    // Carries the partition id so onStopped() can identify queued-but-never-run tasks returned by
+    // shutdownNow() and release exactly their vacuumingPartitions reservations.
+    private static class VacuumTask implements Runnable {
+        private final long partitionId;
+        private final Runnable work;
+
+        VacuumTask(long partitionId, Runnable work) {
+            this.partitionId = partitionId;
+            this.work = work;
+        }
+
+        @Override
+        public void run() {
+            work.run();
         }
     }
 

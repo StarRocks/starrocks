@@ -64,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -930,86 +931,120 @@ public class VacuumTest {
 
     @Test
     public void testOnStoppedReleasesLeaderSessionState() throws Exception {
-        // On leader demotion onStopped() must release leader-session-only state: shut down and
-        // dereference the executor (so it is recreated on re-election) and clear the in-flight set.
-        AutovacuumDaemon daemon = new AutovacuumDaemon();
+        // On leader demotion onStopped() must shut down and dereference the executor (so it is
+        // recreated on re-election) and release the reservations of queued-but-never-run tasks.
+        // A still-running task keeps its reservation until its own finally releases it: dropping
+        // it early would let a re-elected session vacuum the same partition concurrently with the
+        // straggler, and the straggler's late finally would then drop the new session's live entry.
+        int oldParallel = Config.lake_autovacuum_parallel_partitions;
+        try {
+            // Single-threaded pool: the first task occupies the worker, the second stays queued.
+            Config.lake_autovacuum_parallel_partitions = 1;
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+            ThreadPoolExecutor pool = Deencapsulation.invoke(daemon, "getExecutorService");
+            Set<Long> vacuumingPartitions = Deencapsulation.getField(daemon, "vacuumingPartitions");
 
-        java.lang.reflect.Method getExecutorService =
-                AutovacuumDaemon.class.getDeclaredMethod("getExecutorService");
-        getExecutorService.setAccessible(true);
-        ThreadPoolExecutor pool = (ThreadPoolExecutor) getExecutorService.invoke(daemon);
+            long runningPartition = 123L;
+            long queuedPartition = 456L;
+            vacuumingPartitions.add(runningPartition);
+            vacuumingPartitions.add(queuedPartition);
 
-        java.lang.reflect.Field vacuumingField =
-                AutovacuumDaemon.class.getDeclaredField("vacuumingPartitions");
-        vacuumingField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        Set<Long> vacuumingPartitions = (Set<Long>) vacuumingField.get(daemon);
-        vacuumingPartitions.add(123L);
-        vacuumingPartitions.add(456L);
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            // Emulates vacuumPartition() for a straggler stuck in a non-interruptible section: it
+            // survives the shutdownNow() interrupt and only its finally releases its reservation.
+            pool.execute(() -> {
+                try {
+                    started.countDown();
+                    boolean released = false;
+                    while (!released) {
+                        try {
+                            release.await();
+                            released = true;
+                        } catch (InterruptedException ignored) {
+                            // Swallow the shutdownNow() interrupt and keep running.
+                        }
+                    }
+                } finally {
+                    vacuumingPartitions.remove(runningPartition);
+                }
+            });
+            Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
+            pool.execute(newVacuumTask(queuedPartition, () -> vacuumingPartitions.remove(queuedPartition)));
 
-        java.lang.reflect.Field nextCollectField =
-                AutovacuumDaemon.class.getDeclaredField("nextCollectTimeMs");
-        nextCollectField.setAccessible(true);
-        nextCollectField.setLong(daemon, 999L);
+            Deencapsulation.setField(daemon, "nextCollectTimeMs", 999L);
+            Deencapsulation.invoke(daemon, "onStopped");
 
-        java.lang.reflect.Method onStopped = AutovacuumDaemon.class.getDeclaredMethod("onStopped");
-        onStopped.setAccessible(true);
-        onStopped.invoke(daemon);
+            Assertions.assertTrue(pool.isShutdown());
+            Assertions.assertNull(Deencapsulation.getField(daemon, "executorService"));
+            Assertions.assertTrue(
+                    ((java.util.Collection<?>) Deencapsulation.getField(daemon, "pendingCandidates")).isEmpty());
+            Assertions.assertEquals(0L, (long) Deencapsulation.getField(daemon, "nextCollectTimeMs"));
+            // The queued task will never run its finally, so onStopped() released its reservation...
+            Assertions.assertFalse(vacuumingPartitions.contains(queuedPartition));
+            // ...while the running task's reservation survives, so a re-elected session skips it.
+            Assertions.assertTrue(vacuumingPartitions.contains(runningPartition));
 
-        Assertions.assertTrue(pool.isShutdown());
-        java.lang.reflect.Field executorField =
-                AutovacuumDaemon.class.getDeclaredField("executorService");
-        executorField.setAccessible(true);
-        Assertions.assertNull(executorField.get(daemon));
-        Assertions.assertTrue(vacuumingPartitions.isEmpty());
-        java.lang.reflect.Field pendingField =
-                AutovacuumDaemon.class.getDeclaredField("pendingCandidates");
-        pendingField.setAccessible(true);
-        Assertions.assertTrue(((java.util.Collection<?>) pendingField.get(daemon)).isEmpty());
-        Assertions.assertEquals(0L, nextCollectField.getLong(daemon));
+            // The straggler eventually finishes and releases its own reservation.
+            release.countDown();
+            Assertions.assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
+            Assertions.assertTrue(vacuumingPartitions.isEmpty());
+        } finally {
+            Config.lake_autovacuum_parallel_partitions = oldParallel;
+        }
     }
 
     @Test
-    public void testScheduleVacuumRoundOuterGate() throws Exception {
+    public void testScheduleVacuumRoundGatesAndRejectionRollback() throws Exception {
+        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
+        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
         int oldParallel = Config.lake_autovacuum_parallel_partitions;
         try {
+            Config.lake_autovacuum_partition_naptime_seconds = 0;
+            Config.lake_autovacuum_detect_vaccumed_version = false;
+
             AutovacuumDaemon daemon = new AutovacuumDaemon();
-            java.lang.reflect.Method scheduleVacuumRound =
-                    AutovacuumDaemon.class.getDeclaredMethod("scheduleVacuumRound");
-            scheduleVacuumRound.setAccessible(true);
-            java.lang.reflect.Field pendingField =
-                    AutovacuumDaemon.class.getDeclaredField("pendingCandidates");
-            pendingField.setAccessible(true);
-            java.util.Collection<?> pendingCandidates = (java.util.Collection<?>) pendingField.get(daemon);
-            java.lang.reflect.Field vacuumingField =
-                    AutovacuumDaemon.class.getDeclaredField("vacuumingPartitions");
-            vacuumingField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Set<Long> vacuumingPartitions = (Set<Long>) vacuumingField.get(daemon);
+            java.util.Collection<?> pendingCandidates = Deencapsulation.getField(daemon, "pendingCandidates");
+            Set<Long> vacuumingPartitions = Deencapsulation.getField(daemon, "vacuumingPartitions");
 
             // Non-positive parallelism disables AutoVacuum: the round returns before collecting anything.
             Config.lake_autovacuum_parallel_partitions = 0;
-            scheduleVacuumRound.invoke(daemon);
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
             Assertions.assertTrue(pendingCandidates.isEmpty());
 
             // All slots already in flight: the round also returns before collecting.
             Config.lake_autovacuum_parallel_partitions = 2;
             vacuumingPartitions.add(1L);
             vacuumingPartitions.add(2L);
-            try {
-                scheduleVacuumRound.invoke(daemon);
-                Assertions.assertTrue(pendingCandidates.isEmpty());
-            } finally {
-                vacuumingPartitions.remove(1L);
-                vacuumingPartitions.remove(2L);
-            }
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
+            Assertions.assertTrue(pendingCandidates.isEmpty());
+            vacuumingPartitions.clear();
+
+            // Free slots and a vacuumable partition, but an injected shut-down pool makes every
+            // execute() throw RejectedExecutionException: the submission must be rolled back so no
+            // partition id is left "in flight" forever.
+            PhysicalPartition p = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+            Assertions.assertNotNull(p);
+            p.setMetadataSwitchVersion(0);
+            p.setVisibleVersion(10L, System.currentTimeMillis());
+            p.setLastVacuumTime(1000L);
+
+            Config.lake_autovacuum_parallel_partitions = 8;
+            ThreadPoolExecutor deadPool = new ThreadPoolExecutor(
+                    1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+            deadPool.shutdown();
+            Deencapsulation.setField(daemon, "executorService", deadPool);
+            Deencapsulation.invoke(daemon, "scheduleVacuumRound");
+            Assertions.assertTrue(vacuumingPartitions.isEmpty());
         } finally {
+            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
+            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
             Config.lake_autovacuum_parallel_partitions = oldParallel;
         }
     }
 
     @Test
-    public void testRefillOnlyWhenEmpty() throws Exception {
+    public void testRefillOnlyWhenEmptyAndBackoffOnEmptyCollection() throws Exception {
         long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
         boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
         try {
@@ -1023,114 +1058,47 @@ public class VacuumTest {
             p.setLastVacuumTime(1000L);
 
             AutovacuumDaemon daemon = new AutovacuumDaemon();
-            java.lang.reflect.Method refill =
-                    AutovacuumDaemon.class.getDeclaredMethod("refillPendingCandidatesIfEmpty");
-            refill.setAccessible(true);
-            java.lang.reflect.Field pendingField =
-                    AutovacuumDaemon.class.getDeclaredField("pendingCandidates");
-            pendingField.setAccessible(true);
-            java.util.Collection<?> pendingCandidates = (java.util.Collection<?>) pendingField.get(daemon);
+            java.util.Collection<?> pendingCandidates = Deencapsulation.getField(daemon, "pendingCandidates");
 
             // First call fills the queue from a collection.
-            refill.invoke(daemon);
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
             int sizeAfterFirst = pendingCandidates.size();
             Assertions.assertTrue(sizeAfterFirst > 0);
 
             // A second call is a no-op while the queue is non-empty: no re-collection, size unchanged.
-            refill.invoke(daemon);
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
             Assertions.assertEquals(sizeAfterFirst, pendingCandidates.size());
-        } finally {
-            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
-            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
-        }
-    }
 
-    @Test
-    public void testEmptyCollectionBacksOff() throws Exception {
-        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
-        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
-        try {
-            Config.lake_autovacuum_partition_naptime_seconds = 0;
-            Config.lake_autovacuum_detect_vaccumed_version = false;
-
-            // Make every table's partitions non-vacuumable (empty partitions) so the collection is empty.
+            // Drain the queue and make every table's partitions non-vacuumable (empty partitions):
+            // the next collection comes up empty, arms the back-off, and leaves the queue empty.
+            pendingCandidates.clear();
             for (OlapTable table : new OlapTable[] {olapTable, olapTable2, olapTable7}) {
                 for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                     partition.setMetadataSwitchVersion(0);
                     partition.setVisibleVersion(1L, System.currentTimeMillis());
                 }
             }
-
-            AutovacuumDaemon daemon = new AutovacuumDaemon();
-            java.lang.reflect.Method refill =
-                    AutovacuumDaemon.class.getDeclaredMethod("refillPendingCandidatesIfEmpty");
-            refill.setAccessible(true);
-            java.lang.reflect.Field nextCollectField =
-                    AutovacuumDaemon.class.getDeclaredField("nextCollectTimeMs");
-            nextCollectField.setAccessible(true);
-            java.lang.reflect.Field pendingField =
-                    AutovacuumDaemon.class.getDeclaredField("pendingCandidates");
-            pendingField.setAccessible(true);
-            java.util.Collection<?> pendingCandidates = (java.util.Collection<?>) pendingField.get(daemon);
-
-            // An empty collection arms the back-off and leaves the queue empty.
-            refill.invoke(daemon);
-            long backoffUntil = nextCollectField.getLong(daemon);
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            long backoffUntil = Deencapsulation.getField(daemon, "nextCollectTimeMs");
             Assertions.assertTrue(backoffUntil > System.currentTimeMillis());
             Assertions.assertTrue(pendingCandidates.isEmpty());
 
             // A subsequent call within the back-off window is skipped: the back-off point does not move.
-            refill.invoke(daemon);
-            Assertions.assertEquals(backoffUntil, nextCollectField.getLong(daemon));
+            Deencapsulation.invoke(daemon, "refillPendingCandidatesIfEmpty");
+            Assertions.assertEquals(backoffUntil, (long) Deencapsulation.getField(daemon, "nextCollectTimeMs"));
         } finally {
             Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
             Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
         }
     }
 
-    @Test
-    public void testSubmitPendingRollsBackOnRejectedExecution() throws Exception {
-        long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
-        boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
-        int oldParallel = Config.lake_autovacuum_parallel_partitions;
-        try {
-            Config.lake_autovacuum_partition_naptime_seconds = 0;
-            Config.lake_autovacuum_detect_vaccumed_version = false;
-            Config.lake_autovacuum_parallel_partitions = 8;
-
-            PhysicalPartition p = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
-            Assertions.assertNotNull(p);
-            p.setMetadataSwitchVersion(0);
-            p.setVisibleVersion(10L, System.currentTimeMillis());
-            p.setLastVacuumTime(1000L);
-
-            AutovacuumDaemon daemon = new AutovacuumDaemon();
-
-            // Inject a shut-down pool so every execute() throws RejectedExecutionException.
-            ThreadPoolExecutor deadPool = new ThreadPoolExecutor(
-                    1, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
-            deadPool.shutdown();
-            java.lang.reflect.Field executorField =
-                    AutovacuumDaemon.class.getDeclaredField("executorService");
-            executorField.setAccessible(true);
-            executorField.set(daemon, deadPool);
-
-            java.lang.reflect.Method scheduleVacuumRound =
-                    AutovacuumDaemon.class.getDeclaredMethod("scheduleVacuumRound");
-            scheduleVacuumRound.setAccessible(true);
-            scheduleVacuumRound.invoke(daemon);
-
-            // The first submission is rejected and rolled back, then the round stops, so no partition id
-            // is left "in flight".
-            java.lang.reflect.Field vacuumingField =
-                    AutovacuumDaemon.class.getDeclaredField("vacuumingPartitions");
-            vacuumingField.setAccessible(true);
-            Assertions.assertTrue(((Set<?>) vacuumingField.get(daemon)).isEmpty());
-        } finally {
-            Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
-            Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
-            Config.lake_autovacuum_parallel_partitions = oldParallel;
-        }
+    // VacuumTask is private to AutovacuumDaemon; construct it reflectively so the test can put a
+    // task carrying a partition id into the pool queue exactly as submitPendingCandidates() does.
+    private static Runnable newVacuumTask(long partitionId, Runnable work) throws Exception {
+        Class<?> clazz = Class.forName("com.starrocks.lake.vacuum.AutovacuumDaemon$VacuumTask");
+        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(long.class, Runnable.class);
+        ctor.setAccessible(true);
+        return (Runnable) ctor.newInstance(partitionId, work);
     }
 
     private static Object findCandidate(List<Object> candidates, long partitionId) throws Exception {
