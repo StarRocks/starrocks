@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class PredicateStatisticsCalculatorTest {
     @Test
@@ -586,5 +587,177 @@ public class PredicateStatisticsCalculatorTest {
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+    }
+
+    /**
+     * Functional dependency (FD) case: multi-column NDV ≈ single-column NDV for one column (e.g. province -> city).
+     * Expect combined selectivity to follow the determinant column's selectivity, not 1/multi_ndv.
+     */
+    @Test
+    public void testCompoundEqualityWithFunctionalDependency() {
+        ColumnRefOperator province = new ColumnRefOperator(1, IntegerType.INT, "province", true);
+        ColumnRefOperator city = new ColumnRefOperator(2, IntegerType.INT, "city", true);
+
+        double rowCount = 10000;
+        // Province NDV=30, city NDV=30; multi-column (province, city) NDV=30 -> province determines city (FD).
+        // Note: city NDV must be <= multi_ndv when FD holds (at most 30 distinct cities in 30 pairs).
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(province,
+                        ColumnStatistic.builder().setDistinctValuesCount(30).setNullsFraction(0).build())
+                .addColumnStatistic(city,
+                        ColumnStatistic.builder().setDistinctValuesCount(30).setNullsFraction(0).build())
+                .addMultiColumnStatistics(Set.of(province, city), new MultiColumnCombinedStats(30))
+                .build();
+
+        CompoundPredicateOperator predicate = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.EQ, province, ConstantOperator.createInt(1)),
+                new BinaryPredicateOperator(BinaryType.EQ, city, ConstantOperator.createInt(10)));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+
+        // With FD: selectivity ~ 1/30 (province), so rows ~ 10000/30 ≈ 333. Without FD (wrong): would be ~ 1/9000.
+        double expectedApprox = rowCount / 30;
+        Assertions.assertTrue(result.getOutputRowCount() >= expectedApprox * 0.5
+                        && result.getOutputRowCount() <= expectedApprox * 2.0,
+                "FD path should give ~" + expectedApprox + ", got " + result.getOutputRowCount());
+    }
+
+    /**
+     * FD with histogram + MCV: when province has histogram with MCV containing the constant,
+     * use MCV-based selectivity for more accurate estimation.
+     */
+    @Test
+    public void testCompoundEqualityWithFunctionalDependencyAndHistogramMcv() {
+        ColumnRefOperator province = new ColumnRefOperator(1, IntegerType.INT, "province", true);
+        ColumnRefOperator city = new ColumnRefOperator(2, IntegerType.INT, "city", true);
+
+        double rowCount = 10000;
+        // Province has histogram with MCV: "1" -> 400 rows. Total histogram rows = 10000.
+        // MCV selectivity for province=1: 400/10000 = 0.04
+        // City has histogram with MCV: "10" -> 400 rows (FD: province=1 implies city=10).
+        // min(0.04, 0.04) = 0.04, so rows ~ 400
+        Map<String, Long> provinceMcv = new java.util.HashMap<>();
+        provinceMcv.put("1", 400L);
+        List<Bucket> provinceBuckets = List.of(new Bucket(1, 100, 9600L, 0L));
+        Histogram provinceHistogram = new Histogram(provinceBuckets, provinceMcv);
+
+        Map<String, Long> cityMcv = new java.util.HashMap<>();
+        cityMcv.put("10", 400L);
+        List<Bucket> cityBuckets = List.of(new Bucket(1, 100, 9600L, 0L));
+        Histogram cityHistogram = new Histogram(cityBuckets, cityMcv);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(province,
+                        ColumnStatistic.builder()
+                                .setDistinctValuesCount(30)
+                                .setNullsFraction(0)
+                                .setHistogram(provinceHistogram)
+                                .build())
+                .addColumnStatistic(city,
+                        ColumnStatistic.builder()
+                                .setDistinctValuesCount(30)
+                                .setNullsFraction(0)
+                                .setHistogram(cityHistogram)
+                                .build())
+                .addMultiColumnStatistics(Set.of(province, city), new MultiColumnCombinedStats(30))
+                .build();
+
+        CompoundPredicateOperator predicate = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.EQ, province, ConstantOperator.createInt(1)),
+                new BinaryPredicateOperator(BinaryType.EQ, city, ConstantOperator.createInt(10)));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+
+        // FD + MCV: both use MCV selectivity 400/10000 = 0.04, min = 0.04, rows ~ 400
+        double expectedApprox = 400;
+        Assertions.assertTrue(result.getOutputRowCount() >= expectedApprox * 0.5
+                        && result.getOutputRowCount() <= expectedApprox * 2.0,
+                "FD with MCV should give ~" + expectedApprox + ", got " + result.getOutputRowCount());
+    }
+
+    /**
+     * No FD: multi-column NDV is large (300), so no single column "determines" the combination.
+     */
+    @Test
+    public void testCompoundEqualityWithoutFunctionalDependency() {
+        ColumnRefOperator province = new ColumnRefOperator(1, IntegerType.INT, "province", true);
+        ColumnRefOperator city = new ColumnRefOperator(2, IntegerType.INT, "city", true);
+
+        double rowCount = 10000;
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(province,
+                        ColumnStatistic.builder().setDistinctValuesCount(30).setNullsFraction(0).build())
+                .addColumnStatistic(city,
+                        ColumnStatistic.builder().setDistinctValuesCount(300).setNullsFraction(0).build())
+                .addMultiColumnStatistics(Set.of(province, city), new MultiColumnCombinedStats(300))
+                .build();
+
+        CompoundPredicateOperator predicate = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.EQ, province, ConstantOperator.createInt(1)),
+                new BinaryPredicateOperator(BinaryType.EQ, city, ConstantOperator.createInt(10)));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+
+        // No FD: selectivity ~ 1/300 (multi_ndv), so rows ~ 10000/300 ≈ 33.
+        double expectedApprox = rowCount / 300;
+        Assertions.assertTrue(result.getOutputRowCount() >= expectedApprox * 0.3
+                        && result.getOutputRowCount() <= expectedApprox * 3.0,
+                "No-FD path should give ~" + expectedApprox + ", got " + result.getOutputRowCount());
+    }
+
+    @Test
+    public void testCompoundEqualityFdCoverage() {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        try {
+            double rowCount = 10000;
+
+            // Scenario 1: FD with unknown column -> line 131 (skip c), a and b are determinants
+            ColumnRefOperator a1 = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+            ColumnRefOperator b1 = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+            ColumnRefOperator c1 = new ColumnRefOperator(3, IntegerType.INT, "c", true);
+            Statistics stats1 = Statistics.builder()
+                    .setOutputRowCount(rowCount)
+                    .addColumnStatistic(a1, ColumnStatistic.builder().setDistinctValuesCount(100).setNullsFraction(0).build())
+                    .addColumnStatistic(b1, ColumnStatistic.builder().setDistinctValuesCount(100).setNullsFraction(0).build())
+                    .addColumnStatistic(c1, ColumnStatistic.unknown())
+                    .addMultiColumnStatistics(Set.of(a1, b1, c1), new MultiColumnCombinedStats(100))
+                    .build();
+            CompoundPredicateOperator pred1 = new CompoundPredicateOperator(
+                    CompoundPredicateOperator.CompoundType.AND,
+                    new BinaryPredicateOperator(BinaryType.EQ, a1, ConstantOperator.createInt(1)),
+                    new BinaryPredicateOperator(BinaryType.EQ, b1, ConstantOperator.createInt(2)),
+                    new BinaryPredicateOperator(BinaryType.EQ, c1, ConstantOperator.createInt(3)));
+            Statistics result1 = PredicateStatisticsCalculator.statisticsCalculate(pred1, stats1);
+            // FD path: selectivity ~ 1/100, rows ~ 100
+            Assertions.assertTrue(result1.getOutputRowCount() >= 10 && result1.getOutputRowCount() <= 500,
+                    "Scenario 1: expected ~100, got " + result1.getOutputRowCount());
+
+            // Scenario 2: No FD (all fail, line 144) + nullsFraction (lines 223-229)
+            ColumnRefOperator a2 = new ColumnRefOperator(4, IntegerType.INT, "a", true);
+            ColumnRefOperator b2 = new ColumnRefOperator(5, IntegerType.INT, "b", true);
+            Statistics stats2 = Statistics.builder()
+                    .setOutputRowCount(rowCount)
+                    .addColumnStatistic(a2, ColumnStatistic.builder().setDistinctValuesCount(100).setNullsFraction(0.1).build())
+                    .addColumnStatistic(b2, ColumnStatistic.builder().setDistinctValuesCount(100).setNullsFraction(0).build())
+                    .addMultiColumnStatistics(Set.of(a2, b2), new MultiColumnCombinedStats(1000))
+                    .build();
+            CompoundPredicateOperator pred2 = new CompoundPredicateOperator(
+                    CompoundPredicateOperator.CompoundType.AND,
+                    new BinaryPredicateOperator(BinaryType.EQ, a2, ConstantOperator.createInt(1)),
+                    new BinaryPredicateOperator(BinaryType.EQ, b2, ConstantOperator.createInt(2)));
+            Statistics result2 = PredicateStatisticsCalculator.statisticsCalculate(pred2, stats2);
+            // No FD path: selectivity ~ 0.9/1000, rows ~ 9
+            Assertions.assertTrue(result2.getOutputRowCount() >= 1 && result2.getOutputRowCount() <= 50,
+                    "Scenario 2: expected ~9, got " + result2.getOutputRowCount());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 }

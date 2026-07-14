@@ -26,9 +26,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
@@ -36,6 +38,8 @@ import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Double.isInfinite;
 
 public class StatisticsEstimateUtils {
+    private static final double FD_NDV_TOLERANCE = 0.01;
+
     public static ColumnStatistic unionColumnStatistic(ColumnStatistic left, double leftRowCount, ColumnStatistic right,
                                                        double rightRowCount) {
         if (left.isUnknown() || right.isUnknown()) {
@@ -159,6 +163,50 @@ public class StatisticsEstimateUtils {
     }
 
     /**
+     * Detects functional dependency via NDV ratio: if multi_column_ndv ≈ single_column_ndv for some
+     * column in the set, that column functionally determines the others. Returns the selectivity
+     * of the most selective determinant column, or null if no FD is detected.
+     * Prefers MCV-based selectivity when histogram is available for more accurate estimation.
+     */
+    private static Double trySelectivityFromFunctionalDependency(
+            Set<ColumnRefOperator> correlatedColumns,
+            double multiNdv,
+            Statistics statistics,
+            Map<ColumnRefOperator, Double> columnToSelectivityMap,
+            Map<ColumnRefOperator, ConstantOperator> equalityPredicates) {
+        List<Double> determinantSelectivities = new ArrayList<>();
+        for (ColumnRefOperator col : correlatedColumns) {
+            ColumnStatistic colStat = statistics.getColumnStatistic(col);
+            if (colStat == null || colStat.isUnknown()) {
+                continue;
+            }
+            double singleNdv = colStat.getDistinctValuesCount();
+            // FD: multi_ndv <= single_ndv * (1 + tolerance) => this column determines the rest. Otherwise, continue
+            if (singleNdv < 1.0 || multiNdv > singleNdv * (1.0 + FD_NDV_TOLERANCE)) {
+                continue;
+            }
+            Double sel = null;
+            if (colStat.getHistogram() != null) {
+                Optional<Histogram> hist = BinaryPredicateStatisticCalculator
+                        .updateHistWithEqual(colStat, Optional.ofNullable(equalityPredicates.get(col)));
+                if (hist.isPresent()) {
+                    double total = colStat.getHistogram().getTotalRows();
+                    if (total > 0) {
+                        sel = (hist.get().getTotalRows() / total) * (1.0 - colStat.getNullsFraction());
+                    }
+                }
+            }
+            if (sel == null) {
+                sel = columnToSelectivityMap.get(col);
+            }
+            if (sel != null) {
+                determinantSelectivities.add(sel);
+            }
+        }
+        return determinantSelectivities.isEmpty() ? null : Collections.min(determinantSelectivities);
+    }
+
+    /**
      * Estimates selectivity for conjunctive equality predicates across multiple columns.
      *
      * This method implements a hybrid approach that:
@@ -219,18 +267,27 @@ public class StatisticsEstimateUtils {
                 multiColumnStatsPair.second.getNdv() > 0) {
 
             Set<ColumnRefOperator> correlatedColumns = multiColumnStatsPair.first;
-            double distinctValueCount = Math.max(1.0, multiColumnStatsPair.second.getNdv());
+            double multiNdv = Math.max(1.0, multiColumnStatsPair.second.getNdv());
 
-            // Formula: S_corr = 1/NDV
-            // NDV-based selectivity estimation for correlated columns
-            double correlationBasedSelectivity = 1.0 / distinctValueCount;
+            // Functional dependency detection: if ndv(col1, col2, ...) ≈ ndv(col_i), then col_i
+            // functionally determines the others. Use that column's selectivity instead of 1/multi_ndv
+            // to avoid severe underestimation (e.g. province -> city).
+            Double fdBasedSelectivity = trySelectivityFromFunctionalDependency(
+                    correlatedColumns, multiNdv, statistics, columnToSelectivityMap, equalityPredicates);
 
-            double maxNullFraction = correlatedColumns.stream()
-                    .map(statistics::getColumnStatistic)
-                    .mapToDouble(ColumnStatistic::getNullsFraction)
-                    .max()
-                    .orElse(0.0);
-            correlationBasedSelectivity = correlationBasedSelectivity * (1.0 - maxNullFraction);
+            double correlationBasedSelectivity;
+            if (fdBasedSelectivity != null) {
+                correlationBasedSelectivity = fdBasedSelectivity;
+            } else {
+                // Formula: S_corr = 1/NDV
+                correlationBasedSelectivity = 1.0 / multiNdv;
+                double maxNullFraction = correlatedColumns.stream()
+                        .map(statistics::getColumnStatistic)
+                        .mapToDouble(ColumnStatistic::getNullsFraction)
+                        .max()
+                        .orElse(0.0);
+                correlationBasedSelectivity = correlationBasedSelectivity * (1.0 - maxNullFraction);
+            }
 
             // Formula: S_ind = ∏(S_i) for all i in correlatedColumns
             // Calculate independence-assumption selectivity product as lower bound
