@@ -14,6 +14,7 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.TabletSchedCtx;
@@ -132,6 +133,26 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAlterColumnMetricsExposure() {
+        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
+        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
+        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
+        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
+    }
+  
+>>>>>>> 3e048bef9f0... [Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247)
     public void testPlanAdvisorMetricsExposure() {
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
