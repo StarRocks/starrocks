@@ -310,8 +310,8 @@ Reusable exec join hash table algorithms without join nodes, pipeline, storage, 
 ### Orchestration (`orchestration`)
 Orchestration layer below Service for query, fragment, and ingestion lifecycle entrypoints over concrete runtime and execution modules.
 - Targets: `Orchestration`
-- Allowed internal include prefixes: `orchestration/`, `data_workflows/`, `connector_primitive/`, `column/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
-- Allowed target deps: `DataWorkflows`, `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `Platform`, `ColumnCore`, `Runtime`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
+- Allowed internal include prefixes: `orchestration/`, `data_workflows/`, `data_sink/result/`, `data_sink/exchange/`, `data_sink/tablet/`, `connector_primitive/`, `column/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
+- Allowed target deps: `DataWorkflows`, `DataSinkResult`, `DataSinkExchange`, `DataSinkTablet`, `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `Platform`, `ColumnCore`, `Runtime`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
 - Core tests: `orchestration_test`
 - Remediation: Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules.
 

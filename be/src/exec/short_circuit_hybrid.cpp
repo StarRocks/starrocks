@@ -22,7 +22,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
-#include "exec/data_sinks/memory_scratch_sink.h"
+#include "data_sink/result/memory_scratch_sink.h"
 #include "exec/exec_env.h"
 #include "exec/scan_node.h"
 #include "exprs/chunk_predicate_evaluator.h"

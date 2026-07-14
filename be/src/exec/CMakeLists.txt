@@ -289,20 +289,13 @@ set(EXEC_NON_PIPELINE_FILES
     connector_scan_node.cpp
 )
 
-set(EXEC_DATA_SINK_FILES
-    data_sinks/arrow_result_writer.cpp
-    data_sinks/blackhole_table_sink.cpp
-    data_sinks/buffer_control_result_writer.cpp
-    data_sinks/customized_result_writer.cpp
+set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/data_sink_factory.cpp
     data_sinks/data_sink_pipeline.cpp
-    data_sinks/data_stream_sender.cpp
     data_sinks/dictionary_cache_sink.cpp
-    data_sinks/export_sink.cpp
-    data_sinks/file_result_writer.cpp
     data_sinks/hive_table_sink.cpp
-    data_sinks/http_result_writer.cpp
     data_sinks/iceberg_table_sink.cpp
+<<<<<<< HEAD
     data_sinks/memory_scratch_sink.cpp
     data_sinks/remote_scan_result_sink.cpp
     data_sinks/metadata_result_writer.cpp
@@ -316,12 +309,9 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/result_sink.cpp
     data_sinks/schema_table_sink.cpp
     data_sinks/statistic_result_writer.cpp
+=======
+>>>>>>> f2940f38146... [Refactor] Split data sinks into dedicated modules (#76312)
     data_sinks/table_function_table_sink.cpp
-    data_sinks/tablet_sink.cpp
-    data_sinks/tablet_sink_colocate_sender.cpp
-    data_sinks/tablet_sink_index_channel.cpp
-    data_sinks/tablet_sink_sender.cpp
-    data_sinks/variable_result_writer.cpp
 )
 
 set(EXEC_RUNTIME_COMPAT_FILES
@@ -403,7 +393,7 @@ target_link_libraries(ExecRuntime PUBLIC
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
-    ${EXEC_DATA_SINK_FILES}
+    ${EXEC_DATA_SINK_COMPAT_FILES}
     ${EXEC_RUNTIME_COMPAT_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
@@ -411,4 +401,17 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE DataSinkFile Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
+target_link_libraries(Exec PRIVATE
+    DataSinkFile
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkTablet
+    Formats
+    Platform
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+)
