@@ -1,5 +1,5 @@
 name: Bugfix Version Index
-run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.number || github.ref_name || 'reconcile' }}
+run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.number || github.ref_name || github.event.schedule || 'run' }}
 
 # Maintains the deterministic code_kb.versions index (fix side) + the heuristic
 # code_kb.task_summaries cause cache, via the github-bugfix-versions plugin run directly with
@@ -10,15 +10,16 @@ run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.numbe
 #   ① origin bugfix PR merges to main      → :index-fix (seed versions) + :affected-versions (cache cause)
 #   ② a backport PR merges to branch-X.Y*  → :index-fix (rebuild the origin's versions record)
 #   ③ a release tag X.Y.Z is pushed        → :index-fix <tag> (resolve pending-<line> → concrete tag)
-#   ④ daily schedule                       → :index-fix reconcile (self-heal: re-sweep any pending
-#                                             a tag-cut missed/failed — the versions safety net)
+#   ④ daily schedule                       → :index-fix reconcile (pending-only self-heal)
+#   ⑤ weekly schedule                      → :index-fix reconcile-all (re-check concrete too — corrects
+#                                             a wrong concrete tag / reverse error; heavier)
 #
 # NOTE: plugin commands MUST be namespaced (/github-bugfix-versions:<cmd>). A bare /index-fix in
 # headless `-p` does NOT resolve — it is silently treated as prompt text (no write).
 #
-# The index steps FAIL LOUD (no `|| true` / no continue-on-error): a silent failure is exactly what
-# let `pending` records pile up unresolved. The cause step (affected-versions) stays best-effort,
-# and the daily reconcile backs up any transient index failure.
+# The index steps FAIL LOUD: no `|| true`, and `defaults.run.shell: bash` forces `-o pipefail`
+# so a failing `claude ... | tee` propagates claude's non-zero exit (tee's success does not mask it).
+# The cause step (affected-versions) stays best-effort; the daily reconcile backs up transient failures.
 #
 # PREREQUISITES on the [ubuntu, ai] runner (one-time, infra):
 #   - `gh` (authenticated via GITHUB_TOKEN), `git`, `python3` on PATH — version_backfill.py uses gh
@@ -33,8 +34,7 @@ on:
     branches:
       - main
       # release lines. Use [0-9]+ (one-or-more), NOT bare [0-9] (single digit) — else multi-digit
-      # versions like branch-3.12, branch-3.5.20, branch-3.12.20 silently never match the filter
-      # and their backport merges never trigger this workflow. (Mirrors the push-tag pattern below.)
+      # versions like branch-3.12, branch-3.5.20, branch-3.12.20 silently never match the filter.
       - 'branch-[0-9]+.[0-9]+'
       - 'branch-[0-9]+.[0-9]+.[0-9]+'
     types:
@@ -43,23 +43,30 @@ on:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
   schedule:
-    # Daily self-heal. 19:00 UTC = 03:00 Asia/Shanghai (low-traffic for the CN-centric project).
-    - cron: '0 19 * * *'
+    - cron: '0 19 * * *'    # daily 19:00 UTC (03:00 Asia/Shanghai) → reconcile (pending-only)
+    - cron: '0 20 * * 0'    # weekly Sun 20:00 UTC (Mon 04:00 Asia/Shanghai) → reconcile-all (concrete too)
 
-# Concurrency is per-ORIGIN, set at the JOB level (not here) — see each job's `concurrency:`.
-# A workflow-level group keyed on the triggering event (PR #/tag) would be WRONG: the entity
-# written is the *origin* PR's cumulative record (version/<repo>/<origin>), and two backports of
-# the same origin merging on different release branches fire as different events → different
-# groups → concurrent runs. Grouping by origin serializes all writers of the same record;
-# rebuild-from-source + the monotonic guard make a superseded run harmless.
+# Concurrency is per-ORIGIN for the single-origin EVENTS (origin-merge / backport-merge share
+# `BVI-…-origin-N`, so different origins run in parallel but the same origin serializes — a
+# whole-entity upsert can't be lost). The BULK jobs (tag-cut / reconcile / reconcile-all) use their
+# OWN group, so they are NOT serialized against a same-origin backport-merge. That race (a bulk run
+# overwriting a backport just written by an event) is handled in the plugin, NOT here: the monotonic
+# guard keeps a concrete earliest_fix_tag from reverting to pending, and the anti-clobber guard drops
+# any origin whose stored record was updated after the sweep started (so a mid-sweep backport-merge
+# write is never clobbered). A shared group is deliberately NOT used — it would make different-origin
+# backport-writes cancel each other (only one pending kept), dropping writes.
 
 permissions:
   contents: read
   pull-requests: read
 
+defaults:
+  run:
+    shell: bash    # GitHub runs this as `bash --noprofile --norc -eo pipefail {0}` → pipefail makes
+                   # `claude ... | tee` fail the step when claude fails (tee's exit no longer masks it).
+
 jobs:
   # ① origin bugfix PR merged to main → seed versions (fix side) + cache cause (task_summaries).
-  # Gated to [BugFix]-titled PRs (StarRocks convention) to avoid an LLM cause analysis on every merge.
   origin-merge:
     if: >
       github.event_name == 'pull_request_target' &&
@@ -80,9 +87,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # full history — `git tag --contains` needs the commit objects
-          fetch-tags: true      # all release tags
-      - name: fetch release branches (for branch --contains / pending resolution)
+          fetch-depth: 0
+          fetch-tags: true
+      - name: fetch release branches
         run: git fetch origin '+refs/heads/branch-*:refs/remotes/origin/branch-*' || true
       - name: index-fix (deterministic fix side → code_kb.versions) [FAIL-LOUD]
         run: |
@@ -90,19 +97,13 @@ jobs:
           claude --dangerously-skip-permissions \
             -p "/github-bugfix-versions:index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt"
       - name: affected-versions (heuristic cause → code_kb.task_summaries) [best-effort]
-        if: always()               # run even if index-fix failed; cause caching is decoupled
-        continue-on-error: true    # never fail the job on the cause step (its own daily backfill covers gaps)
+        if: always()
+        continue-on-error: true
         run: |
-          # Cause is stable at origin-merge (blame over immutable pre-fix history); cache it now
-          # so the pre-release report is a fast bulk query. Firewall runs inside the skill.
           claude --dangerously-skip-permissions \
             -p "/github-bugfix-versions:affected-versions ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/affected_versions.txt" || true
 
-  # ② a backport PR merged to a release branch → rebuild EACH origin it backports. A title can
-  # bundle several origins ((backport #a)(backport #b)...). FAN OUT: one matrix instance per origin,
-  # each serialized on that origin via `concurrency`. Exclude branch-sync PRs (head `…-sync-pr-…`):
-  # a sync carries 'backport' in its title but is NOT a real (backport #N) landing. Do NOT exclude
-  # `mergify/` here — mergify IS the backport mechanism (head `mergify/bp/branch-X.Y/pr-N`).
+  # ② a backport PR merged to a release branch → rebuild EACH origin it backports.
   backport-resolve:
     if: >
       github.event_name == 'pull_request_target' &&
@@ -120,8 +121,6 @@ jobs:
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          # ALL markers (mirrors the skill's backport_markers), not just the last — bundled/chained
-          # titles backport several origins. Build the JSON array with awk so it is shell-agnostic.
           json="$(printf '%s' "$TITLE" | grep -oiE 'backport #[0-9]+' | grep -oE '[0-9]+' | sort -un \
                  | awk 'BEGIN{printf "["} {printf "%s\"%s\"",(NR>1?",":""),$0} END{printf "]"}')"
           echo "origins=$json" >> "$GITHUB_OUTPUT"
@@ -134,7 +133,6 @@ jobs:
       fail-fast: false
       matrix:
         origin: ${{ fromJSON(needs.backport-resolve.outputs.origins) }}
-    # Serialize per origin (shares the group with the origin-merge job of the same origin).
     concurrency:
       group: BVI-${{ github.repository }}-origin-${{ matrix.origin }}
       cancel-in-progress: false
@@ -156,8 +154,6 @@ jobs:
             -p "/github-bugfix-versions:index-fix ${{ github.repository }}#${{ matrix.origin }}" 2>&1 | tee "${RUNNER_TEMP}/index_fix_${{ matrix.origin }}.txt"
 
   # ③ release tag cut → resolve pending-<line> records on that line to the concrete tag.
-  # The monotonic guard (in the plugin) prevents a late backport-write from reverting this
-  # pending→concrete resolution, so a per-origin group here is not needed for correctness.
   tag-cut:
     if: github.event_name == 'push'
     concurrency:
@@ -181,11 +177,9 @@ jobs:
           claude --dangerously-skip-permissions \
             -p "/github-bugfix-versions:index-fix ${TAG}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt"
 
-  # ④ daily self-heal → re-sweep pending on all maintained lines. Catches any tag-cut event that
-  # failed or was skipped, so a shipped fix never stays stuck at `pending`. Steady-state cheap
-  # (only genuinely-unreleased fixes remain pending after the first run clears the backlog).
+  # ④ daily self-heal → pending-only sweep across all maintained lines.
   reconcile:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * *'
     concurrency:
       group: BVI-${{ github.repository }}-reconcile
       cancel-in-progress: false
@@ -205,3 +199,28 @@ jobs:
           echo "daily reconcile"
           claude --dangerously-skip-permissions \
             -p "/github-bugfix-versions:index-fix reconcile" 2>&1 | tee "${RUNNER_TEMP}/reconcile.txt"
+
+  # ⑤ weekly deep self-heal → re-check concrete records too, correcting a wrong concrete tag
+  # (reverse error like #74855: stored 4.1.3 but really 4.1.2). Heavier — every maintained-line
+  # origin is rebuilt from GitHub — so weekly, off-peak, not on the daily cron.
+  reconcile-all:
+    if: github.event_name == 'schedule' && github.event.schedule == '0 20 * * 0'
+    concurrency:
+      group: BVI-${{ github.repository }}-reconcile-all
+      cancel-in-progress: false
+    runs-on: [ubuntu, ai]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: fetch release branches
+        run: git fetch origin '+refs/heads/branch-*:refs/remotes/origin/branch-*' || true
+      - name: index-fix reconcile-all (re-check concrete + pending on all maintained lines) [FAIL-LOUD]
+        run: |
+          echo "weekly reconcile-all"
+          claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:index-fix reconcile-all" 2>&1 | tee "${RUNNER_TEMP}/reconcile_all.txt"
