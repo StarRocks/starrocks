@@ -16,6 +16,8 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DefaultExpr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +30,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -38,6 +41,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -746,5 +750,335 @@ public class RangeDistributionGuardTest {
         // A real ADD ROLLUP now falls through to the existing range rejection.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_rollup_existing add rollup r_new(k1, k2, v1) order by (k2, k1)");
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd / resolveEffectiveSortKeyColumns
+    //
+    // These are additive, self-contained pieces (not wired into the ALTER dispatch yet), so they are
+    // exercised as pure functions over a hand-built resolved SchemaChangeData rather than by driving a
+    // real ADD COLUMN KEY through analyzeAndCreateJob (which today still routes to the existing
+    // needsRangeRewriteSchemaChange path before finalAnalyze ever runs).
+    // ------------------------------------------------------------------------------------------
+
+    private static String dupRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String aggRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int sum)\n" +
+                "AGGREGATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String uniqueRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "UNIQUE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String primaryKeyRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int not null, k2 int not null, v1 int)\n" +
+                "PRIMARY KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static OlapTable getTable(String name) {
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+    }
+
+    private static Column constKeyColumn(OlapTable table, String name) {
+        Column column = new Column(name, IntegerType.INT);
+        column.setIsKey(true);
+        column.setUniqueId(table.getMaxColUniqueId() + 1000);
+        column.setDefaultValue("0");
+        return column;
+    }
+
+    /**
+     * Build a resolved {@link SchemaChangeData} simulating {@code ADD COLUMN <newKeyColumn> KEY} on
+     * {@code table}: the base index schema with {@code newKeyColumn} inserted as a brand-new trailing
+     * key column (after the existing key columns, keeping the key set a contiguous prefix), and a
+     * candidate sort key that is the table's current effective sort key plus that new column,
+     * expressed via {@code sortKeyUniqueIds} -- the resolver's highest-precedence tier, so this is
+     * valid regardless of which tier the live table itself uses.
+     */
+    private static SchemaChangeData buildTrailingKeyAddCandidate(OlapTable table, Column newKeyColumn) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(newKeyColumn.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        return SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+    }
+
+    @Test
+    public void testDupTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_dup"));
+        OlapTable table = getTable("t_meta_dup");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testAggTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_meta_agg"));
+        OlapTable table = getTable("t_meta_agg");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testUniqueTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_meta_unique"));
+        OlapTable table = getTable("t_meta_unique");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * Same AGG scenario as {@link #testAggTrailingKeyAddIsMetadataOnly}, but the candidate sort key is
+     * expressed via {@code sortKeyIdxes} (schema position) instead of {@code sortKeyUniqueIds},
+     * exercising the resolver's second precedence tier at the classifier level, over a resolved schema
+     * whose key columns (k1, k2, c_new) form a contiguous leading prefix matching those idxes.
+     */
+    @Test
+    public void testAggIdxBasedTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_meta_agg_idx"));
+        OlapTable table = getTable("t_meta_agg_idx");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        // k1, k2, c_new form the leading contiguous key prefix -> idxes [0, 1, 2].
+        assertTrue(newSchema.get(0).isKey() && newSchema.get(1).isKey() && newSchema.get(2).isKey());
+        assertFalse(newSchema.get(3).isKey());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyIdxes(List.of(0, 1, 2))
+                .build();
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testPrimaryKeyTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(primaryKeyRangeTableWithValueDdl("t_meta_pk"));
+        OlapTable table = getTable("t_meta_pk");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * Promoting an EXISTING value column to key (a value-to-key flip) is not an ADD of a brand-new
+     * column: the classifier must reject it even though the resulting sort key also grows by one.
+     */
+    @Test
+    public void testPromotingExistingColumnNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_promote"));
+        OlapTable table = getTable("t_meta_promote");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        List<Column> newSchema = new ArrayList<>();
+        Column promotedV1 = null;
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                Column copy = column.deepCopy();
+                copy.setIsKey(true);
+                promotedV1 = copy;
+                newSchema.add(copy);
+            } else {
+                newSchema.add(column);
+            }
+        }
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(promotedV1.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testColocateTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_colocate"));
+        OlapTable table = getTable("t_meta_colocate");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testAutoIncrementTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_meta_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = getTable("t_meta_autoinc");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testMultiIndexTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_multi"));
+        OlapTable table = getTable("t_meta_multi");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+
+        long extraMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> rollupSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2);
+        table.setIndexMeta(extraMetaId, "r_meta_multi", rollupSchema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testTempPartitionsTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_temp"));
+        OlapTable table = getTable("t_meta_temp");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean existTempPartitions() {
+                return true;
+            }
+        };
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testNonConstDefaultNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_nonconst"));
+        OlapTable table = getTable("t_meta_nonconst");
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        // Force a variable (non-constant) default, as if DEFAULT uuid() had been specified.
+        Deencapsulation.setField(newKeyColumn, "defaultExpr", new DefaultExpr("uuid()", false));
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, newKeyColumn);
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    // -- resolveEffectiveSortKeyColumns: BE-compatible precedence (tablet_schema.cpp) --
+
+    private static List<Column> threeColumnSchema() {
+        Column a = new Column("a", IntegerType.INT);
+        a.setIsKey(true);
+        a.setUniqueId(10);
+        Column b = new Column("b", IntegerType.INT);
+        b.setIsKey(true);
+        b.setUniqueId(11);
+        Column c = new Column("c", IntegerType.INT);
+        c.setUniqueId(12);
+        return new ArrayList<>(List.of(a, b, c));
+    }
+
+    @Test
+    public void testResolverPrefersSortKeyUniqueIds() {
+        List<Column> schema = threeColumnSchema();
+        // Reordered relative to schema position, and ignores sortKeyIdxes entirely.
+        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                schema, List.of(11, 10), List.of(2, 1, 0));
+        assertEquals(List.of("b", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsNull() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(schema, null, List.of(2, 0));
+        assertEquals(List.of("c", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsEmpty() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                schema, List.of(), List.of(2, 0));
+        assertEquals(List.of("c", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToKeyColumnsWhenBothNull() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(schema, null, null);
+        assertEquals(List.of("a", "b"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToKeyColumnsWhenBothEmpty() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+                schema, List.of(), List.of());
+        assertEquals(List.of("a", "b"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
     }
 }

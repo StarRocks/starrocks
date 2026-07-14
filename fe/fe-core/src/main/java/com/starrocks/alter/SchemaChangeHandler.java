@@ -4835,6 +4835,140 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
+     * Resolve the effective sort-key columns of {@code schema}, following the same precedence BE
+     * applies when loading a {@code TabletSchemaPB} (see {@code tablet_schema.cpp}'s sort-key
+     * resolution): a non-empty {@code sortKeyUniqueIds} locates sort-key columns by unique id;
+     * otherwise a non-empty {@code sortKeyIdxes} locates them by schema position; otherwise the sort
+     * key is the leading run of key columns ({@link Column#isKey()}). Both {@code null} and empty
+     * lists fall through to the next precedence level. This differs from {@link
+     * MetaUtils#getRangeDistributionColumns(OlapTable, long)}, which treats a non-null (but possibly
+     * empty) {@code sortKeyIdxes} as an explicit sort key and never falls back to key columns.
+     */
+    @VisibleForTesting
+    static List<Column> resolveEffectiveSortKeyColumns(List<Column> schema, @Nullable List<Integer> sortKeyUniqueIds,
+                                                        @Nullable List<Integer> sortKeyIdxes) {
+        if (sortKeyUniqueIds != null && !sortKeyUniqueIds.isEmpty()) {
+            Map<Integer, Column> uniqueIdToColumn = new HashMap<>();
+            for (Column column : schema) {
+                uniqueIdToColumn.put(column.getUniqueId(), column);
+            }
+            List<Column> sortKeyColumns = new ArrayList<>(sortKeyUniqueIds.size());
+            for (Integer uniqueId : sortKeyUniqueIds) {
+                Column column = uniqueIdToColumn.get(uniqueId);
+                Preconditions.checkArgument(column != null, "no column with unique id %s in schema", uniqueId);
+                sortKeyColumns.add(column);
+            }
+            return sortKeyColumns;
+        }
+        if (sortKeyIdxes != null && !sortKeyIdxes.isEmpty()) {
+            List<Column> sortKeyColumns = new ArrayList<>(sortKeyIdxes.size());
+            for (Integer idx : sortKeyIdxes) {
+                sortKeyColumns.add(schema.get(idx));
+            }
+            return sortKeyColumns;
+        }
+        long keyColumnCount = schema.stream().filter(Column::isKey).count();
+        return new ArrayList<>(schema.subList(0, (int) keyColumnCount));
+    }
+
+    /**
+     * Whether {@code resolved} -- the {@link SchemaChangeData} produced by {@link #finalAnalyze} --
+     * describes a metadata-only trailing key-column add on a shared-data range-distribution table: the
+     * new column's value is a constant/NULL sentinel appended after every existing range sort-key
+     * column, so existing tablet range boundaries stay valid without a data rewrite. Self-contained:
+     * computed entirely from the resolved schema, independent of {@link #needsRangeRewriteSchemaChange}
+     * (which routes a broader set of key changes to the K-tablet rewrite job).
+     *
+     * <p>Eligible iff ALL of:
+     * <ul>
+     *   <li>the table is a shared-data (cloud-native) range-distribution table;</li>
+     *   <li>the table has exactly one index meta (no rollup / synchronous MV);</li>
+     *   <li>the table is not a colocate table, has no AUTO_INCREMENT column, and has no temp
+     *       partitions;</li>
+     *   <li>the table's keysType is DUP_KEYS, AGG_KEYS, or UNIQUE_KEYS (not PRIMARY_KEYS);</li>
+     *   <li>the base index's resolved schema adds exactly one brand-new key column (a unique id not
+     *       present in the current live schema -- excludes promoting an existing value column to key),
+     *       whose default is constant or NULL (not auto-increment, not generated, not a variable
+     *       expression default such as {@code uuid()});</li>
+     *   <li>the base index's resolved schema's key columns form a contiguous leading prefix;</li>
+     *   <li>the resolved (candidate) effective sort key -- resolved with {@link
+     *       #resolveEffectiveSortKeyColumns} -- equals the current effective sort key plus exactly
+     *       that one new column trailing at the end.</li>
+     * </ul>
+     */
+    @VisibleForTesting
+    static boolean isMetadataOnlyTrailingKeyAdd(SchemaChangeData resolved) {
+        OlapTable table = resolved.getTable();
+        if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
+            return false;
+        }
+        if (table.getIndexMetaIdToMeta().size() != 1) {
+            return false;
+        }
+        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
+                || table.hasAutoIncrementColumn() || table.existTempPartitions()) {
+            return false;
+        }
+        KeysType keysType = table.getKeysType();
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.AGG_KEYS && keysType != KeysType.UNIQUE_KEYS) {
+            return false;
+        }
+
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> newSchema = resolved.getNewIndexMetaIdToSchema().get(baseIndexMetaId);
+        if (newSchema == null) {
+            return false;
+        }
+        // Key columns must form a contiguous leading prefix; a metadata-only classification must not
+        // bypass this invariant.
+        boolean sawValue = false;
+        for (Column column : newSchema) {
+            if (column.isKey()) {
+                if (sawValue) {
+                    return false;
+                }
+            } else {
+                sawValue = true;
+            }
+        }
+
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Set<Integer> oldUniqueIds = new HashSet<>();
+        for (Column column : oldSchema) {
+            oldUniqueIds.add(column.getUniqueId());
+        }
+        List<Column> newKeyColumns = new ArrayList<>();
+        for (Column column : newSchema) {
+            if (column.isKey() && !oldUniqueIds.contains(column.getUniqueId())) {
+                newKeyColumns.add(column);
+            }
+        }
+        if (newKeyColumns.size() != 1) {
+            return false;
+        }
+        Column newKeyColumn = newKeyColumns.get(0);
+        if (newKeyColumn.isAutoIncrement() || newKeyColumn.isGeneratedColumn()
+                || newKeyColumn.getDefaultValueType() == Column.DefaultValueType.VARY) {
+            return false;
+        }
+
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = resolveEffectiveSortKeyColumns(oldSchema,
+                oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+        List<Column> newSortKey = resolveEffectiveSortKeyColumns(newSchema,
+                resolved.getSortKeyUniqueIds(), resolved.getSortKeyIdxes());
+        if (newSortKey.size() != oldSortKey.size() + 1) {
+            return false;
+        }
+        for (int i = 0; i < oldSortKey.size(); i++) {
+            if (oldSortKey.get(i).getUniqueId() != newSortKey.get(i).getUniqueId()) {
+                return false;
+            }
+        }
+        return newSortKey.get(newSortKey.size() - 1).getUniqueId() == newKeyColumn.getUniqueId();
+    }
+
+    /**
      * Reject the operation if the named column belongs to the range-
      * distribution sort-key column set of the given index.
      *
