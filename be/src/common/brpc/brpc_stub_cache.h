@@ -71,6 +71,13 @@ public:
         if (_cache->_stopping) {
             return;
         }
+        // Make sure this task is still the authoritative cleanup task for the
+        // endpoint before rescheduling. If shutdown() cleared the cache or a new
+        // entry was created for the same endpoint, this task is stale and must
+        // not schedule anything.
+        if (!_cache->is_cleanup_task_owner_locked(_endpoint, this)) {
+            return;
+        }
         int64_t now_us = butil::gettimeofday_us();
         if (now_us >= _deadline) {
             LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for " << (now_us - _deadline) / 1000
@@ -80,7 +87,9 @@ public:
         }
         auto new_task = std::make_shared<EndpointCleanupTask<StubCacheT>>(_cache, _endpoint, _ttl_seconds);
         new_task->_deadline = _deadline;
-        _cache->replace_cleanup_task_locked(_endpoint, new_task);
+        if (!_cache->replace_cleanup_task_locked(_endpoint, new_task)) {
+            return;
+        }
         timespec tm = butil::microseconds_to_timespec(_deadline);
         auto status = _cache->_timer->schedule(new_task.get(), tm);
         if (!status.ok()) {
@@ -124,7 +133,13 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
+    bool is_cleanup_task_owner_locked(
+            const butil::EndPoint& endpoint, const EndpointCleanupTask<BrpcStubCache>* task) const {
+        auto pool = _stub_map.seek(endpoint);
+        return pool != nullptr && (*pool)->_cleanup_task.get() == task;
+    }
+
+    bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
 
     struct Metrics;
@@ -167,7 +182,13 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
+    bool is_cleanup_task_owner_locked(
+            const butil::EndPoint& endpoint, const EndpointCleanupTask<HttpBrpcStubCache>* task) const {
+        auto entry = _stub_map.seek(endpoint);
+        return entry != nullptr && entry->cleanup_task.get() == task;
+    }
+
+    bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task);
 
     struct StubEntry {
@@ -204,7 +225,14 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
+    bool is_cleanup_task_owner_locked(
+            const butil::EndPoint& endpoint,
+            const EndpointCleanupTask<LakeServiceBrpcStubCache>* task) const {
+        auto entry = _stub_map.seek(endpoint);
+        return entry != nullptr && entry->cleanup_task.get() == task;
+    }
+
+    bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task);
 
     struct StubEntry {

@@ -108,12 +108,15 @@ BrpcStubCache::~BrpcStubCache() {
     wait_clean_tasks_terminate(this, [](const std::shared_ptr<StubPool>& pool) { return pool->_cleanup_task; });
 }
 
-void BrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
-                                                std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task) {
+bool BrpcStubCache::replace_cleanup_task_locked(
+        const butil::EndPoint& endpoint,
+        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task) {
     auto pool = _stub_map.seek(endpoint);
     if (pool != nullptr) {
         (*pool)->_cleanup_task = std::move(task);
+        return true;
     }
+    return false;
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
@@ -222,12 +225,15 @@ void HttpBrpcStubCache::shutdown() {
     wait_clean_tasks_terminate(this, [](const StubEntry& entry) { return entry.cleanup_task; });
 }
 
-void HttpBrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
-                                                    std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task) {
+bool HttpBrpcStubCache::replace_cleanup_task_locked(
+        const butil::EndPoint& endpoint,
+        std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task) {
     auto entry = _stub_map.seek(endpoint);
     if (entry != nullptr) {
         entry->cleanup_task = std::move(task);
+        return true;
     }
+    return false;
 }
 
 StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::get_http_stub(
@@ -314,12 +320,15 @@ void LakeServiceBrpcStubCache::shutdown() {
     wait_clean_tasks_terminate(this, [](const StubEntry& entry) { return entry.cleanup_task; });
 }
 
-void LakeServiceBrpcStubCache::replace_cleanup_task_locked(
-        const butil::EndPoint& endpoint, std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task) {
+bool LakeServiceBrpcStubCache::replace_cleanup_task_locked(
+        const butil::EndPoint& endpoint,
+        std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task) {
     auto entry = _stub_map.seek(endpoint);
     if (entry != nullptr) {
         entry->cleanup_task = std::move(task);
+        return true;
     }
+    return false;
 }
 
 DEFINE_FAIL_POINT(get_stub_return_nullptr);
