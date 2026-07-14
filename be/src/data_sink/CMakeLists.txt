@@ -127,7 +127,7 @@ ADD_BE_LIB(DataSinkTablet
     tablet/multi_olap_table_sink.cpp
     tablet/range_router.cpp
     tablet/range_tablet_sink_sender.cpp
-    tablet/tablet_sink.cpp
+    tablet/olap_table_sink.cpp
     tablet/tablet_sink_colocate_sender.cpp
     tablet/tablet_sink_index_channel.cpp
     tablet/tablet_sink_sender.cpp
