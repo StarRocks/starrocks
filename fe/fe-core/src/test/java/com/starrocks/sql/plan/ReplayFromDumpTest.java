@@ -1002,7 +1002,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                     "    UNPARTITIONED\n" +
                     "\n" +
                     "  27:Project\n" +
-                    "  |  <slot 603> : array_contains(DictDecode(625: array_agg, [<place-holder>]), 'asdfasdfasdf')\n" +
+                    "  |  <slot 603> : array_contains(625: array_agg, dict_encode('asdfasdfasdf', 625))\n" +
                     "  |  \n" +
                     "  26:AGGREGATE (merge finalize)\n" +
                     "  |  output: array_agg(625: array_agg)\n" +
