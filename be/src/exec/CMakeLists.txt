@@ -296,7 +296,6 @@ set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/dictionary_cache_sink.cpp
     data_sinks/hive_table_sink.cpp
     data_sinks/iceberg_table_sink.cpp
-    data_sinks/remote_scan_result_sink.cpp
     data_sinks/table_function_table_sink.cpp
 )
 

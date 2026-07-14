@@ -43,6 +43,7 @@ ADD_BE_LIB(DataSinkResult
     result/memory_scratch_sink.cpp
     result/metadata_result_writer.cpp
     result/mysql_result_writer.cpp
+    result/remote_scan_result_sink.cpp
     result/result_sink.cpp
     result/statistic_result_writer.cpp
     result/variable_result_writer.cpp

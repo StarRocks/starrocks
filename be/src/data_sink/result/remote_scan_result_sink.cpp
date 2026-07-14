@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/remote_scan_result_sink.h"
+#include "data_sink/result/remote_scan_result_sink.h"
 
 #include <utility>
 

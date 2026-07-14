@@ -35,8 +35,8 @@
 #include "data_sink/external/noop_sink.h"
 #include "data_sink/external/schema_table_sink.h"
 #include "data_sink/result/memory_scratch_sink.h"
+#include "data_sink/result/remote_scan_result_sink.h"
 #include "data_sink/result/result_sink.h"
-#include "exec/data_sinks/remote_scan_result_sink.h"
 #include "exec/data_sinks/table_function_table_sink.h"
 #include "runtime/runtime_state.h"
 
