@@ -214,6 +214,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             if (targetRanges != null) {
                 // Range path: the short-key count may change, so the equal-assertion is relaxed and
                 // the version relation is handled explicitly for exact-state replay idempotency.
+                // The exact-state-replay `return` below exits the whole loop, which is only correct
+                // because the metadata-only range route guarantees exactly one index; a future
+                // multi-index extension must revisit this instead of silently skipping other indexes.
+                Preconditions.checkState(schemaInfos.size() == 1,
+                        "range flip target only supports a single index, got " + schemaInfos.size());
                 if (schemaInfo.getVersion() == indexMeta.getSchemaVersion()) {
                     // Exact-state replay: the flip already happened. Verify the live ranges already
                     // equal the targets and return WITHOUT re-appending (no double-append).
@@ -299,6 +304,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void validateBeforeFinishUnprotected(Database db, OlapTable table) throws AlterCancelException {
+        // Runs after publishVersion() (see LakeTableAlterMetaJobBase#runFinishedRewritingJob) but before
+        // the catalog flip; that ordering is safe only because (a) visibility is gated on this
+        // validation succeeding and (b) this job inherits allowConcurrentPartitionCreation() == false,
+        // so the live tablet set cannot change during the SCHEMA_CHANGE window. If this job ever opts
+        // into concurrent partition creation, the coverage validation below must move before publish.
         if (targetRanges == null) {
             return;
         }

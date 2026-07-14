@@ -4566,9 +4566,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 continue;
             }
             for (Tablet tablet : index.getTablets()) {
+                TabletRange tabletRange = tablet.getRange();
+                Preconditions.checkState(tabletRange != null && tabletRange.getRange() != null,
+                        "Tablet range is null, tabletId=" + tablet.getId());
                 targetRanges.put(tablet.getId(), new TabletRange(
                         TrailingSortKeyRangeReprojection.appendTrailing(
-                                tablet.getRange().getRange(), newTrailingColumn)));
+                                tabletRange.getRange(), newTrailingColumn)));
             }
         }
         return targetRanges;
