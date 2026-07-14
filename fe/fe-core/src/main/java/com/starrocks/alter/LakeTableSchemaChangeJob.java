@@ -797,6 +797,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             });
         }
 
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+        }
+
         if (span != null) {
             span.end();
         }
