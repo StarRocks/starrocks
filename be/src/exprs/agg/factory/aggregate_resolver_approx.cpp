@@ -84,8 +84,7 @@ void AggregateFuncResolver::register_approx() {
             "ds_theta_combine", false, AggregateFactory::MakeThetaSketchCombineAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_VARBINARY, TYPE_DOUBLE, ThetaSketchIntersectCondState>(
-            "ds_theta_intersect_cond_agg", false,
-            AggregateFactory::MakeThetaSketchIntersectCondAggregateFunction());
+            "ds_theta_intersect_cond_agg", false, AggregateFactory::MakeThetaSketchIntersectCondAggregateFunction());
 }
 
 } // namespace starrocks

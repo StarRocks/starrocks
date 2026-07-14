@@ -55,7 +55,7 @@ struct ThetaSketchIntersectCondState {
 // but operates directly on VARBINARY (no hex encoding) and returns DOUBLE.
 class ThetaSketchIntersectCondAggregateFunction final
         : public AggregateFunctionBatchHelper<ThetaSketchIntersectCondState,
-                                             ThetaSketchIntersectCondAggregateFunction> {
+                                              ThetaSketchIntersectCondAggregateFunction> {
 public:
     using alloc_type = DataSketchesTheta::alloc_type;
     using theta_intersection_type = datasketches::theta_intersection_alloc<alloc_type>;
@@ -104,8 +104,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
-               size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         const BinaryColumn* binary = down_cast<const BinaryColumn*>(column);
         auto slice = binary->get_slice(row_num);
@@ -144,8 +143,8 @@ public:
     // Single input row → partial serialized state for streaming pre-aggregation.
     // If is_anchor=1: writes [sketch_size][sketch_bytes] (anchor=sketch, window=empty).
     // If is_anchor=0: writes [0][sketch_bytes]           (anchor=empty, window=sketch).
-    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src,
-                                     size_t chunk_size, MutableColumnPtr& dst) const override {
+    void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
         const Column* raw0 = ColumnHelper::get_data_column(src[0].get());
         const BinaryColumn* sketch_col = down_cast<const BinaryColumn*>(raw0);
         const Column* raw1 = ColumnHelper::get_data_column(src[1].get());
@@ -203,15 +202,13 @@ public:
 private:
     void _init_anchor_if_needed(AggDataPtr __restrict state) const {
         if (UNLIKELY(this->data(state).anchor_sketch == nullptr)) {
-            this->data(state).anchor_sketch =
-                    std::make_unique<DataSketchesTheta>(&(this->data(state).anchor_mem));
+            this->data(state).anchor_sketch = std::make_unique<DataSketchesTheta>(&(this->data(state).anchor_mem));
         }
     }
 
     void _init_window_if_needed(AggDataPtr __restrict state) const {
         if (UNLIKELY(this->data(state).window_sketch == nullptr)) {
-            this->data(state).window_sketch =
-                    std::make_unique<DataSketchesTheta>(&(this->data(state).window_mem));
+            this->data(state).window_sketch = std::make_unique<DataSketchesTheta>(&(this->data(state).window_mem));
         }
     }
 
