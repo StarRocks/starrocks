@@ -1672,8 +1672,6 @@ under the License.
 
         </dependencies>
     </dependencyManagement>
-<<<<<<< HEAD
-=======
 
     <build>
         <plugins>
@@ -1714,7 +1712,6 @@ under the License.
         </plugins>
     </build>
 
->>>>>>> 552695f24a9... [BugFix][CVE] Remove vulnerable stale transitive dependencies and enforce bans (backport #76097) (#76137)
     <reporting>
         <plugins>
             <plugin>
