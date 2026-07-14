@@ -2878,10 +2878,15 @@ public class SchemaChangeHandler extends AlterHandler {
         if (rangeKeyAddPending) {
             // A routed ADD of a key column on a shared-data range table: if the resolved change is a
             // metadata-only trailing sort-key add, run the async schema-evolution job that reprojects
-            // tablet ranges in place; otherwise fall back to the K-tablet data-rewrite job.
-            AlterJobV2 metadataOnlyJob = tryCreateMetadataOnlyTrailingKeyAddJob(olapTable, schemaChangeData);
-            if (metadataOnlyJob != null) {
-                return metadataOnlyJob;
+            // tablet ranges in place; otherwise fall back to the K-tablet data-rewrite job. The
+            // metadata-only route only applies to a single-clause ADD -- a multi-clause batch (e.g. ADD
+            // + MODIFY) must fall through to buildRoutedAddKeyColumnJob, which rejects it precisely,
+            // rather than shipping the other clause's change under the new schema with no data rewrite.
+            if (alterClauses.size() == 1) {
+                AlterJobV2 metadataOnlyJob = tryCreateMetadataOnlyTrailingKeyAddJob(olapTable, schemaChangeData);
+                if (metadataOnlyJob != null) {
+                    return metadataOnlyJob;
+                }
             }
             return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
         }

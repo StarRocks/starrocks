@@ -1382,4 +1382,22 @@ public class RangeDistributionGuardTest {
             Config.enable_range_distribution = saved;
         }
     }
+
+    /**
+     * A batch combining the trailing key-column ADD with another SCHEMA_CHANGE clause (ADD and MODIFY
+     * both map to AlterOpType.SCHEMA_CHANGE, so conflict analysis allows the batch) must NOT be routed
+     * to the metadata-only async job: that job would carry the MODIFY'd column's new type in the
+     * schema with no data rewrite, while old segments still hold the pre-MODIFY encoding. The batch
+     * must be rejected precisely, mirroring {@code buildRoutedAddKeyColumnJob}'s single-clause check.
+     */
+    @Test
+    public void testAddTrailingKeyColCombinedWithModifyColumnRejected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_combined"));
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_combined",
+                        "alter table t_add_meta_combined add column c int key default '0', "
+                                + "modify column v1 bigint"));
+        assertTrue(e.getMessage().contains("can not be combined with other alter operations"),
+                "Expected combined-op rejection in: " + e.getMessage());
+    }
 }
