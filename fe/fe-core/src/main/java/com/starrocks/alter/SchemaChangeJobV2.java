@@ -854,7 +854,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
+<<<<<<< HEAD
         EditLog.waitInfinity(journalTask);
+=======
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+        }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();

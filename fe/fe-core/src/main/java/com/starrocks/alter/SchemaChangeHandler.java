@@ -2253,10 +2253,24 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add column
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+<<<<<<< HEAD
+=======
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+                if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
             } else if (alterClause instanceof AddColumnsClause) {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+<<<<<<< HEAD
+=======
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+                if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
             } else if (alterClause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
@@ -2267,6 +2281,109 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
+<<<<<<< HEAD
+=======
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.DROP_COLUMN);
+
+                List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+                if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
+                    // The routed early-return bypasses finalAnalyze, and the range-specific reject was
+                    // already relaxed above, so the finalAnalyze validations that still apply must be
+                    // re-run HERE and an invalid post-drop schema rejected with a precise error --
+                    // never fall through to the normal (non-rewrite) job, which for a range sort-key
+                    // change would produce invalid tablet boundaries.
+                    // (a) Partition column cannot be dropped -- finalAnalyze's checkPartitionColumnChange
+                    //     is bypassed by the early return. checkDistributionColumnChange is a no-op for
+                    //     range (RangeDistributionInfo.getDistributionColumns() == emptyList), so it is
+                    //     intentionally not re-run: dropping a range sort-key column IS the routed
+                    //     operation.
+                    checkPartitionColumnChange(olapTable, postDropBaseSchema, olapTable.getBaseIndexMetaId(), null);
+                    // (b) key-set invariants (>=1 key, keys form a prefix).
+                    if (!rangeRewriteKeySchemaIsValid(postDropBaseSchema)) {
+                        throw new DdlException("DROP COLUMN " + dropColumnClause.getColName()
+                                + " would leave no key column on range-distribution table " + olapTable.getName());
+                    }
+                    // (c) processDropColumn() above already removed any secondary index (BITMAP/GIN/NGRAM)
+                    //     on the dropped column from newIndexes -- a copy -- not from OlapTable.indexes
+                    //     itself. The routed early return never commits newIndexes back onto the table
+                    //     (that happens in finalAnalyze, which this path bypasses), so silently continuing
+                    //     would leave OlapTable.indexes referencing a now-missing column. Reject instead.
+                    Column droppedColumnForIndexCheck = olapTable.getColumn(dropColumnClause.getColName());
+                    if (droppedColumnForIndexCheck != null && olapTable.getIndexes().stream()
+                            .anyMatch(index -> index.getColumns().stream()
+                                    .anyMatch(c -> c.equalsIgnoreCase(droppedColumnForIndexCheck.getColumnId())))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a secondary index "
+                                + "(BITMAP/GIN/NGRAM) is not supported on range-distribution tables; drop the index "
+                                + "first with DROP INDEX. Column: " + dropColumnClause.getColName());
+                    }
+                    // (c') A plain bloom filter is tracked on OlapTable.bfColumns, NOT in getIndexes(), so
+                    //     the secondary-index check above misses it. The routed early return never re-writes
+                    //     the bloom-filter set, so dropping a bloom-filter column would leave a dangling
+                    //     ColumnId after the flip. Reject; the user must remove it from bloom_filter_columns
+                    //     first.
+                    Set<String> bfColumnNames = olapTable.getBfColumnNames();
+                    if (bfColumnNames != null && bfColumnNames.stream()
+                            .anyMatch(n -> n.equalsIgnoreCase(dropColumnClause.getColName()))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a bloom filter is "
+                                + "not supported on range-distribution tables; remove it from "
+                                + "bloom_filter_columns first. Column: " + dropColumnClause.getColName());
+                    }
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("DROP COLUMN that changes the range sort key on a "
+                                + "range-distribution table can not be combined with other alter operations");
+                    }
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    // Compute the EXPLICIT post-drop range sort key = current range sort key minus the
+                    // dropped column, remapped to post-drop positions, and build the job directly. Do NOT
+                    // use createRangeRewriteJob(List<Column>) (it forces sortKeyIdxes=null ->
+                    // resolveSortKeyColumns derives from isKey()): a DUP table whose explicit ORDER BY is a
+                    // superset of KEY() (e.g. KEY(k1) ORDER BY(k1,k2,k3)) would silently lose its non-key
+                    // sort-key columns.
+                    List<String> oldSortKeyNames =
+                            MetaUtils.getRangeDistributionColumns(olapTable, olapTable.getBaseIndexMetaId())
+                                    .stream().map(Column::getName).collect(Collectors.toList());
+                    List<Integer> dropSortKeyIdxes = new ArrayList<>();
+                    List<Integer> dropSortKeyUniqueIds = new ArrayList<>();
+                    boolean useSortKeyUniqueId = true;
+                    for (String skName : oldSortKeyNames) {
+                        if (skName.equalsIgnoreCase(dropColumnClause.getColName())) {
+                            continue;
+                        }
+                        for (int i = 0; i < postDropBaseSchema.size(); i++) {
+                            if (postDropBaseSchema.get(i).getName().equalsIgnoreCase(skName)) {
+                                dropSortKeyIdxes.add(i);
+                                // Mirror processModifySortKeyColumn: only carry sort-key unique ids when
+                                // every surviving sort-key column has one. A table whose columns predate
+                                // unique-id assignment (uniqueId == COLUMN_UNIQUE_ID_INIT_VALUE) must fall
+                                // back to positional idxes; otherwise the flipped index stores a bogus
+                                // sentinel [-1, ...] that a later alter would mis-resolve by uniqueId.
+                                if (useSortKeyUniqueId
+                                        && postDropBaseSchema.get(i).getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                                    dropSortKeyUniqueIds.add(postDropBaseSchema.get(i).getUniqueId());
+                                } else {
+                                    useSortKeyUniqueId = false;
+                                    dropSortKeyUniqueIds.clear();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (dropSortKeyIdxes.isEmpty()) {
+                        // The dropped column was the entire explicit sort key (e.g. KEY(k1, k2)
+                        // ORDER BY(k1)); fall back to the key-derived sort key (the remaining key
+                        // columns), as a range table with no explicit ORDER BY resolves. Guaranteed
+                        // non-empty by the rangeRewriteKeySchemaIsValid check above (>=1 key remains).
+                        short fallbackShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null);
+                        return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                                olapTable.getKeysType(), null, null, fallbackShortKeyCount);
+                    }
+                    short dropShortKeyCount =
+                            GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null, dropSortKeyIdxes);
+                    return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                            olapTable.getKeysType(), dropSortKeyIdxes, dropSortKeyUniqueIds, dropShortKeyCount);
+                }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
@@ -2294,6 +2411,32 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
+<<<<<<< HEAD
+=======
+                AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.MODIFY_COLUMN);
+                List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+                if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
+                        && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
+                    // A keyness flip on a shared-data range table whose flip shifts the range sort key:
+                    // re-route/re-sort/re-aggregate all data into a freshly sampled K-tablet shadow
+                    // index and flip. Routed here (early return), bypassing finalAnalyze, because a
+                    // keyness flip changes the column's aggregation type -- which the generic
+                    // compatibility check rejects -- but the rewrite re-aggregates under the new key.
+                    // Only a post-flip schema that still satisfies finalAnalyze's key invariants (at least
+                    // one key column, every value after every key) is routed; an invalid flip -- the
+                    // last/only key demoted to a value, or a value column promoted ahead of a key -- falls
+                    // through to finalAnalyze, which rejects it synchronously with the precise "No key
+                    // column left" / "value should be after key" error instead of the rewrite job failing
+                    // asynchronously later.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN that changes keyness on a range-distribution table "
+                                + "can not be combined with other alter operations");
+                    }
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    return createRangeRewriteJob(db, olapTable, postFlipBaseSchema);
+                }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
             } else if (alterClause instanceof ModifyColumnCommentClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
                 if (alterClauses.size() > 1) {
@@ -3577,6 +3720,7 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private void updateCatalogForFastSchemaEvolution(SchemaChangeData schemaChangeData)
             throws DdlException, NotImplementedException {
+        long startMs = System.currentTimeMillis();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         // for schema change add/drop value column optimize, direct modify table meta.
@@ -3590,8 +3734,16 @@ public class SchemaChangeHandler extends AlterHandler {
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
         // try to copy first before modifying, avoiding in-place changes.
         applyFastSchemaEvolutionMetaChange(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
+<<<<<<< HEAD
                 schemaChangeData.getNewIndexMetaIdToSchema(), schemaChangeData.getIndexes(), jobId,
                 indexMetaIdToNewSchemaId, false, -1);
+=======
+                schemaChangeData.getNewIndexMetaIdToSchema(),
+                schemaChangeData.getIndexes(), jobId, indexMetaIdToNewSchemaId);
+        AlterMetricRegistry.getInstance().updateAlterDuration(
+                AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION,
+                System.currentTimeMillis() - startMs);
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
     }
 
     private AlterJobV2 createFastSchemaEvolutionJobInSharedDataMode(SchemaChangeData schemaChangeData) {

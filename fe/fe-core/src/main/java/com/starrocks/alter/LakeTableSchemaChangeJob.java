@@ -785,7 +785,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             editLogFuture = writeEditLogAsync(this);
         }
 
+<<<<<<< HEAD
         EditLog.waitInfinity(editLogFuture);
+=======
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+        }
+>>>>>>> 3e048bef9f ([Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247))
 
         if (span != null) {
             span.end();
