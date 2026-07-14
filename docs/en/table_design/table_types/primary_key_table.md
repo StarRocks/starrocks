@@ -160,7 +160,7 @@ Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters suppo
 
 :::note
 
-In shared-data clusters, Primary Key tables now support only the cloud-native persistent index (`persistent_index_type = CLOUD_NATIVE`). Setting `persistent_index_type` to `LOCAL` is no longer supported when you create or alter a table. Existing tables that use a `LOCAL` persistent index are not affected.
+In shared-data clusters, Primary Key tables now support only the cloud-native persistent index (`persistent_index_type = CLOUD_NATIVE`). Setting `persistent_index_type` to `LOCAL` is no longer supported when you create or alter a table. Existing tables that were created with a `LOCAL` (or in-memory) persistent index are automatically upgraded to the cloud-native persistent index.
 
 :::
 
