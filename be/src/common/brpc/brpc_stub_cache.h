@@ -133,8 +133,8 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    bool is_cleanup_task_owner_locked(
-            const butil::EndPoint& endpoint, const EndpointCleanupTask<BrpcStubCache>* task) const {
+    bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
+                                      const EndpointCleanupTask<BrpcStubCache>* task) const {
         auto pool = _stub_map.seek(endpoint);
         return pool != nullptr && (*pool)->_cleanup_task.get() == task;
     }
@@ -182,8 +182,8 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    bool is_cleanup_task_owner_locked(
-            const butil::EndPoint& endpoint, const EndpointCleanupTask<HttpBrpcStubCache>* task) const {
+    bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
+                                      const EndpointCleanupTask<HttpBrpcStubCache>* task) const {
         auto entry = _stub_map.seek(endpoint);
         return entry != nullptr && entry->cleanup_task.get() == task;
     }
@@ -225,9 +225,8 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    bool is_cleanup_task_owner_locked(
-            const butil::EndPoint& endpoint,
-            const EndpointCleanupTask<LakeServiceBrpcStubCache>* task) const {
+    bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
+                                      const EndpointCleanupTask<LakeServiceBrpcStubCache>* task) const {
         auto entry = _stub_map.seek(endpoint);
         return entry != nullptr && entry->cleanup_task.get() == task;
     }

@@ -108,9 +108,8 @@ BrpcStubCache::~BrpcStubCache() {
     wait_clean_tasks_terminate(this, [](const std::shared_ptr<StubPool>& pool) { return pool->_cleanup_task; });
 }
 
-bool BrpcStubCache::replace_cleanup_task_locked(
-        const butil::EndPoint& endpoint,
-        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task) {
+bool BrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
+                                                std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task) {
     auto pool = _stub_map.seek(endpoint);
     if (pool != nullptr) {
         (*pool)->_cleanup_task = std::move(task);
@@ -225,9 +224,8 @@ void HttpBrpcStubCache::shutdown() {
     wait_clean_tasks_terminate(this, [](const StubEntry& entry) { return entry.cleanup_task; });
 }
 
-bool HttpBrpcStubCache::replace_cleanup_task_locked(
-        const butil::EndPoint& endpoint,
-        std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task) {
+bool HttpBrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
+                                                    std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task) {
     auto entry = _stub_map.seek(endpoint);
     if (entry != nullptr) {
         entry->cleanup_task = std::move(task);
@@ -321,8 +319,7 @@ void LakeServiceBrpcStubCache::shutdown() {
 }
 
 bool LakeServiceBrpcStubCache::replace_cleanup_task_locked(
-        const butil::EndPoint& endpoint,
-        std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task) {
+        const butil::EndPoint& endpoint, std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task) {
     auto entry = _stub_map.seek(endpoint);
     if (entry != nullptr) {
         entry->cleanup_task = std::move(task);
