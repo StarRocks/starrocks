@@ -257,7 +257,10 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             }
         }
         if (targetRanges != null) {
-            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            // Must use the same clock as OptimisticVersion.generate() (System.nanoTime), which the
+            // lock-free planner compares against; mixing it with epoch millis would break stale-plan
+            // invalidation after the in-place range flip. Mirrors SplitTabletJob's reshard flip.
+            table.lastSchemaUpdateTime.set(System.nanoTime());
         }
         table.rebuildFullSchema();
 
