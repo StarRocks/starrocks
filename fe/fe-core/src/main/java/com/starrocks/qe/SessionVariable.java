@@ -1006,6 +1006,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+    public static final String ONE_TABLET_OPT_MAX_TABLET_ROWS = "one_tablet_opt_max_tablet_rows";
+
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
     public static final String ENABLE_JDBC_JOIN_PUSH_DOWN = "enable_jdbc_join_push_down";
@@ -3166,6 +3168,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
+
+    // Disable the one-tablet optimization (one-phase aggregation / single-tablet gather output) when the
+    // single selected tablet's fuzzy row count exceeds this value; such a large tablet would otherwise be
+    // scanned and aggregated serially on one node. Default 10000000 (10M rows) enables the gate for
+    // genuinely large tablets while sparing small/medium ones; set to -1 to disable the gate entirely and
+    // keep the pre-existing one-tablet behavior regardless of tablet size.
+    @VarAttr(name = ONE_TABLET_OPT_MAX_TABLET_ROWS)
+    private long oneTabletOptMaxTabletRows = 10000000;
 
     @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
     private boolean enablePushdownOrPredicate = true;
@@ -5896,6 +5906,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
+<<<<<<< HEAD
     public boolean isEnableJdbcJoinPushDown() {
         return enableJdbcJoinPushDown;
     }
@@ -5926,6 +5937,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcProjectPushDown(boolean enableJdbcProjectPushDown) {
         this.enableJdbcProjectPushDown = enableJdbcProjectPushDown;
+=======
+    public long getOneTabletOptMaxTabletRows() {
+        return oneTabletOptMaxTabletRows;
+    }
+
+    public void setOneTabletOptMaxTabletRows(long oneTabletOptMaxTabletRows) {
+        this.oneTabletOptMaxTabletRows = oneTabletOptMaxTabletRows;
+>>>>>>> 6c08cdde089... [Enhancement] Gate the one-tablet optimization by tablet row count (#76301)
     }
 
     public TPredicateTreeParams getPredicateTreeParams() {
