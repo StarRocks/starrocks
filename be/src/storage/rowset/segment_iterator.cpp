@@ -4031,7 +4031,8 @@ Status SegmentIterator::_wrap_or_match_predicates_for_fallback() {
     }
 
     OrMatchFallbackVisitor visitor{_inverted_index_ctx->inverted_index_iterators, _obj_pool,
-                                   &_inverted_index_ctx->rowid_buffer, &_inverted_index_ctx->has_fallback_predicates};
+                                   &_inverted_index_ctx->rowid_buffer, &_inverted_index_ctx->has_fallback_predicates,
+                                   num_rows()};
     auto root = _opts.pred_tree.release_root();
     for (auto& or_child : root.compound_children()) {
         RETURN_IF_ERROR(or_child.visit(visitor));

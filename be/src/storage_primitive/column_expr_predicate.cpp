@@ -184,14 +184,6 @@ bool ColumnExprPredicate::is_match_expr() const {
     return root->node_type() == TExprNodeType::MATCH_EXPR;
 }
 
-bool ColumnExprPredicate::is_negated_expr() const {
-    if (_expr_ctxs.empty()) {
-        return false;
-    }
-    Expr* root = _expr_ctxs[0]->root();
-    return root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT;
-}
-
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     // if expr does not satisfy monotonicity, we can not apply zone map.
     if (!_monotonic) return true;
