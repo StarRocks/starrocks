@@ -12,21 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "parquet_builder.h"
+#include "data_sink/file/parquet_builder.h"
 
-#include <arrow/buffer.h>
-#include <parquet/arrow/writer.h>
-
-#include "column/array_column.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "common/logging.h"
-#include "exec/exec_env.h"
-#include "exprs/column_ref.h"
-#include "exprs/expr.h"
-#include "gutil/endian.h"
+#include "formats/parquet/file_writer.h"
 
 namespace starrocks {
 
@@ -39,6 +27,8 @@ ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
             std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs, max_file_size, state);
     _writer->set_max_row_group_size(row_group_max_size);
 }
+
+ParquetBuilder::~ParquetBuilder() = default;
 
 Status ParquetBuilder::init() {
     return _writer->init();

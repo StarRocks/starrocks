@@ -14,24 +14,15 @@
 
 #pragma once
 
-#include "column/vectorized_fwd.h"
+#include <cstdint>
+#include <map>
+
 #include "common/status.h"
 
 namespace starrocks {
+class CombinedTxnLogPB;
 
-// this class is the base class of file builder, which defines the basic API of building any format of file
-class FileBuilder {
-public:
-    virtual ~FileBuilder() = default;
-
-    // appends this chunk to the file
-    virtual Status add_chunk(Chunk* chunk) = 0;
-
-    // returns the size of underlying file or stream
-    virtual std::size_t file_size() = 0;
-
-    // close underlying file or stream properly, including flush and sync semantics
-    virtual Status finish() = 0;
-};
+Status write_combined_txn_log(const CombinedTxnLogPB& logs);
+Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map);
 
 } // namespace starrocks

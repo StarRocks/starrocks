@@ -18,11 +18,8 @@
 
 namespace starrocks {
 
-/**
- * @brief The AsyncDataSink class is a data sink that can handle multiple OLAP table sinks.
- * 
- * This class inherits from the DataSink class and provides methods for preparing, opening, adding chunks, closing
- */
+// Extension of the DataSink contract for sinks whose open, send, and close
+// operations may complete asynchronously and expose backpressure to callers.
 class AsyncDataSink : public DataSink {
 public:
     /**

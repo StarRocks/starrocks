@@ -59,13 +59,13 @@
 #include "common/tracer.h"
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "exec/data_sinks/range_tablet_sink_sender.h"
 #include "exec/data_sinks/tablet_sink_colocate_sender.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "gen_cpp/FrontendService.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -74,8 +74,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
+#include "runtime/service_contexts.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;

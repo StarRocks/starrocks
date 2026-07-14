@@ -15,13 +15,13 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "exec/file_builder.h"
-#include "fs/fs.h"
+#include "data_sink/file/file_builder.h"
+#include "fs/fs_fwd.h"
 
 namespace starrocks {
 
@@ -34,7 +34,6 @@ class FormattedOutputStream;
 } // namespace formats
 
 class ExprContext;
-class FileWriter;
 
 struct PlainTextBuilderOptions {
     std::string column_terminated_by;

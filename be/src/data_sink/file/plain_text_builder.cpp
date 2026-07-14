@@ -1,10 +1,8 @@
-#include "plain_text_builder.h"
+#include "data_sink/file/plain_text_builder.h"
 
-#include "base/time/date_func.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/mysql_row_buffer.h"
+#include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

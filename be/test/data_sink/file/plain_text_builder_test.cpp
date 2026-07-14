@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/plain_text_builder.h"
+#include "data_sink/file/plain_text_builder.h"
 
 #include <gtest/gtest.h>
 
@@ -20,17 +20,7 @@
 #include <fstream>
 
 #include "base/testutil/assert.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
-#include "exec/exec_env.h"
-#include "exprs/column_ref.h"
-#include "exprs/mock_vectorized_expr.h"
 #include "fs/fs.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
