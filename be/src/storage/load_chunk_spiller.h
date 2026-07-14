@@ -15,13 +15,10 @@
 #pragma once
 
 #include <atomic>
-<<<<<<< HEAD:be/src/storage/load_chunk_spiller.h
-=======
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
->>>>>>> 2928602a6b ([BugFix] Fix LoadChunkSpiller init race that crashes BE during load spill (#76098)):be/src/compute_env/load_spill/load_chunk_spiller.h
 
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"

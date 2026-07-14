@@ -14,15 +14,9 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/storage/load_spill_pipeline_merge_test.cpp
-=======
 #include <atomic>
-#include <limits>
 #include <thread>
-#include <unordered_set>
 
-#include "base/testutil/assert.h"
->>>>>>> 2928602a6b ([BugFix] Fix LoadChunkSpiller init race that crashes BE during load spill (#76098)):be/test/compute_env/load_spill/load_chunk_spiller_test.cpp
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -401,12 +395,11 @@ TEST_F(LoadSpillPipelineMergeTest, test_duplicate_slot_idx) {
 //
 // Each round drives many threads through the first spill of a fresh LoadChunkSpiller so the
 // narrow initialization window is exercised repeatedly; every concurrent spill must succeed.
-TEST_F(LoadChunkSpillerTest, test_concurrent_first_spill_is_thread_safe) {
+TEST_F(LoadSpillPipelineMergeTest, test_concurrent_first_spill_is_thread_safe) {
     constexpr int kRounds = 200;
     constexpr int kThreads = 8;
     for (int round = 0; round < kRounds; round++) {
-        auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr,
-                                                                     _local_spill_dir_mgr.get());
+        auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
         ASSERT_OK(block_manager->init());
         RuntimeProfile profile("test");
         // No slot tracker: spill() then skips mark_slot_ready(), keeping the test focused on

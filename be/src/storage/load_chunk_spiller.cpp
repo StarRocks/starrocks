@@ -163,18 +163,11 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         // still null and crash in ColumnarSerde::serialize().
         spill::SpilledOptions options;
         options.encode_level = 7;
-<<<<<<< HEAD:be/src/storage/load_chunk_spiller.cpp
         options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
-        _spiller = _spiller_factory->create(options);
-        RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
-=======
-        // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
-        // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
         auto spiller = _spiller_factory->create(options);
         if (_prepare_status = spiller->prepare(_runtime_state.get()); !_prepare_status.ok()) {
             return;
         }
->>>>>>> 2928602a6b ([BugFix] Fix LoadChunkSpiller init race that crashes BE during load spill (#76098)):be/src/compute_env/load_spill/load_chunk_spiller.cpp
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
         spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
         spiller->set_metrics(metrics);
