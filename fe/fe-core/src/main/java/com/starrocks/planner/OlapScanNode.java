@@ -849,7 +849,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds);
+                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
@@ -858,28 +858,36 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     /**
-     * Populates {@link #tabletId2BucketSeq} for one {@link MaterializedIndex}.
-     * Range-colocate scans use the bucket sequence supplied by the dispatch
-     * facade when alignment holds; everything else (HASH, range non-colocate,
-     * or transiently unaligned range colocate) falls back to position-based
-     * bucketSeq. The dispatch-time alignment guard fires later in
-     * {@link #getBucketNums()} for the colocate-dispatch path.
+     * Fills {@code target} with the tablet-id → bucket-sequence assignment for {@code selectedIndex},
+     * applying the position-fallback policy shared by both scan-time producers of
+     * {@link #tabletId2BucketSeq} — this class's {@link #computeTabletInfo} and
+     * {@link com.starrocks.sql.plan.PlanFragmentBuilder}:
+     *
+     * <ul>
+     *   <li>range colocate and aligned — {@code dispatch != null} and
+     *       {@link RangeColocateScanDispatch#computeBucketSeq} returns a mapping — uses that mapping;</li>
+     *   <li>everything else (HASH, range non-colocate, or a transiently unaligned range colocate group
+     *       where {@code computeBucketSeq} returns {@code null}) falls back to position-based bucketSeq.</li>
+     * </ul>
+     *
+     * <p>Entries are added to {@code target} without clearing it, so a caller can accumulate the
+     * whole-scan assignment across sub-partitions. The dispatch-time alignment guard in
+     * {@link #getBucketNums()} fails closed on the colocate-dispatch path when the built assignment is a
+     * stale position fallback, so no unaligned observation needs to be recorded here.
      */
-    private void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
-                                          MaterializedIndex selectedIndex,
-                                          List<Long> allTabletIds) {
+    public static void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
+                                              MaterializedIndex selectedIndex,
+                                              List<Long> allTabletIds,
+                                              Map<Long, Integer> target) {
         if (dispatch != null) {
             Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
             if (rangeColocateMap != null) {
-                tabletId2BucketSeq.putAll(rangeColocateMap);
+                target.putAll(rangeColocateMap);
                 return;
             }
-            // Range-colocate but transiently unaligned: fall back to position-based bucketSeq so a
-            // non-colocate scan of this table still works. getBucketNums() fails closed on the
-            // colocate-dispatch path by validating this built assignment against the aligned mapping.
         }
         for (int i = 0; i < allTabletIds.size(); i++) {
-            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+            target.put(allTabletIds.get(i), i);
         }
     }
 
