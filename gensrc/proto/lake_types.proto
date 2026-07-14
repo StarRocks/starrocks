@@ -63,10 +63,20 @@ message PersistentIndexSstablePB {
     optional PUniqueId fileset_id = 12;
     // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
     optional int32 rssid_offset = 13 [default = 0];
+    // The tablet metadata version at which this physical sstable file first
+    // became visible -- i.e. the new version of the publish (or reshard) that
+    // produced it. Stamped once when the file is first persisted and never
+    // changed afterward; CopyFrom inherits it across tablet split/merge so a
+    // shared file keeps its original value. A non-zero value is never
+    // overwritten. 0/unset means unknown -- e.g. a file created before this
+    // field existed stays 0, so consumers such as lake vacuum retention must
+    // treat 0 conservatively.
+    optional int64 generation_version = 14;
 }
 
 message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
+    // sstables are ordered by max_rss_rowid ascending (see
+    // LakePersistentIndex::commit and apply_opcompaction), not by any version.
     repeated PersistentIndexSstablePB sstables = 1;
 }
 

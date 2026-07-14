@@ -227,7 +227,8 @@ Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const Persistent
     }
 }
 
-Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
+Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                int64_t generation_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (!_enable_persistent_index) {
         return Status::OK();
@@ -250,7 +251,7 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->commit(builder);
+            return lake_persistent_index->commit(builder, generation_version);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
