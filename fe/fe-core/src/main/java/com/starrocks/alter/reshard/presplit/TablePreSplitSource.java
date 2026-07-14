@@ -112,6 +112,9 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 mapping.sortKeySourceColumnNames(), mapping.partitionSourceColumnNames(),
                 wherePredicateSql, context.getCurrentComputeResource());
         long estimatedBytes = Math.max(0L, resolvedSource.sourceTable().getDataSize());
+        // INSERT-from-table cannot remap a rollup's sort key to source columns, so the
+        // dispatch gate already skips multi-index targets for this load kind; secondaryIndexSpecs
+        // stays empty here via the backward-compatible Prepared constructor.
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource());
     }

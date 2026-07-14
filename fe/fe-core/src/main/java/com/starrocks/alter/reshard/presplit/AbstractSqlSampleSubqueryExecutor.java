@@ -165,15 +165,37 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         SampleSpec spec = resolveSampleSpec(request);
         double samplingRate = pickSamplingRate(spec.totalInputBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
+        List<SecondaryIndexSpec> secondaryIndexSortKeys = request.getSecondaryIndexSortKeys();
         String sampleSql = buildSampleSql(
                 spec.fromClauseSql(), spec.whereClauseSqlOrNull(),
-                spec.sortKeyProjectionIdents(), spec.partitionProjectionIdents(),
+                spec.sortKeyProjectionIdents(), secondaryProjectionIdents(secondaryIndexSortKeys),
+                spec.partitionProjectionIdents(),
                 samplingRate, rowLimit, request.getSeed());
         List<TResultBatch> resultBatches = runSampleQuery(
                 sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds());
-        Iterator<SampleRow> rowIterator =
-                decodeRows(resultBatches, spec.sortKeyColumns(), spec.partitionSourceColumns()).iterator();
+        Iterator<SampleRow> rowIterator = decodeRows(
+                resultBatches, spec.sortKeyColumns(), secondaryIndexSortKeys, spec.partitionSourceColumns())
+                .iterator();
         return new SampleExecution(rowIterator, new Estimates(spec.totalInputBytes(), 0L));
+    }
+
+    /**
+     * Flattens each {@link SecondaryIndexSpec}'s sort-key column names into
+     * backtick-quoted SQL identifiers, in spec order then per-spec column
+     * order. Empty when {@code secondaryIndexSortKeys} is empty, so the
+     * projection is byte-identical to the pre-multi-index SQL.
+     */
+    private static List<String> secondaryProjectionIdents(List<SecondaryIndexSpec> secondaryIndexSortKeys) {
+        if (secondaryIndexSortKeys.isEmpty()) {
+            return List.of();
+        }
+        List<String> idents = new ArrayList<>();
+        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
+            for (Column column : secondaryIndexSpec.sortKey()) {
+                idents.add(SqlUtils.getIdentSql(column.getName()));
+            }
+        }
+        return idents;
     }
 
     static double pickSamplingRate(long totalFileBytes) {
@@ -211,9 +233,26 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             String fromClauseSql, String whereClauseSqlOrNull,
             List<String> sortKeyProjectionIdents, List<String> partitionProjectionIdents,
             double samplingRate, int rowLimit, long seed) {
+        return buildSampleSql(fromClauseSql, whereClauseSqlOrNull, sortKeyProjectionIdents, List.of(),
+                partitionProjectionIdents, samplingRate, rowLimit, seed);
+    }
+
+    /**
+     * Extended overload additionally projecting {@code secondaryProjectionIdents}
+     * between the sort-key and partition-source slices, for the multi-index
+     * data-tier sampler. An empty {@code secondaryProjectionIdents} produces SQL
+     * byte-identical to the base overload above.
+     */
+    @VisibleForTesting
+    static String buildSampleSql(
+            String fromClauseSql, String whereClauseSqlOrNull,
+            List<String> sortKeyProjectionIdents, List<String> secondaryProjectionIdents,
+            List<String> partitionProjectionIdents,
+            double samplingRate, int rowLimit, long seed) {
         List<String> projected = new ArrayList<>(
-                sortKeyProjectionIdents.size() + partitionProjectionIdents.size());
+                sortKeyProjectionIdents.size() + secondaryProjectionIdents.size() + partitionProjectionIdents.size());
         projected.addAll(sortKeyProjectionIdents);
+        projected.addAll(secondaryProjectionIdents);
         projected.addAll(partitionProjectionIdents);
         String projection = String.join(", ", projected);
         long orderShuffleSeed = seed ^ 0x5A5A5A5A5A5A5A5AL;
@@ -299,6 +338,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private List<SampleRow> decodeRows(
             List<TResultBatch> resultBatches,
             List<Column> sortKeyColumns,
+            List<SecondaryIndexSpec> secondaryIndexSortKeys,
             List<Column> partitionSourceColumns) throws StarRocksException {
         List<SampleRow> rows = new ArrayList<>();
         if (resultBatches == null) {
@@ -310,7 +350,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 continue;
             }
             for (ByteBuffer rowBuffer : batchRows) {
-                rows.add(decodeRow(rowBuffer, sortKeyColumns, partitionSourceColumns));
+                rows.add(decodeRow(rowBuffer, sortKeyColumns, secondaryIndexSortKeys, partitionSourceColumns));
             }
         }
         return rows;
@@ -318,12 +358,15 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     /**
      * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into a
-     * {@link SampleRow}. The JSON array carries
-     * {@code sortKeyColumns.size() + partitionSourceColumns.size()} cells in
-     * projection order: the first slice fills the row's sort-key tuple, the
-     * trailing slice fills its partition-source tuple. When
-     * {@code partitionSourceColumns} is empty the trailing slice is empty and
-     * the row collapses to the pre-extension single-tuple shape.
+     * {@link SampleRow}. The JSON array carries {@code sortKeyColumns.size() +
+     * <sum of each secondary spec's sort-key size> + partitionSourceColumns.size()}
+     * cells in projection order: the first slice fills the row's sort-key
+     * tuple, the middle slice fills one id-tagged {@link IndexTuple} per
+     * {@link SecondaryIndexSpec} (in spec order), and the trailing slice fills
+     * its partition-source tuple. When {@code secondaryIndexSortKeys} is empty
+     * the middle slice is empty and, combined with an empty
+     * {@code partitionSourceColumns}, the row collapses to the pre-extension
+     * single-tuple shape.
      *
      * <p>Nullable columns accept JSON nulls and decode to
      * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface a
@@ -335,22 +378,38 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private SampleRow decodeRow(
             ByteBuffer rowBuffer,
             List<Column> sortKeyColumns,
+            List<SecondaryIndexSpec> secondaryIndexSortKeys,
             List<Column> partitionSourceColumns) throws StarRocksException {
-        int expectedArity = sortKeyColumns.size() + partitionSourceColumns.size();
+        int secondaryArity = 0;
+        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
+            secondaryArity += secondaryIndexSpec.sortKey().size();
+        }
+        int expectedArity = sortKeyColumns.size() + secondaryArity + partitionSourceColumns.size();
         JsonArray dataArray = extractDataArray(rowBuffer, expectedArity);
         List<Variant> sortKeyValues = new ArrayList<>(sortKeyColumns.size());
         for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
             sortKeyValues.add(decodeCell(
                     dataArray.get(columnIndex), sortKeyColumns.get(columnIndex), COLUMN_ROLE_SORT_KEY));
         }
+        List<IndexTuple> secondaryIndexTuples = new ArrayList<>(secondaryIndexSortKeys.size());
+        int cursor = sortKeyColumns.size();
+        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
+            List<Column> indexSortKey = secondaryIndexSpec.sortKey();
+            List<Variant> indexValues = new ArrayList<>(indexSortKey.size());
+            for (Column column : indexSortKey) {
+                indexValues.add(decodeCell(dataArray.get(cursor), column, COLUMN_ROLE_SECONDARY_INDEX));
+                cursor++;
+            }
+            secondaryIndexTuples.add(new IndexTuple(secondaryIndexSpec.indexMetaId(), indexValues));
+        }
         List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceColumns.size());
         for (int columnIndex = 0; columnIndex < partitionSourceColumns.size(); columnIndex++) {
             partitionSourceValues.add(decodeCell(
-                    dataArray.get(sortKeyColumns.size() + columnIndex),
+                    dataArray.get(cursor + columnIndex),
                     partitionSourceColumns.get(columnIndex),
                     COLUMN_ROLE_PARTITION_SOURCE));
         }
-        return new SampleRow(sortKeyValues, partitionSourceValues);
+        return new SampleRow(sortKeyValues, partitionSourceValues, secondaryIndexTuples);
     }
 
     /**
@@ -410,6 +469,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     }
 
     private static final String COLUMN_ROLE_SORT_KEY = "sort-key";
+    private static final String COLUMN_ROLE_SECONDARY_INDEX = "secondary-index";
     private static final String COLUMN_ROLE_PARTITION_SOURCE = "partition-source";
 
     /**

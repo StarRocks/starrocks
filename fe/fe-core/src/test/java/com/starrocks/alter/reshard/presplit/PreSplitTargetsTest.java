@@ -39,21 +39,27 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for {@link PreSplitTargets#findEligibleTable}, the table-level
  * structural eligibility gate shared by both load hooks and the multi-partition
- * coordinator's defensive re-check.
+ * coordinator's defensive re-check, plus {@link PreSplitTargets#findEligibleTarget}
+ * and {@link PreSplitTargets#resolveVisibleIndexTargets}.
  *
- * <p>Each test stubs an {@link OlapTable} that passes every check up to the one
- * under test, then asserts the gate returns exactly that branch's
- * {@link SkipReason}. The {@code null} (eligible) path is also pinned as a
- * positive control.
+ * <p>Each {@code findEligibleTable} test stubs an {@link OlapTable} that passes
+ * every check up to the one under test, then asserts the gate returns exactly
+ * that branch's {@link SkipReason}. The {@code null} (eligible) path is also
+ * pinned as a positive control.
  */
 public class PreSplitTargetsTest {
+
+    private static final long BASE_INDEX_META_ID = 10L;
+    private static final long ROLLUP_INDEX_META_ID = 20L;
 
     private static OlapTable tableThatPassesUpTo() {
         OlapTable table = mock(OlapTable.class);
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
         return table;
     }
 
@@ -86,23 +92,11 @@ public class PreSplitTargetsTest {
     }
 
     @Test
-    public void rejectsTableWithMaterializedViewOrRollup() {
-        // More than one visible index meta means an MV / rollup is attached.
-        OlapTable table = mock(OlapTable.class);
-        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
-        when(table.isRangeDistribution()).thenReturn(true);
-        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(
-                mock(MaterializedIndexMeta.class), mock(MaterializedIndexMeta.class)));
-        Assertions.assertEquals(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP,
-                PreSplitTargets.findEligibleTable(mock(Database.class), table));
-    }
-
-    @Test
     public void rejectsEmptySortKey() {
         OlapTable table = tableThatPassesUpTo();
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table)).thenReturn(List.of());
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of());
             Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
                     PreSplitTargets.findEligibleTable(mock(Database.class), table));
         }
@@ -113,7 +107,7 @@ public class PreSplitTargetsTest {
         OlapTable table = tableThatPassesUpTo();
         Column arrayColumn = new Column("arr", new ArrayType(IntegerType.INT));
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(arrayColumn));
             Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
                     PreSplitTargets.findEligibleTable(mock(Database.class), table));
@@ -121,15 +115,67 @@ public class PreSplitTargetsTest {
     }
 
     @Test
-    public void acceptsEligibleTable() {
+    public void findEligibleTable_singleIndex_ok() {
         // Positive control: range-distribution, NORMAL, single index, scalar sort key -> eligible (null).
         OlapTable table = tableThatPassesUpTo();
         Column scalarColumn = new Column("k", IntegerType.BIGINT);
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
                     .thenReturn(List.of(scalarColumn));
             Assertions.assertNull(PreSplitTargets.findEligibleTable(mock(Database.class), table),
                     "fully eligible table must return null (no skip reason)");
+        }
+    }
+
+    @Test
+    public void findEligibleTable_baseAndScalarRollup_ok() {
+        // A visible rollup with its own scalar sort key no longer disqualifies the table --
+        // the `getVisibleIndexMetas().size() != 1` gate is gone; every visible index's sort
+        // key is checked independently instead.
+        OlapTable table = mock(OlapTable.class);
+        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(table.isRangeDistribution()).thenReturn(true);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+
+        Column baseSortKey = new Column("k", IntegerType.BIGINT);
+        Column rollupSortKey = new Column("k2", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(baseSortKey));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
+                    .thenReturn(List.of(rollupSortKey));
+            Assertions.assertNull(PreSplitTargets.findEligibleTable(mock(Database.class), table),
+                    "base + scalar-sort-key rollup must be eligible (null)");
+        }
+    }
+
+    @Test
+    public void findEligibleTable_rollupNonScalarSortKey_unsupported() {
+        // Base index is fine; the rollup's sort key has a non-scalar column -> UNSUPPORTED_SORT_KEY.
+        OlapTable table = mock(OlapTable.class);
+        when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(table.isRangeDistribution()).thenReturn(true);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+
+        Column baseSortKey = new Column("k", IntegerType.BIGINT);
+        Column rollupArrayColumn = new Column("arr", new ArrayType(IntegerType.INT));
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(baseSortKey));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
+                    .thenReturn(List.of(rollupArrayColumn));
+            Assertions.assertEquals(SkipReason.UNSUPPORTED_SORT_KEY,
+                    PreSplitTargets.findEligibleTable(mock(Database.class), table));
         }
     }
 
@@ -140,15 +186,16 @@ public class PreSplitTargetsTest {
      */
     private static OlapTable tableWithSinglePartition(int tabletCount) {
         OlapTable table = mock(OlapTable.class);
-        when(table.getBaseIndexMetaId()).thenReturn(10L);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         PhysicalPartition partition = mock(PhysicalPartition.class);
         when(partition.getId()).thenReturn(100L);
         when(table.getPhysicalPartitions()).thenReturn(List.of(partition));
         if (tabletCount < 0) {
-            when(partition.getIndex(10L)).thenReturn(null);
+            when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(null);
         } else {
             MaterializedIndex baseIndex = mock(MaterializedIndex.class);
-            when(partition.getIndex(10L)).thenReturn(baseIndex);
+            when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+            when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
             List<Tablet> tablets = new ArrayList<>();
             for (int i = 0; i < tabletCount; i++) {
                 Tablet tablet = mock(Tablet.class);
@@ -156,6 +203,8 @@ public class PreSplitTargetsTest {
                 tablets.add(tablet);
             }
             when(baseIndex.getTablets()).thenReturn(tablets);
+            when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                    .thenReturn(List.of(baseIndex));
         }
         return table;
     }
@@ -164,11 +213,16 @@ public class PreSplitTargetsTest {
     public void resolvesSinglePartitionSingleTabletTarget() {
         // Positive control: exactly one physical partition with one base tablet -> target.
         OlapTable table = tableWithSinglePartition(1);
-        PreSplitTargets.EligibleTarget target =
-                PreSplitTargets.findEligibleTarget(mock(Database.class), table);
-        Assertions.assertNotNull(target);
-        Assertions.assertEquals(100L, target.partitionId());
-        Assertions.assertEquals(1000L, target.oldTabletId());
+        Column sortKey = new Column("k", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(sortKey));
+            PreSplitTargets.EligibleTarget target =
+                    PreSplitTargets.findEligibleTarget(mock(Database.class), table);
+            Assertions.assertNotNull(target);
+            Assertions.assertEquals(100L, target.partitionId());
+            Assertions.assertEquals(1000L, target.oldTabletId());
+        }
     }
 
     @Test
@@ -221,5 +275,128 @@ public class PreSplitTargetsTest {
     private static long skipBucket(SkipReason reason) {
         return MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
                 .getMetric(reason.name().toLowerCase()).getValue().longValue();
+    }
+
+    // ---------- resolveVisibleIndexTargets ----------
+
+    private static MaterializedIndex mockIndexWithOneTablet(long metaId, long tabletId) {
+        MaterializedIndex index = mock(MaterializedIndex.class);
+        when(index.getMetaId()).thenReturn(metaId);
+        Tablet tablet = mock(Tablet.class);
+        when(tablet.getId()).thenReturn(tabletId);
+        when(index.getTablets()).thenReturn(List.of(tablet));
+        return index;
+    }
+
+    @Test
+    public void resolveVisibleIndexTargets_baseOnly_resolvesSingleTarget() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
+
+        Column sortKey = new Column("k", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(sortKey));
+            List<IndexPreSplitTarget> targets = PreSplitTargets.resolveVisibleIndexTargets(table, partition);
+            Assertions.assertNotNull(targets);
+            Assertions.assertEquals(1, targets.size());
+            Assertions.assertEquals(BASE_INDEX_META_ID, targets.get(0).indexMetaId());
+            Assertions.assertEquals(1001L, targets.get(0).oldTabletId());
+            Assertions.assertEquals(List.of(sortKey), targets.get(0).sortKey());
+        }
+    }
+
+    @Test
+    public void resolveVisibleIndexTargets_baseAndRollup_baseFirst() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndex rollupIndex = mockIndexWithOneTablet(ROLLUP_INDEX_META_ID, 2001L);
+        MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        // Rollup listed before base in the source list -- base must still resolve first.
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(rollupIndex, baseIndex));
+
+        Column baseSortKey = new Column("k", IntegerType.BIGINT);
+        Column rollupSortKey = new Column("k2", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(baseSortKey));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
+                    .thenReturn(List.of(rollupSortKey));
+            List<IndexPreSplitTarget> targets = PreSplitTargets.resolveVisibleIndexTargets(table, partition);
+            Assertions.assertNotNull(targets);
+            Assertions.assertEquals(2, targets.size());
+            Assertions.assertEquals(BASE_INDEX_META_ID, targets.get(0).indexMetaId(), "base index must be first");
+            Assertions.assertEquals(ROLLUP_INDEX_META_ID, targets.get(1).indexMetaId());
+        }
+    }
+
+    @Test
+    public void resolveVisibleIndexTargets_rollupMultiTablet_null() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
+        MaterializedIndex rollupIndex = mock(MaterializedIndex.class);
+        when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        when(rollupIndex.getTablets()).thenReturn(List.of(mock(Tablet.class), mock(Tablet.class)));
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
+
+        Column baseSortKey = new Column("k", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(baseSortKey));
+            Assertions.assertNull(PreSplitTargets.resolveVisibleIndexTargets(table, partition),
+                    "a multi-tablet rollup must fail the whole resolution");
+        }
+    }
+
+    @Test
+    public void resolveVisibleIndexTargets_rollupNonScalarSortKey_null() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
+        MaterializedIndex rollupIndex = mockIndexWithOneTablet(ROLLUP_INDEX_META_ID, 2001L);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
+
+        Column baseSortKey = new Column("k", IntegerType.BIGINT);
+        Column rollupArrayColumn = new Column("arr", new ArrayType(IntegerType.INT));
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(baseSortKey));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, ROLLUP_INDEX_META_ID))
+                    .thenReturn(List.of(rollupArrayColumn));
+            Assertions.assertNull(PreSplitTargets.resolveVisibleIndexTargets(table, partition),
+                    "a non-scalar rollup sort-key column must fail the whole resolution");
+        }
+    }
+
+    @Test
+    public void resolveVisibleIndexTargets_baseNonEmptyRowCount_stillResolves() {
+        // Row-count emptiness is a separate PARTITION_NOT_EMPTY gate elsewhere; the resolver
+        // itself must not reject a non-empty base index.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
+        when(baseIndex.getRowCount()).thenReturn(999L);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
+
+        Column sortKey = new Column("k", IntegerType.BIGINT);
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, BASE_INDEX_META_ID))
+                    .thenReturn(List.of(sortKey));
+            Assertions.assertNotNull(PreSplitTargets.resolveVisibleIndexTargets(table, partition),
+                    "row count must not be checked by the resolver");
+        }
     }
 }
