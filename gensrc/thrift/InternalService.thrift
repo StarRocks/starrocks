@@ -418,6 +418,10 @@ struct TQueryOptions {
   222: optional i64 topn_back_pressure_num_rows = 1024;
   223: optional i64 topn_back_pressure_throttle_time_ms = 8;
   224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
+
+  // Arrow IPC compression codec for Arrow Flight SQL DoGet responses:
+  // "" (inherit BE config arrow_flight_ipc_compression), "none", "lz4", or "zstd".
+  225: optional string arrow_flight_compression;
 }
 
 // A scan range plus the parameters needed to execute that scan.

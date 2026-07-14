@@ -15,6 +15,7 @@
 #pragma once
 
 #include <arrow/record_batch.h>
+#include <arrow/util/compression.h>
 
 #include <atomic>
 #include <map>
@@ -64,10 +65,15 @@ public:
 
     std::shared_ptr<arrow::Schema> get_arrow_schema(const TUniqueId& query_id);
 
+    void set_arrow_compression(const TUniqueId& query_id, arrow::Compression::type codec);
+
+    arrow::Compression::type get_arrow_compression(const TUniqueId& query_id);
+
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;
     typedef std::map<time_t, std::vector<TUniqueId>> TimeoutMap;
     typedef std::unordered_map<TUniqueId, std::shared_ptr<arrow::Schema>> ArrowSchemaMap;
+    typedef std::unordered_map<TUniqueId, arrow::Compression::type> ArrowCompressionMap;
 
     std::shared_ptr<BufferControlBlock> find_control_block(const TUniqueId& query_id);
 
@@ -91,5 +97,7 @@ private:
     std::unique_ptr<std::thread> _cancel_thread;
 
     ArrowSchemaMap _arrow_schema_map;
+
+    ArrowCompressionMap _arrow_compression_map;
 };
 } // namespace starrocks

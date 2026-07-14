@@ -169,6 +169,15 @@ This topic introduces the following types of BE configurations:
 - Description: TCP port for the BE Arrow Flight SQL server. `-1` indicaes to disable the Arrow Flight service. On non-macOS builds, BE invokes Arrow Flight SQL Server with this port during startup; if the port is unavailable, the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload.
 - Introduced in: v3.4.0, v3.5.0
 
+### arrow_flight_ipc_compression
+
+- Default: none
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default Arrow IPC compression codec for the result data that the BE streams over Arrow Flight SQL (`DoGet`). Valid values: `none` (no compression), `lz4` (Arrow `LZ4_FRAME`), or `zstd`. The session variable `arrow_flight_compression` overrides this per connection when it is set to a non-empty value.
+- Introduced in: -
+
 ### be_exit_after_disk_write_hang_second
 
 - Default: 60
