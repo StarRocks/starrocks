@@ -123,6 +123,25 @@ target_link_libraries(DataSinkExternal PRIVATE
     Gutil
 )
 
+ADD_BE_LIB(DataSinkDictionaryCache
+    dictionary_cache/dictionary_cache_sink.cpp
+)
+
+target_link_libraries(DataSinkDictionaryCache PUBLIC
+    ExecPrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkDictionaryCache PRIVATE
+    Gutil
+)
+
 ADD_BE_LIB(DataSinkTablet
     tablet/multi_olap_table_sink.cpp
     tablet/range_router.cpp
