@@ -129,6 +129,7 @@ set(EXEC_FILES
     file_scanner/json_scanner.cpp
     file_scanner/orc_scanner.cpp
     file_scanner/parquet_scanner.cpp
+    file_scanner/stream_source_meta.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
