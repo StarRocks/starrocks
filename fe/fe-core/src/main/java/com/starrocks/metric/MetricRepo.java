@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.backup.AbstractJob;
@@ -1449,6 +1450,8 @@ public final class MetricRepo {
         MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         TransactionMetricRegistry.getInstance().report(visitor);
+
+        AlterMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
