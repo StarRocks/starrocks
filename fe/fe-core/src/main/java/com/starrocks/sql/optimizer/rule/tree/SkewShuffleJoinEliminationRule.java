@@ -224,12 +224,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            originalShuffleJoinOperator.getPredicateCommonOperators(),
                             projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             PhysicalHashJoinOperator newBroadcastJoinOpt =
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            originalShuffleJoinOperator.getPredicateCommonOperators(),
                             projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             // we have to let them know each other for runtime filter
