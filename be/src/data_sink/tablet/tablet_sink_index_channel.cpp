@@ -32,7 +32,7 @@
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/query_runtime_state.h"
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"

@@ -95,7 +95,7 @@ set(DATA_SINK_TABLET_TEST_FILES
     tablet/range_router_test.cpp
     tablet/tablet_sink_index_channel_test.cpp
     tablet/tablet_sink_sender_range_test.cpp
-    tablet/tablet_sink_test.cpp
+    tablet/olap_table_sink_test.cpp
 )
 
 add_library(starrocks_data_sink_tablet_test_objs OBJECT ${DATA_SINK_TABLET_TEST_FILES})

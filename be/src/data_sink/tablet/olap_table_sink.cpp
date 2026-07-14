@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 
 #include <memory>
 #include <numeric>

@@ -37,7 +37,7 @@
 #include "connector_primitive/data_source_provider.h"
 #include "data_sink/exchange/data_stream_sender.h"
 #include "data_sink/result/result_sink.h"
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
