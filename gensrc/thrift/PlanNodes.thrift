@@ -508,7 +508,9 @@ struct THdfsScanRange {
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
 
-    41: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
+    // Enterprise-only fields start at 100, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    100: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {
