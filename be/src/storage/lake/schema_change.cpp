@@ -537,15 +537,15 @@ Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaIn
 Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
     auto timer = MonotonicStopWatch{};
     timer.start();
-    if (tablet_meta_info.__isset.range) {
+    if (tablet_meta_info.__isset.tablet_range) {
         // A populated range carries raw user boundary values; do not log them. Log the other fields
         // as before, and describe the range only by tablet id and per-bound arity.
         TTabletMetaInfo redacted = tablet_meta_info;
-        redacted.__isset.range = false;
+        redacted.__isset.tablet_range = false;
         const int lower_arity =
-                tablet_meta_info.range.__isset.lower_bound ? tablet_meta_info.range.lower_bound.values.size() : -1;
+                tablet_meta_info.tablet_range.__isset.lower_bound ? tablet_meta_info.tablet_range.lower_bound.values.size() : -1;
         const int upper_arity =
-                tablet_meta_info.range.__isset.upper_bound ? tablet_meta_info.range.upper_bound.values.size() : -1;
+                tablet_meta_info.tablet_range.__isset.upper_bound ? tablet_meta_info.tablet_range.upper_bound.values.size() : -1;
         LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(redacted)
                   << " tablet_id: " << tablet_meta_info.tablet_id << " range lower arity: " << lower_arity
                   << " range upper arity: " << upper_arity;
@@ -579,17 +579,17 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         }
     }
 
-    if (tablet_meta_info.__isset.range) {
+    if (tablet_meta_info.__isset.tablet_range) {
         // A range must always travel with the schema it is to be interpreted against.
         if (!tablet_meta_info.__isset.tablet_schema) {
             return Status::Corruption("tablet meta update carries a range without a tablet schema");
         }
-        ASSIGN_OR_RETURN(auto pb_range, TabletRangeHelper::convert_t_range_to_pb_range(tablet_meta_info.range));
+        ASSIGN_OR_RETURN(auto pb_range, TabletRangeHelper::convert_t_range_to_pb_range(tablet_meta_info.tablet_range));
         // Build has no authoritative base metadata version, so only structural checks are possible
         // here; the exact trailing-ADD transition is validated at apply.
         auto new_schema = TabletSchema::create(metadata_update_info->tablet_schema());
         RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(pb_range, *new_schema));
-        metadata_update_info->mutable_range()->CopyFrom(pb_range);
+        metadata_update_info->mutable_tablet_range()->CopyFrom(pb_range);
     }
 
     // TODO(zhangqiang)

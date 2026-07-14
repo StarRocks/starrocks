@@ -558,7 +558,7 @@ struct TTabletMetaInfo {
     12: optional TFlatJsonConfig flat_json_config;
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
-    15: optional Types.TTabletRange range;
+    15: optional Types.TTabletRange tablet_range;
 }
 
 struct TUpdateTabletMetaInfoReq {

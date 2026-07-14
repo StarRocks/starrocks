@@ -78,13 +78,13 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         // metadata as it stands (old schema + old range), archive the pre-alter schema without
         // clearing existing history, then install the new schema and range. This path is independent
         // of `lake_enable_alter_struct` and must not touch the clearing branch below.
-        if (alter_meta.has_range()) {
+        if (alter_meta.has_tablet_range()) {
             if (!alter_meta.has_tablet_schema()) {
                 return Status::Corruption("alter metadata carries a range without a tablet schema");
             }
             auto new_schema = TabletSchema::create(alter_meta.tablet_schema());
-            RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(alter_meta.range(), *new_schema));
-            RETURN_IF_ERROR(TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.range()));
+            RETURN_IF_ERROR(TabletRangeHelper::validate_range_structural(alter_meta.tablet_range(), *new_schema));
+            RETURN_IF_ERROR(TabletRangeHelper::validate_range_transition(*metadata, *new_schema, alter_meta.tablet_range()));
 
             // Non-clearing archival of the pre-alter schema: map every currently-unmapped rowset to
             // the current schema id, and record the current schema in history only if it is absent.
@@ -102,7 +102,7 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             }
 
             metadata->mutable_schema()->CopyFrom(alter_meta.tablet_schema());
-            metadata->mutable_range()->CopyFrom(alter_meta.range());
+            metadata->mutable_range()->CopyFrom(alter_meta.tablet_range());
         }
         // update tablet meta
         // 1. rowset_to_schema is empty, maybe upgrade from old version or first time to do fast ddl. So we will

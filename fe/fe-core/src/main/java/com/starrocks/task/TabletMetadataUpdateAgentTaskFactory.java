@@ -434,7 +434,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 if (tabletRanges != null) {
                     TabletRange range = tabletRanges.get(tabletId);
                     if (range != null) {
-                        metaInfo.setRange(range.toThrift());
+                        metaInfo.setTablet_range(range.toThrift());
                     }
                 }
 

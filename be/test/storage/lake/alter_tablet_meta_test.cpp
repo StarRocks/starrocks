@@ -763,7 +763,7 @@ TEST_F(AlterTabletMetaTest, test_apply_range_alter_meta_non_clearing_archival) {
     auto* upd = log.mutable_op_alter_metadata()->add_metadata_update_infos();
     upd->mutable_tablet_schema()->CopyFrom(build_range_schema_pb(2, kNewSchemaId));
     {
-        auto* r = upd->mutable_range();
+        auto* r = upd->mutable_tablet_range();
         add_int_value(r->mutable_lower_bound(), 1);
         add_null_value(r->mutable_lower_bound());
         add_int_value(r->mutable_upper_bound(), 2);
@@ -876,7 +876,7 @@ TEST_F(AlterTabletMetaTest, test_do_process_update_tablet_meta_copies_range) {
     t_range.__set_upper_bound(upper);
     t_range.__set_lower_bound_included(true);
     t_range.__set_upper_bound_included(false);
-    info.__set_range(t_range);
+    info.__set_tablet_range(t_range);
 
     req.tabletMetaInfos.push_back(info);
     ASSERT_OK(handler.process_update_tablet_meta(req));
@@ -886,13 +886,13 @@ TEST_F(AlterTabletMetaTest, test_do_process_update_tablet_meta_copies_range) {
     ASSERT_TRUE(txn_log->has_op_alter_metadata());
     ASSERT_EQ(1, txn_log->op_alter_metadata().metadata_update_infos_size());
     const auto& upd = txn_log->op_alter_metadata().metadata_update_infos(0);
-    ASSERT_TRUE(upd.has_range());
-    ASSERT_EQ(2, upd.range().lower_bound().values_size());
-    ASSERT_EQ(2, upd.range().upper_bound().values_size());
-    ASSERT_EQ("1", upd.range().lower_bound().values(0).value());
-    ASSERT_EQ(VariantTypePB::NULL_VALUE, upd.range().lower_bound().values(1).variant_type());
-    ASSERT_TRUE(upd.range().lower_bound_included());
-    ASSERT_FALSE(upd.range().upper_bound_included());
+    ASSERT_TRUE(upd.has_tablet_range());
+    ASSERT_EQ(2, upd.tablet_range().lower_bound().values_size());
+    ASSERT_EQ(2, upd.tablet_range().upper_bound().values_size());
+    ASSERT_EQ("1", upd.tablet_range().lower_bound().values(0).value());
+    ASSERT_EQ(VariantTypePB::NULL_VALUE, upd.tablet_range().lower_bound().values(1).variant_type());
+    ASSERT_TRUE(upd.tablet_range().lower_bound_included());
+    ASSERT_FALSE(upd.tablet_range().upper_bound_included());
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
