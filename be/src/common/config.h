@@ -1795,4 +1795,12 @@ CONF_Int32(tantivy_index_build_thread_pool_num_threads, "0");
 // rationale in tantivy_ffi_pool_bridge.cpp.
 CONF_Int32(tantivy_index_merge_thread_pool_num_threads, "0");
 
+// Selectivity gate for the MATCH_ALL bitmap-AND read path. bitmap-AND pays
+// ~O(max doc_freq) (decodes each term's full posting list); leapfrog pays
+// ~O(min doc_freq). Only take bitmap-AND when the rarest MUST term matches at
+// least this fraction of a segment's docs (no cheap lead), which also bounds
+// the max/min doc_freq ratio to <= 2 so a conjunction with a selective term
+// never regresses. Range [0.0, 1.0]: 0.0 forces bitmap for every >=2-term
+// MATCH_ALL, 1.0 effectively disables it. Mutable.
+CONF_mDouble(tantivy_match_all_bitmap_min_df_ratio, "0.5");
 } // namespace starrocks::config

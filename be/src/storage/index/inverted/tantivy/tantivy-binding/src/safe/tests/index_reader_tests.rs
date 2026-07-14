@@ -76,8 +76,15 @@ fn bitmap_variants_match_vec_variants() {
     // MATCH_ALL
     let mut want = r.match_all_query(&["alpha", "beta"]).expect("all");
     want.sort_unstable();
-    r.match_all_query_bitmap(&["alpha", "beta"], test_bitmap_sink()).expect("all bitmap");
-    assert_eq!(drain_sink(), want, "match_all bitmap == vec");
+    // ratio 0.5 → bitmap-AND path (alpha/beta both high-freq in this tiny index)
+    r.match_all_query_bitmap(&["alpha", "beta"], 0.5, test_bitmap_sink()).expect("all bitmap");
+    assert_eq!(drain_sink(), want, "match_all bitmap-AND == vec");
+    // ratio 1.0 → leapfrog fallback (general collector)
+    r.match_all_query_bitmap(&["alpha", "beta"], 1.0, test_bitmap_sink()).expect("all leapfrog");
+    assert_eq!(drain_sink(), want, "match_all leapfrog == vec");
+    // absent MUST term → empty
+    r.match_all_query_bitmap(&["alpha", "zzz"], 0.5, test_bitmap_sink()).expect("all absent");
+    assert_eq!(drain_sink(), Vec::<u32>::new(), "match_all absent term → empty");
 
     // MATCH_ANY
     let mut want = r.match_any_query(&["beta", "delta"]).expect("any");

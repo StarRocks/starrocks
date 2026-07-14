@@ -487,10 +487,11 @@ pub unsafe extern "C" fn tantivy_match_all_query_bitmap(
     reader: *const c_void,
     terms: *const FFISlice,
     count: usize,
+    min_df_ratio: f64,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
-    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_all_query_bitmap(t, s)))
+    catch_ffi(|| with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| r.match_all_query_bitmap(t, min_df_ratio, s)))
 }
 
 /// MATCH_PHRASE → bitmap. SAFETY: as `tantivy_phrase_match_query`.

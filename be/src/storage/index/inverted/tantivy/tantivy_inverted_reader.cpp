@@ -20,6 +20,7 @@
 #include <fstream>
 #include <vector>
 
+#include "common/config.h"
 #include "storage/index/compound_index_common.h"
 #include "storage/index/compound_index_file_reader.h"
 #include "storage/index/inverted/inverted_index_common.h"
@@ -242,7 +243,9 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(),
-                                                              terms.slices.size(), bit_map, sr_tantivy_append_rowids);
+                                                              terms.slices.size(),
+                                                              config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
+                                                              sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();

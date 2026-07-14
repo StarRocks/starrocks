@@ -37,7 +37,10 @@ use tantivy::columnar::Column;
 use tantivy::directory::MmapDirectory;
 use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, RegexQuery, TermQuery};
 use tantivy::schema::{Field, IndexRecordOption};
-use tantivy::{Directory, Index, IndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader, Term};
+use tantivy::{
+    Directory, DocSet, Index, IndexReader, InvertedIndexReader, ReloadPolicy, Score, SegmentOrdinal, SegmentReader,
+    Term, COLLECT_BLOCK_BUFFER_LEN,
+};
 
 use crate::error::{Result, TantivyBindingError};
 
@@ -261,17 +264,110 @@ impl IndexReaderWrapper {
         self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink)
     }
 
-    /// MATCH_ALL (BooleanQuery MUST), streamed into `sink`.
-    pub fn match_all_query_bitmap(&self, terms: &[&str], sink: BitmapSink) -> Result<()> {
-        let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
-            .iter()
-            .map(|t| {
-                let term = Term::from_field_text(self.text_field, t);
-                let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
-                (Occur::Must, q)
-            })
-            .collect();
-        self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink)
+    /// MATCH_ALL, streamed into `sink`. When every term is high-frequency (the
+    /// rarest term's `doc_freq / num_docs >= min_df_ratio`), tantivy's leapfrog
+    /// Intersection has no cheap lead and degrades to O(hits) seek; instead build
+    /// a per-term doc-id bitset, AND them word-wise, and stream matched row ids
+    /// (the Doris bitmap-AND path). Otherwise a selective term exists and the
+    /// general collector (leapfrog + direct write) is already optimal. An absent
+    /// MUST term short-circuits to empty.
+    pub fn match_all_query_bitmap(&self, terms: &[&str], min_df_ratio: f64, sink: BitmapSink) -> Result<()> {
+        if terms.is_empty() {
+            return Ok(());
+        }
+        let searcher = self.reader.searcher();
+        let num_docs = searcher.num_docs();
+        let mut min_df = u64::MAX;
+        for t in terms {
+            let df = searcher.doc_freq(&Term::from_field_text(self.text_field, t))?;
+            if df == 0 {
+                return Ok(());
+            }
+            min_df = min_df.min(df);
+        }
+        let all_high = terms.len() >= 2 && num_docs > 0 && (min_df as f64 / num_docs as f64) >= min_df_ratio;
+        if !all_high {
+            let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
+                .iter()
+                .map(|t| {
+                    let term = Term::from_field_text(self.text_field, t);
+                    let q: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+                    (Occur::Must, q)
+                })
+                .collect();
+            return self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink);
+        }
+
+        // Bitmap-AND path: all terms high-frequency, no selective lead.
+        let tterms: Vec<Term> = terms.iter().map(|t| Term::from_field_text(self.text_field, t)).collect();
+        let mut out: Vec<u32> = Vec::with_capacity(BITMAP_FLUSH_BLOCK);
+        for seg in searcher.segment_readers() {
+            let max_doc = seg.max_doc();
+            if max_doc == 0 {
+                continue;
+            }
+            let inv = seg.inverted_index(self.text_field)?;
+            let words = (max_doc as usize + 63) / 64;
+            let mut acc = vec![0u64; words];
+            if !fill_term_bitset(&inv, &tterms[0], &mut acc)? {
+                continue;
+            }
+            let mut nonempty = acc.iter().any(|&w| w != 0);
+            let mut tmp = vec![0u64; words];
+            for term in &tterms[1..] {
+                if !nonempty {
+                    break;
+                }
+                for w in tmp.iter_mut() {
+                    *w = 0;
+                }
+                if !fill_term_bitset(&inv, term, &mut tmp)? {
+                    nonempty = false;
+                    break;
+                }
+                nonempty = false;
+                for i in 0..words {
+                    acc[i] &= tmp[i];
+                    nonempty |= acc[i] != 0;
+                }
+            }
+            if !nonempty {
+                continue;
+            }
+
+            // Resolve doc ids to BE row ids and stream via addMany. read_postings
+            // does not apply deletes, so skip them here (and disable the
+            // contiguous fast path when the segment has any deletes).
+            let row_id = seg.fast_fields().u64("row_id")?;
+            let alive = seg.alive_bitset();
+            let base = row_id.values_for_doc(0).next();
+            let last = row_id.values_for_doc(max_doc - 1).next();
+            let contiguous =
+                alive.is_none() && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
+            let base = base.unwrap_or(0) as u32;
+            for_each_set_bit(&acc, max_doc, |doc| {
+                if let Some(ab) = alive {
+                    if ab.is_deleted(doc) {
+                        return;
+                    }
+                }
+                let rid = if contiguous {
+                    base + doc
+                } else {
+                    match row_id.values_for_doc(doc).next() {
+                        Some(r) => r as u32,
+                        None => return,
+                    }
+                };
+                out.push(rid);
+                if out.len() >= BITMAP_FLUSH_BLOCK {
+                    sink.flush(&out);
+                    out.clear();
+                }
+            });
+        }
+        sink.flush(&out);
+        Ok(())
     }
 
     /// MATCH_PHRASE, streamed into `sink`.
@@ -450,6 +546,46 @@ impl SegmentCollector for BitmapSegmentCollector {
 
     fn harvest(self) -> () {
         self.sink.flush(&self.buf);
+    }
+}
+
+// Fill `bitset` (1 bit per doc id) with `term`'s postings in one segment via
+// bulk `fill_buffer` decode. Returns `false` if the term has no postings here,
+// so a MUST intersection is empty for the whole segment. Deletes are NOT applied
+// by `read_postings`; the caller filters them at row-id resolution time.
+fn fill_term_bitset(inv: &InvertedIndexReader, term: &Term, bitset: &mut [u64]) -> Result<bool> {
+    let mut postings = match inv
+        .read_postings(term, IndexRecordOption::Basic)
+        .map_err(|e| TantivyBindingError::Internal(format!("read_postings failed: {e}")))?
+    {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+    let mut buf = [0u32; COLLECT_BLOCK_BUFFER_LEN];
+    loop {
+        let n = postings.fill_buffer(&mut buf);
+        for &doc in &buf[..n] {
+            bitset[(doc as usize) >> 6] |= 1u64 << (doc & 63);
+        }
+        if n < COLLECT_BLOCK_BUFFER_LEN {
+            break;
+        }
+    }
+    Ok(true)
+}
+
+// Invoke `f` for each set doc id (`< max_doc`) in `bitset`, ascending.
+fn for_each_set_bit<F: FnMut(u32)>(bitset: &[u64], max_doc: u32, mut f: F) {
+    for (wi, &word) in bitset.iter().enumerate() {
+        let mut bits = word;
+        while bits != 0 {
+            let doc = (wi as u32) * 64 + bits.trailing_zeros();
+            if doc >= max_doc {
+                return;
+            }
+            f(doc);
+            bits &= bits - 1;
+        }
     }
 }
 

@@ -94,7 +94,7 @@ struct RustF32Array {
 
 /**
  * C callback that appends a block of BE row ids into the caller-owned bitmap
- * (the C++ side does `roaring::Roaring::addMany`). 
+ * (the C++ side does `roaring::Roaring::addMany`).
  * `set_bitset` callback so tantivy hits stream straight into the result bitmap
  * without a `Vec<u32>` round-trip.
  */
@@ -253,6 +253,7 @@ RustResult tantivy_match_query_bitmap(const void *reader,
 RustResult tantivy_match_all_query_bitmap(const void *reader,
                                           const FFISlice *terms,
                                           uintptr_t count,
+                                          double min_df_ratio,
                                           void *ctx,
                                           SetBitmapFn append);
 
