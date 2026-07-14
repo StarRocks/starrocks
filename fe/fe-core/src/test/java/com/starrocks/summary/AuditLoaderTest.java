@@ -223,4 +223,41 @@ public class AuditLoaderTest {
         }
     }
 
+    @Test
+    public void testSingleRowLargerThanCapIsDropped() {
+        // A single row larger than the cap must be dropped even into an empty buffer, otherwise the
+        // buffer would no longer be byte-bounded under a very low cap.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origCap = Config.audit_loader_batch_max_bytes;
+        try {
+            Config.audit_loader_batch_max_bytes = 10;
+            mgr.offerEvent(baseEvent());
+            Assertions.assertEquals(0, mgr.bufferedRows());
+            Assertions.assertEquals(0, mgr.bufferedBytes());
+            Assertions.assertEquals(1, mgr.droppedEvents());
+        } finally {
+            Config.audit_loader_batch_max_bytes = origCap;
+        }
+    }
+
+    @Test
+    public void testMaybeFlushDoesNotAdvanceOnFailure() {
+        // With no BE the flush fails, so lastFlushMs must not advance: the very next maybeFlush must
+        // attempt the flush again instead of waiting a full interval.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origInterval = Config.audit_loader_load_interval_seconds;
+        try {
+            Config.audit_loader_load_interval_seconds = 3600;
+            mgr.offerEvent(baseEvent());
+            mgr.maybeFlush();
+            // Buffer still full (flush failed) and a second immediate call still retries: rows kept.
+            mgr.maybeFlush();
+            Assertions.assertEquals(1, mgr.bufferedRows());
+            Assertions.assertFalse(mgr.flush());
+        } finally {
+            Config.audit_loader_load_interval_seconds = origInterval;
+            mgr.clearBuffer();
+        }
+    }
+
 }

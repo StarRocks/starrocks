@@ -131,14 +131,18 @@ public class AuditLoaderMgr extends FrontendDaemon {
             return;
         }
         long rowBytes = row.getBytes(StandardCharsets.UTF_8).length;
-        // Byte-bounded: drop when the buffer is full to protect FE memory. Never block the caller.
-        if (bufferBytes.get() + rowBytes > Config.audit_loader_batch_max_bytes && !rowQueue.isEmpty()) {
+        long cap = Config.audit_loader_batch_max_bytes;
+        // Byte-bounded, never blocking. A single row larger than the cap can never fit a
+        // cap-bounded batch, so drop it outright; otherwise drop only when adding it would exceed
+        // the cap and the buffer is not already empty (always admit at least one row so the loader
+        // can make progress). This keeps the buffer bounded by the cap.
+        if (rowBytes > cap || (bufferBytes.get() + rowBytes > cap && !rowQueue.isEmpty())) {
             long dropped = droppedCount.incrementAndGet();
             long now = System.currentTimeMillis();
             if (now - lastDropWarnMs >= DROP_WARN_INTERVAL_MS) {
                 lastDropWarnMs = now;
-                LOG.warn("audit loader buffer is full ({} bytes), dropped {} events so far",
-                        bufferBytes.get(), dropped);
+                LOG.warn("audit loader buffer is full or event too large ({} bytes cap), "
+                        + "dropped {} events so far", cap, dropped);
             }
             return;
         }
@@ -235,8 +239,11 @@ public class AuditLoaderMgr extends FrontendDaemon {
         if (rowQueue.isEmpty() || (!intervalReached && !bufferLarge)) {
             return;
         }
-        flush();
-        lastFlushMs = System.currentTimeMillis();
+        // Only advance lastFlushMs when a batch actually landed. A failed flush must be retried on
+        // the next daemon cycle instead of waiting a full interval.
+        if (flush()) {
+            lastFlushMs = System.currentTimeMillis();
+        }
     }
 
     /**
@@ -245,8 +252,9 @@ public class AuditLoaderMgr extends FrontendDaemon {
      * stop and retry on the next cycle (the rows stay queued).
      */
     @VisibleForTesting
-    void flush() {
+    boolean flush() {
         long batchMaxBytes = Config.audit_loader_batch_max_bytes;
+        boolean flushedAny = false;
         while (!rowQueue.isEmpty()) {
             // Collect one batch by copying references from the head, without removing yet.
             List<String> batch = new ArrayList<>();
@@ -263,7 +271,7 @@ public class AuditLoaderMgr extends FrontendDaemon {
             }
             // Empty-batch guard: never send an empty payload to the stream load.
             if (batch.isEmpty()) {
-                return;
+                return flushedAny;
             }
 
             StringBuilder sb = new StringBuilder(batch.size() * 64 + 2);
@@ -296,15 +304,17 @@ public class AuditLoaderMgr extends FrontendDaemon {
 
             if (!ok) {
                 // Keep the batch queued and retry next cycle.
-                return;
+                return flushedAny;
             }
             // Success: remove exactly the flushed rows from the head (single consumer, FIFO).
             for (int i = 0; i < batch.size(); i++) {
                 rowQueue.poll();
             }
             bufferBytes.addAndGet(-batchBytes);
+            flushedAny = true;
             LOG.debug("audit loader flushed {} rows", batch.size());
         }
+        return flushedAny;
     }
 
     @VisibleForTesting
