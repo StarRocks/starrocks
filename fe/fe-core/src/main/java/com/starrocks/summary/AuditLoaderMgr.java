@@ -286,6 +286,10 @@ public class AuditLoaderMgr extends FrontendDaemon {
                     LOG.warn("audit loader flush failed, batch rows[{}], response[{}]", batch.size(), response);
                 }
             } catch (Throwable t) {
+                if (t instanceof InterruptedException) {
+                    // Restore the interrupt flag so the daemon can still react to shutdown.
+                    Thread.currentThread().interrupt();
+                }
                 LOG.warn("audit loader flush failed, batch rows[{}]", batch.size(), t);
                 ok = false;
             }
