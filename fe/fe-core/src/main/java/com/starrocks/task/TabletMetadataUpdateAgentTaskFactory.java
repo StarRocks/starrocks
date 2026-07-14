@@ -19,6 +19,7 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TCompactionStrategy;
@@ -30,6 +31,7 @@ import com.starrocks.thrift.TTabletSchema;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -134,7 +136,15 @@ public class TabletMetadataUpdateAgentTaskFactory {
                                                                              List<Long> tabletIds,
                                                                              TTabletSchema tabletSchema,
                                                                              boolean createSchemaFile) {
-        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile);
+        return createTabletSchemaUpdateTask(backendId, tabletIds, tabletSchema, createSchemaFile, null);
+    }
+
+    public static TabletMetadataUpdateAgentTask createTabletSchemaUpdateTask(long backendId,
+                                                                             List<Long> tabletIds,
+                                                                             TTabletSchema tabletSchema,
+                                                                             boolean createSchemaFile,
+                                                                             Map<Long, TabletRange> tabletRanges) {
+        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile, tabletRanges);
     }
 
     private static class UpdatePartitionIdTask extends TabletMetadataUpdateAgentTask {
@@ -389,15 +399,19 @@ public class TabletMetadataUpdateAgentTaskFactory {
         private final List<Long> tablets;
         private final TTabletSchema tabletSchema;
         private final boolean createSchemaFile;
+        // Per-tablet target range, only set for an arity-changing range-distribution schema change.
+        // Null on the ordinary fast-schema-evolution path (no range is sent).
+        private final Map<Long, TabletRange> tabletRanges;
 
         private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
-                                       boolean createSchemaFile) {
+                                       boolean createSchemaFile, Map<Long, TabletRange> tabletRanges) {
             super(backendId, tablets.hashCode());
             this.tablets = new ArrayList<>(tablets);
             // tabletSchema may be null when the table has multi materialized index
             // and the schema of some materialized indexes are not needed to be updated
             this.tabletSchema = tabletSchema;
             this.createSchemaFile = createSchemaFile;
+            this.tabletRanges = tabletRanges;
         }
 
         @Override
@@ -415,6 +429,13 @@ public class TabletMetadataUpdateAgentTaskFactory {
 
                 if (tabletSchema != null) {
                     metaInfo.setTablet_schema(tabletSchema);
+                }
+
+                if (tabletRanges != null) {
+                    TabletRange range = tabletRanges.get(tabletId);
+                    if (range != null) {
+                        metaInfo.setRange(range.toThrift());
+                    }
                 }
 
                 metaInfos.add(metaInfo);

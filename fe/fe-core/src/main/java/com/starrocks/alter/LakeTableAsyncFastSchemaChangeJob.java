@@ -25,6 +25,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -40,8 +42,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -79,6 +84,15 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @SerializedName(value = "historySchema")
     private OlapTableHistorySchema historySchema;
 
+    /**
+     * Per-tablet TARGET (N+1) range for an arity-changing trailing sort-key ADD on a
+     * range-distribution table. Built once (before the first job WAL) and used for BE task
+     * construction, the leader catalog flip, and replay. When null, this is an ordinary fast
+     * schema-evolution job and every range-specific behavior is skipped.
+     */
+    @SerializedName(value = "targetRanges")
+    private Map<Long, TabletRange> targetRanges;
+
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
     // for deserialization
@@ -99,6 +113,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         }
         this.disableFastSchemaEvolutionV2 = other.disableFastSchemaEvolutionV2;
         this.historySchema = other.historySchema;
+        this.targetRanges = other.targetRanges == null ? null : new HashMap<>(other.targetRanges);
         partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
@@ -107,10 +122,23 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.schemaInfos = job.schemaInfos == null ? null : new ArrayList<>(job.schemaInfos);
         this.disableFastSchemaEvolutionV2 = job.disableFastSchemaEvolutionV2;
         this.historySchema = job.historySchema;
+        this.targetRanges = job.targetRanges == null ? null : new HashMap<>(job.targetRanges);
     }
 
     public void setIndexTabletSchema(long indexMetaId, String indexName, SchemaInfo schemaInfo) {
         schemaInfos.add(new IndexSchemaInfo(indexMetaId, indexName, schemaInfo));
+    }
+
+    /**
+     * Installs the per-tablet target range map. Package-private so the schema-change routing (and
+     * tests) can set it when constructing the job for a metadata-only trailing sort-key ADD.
+     */
+    void setTargetRanges(Map<Long, TabletRange> targetRanges) {
+        this.targetRanges = targetRanges;
+    }
+
+    Map<Long, TabletRange> getTargetRanges() {
+        return targetRanges;
     }
 
     @Override
@@ -125,7 +153,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                 // `Set.add()` returns true means this set did not already contain the specified element
                 boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
                 task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
-                        new ArrayList<>(tablets), info.getSchemaInfo().toTabletSchema(), createSchemaFile);
+                        new ArrayList<>(tablets), info.getSchemaInfo().toTabletSchema(), createSchemaFile, targetRanges);
                 break;
             }
         }
@@ -183,8 +211,23 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             List<Column> oldColumns = indexMeta.getSchema();
 
             Preconditions.checkState(Objects.equals(indexMeta.getKeysType(), schemaInfo.getKeysType()));
-            Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
-            Preconditions.checkState(Objects.equals(indexMeta.getShortKeyColumnCount(), schemaInfo.getShortKeyColumnCount()));
+            if (targetRanges != null) {
+                // Range path: the short-key count may change, so the equal-assertion is relaxed and
+                // the version relation is handled explicitly for exact-state replay idempotency.
+                if (schemaInfo.getVersion() == indexMeta.getSchemaVersion()) {
+                    // Exact-state replay: the flip already happened. Verify the live ranges already
+                    // equal the targets and return WITHOUT re-appending (no double-append).
+                    verifyLiveRangesMatchTargets(table, indexMetaId);
+                    return;
+                }
+                Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion(),
+                        "range flip target schema version " + schemaInfo.getVersion()
+                                + " is older than current " + indexMeta.getSchemaVersion());
+            } else {
+                Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
+                Preconditions.checkState(
+                        Objects.equals(indexMeta.getShortKeyColumnCount(), schemaInfo.getShortKeyColumnCount()));
+            }
 
             if (hasMv) {
                 droppedOrModifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(oldColumns, schemaInfo.getColumns()));
@@ -195,16 +238,101 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             indexMeta.setSchemaId(schemaInfo.getId());
             indexMeta.setSortKeyIdxes(schemaInfo.getSortKeyIndexes());
             indexMeta.setSortKeyUniqueIds(schemaInfo.getSortKeyUniqueIds());
+            if (targetRanges != null) {
+                indexMeta.setShortKeyColumnCount(schemaInfo.getShortKeyColumnCount());
+            }
 
             // update the indexIdToMeta
             table.getIndexMetaIdToMeta().put(indexMetaId, indexMeta);
             table.setIndexes(schemaInfo.getIndexes());
             table.renameColumnNamePrefix(indexMetaId);
+
+            if (targetRanges != null) {
+                flipTabletRangesInPlace(table, indexMetaId);
+            }
+        }
+        if (targetRanges != null) {
+            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
         }
         table.rebuildFullSchema();
 
         // If modified columns are already done, inactive related mv
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, droppedOrModifiedColumns);
+    }
+
+    /**
+     * In-place reference swap of each live tablet's range to its persisted target, over every tablet
+     * of every visible physical partition. In-place (not copy-and-swap) so background lake-stat and
+     * autovacuum work that holds the same Tablet object is not orphaned.
+     */
+    private void flipTabletRangesInPlace(OlapTable table, long indexMetaId) {
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
+            if (index == null) {
+                continue;
+            }
+            for (Tablet tablet : index.getTablets()) {
+                TabletRange target = targetRanges.get(tablet.getId());
+                Preconditions.checkState(target != null, "no target range for tablet " + tablet.getId());
+                tablet.setRange(target);
+            }
+        }
+    }
+
+    /**
+     * Exact-state replay guard: every live tablet's range must already equal its persisted target
+     * (value comparison via {@link TabletRange#equals}), proving the flip was applied exactly once.
+     */
+    private void verifyLiveRangesMatchTargets(OlapTable table, long indexMetaId) {
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
+            if (index == null) {
+                continue;
+            }
+            for (Tablet tablet : index.getTablets()) {
+                TabletRange target = targetRanges.get(tablet.getId());
+                Preconditions.checkState(target != null && Objects.equals(target, tablet.getRange()),
+                        "exact-state replay range mismatch for tablet " + tablet.getId());
+            }
+        }
+    }
+
+    @Override
+    protected void validateBeforeFinishUnprotected(Database db, OlapTable table) throws AlterCancelException {
+        if (targetRanges == null) {
+            return;
+        }
+        Set<Long> liveTabletIds = new HashSet<>();
+        for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
+            long indexMetaId = indexSchemaInfo.getIndexMetaId();
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+            if (indexMeta == null) {
+                throw new AlterCancelException("index meta not found for range flip, indexMetaId: " + indexMetaId);
+            }
+            // The target must not be older than the current schema (corruption / stale replay).
+            if (indexSchemaInfo.getSchemaInfo().getVersion() < indexMeta.getSchemaVersion()) {
+                throw new AlterCancelException("range flip target schema version "
+                        + indexSchemaInfo.getSchemaInfo().getVersion() + " is older than current "
+                        + indexMeta.getSchemaVersion());
+            }
+            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
+                if (index == null) {
+                    continue;
+                }
+                for (Tablet tablet : index.getTablets()) {
+                    if (!targetRanges.containsKey(tablet.getId())) {
+                        throw new AlterCancelException("missing target range for tablet " + tablet.getId());
+                    }
+                    liveTabletIds.add(tablet.getId());
+                }
+            }
+        }
+        // Reject stale coverage: the target map must cover exactly the live tablet set, no extras.
+        if (!targetRanges.keySet().equals(liveTabletIds)) {
+            throw new AlterCancelException("target range coverage mismatch: targets=" + targetRanges.keySet()
+                    + " liveTablets=" + liveTabletIds);
+        }
     }
 
     private void setFastSchemaEvolutionV2(OlapTable table, boolean enabled) {
@@ -227,6 +355,8 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         }
         this.disableFastSchemaEvolutionV2 = schemaChangeJob.disableFastSchemaEvolutionV2;
         this.historySchema = ((LakeTableAsyncFastSchemaChangeJob) job).historySchema;
+        // Replay reprojects from the identical persisted targets, so the flip is reproduced exactly.
+        this.targetRanges = schemaChangeJob.targetRanges;
     }
 
     @Override
@@ -317,5 +447,8 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     public void gsonPostProcess() throws IOException {
         partitionsWithSchemaFile = new HashSet<>();
+        if (targetRanges != null) {
+            targetRanges = Collections.unmodifiableMap(targetRanges);
+        }
     }
 }
