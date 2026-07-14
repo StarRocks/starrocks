@@ -29,9 +29,15 @@ import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.GenericManifestFile;
+import org.apache.iceberg.InternalData;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -49,6 +55,34 @@ import java.util.Set;
 public final class IcebergUtil {
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    private static final Schema MANIFEST_PROJECTION =
+            ManifestFile.schema().select(
+                    "manifest_path",
+                    "manifest_length",
+                    "content",
+                    "partition_spec_id",
+                    "added_snapshot_id",
+                    "deleted_data_files_count");
+
+    /**
+     * Streams the manifest files of a snapshot. When the snapshot has a manifest list file,
+     * reads it directly (AVRO) with a narrow projection instead of materializing the full
+     * manifest list via snapshot.allManifests(); otherwise falls back to allManifests().
+     * Aligned with Iceberg FileCleanupStrategy.readManifests().
+     */
+    public static CloseableIterable<ManifestFile> readManifests(Snapshot snapshot, FileIO fileIO) {
+        if (snapshot.manifestListLocation() != null) {
+            return InternalData.read(
+                            FileFormat.AVRO, fileIO.newInputFile(snapshot.manifestListLocation()))
+                    .setRootType(GenericManifestFile.class)
+                    .project(MANIFEST_PROJECTION)
+                    .reuseContainers()
+                    .build();
+        } else {
+            return CloseableIterable.withNoopClose(snapshot.allManifests(fileIO));
+        }
     }
 
     public static class MinMaxValue {
