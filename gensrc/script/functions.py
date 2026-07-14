@@ -1582,5 +1582,8 @@ vectorized_functions = [
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
 
     # ai functions
-    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
+    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"],
+    # embedding function -- calls an OpenAI-compatible /v1/embeddings endpoint per row.
+    # See be/src/exprs/embedding_functions.cpp.
+    [200001, 'embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'JSON'], "EmbeddingFunctions::embedding"]
 ]

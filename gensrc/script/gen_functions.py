@@ -330,6 +330,7 @@ def generate_cpp(path):
         "MapFunctions",
         "GinFunctions",
         "AiFunctions",
+        "EmbeddingFunctions",
         "HttpRequestFunctions",
         "DictFunctions",
     ]

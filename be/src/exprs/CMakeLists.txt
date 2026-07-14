@@ -44,6 +44,7 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   ai_functions.cpp
+  embedding_functions.cpp
   array_functions.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
