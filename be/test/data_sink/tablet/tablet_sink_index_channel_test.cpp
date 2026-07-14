@@ -12,13 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD:be/test/exec/data_sinks/tablet_sink_index_channel_test.cpp
-#define private public
-#include "exec/data_sinks/tablet_sink_index_channel.h"
-#undef private
-=======
 #include "data_sink/tablet/tablet_sink_index_channel.h"
->>>>>>> f2940f38146... [Refactor] Split data sinks into dedicated modules (#76312):be/test/data_sink/tablet/tablet_sink_index_channel_test.cpp
 
 #include <gtest/gtest.h>
 

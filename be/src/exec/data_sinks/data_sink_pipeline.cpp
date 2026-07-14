@@ -23,12 +23,7 @@
 #include "data_sink/tablet/tablet_sink.h"
 #include "exec/data_sinks/dictionary_cache_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
-<<<<<<< HEAD
-#include "exec/data_sinks/multi_olap_table_sink.h"
 #include "exec/data_sinks/remote_scan_result_sink.h"
-#include "exec/data_sinks/tablet_sink.h"
-=======
->>>>>>> f2940f38146... [Refactor] Split data sinks into dedicated modules (#76312)
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"

@@ -295,22 +295,7 @@ set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/dictionary_cache_sink.cpp
     data_sinks/hive_table_sink.cpp
     data_sinks/iceberg_table_sink.cpp
-<<<<<<< HEAD
-    data_sinks/memory_scratch_sink.cpp
     data_sinks/remote_scan_result_sink.cpp
-    data_sinks/metadata_result_writer.cpp
-    data_sinks/multi_cast_data_stream_sink.cpp
-    data_sinks/multi_olap_table_sink.cpp
-    data_sinks/mysql_result_writer.cpp
-    data_sinks/mysql_table_sink.cpp
-    data_sinks/mysql_table_writer.cpp
-    data_sinks/range_router.cpp
-    data_sinks/range_tablet_sink_sender.cpp
-    data_sinks/result_sink.cpp
-    data_sinks/schema_table_sink.cpp
-    data_sinks/statistic_result_writer.cpp
-=======
->>>>>>> f2940f38146... [Refactor] Split data sinks into dedicated modules (#76312)
     data_sinks/table_function_table_sink.cpp
 )
 

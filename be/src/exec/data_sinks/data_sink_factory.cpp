@@ -30,22 +30,13 @@
 #ifndef __APPLE__
 #include "exec/data_sinks/iceberg_table_sink.h"
 #endif
-<<<<<<< HEAD
-#include "exec/data_sinks/memory_scratch_sink.h"
-#include "exec/data_sinks/multi_cast_data_stream_sink.h"
-#include "exec/data_sinks/mysql_table_sink.h"
-#include "exec/data_sinks/noop_sink.h"
-#include "exec/data_sinks/remote_scan_result_sink.h"
-#include "exec/data_sinks/result_sink.h"
-#include "exec/data_sinks/schema_table_sink.h"
-=======
 #include "data_sink/exchange/multi_cast_data_stream_sink.h"
 #include "data_sink/external/mysql_table_sink.h"
 #include "data_sink/external/noop_sink.h"
 #include "data_sink/external/schema_table_sink.h"
 #include "data_sink/result/memory_scratch_sink.h"
 #include "data_sink/result/result_sink.h"
->>>>>>> f2940f38146... [Refactor] Split data sinks into dedicated modules (#76312)
+#include "exec/data_sinks/remote_scan_result_sink.h"
 #include "exec/data_sinks/table_function_table_sink.h"
 #include "runtime/runtime_state.h"
 
