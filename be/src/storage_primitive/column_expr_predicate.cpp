@@ -390,10 +390,11 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
 
     ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
 
-    // nullopt means empty match string - clear bitmap
+    // nullopt means an empty match string, which matches no rows. Fall through
+    // with an empty posting set so the shared logic below produces the right
+    // result
     if (!roaring_opt.has_value()) {
-        *row_bitmap -= *row_bitmap;
-        return Status::OK();
+        roaring_opt.emplace();
     }
 
     if (with_not) {

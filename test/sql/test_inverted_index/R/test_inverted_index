@@ -778,6 +778,20 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 4	This is Gin Index
 5	None
 -- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "" OR id1 = 100;
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
 DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
