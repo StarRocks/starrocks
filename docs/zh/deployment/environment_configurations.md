@@ -89,6 +89,37 @@ netstat -tunlp | grep 9070
 
 ## JDK 设置
 
+StarRocks 的 Java 组件运行在 JDK 之上。这些 Java 组件包括：
+
+- FE
+- BE 和 CN 上的 Java UDF、Connector 和 Java Extensions 功能
+
+在部署前，请先安装您的 StarRocks 版本所要求的 JDK 版本，然后将 `JAVA_HOME` 指向该 JDK。
+
+### 各 StarRocks 版本对应的 JDK 版本
+
+最低和推荐的 JDK 版本取决于您的 StarRocks 版本：
+
+| StarRocks 版本 | 最低 JDK | 推荐 JDK |
+| --- | --- | --- |
+| v2.5、v3.0、v3.1、v3.2 | JDK 8 | JDK 11 |
+| v3.3、v3.4 | JDK 11 | JDK 11 |
+| v3.5、v4.0、v4.1 | JDK 17 | JDK 17 |
+| v4.2 及以后版本 | JDK 17 | JDK 21 |
+
+补充说明：
+
+- 对于 v2.5、v3.0、v3.1 和 v3.2，在 Ubuntu 22.04 上部署需要 JDK 11。
+- FE 的编译目标在 v3.5.0 中从 Java 11 提升到 Java 17，因此 v3.5 及以后版本在运行时需要 JDK 17 或更高版本。
+- 从 v3.5.0 起，StarRocks 不再为特定 JDK 版本提供各自的 JVM 预设；所有 JDK 版本共用同一份 `JAVA_OPTS`。当从 v3.4 或更早版本升级到 v3.5 及以后版本时，请移除 **fe.conf** 中与 JDK 17 不兼容的 `JAVA_OPTS` 选项（例如 CMS 相关选项），并使用 v3.5 及以后版本自带的默认 `JAVA_OPTS`。
+- 从 v4.2 起，推荐使用 JDK 21。运行时的最低版本仍为 JDK 17（FE 的编译目标为 Java 17）；JDK 21 向后兼容 JDK 17 运行时目标。
+
+:::note
+StarRocks 不支持 JRE。您必须安装完整的 JDK。
+:::
+
+### 设置 JAVA_HOME
+
 StarRocks 依靠环境变量 `JAVA_HOME` 定位实例上的 Java 依赖项。
 
 运行以下命令查看环境变量 `JAVA_HOME`：
