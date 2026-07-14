@@ -20,13 +20,21 @@ import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class AuditLoaderTest {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+    }
 
     private static AuditEvent baseEvent() {
         AuditEvent event = new AuditEvent();
@@ -96,6 +104,82 @@ public class AuditLoaderTest {
         String r = AuditLoaderMgr.truncateToBytes("你好", 4);
         Assertions.assertEquals("你", r);
         Assertions.assertTrue(r.getBytes(StandardCharsets.UTF_8).length <= 4);
+    }
+
+    @Test
+    public void testPluginGatingAndExec() {
+        AuditLoaderMgr mgr = GlobalStateMgr.getCurrentState().getAuditLoaderMgr();
+        Assertions.assertNotNull(mgr);
+        AuditLoaderPlugin plugin = new AuditLoaderPlugin();
+        Assertions.assertNotNull(plugin.getPluginInfo());
+        boolean orig = Config.enable_audit_loader;
+        try {
+            Config.enable_audit_loader = false;
+            Assertions.assertFalse(plugin.eventFilter(EventType.AFTER_QUERY));
+            Config.enable_audit_loader = true;
+            Assertions.assertFalse(plugin.eventFilter(EventType.BEFORE_QUERY));
+            Assertions.assertTrue(plugin.eventFilter(EventType.AFTER_QUERY));
+            Assertions.assertTrue(plugin.eventFilter(EventType.CONNECTION));
+            int before = mgr.bufferedRows();
+            plugin.exec(baseEvent());
+            Assertions.assertEquals(before + 1, mgr.bufferedRows());
+        } finally {
+            Config.enable_audit_loader = orig;
+            mgr.clearBuffer();
+        }
+    }
+
+    @Test
+    public void testRunCycleDisabledDrainsBuffer() {
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        boolean orig = Config.enable_audit_loader;
+        try {
+            Config.enable_audit_loader = false;
+            mgr.offerEvent(baseEvent());
+            Assertions.assertEquals(1, mgr.bufferedRows());
+            mgr.runAfterCatalogReady();
+            Assertions.assertEquals(0, mgr.bufferedRows());
+            Assertions.assertFalse(mgr.isDisabledByConflict());
+        } finally {
+            Config.enable_audit_loader = orig;
+        }
+    }
+
+    @Test
+    public void testRunCycleEnabledTableNotReadyKeepsBuffer() {
+        // The _statistics_ database does not exist in this harness, so ensureAuditTable fails and
+        // the cycle must leave buffered rows untouched (retry when the table becomes available).
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        boolean orig = Config.enable_audit_loader;
+        try {
+            Config.enable_audit_loader = true;
+            mgr.offerEvent(baseEvent());
+            mgr.runAfterCatalogReady();
+            Assertions.assertEquals(1, mgr.bufferedRows());
+        } finally {
+            Config.enable_audit_loader = orig;
+            mgr.clearBuffer();
+        }
+    }
+
+    @Test
+    public void testFlushFailureKeepsRowsQueued() {
+        // No BE can serve the internal stream load in this harness, so the flush attempt fails and
+        // the copy-then-remove rule must keep every row queued for the next cycle.
+        AuditLoaderMgr mgr = new AuditLoaderMgr();
+        long origInterval = Config.audit_loader_load_interval_seconds;
+        try {
+            Config.audit_loader_load_interval_seconds = 0;
+            mgr.offerEvent(baseEvent());
+            mgr.offerEvent(baseEvent());
+            long bytesBefore = mgr.bufferedBytes();
+            mgr.maybeFlush();
+            Assertions.assertEquals(2, mgr.bufferedRows());
+            Assertions.assertEquals(bytesBefore, mgr.bufferedBytes());
+        } finally {
+            Config.audit_loader_load_interval_seconds = origInterval;
+            mgr.clearBuffer();
+        }
     }
 
     @Test
