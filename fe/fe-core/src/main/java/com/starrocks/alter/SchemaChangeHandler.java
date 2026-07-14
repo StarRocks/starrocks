@@ -4515,8 +4515,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!isMetadataOnlyTrailingKeyAdd(schemaChangeData)) {
             return null;
         }
-        Column newTrailingColumn = findNewTrailingKeyColumn(olapTable, schemaChangeData);
-        if (newTrailingColumn == null) {
+        List<Column> newTrailingColumns = findNewTrailingKeyColumns(olapTable, schemaChangeData);
+        if (newTrailingColumns.isEmpty()) {
             return null;
         }
         AlterJobV2 job = createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
@@ -4524,40 +4524,42 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         }
         LakeTableAsyncFastSchemaChangeJob asyncJob = (LakeTableAsyncFastSchemaChangeJob) job;
-        asyncJob.setTargetRanges(computeTargetRanges(olapTable, newTrailingColumn));
+        asyncJob.setTargetRanges(computeTargetRanges(olapTable, newTrailingColumns));
         return asyncJob;
     }
 
     /**
-     * The single brand-new key column of a metadata-only trailing key-column ADD: the resolved base
-     * schema column whose unique id is absent from the live pre-add base schema. {@link
-     * #isMetadataOnlyTrailingKeyAdd} has already verified there is exactly one such key column.
+     * The brand-new trailing key columns of a metadata-only trailing key-column ADD, in schema order:
+     * the resolved base schema columns whose unique id is absent from the live pre-add base schema.
+     * {@link #isMetadataOnlyTrailingKeyAdd} has already verified every such new column is a trailing
+     * key column with a constant/NULL default.
      */
-    private static Column findNewTrailingKeyColumn(OlapTable olapTable, SchemaChangeData schemaChangeData) {
+    private static List<Column> findNewTrailingKeyColumns(OlapTable olapTable, SchemaChangeData schemaChangeData) {
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
         List<Column> newSchema = schemaChangeData.getNewIndexMetaIdToSchema().get(baseIndexMetaId);
         if (newSchema == null) {
-            return null;
+            return List.of();
         }
         Set<Integer> oldUniqueIds = new HashSet<>();
         for (Column column : olapTable.getSchemaByIndexMetaId(baseIndexMetaId)) {
             oldUniqueIds.add(column.getUniqueId());
         }
+        List<Column> newKeyColumns = new ArrayList<>();
         for (Column column : newSchema) {
             if (column.isKey() && !oldUniqueIds.contains(column.getUniqueId())) {
-                return column;
+                newKeyColumns.add(column);
             }
         }
-        return null;
+        return newKeyColumns;
     }
 
     /**
-     * Reproject every base-index tablet's current boundary with a trailing NULL sentinel for {@code
-     * newTrailingColumn}, keyed by tablet id, over every tablet of every visible physical partition.
-     * Mirrors the job's in-place flip / coverage-validation iteration so the target map covers exactly
-     * the live tablet set.
+     * Reproject every base-index tablet's current boundary with one trailing NULL sentinel per column
+     * in {@code newTrailingColumns} (in order), keyed by tablet id, over every tablet of every visible
+     * physical partition. Mirrors the job's in-place flip / coverage-validation iteration so the target
+     * map covers exactly the live tablet set.
      */
-    private static Map<Long, TabletRange> computeTargetRanges(OlapTable olapTable, Column newTrailingColumn) {
+    private static Map<Long, TabletRange> computeTargetRanges(OlapTable olapTable, List<Column> newTrailingColumns) {
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
         Map<Long, TabletRange> targetRanges = new HashMap<>();
         for (PhysicalPartition physicalPartition : olapTable.getPhysicalPartitions()) {
@@ -4571,7 +4573,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Tablet range is null, tabletId=" + tablet.getId());
                 targetRanges.put(tablet.getId(), new TabletRange(
                         TrailingSortKeyRangeReprojection.appendTrailing(
-                                tabletRange.getRange(), newTrailingColumn)));
+                                tabletRange.getRange(), newTrailingColumns)));
             }
         }
         return targetRanges;
@@ -5030,31 +5032,32 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
-        // The metadata-only route adds exactly one column: the trailing sort key. A single ADD COLUMNS
-        // clause that co-adds other new columns (e.g. a value column needing materialization such as an
-        // AUTO_INCREMENT, generated, or non-constant-default column) must fall through to the data-rewrite
-        // path, which materializes them; classifying it as metadata-only would install the new schema
-        // without materializing those columns' values for existing rows.
-        if (newSchema.size() != oldSchema.size() + 1) {
-            return false;
-        }
         Set<Integer> oldUniqueIds = new HashSet<>();
         for (Column column : oldSchema) {
             oldUniqueIds.add(column.getUniqueId());
         }
-        List<Column> newKeyColumns = new ArrayList<>();
+        // Collect the brand-new columns (unique id not in the live schema), in schema order.
+        List<Column> newColumns = new ArrayList<>();
         for (Column column : newSchema) {
-            if (column.isKey() && !oldUniqueIds.contains(column.getUniqueId())) {
-                newKeyColumns.add(column);
+            if (!oldUniqueIds.contains(column.getUniqueId())) {
+                newColumns.add(column);
             }
         }
-        if (newKeyColumns.size() != 1) {
+        // The metadata-only route adds one or more columns, and EVERY added column must be a trailing
+        // sort key with a constant/NULL default. A batch that co-adds a value column (needs
+        // materialization) or a key column with an auto-increment / generated / variable default must
+        // fall through to the data-rewrite path, which materializes them; classifying it as
+        // metadata-only would install the new schema without materializing those values for existing
+        // rows. Requiring newSchema.size() == oldSchema.size() + newColumns.size() also rejects any
+        // concurrent column drop.
+        if (newColumns.isEmpty() || newSchema.size() != oldSchema.size() + newColumns.size()) {
             return false;
         }
-        Column newKeyColumn = newKeyColumns.get(0);
-        if (newKeyColumn.isAutoIncrement() || newKeyColumn.isGeneratedColumn()
-                || newKeyColumn.getDefaultValueType() == Column.DefaultValueType.VARY) {
-            return false;
+        for (Column column : newColumns) {
+            if (!column.isKey() || column.isAutoIncrement() || column.isGeneratedColumn()
+                    || column.getDefaultValueType() == Column.DefaultValueType.VARY) {
+                return false;
+            }
         }
 
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
@@ -5062,7 +5065,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
         List<Column> newSortKey = resolveEffectiveSortKeyColumns(newSchema,
                 resolved.getSortKeyUniqueIds(), resolved.getSortKeyIdxes());
-        if (newSortKey.size() != oldSortKey.size() + 1) {
+        // The new sort key must be the old sort key with exactly the new columns appended as a trailing
+        // block, in add order.
+        if (newSortKey.size() != oldSortKey.size() + newColumns.size()) {
             return false;
         }
         // Keep the metadata-only route within the arity the BE range channel supports (kMaxRangeSortKeyArity
@@ -5076,7 +5081,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 return false;
             }
         }
-        return newSortKey.get(newSortKey.size() - 1).getUniqueId() == newKeyColumn.getUniqueId();
+        for (int j = 0; j < newColumns.size(); j++) {
+            if (newSortKey.get(oldSortKey.size() + j).getUniqueId() != newColumns.get(j).getUniqueId()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

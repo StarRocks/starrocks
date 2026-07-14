@@ -396,16 +396,17 @@ Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, 
 
 Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_meta, const TabletSchema& new_schema,
                                                     const TabletRangePB& new_range) {
-    // 1. The schema change must be exactly a trailing sort-key ADD: the existing effective sort key
-    //    is preserved by unique id/type/order and exactly one new trailing sort key is appended.
+    // 1. The schema change must be a trailing sort-key ADD: the existing effective sort key is
+    //    preserved by unique id/type/order and one or more new trailing sort keys are appended.
     auto old_schema = TabletSchema::create(old_meta.schema());
     const auto& old_sk = old_schema->sort_key_idxes();
     const auto& new_sk = new_schema.sort_key_idxes();
-    if (new_sk.size() != old_sk.size() + 1) {
+    if (new_sk.size() <= old_sk.size()) {
         return Status::Corruption(
-                fmt::format("trailing sort-key ADD requires exactly one new sort key: old sort key size {}, new {}",
+                fmt::format("trailing sort-key ADD requires at least one new sort key: old sort key size {}, new {}",
                             old_sk.size(), new_sk.size()));
     }
+    const int num_added = static_cast<int>(new_sk.size() - old_sk.size());
     for (size_t i = 0; i < old_sk.size(); ++i) {
         const auto& oc = old_schema->column(old_sk[i]);
         const auto& nc = new_schema.column(new_sk[i]);
@@ -416,8 +417,8 @@ Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_
     }
 
     // 2. Each present bound of new_range == the corresponding bound of old_meta.range() with exactly
-    //    one trailing typed NULL_VALUE appended; bound presence and inclusivity are unchanged; and a
-    //    fully unbounded range (Range.all) stays fully unbounded.
+    //    `num_added` trailing typed NULL_VALUEs appended; bound presence and inclusivity are unchanged;
+    //    and a fully unbounded range (Range.all) stays fully unbounded.
     const auto& old_range = old_meta.range();
     if (old_range.has_lower_bound() != new_range.has_lower_bound() ||
         old_range.has_upper_bound() != new_range.has_upper_bound()) {
@@ -430,31 +431,35 @@ Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_
         return Status::Corruption("range upper bound inclusivity changed across the trailing ADD");
     }
 
-    const auto& new_trailing_col = new_schema.column(new_sk[new_sk.size() - 1]);
     auto check_bound = [&](bool has, const TuplePB& old_tuple, const TuplePB& new_tuple, const char* which) -> Status {
         if (!has) {
             return Status::OK();
         }
-        if (new_tuple.values_size() != old_tuple.values_size() + 1) {
-            return Status::Corruption(fmt::format("range {} bound must gain exactly one trailing value", which));
+        if (new_tuple.values_size() != old_tuple.values_size() + num_added) {
+            return Status::Corruption(
+                    fmt::format("range {} bound must gain exactly {} trailing value(s)", which, num_added));
         }
         for (int i = 0; i < old_tuple.values_size(); ++i) {
             if (!google::protobuf::util::MessageDifferencer::Equals(new_tuple.values(i), old_tuple.values(i))) {
                 return Status::Corruption(fmt::format("range {} bound prefix changed across the trailing ADD", which));
             }
         }
-        const auto& trailing = new_tuple.values(new_tuple.values_size() - 1);
-        if (trailing.variant_type() != VariantTypePB::NULL_VALUE) {
-            return Status::Corruption(fmt::format("range {} bound trailing value must be the NULL sentinel", which));
-        }
-        if (!trailing.has_type()) {
-            return Status::Corruption(fmt::format("range {} bound trailing value is missing a type", which));
-        }
-        const auto type_desc = TypeDescriptor::from_protobuf(trailing.type());
-        if (type_desc.type != new_trailing_col.type()) {
-            return Status::Corruption(fmt::format("range {} bound trailing NULL type {} != new sort-key column type {}",
-                                                  which, static_cast<int>(type_desc.type),
-                                                  static_cast<int>(new_trailing_col.type())));
+        for (int j = 0; j < num_added; ++j) {
+            const auto& new_trailing_col = new_schema.column(new_sk[old_sk.size() + j]);
+            const auto& trailing = new_tuple.values(old_tuple.values_size() + j);
+            if (trailing.variant_type() != VariantTypePB::NULL_VALUE) {
+                return Status::Corruption(
+                        fmt::format("range {} bound trailing value {} must be the NULL sentinel", which, j));
+            }
+            if (!trailing.has_type()) {
+                return Status::Corruption(fmt::format("range {} bound trailing value {} is missing a type", which, j));
+            }
+            const auto type_desc = TypeDescriptor::from_protobuf(trailing.type());
+            if (type_desc.type != new_trailing_col.type()) {
+                return Status::Corruption(
+                        fmt::format("range {} bound trailing NULL {} type {} != new sort-key column type {}", which, j,
+                                    static_cast<int>(type_desc.type), static_cast<int>(new_trailing_col.type())));
+            }
         }
         return Status::OK();
     };

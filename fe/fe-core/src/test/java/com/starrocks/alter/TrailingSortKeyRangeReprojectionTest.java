@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
 
 public class TrailingSortKeyRangeReprojectionTest {
 
@@ -36,7 +37,7 @@ public class TrailingSortKeyRangeReprojectionTest {
 
     @Test
     public void testAppendToAllRangeReturnsAll() {
-        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(Range.all(), NEW_COLUMN);
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(Range.all(), List.of(NEW_COLUMN));
         Assertions.assertTrue(result.isAll());
     }
 
@@ -44,7 +45,7 @@ public class TrailingSortKeyRangeReprojectionTest {
     @Test
     public void testAppendToBoundedRangePreservesPrefixAndInclusivity() {
         Range<Tuple> old = Range.gelt(makeTuple(100), makeTuple(200));
-        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, NEW_COLUMN);
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, List.of(NEW_COLUMN));
 
         Assertions.assertTrue(result.isLowerBoundIncluded());
         Assertions.assertFalse(result.isUpperBoundIncluded());
@@ -68,7 +69,7 @@ public class TrailingSortKeyRangeReprojectionTest {
     @Test
     public void testAppendKeepsLowerUnboundedAndExtendsUpperOnly() {
         Range<Tuple> old = Range.lt(makeTuple(200));
-        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, NEW_COLUMN);
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, List.of(NEW_COLUMN));
 
         Assertions.assertTrue(result.isMinimum());
         Assertions.assertNull(result.getLowerBound());
@@ -84,7 +85,7 @@ public class TrailingSortKeyRangeReprojectionTest {
     @Test
     public void testAppendKeepsUpperUnboundedAndExtendsLowerOnly() {
         Range<Tuple> old = Range.ge(makeTuple(100));
-        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, NEW_COLUMN);
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, List.of(NEW_COLUMN));
 
         Assertions.assertTrue(result.isMaximum());
         Assertions.assertNull(result.getUpperBound());
@@ -96,10 +97,32 @@ public class TrailingSortKeyRangeReprojectionTest {
         Assertions.assertTrue(lower.getValues().get(1) instanceof NullVariant);
     }
 
+    // [100, 200) with two trailing keys -> [(100, NULL, NULL), (200, NULL, NULL))
+    @Test
+    public void testAppendMultipleTrailingColumns() {
+        Column k3 = new Column("k3", IntegerType.INT);
+        Range<Tuple> old = Range.gelt(makeTuple(100), makeTuple(200));
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, List.of(NEW_COLUMN, k3));
+
+        Tuple lower = result.getLowerBound();
+        Assertions.assertEquals(3, lower.getValues().size());
+        Assertions.assertEquals("100", lower.getValues().get(0).getStringValue());
+        Assertions.assertTrue(lower.getValues().get(1) instanceof NullVariant);
+        Assertions.assertTrue(lower.getValues().get(2) instanceof NullVariant);
+        Assertions.assertEquals(VarcharType.VARCHAR, lower.getValues().get(1).getType());
+        Assertions.assertEquals(IntegerType.INT, lower.getValues().get(2).getType());
+
+        Tuple upper = result.getUpperBound();
+        Assertions.assertEquals(3, upper.getValues().size());
+        Assertions.assertEquals("200", upper.getValues().get(0).getStringValue());
+        Assertions.assertTrue(upper.getValues().get(1) instanceof NullVariant);
+        Assertions.assertTrue(upper.getValues().get(2) instanceof NullVariant);
+    }
+
     @Test
     public void testAppendedNullVariantHasNewColumnType() {
         Range<Tuple> old = Range.gelt(makeTuple(100), makeTuple(200));
-        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, NEW_COLUMN);
+        Range<Tuple> result = TrailingSortKeyRangeReprojection.appendTrailing(old, List.of(NEW_COLUMN));
 
         Assertions.assertEquals(VarcharType.VARCHAR, result.getLowerBound().getValues().get(1).getType());
         Assertions.assertEquals(VarcharType.VARCHAR, result.getUpperBound().getValues().get(1).getType());

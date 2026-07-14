@@ -221,7 +221,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             TabletRange old = oneColRange(i * 10);
             tablet.setRange(old);
             targetRanges.put(tablet.getId(),
-                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), newKey)));
+                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), List.of(newKey))));
             i++;
         }
 
@@ -275,7 +275,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             TabletRange old = oneColRange(i * 10);
             tablet.setRange(old);
             targetRanges.put(tablet.getId(),
-                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), newKey)));
+                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), List.of(newKey))));
             i++;
         }
         SchemaInfo target = buildTrailingKeyTargetSchema(table, newKey);
@@ -313,7 +313,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             // Deliberately drop coverage for the first tablet.
             if (i != 0) {
                 targetRanges.put(tablet.getId(),
-                        new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), newKey)));
+                        new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), List.of(newKey))));
             }
             i++;
         }
@@ -347,12 +347,12 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             TabletRange old = oneColRange(i * 10);
             tablet.setRange(old);
             targetRanges.put(tablet.getId(),
-                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), newKey)));
+                    new TabletRange(TrailingSortKeyRangeReprojection.appendTrailing(old.getRange(), List.of(newKey))));
             i++;
         }
         // An extra tablet id that is not part of the live set.
         targetRanges.put(-9999L, new TabletRange(
-                TrailingSortKeyRangeReprojection.appendTrailing(oneColRange(0).getRange(), newKey)));
+                TrailingSortKeyRangeReprojection.appendTrailing(oneColRange(0).getRange(), List.of(newKey))));
 
         SchemaInfo target = buildTrailingKeyTargetSchema(table, newKey);
         LakeTableAsyncFastSchemaChangeJob job = newJob(db, table, target);

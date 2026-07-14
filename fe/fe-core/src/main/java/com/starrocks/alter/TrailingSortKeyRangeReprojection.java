@@ -29,30 +29,32 @@ import java.util.List;
 public class TrailingSortKeyRangeReprojection {
 
     /**
-     * Appends one {@link Variant#nullVariant(com.starrocks.type.Type)} sentinel for
-     * {@code newTrailingSortKeyColumn} to each bounded side of {@code old}, preserving the
+     * Appends one {@link Variant#nullVariant(com.starrocks.type.Type)} sentinel per column in
+     * {@code newTrailingSortKeyColumns} (in order) to each bounded side of {@code old}, preserving the
      * existing prefix, inclusivity, and any unbounded side.
      *
-     * @param old the tablet's current boundary range, keyed on the sort key before the new column
-     * @param newTrailingSortKeyColumn the trailing sort-key column being appended
-     * @return the reprojected range, keyed on the sort key including the new column
+     * @param old the tablet's current boundary range, keyed on the sort key before the new columns
+     * @param newTrailingSortKeyColumns the trailing sort-key columns being appended, in sort-key order
+     * @return the reprojected range, keyed on the sort key including the new columns
      */
-    public static Range<Tuple> appendTrailing(Range<Tuple> old, Column newTrailingSortKeyColumn) {
+    public static Range<Tuple> appendTrailing(Range<Tuple> old, List<Column> newTrailingSortKeyColumns) {
         if (old.isAll()) {
             return Range.all();
         }
         Tuple lowerBound = old.isMinimum() ? null
-                : appendNull(old.getLowerBound(), newTrailingSortKeyColumn);
+                : appendNulls(old.getLowerBound(), newTrailingSortKeyColumns);
         Tuple upperBound = old.isMaximum() ? null
-                : appendNull(old.getUpperBound(), newTrailingSortKeyColumn);
+                : appendNulls(old.getUpperBound(), newTrailingSortKeyColumns);
         return Range.of(lowerBound, upperBound,
                 old.isLowerBoundIncluded(),
                 old.isUpperBoundIncluded());
     }
 
-    private static Tuple appendNull(Tuple tuple, Column newTrailingSortKeyColumn) {
+    private static Tuple appendNulls(Tuple tuple, List<Column> newTrailingSortKeyColumns) {
         List<Variant> values = new ArrayList<>(tuple.getValues());
-        values.add(Variant.nullVariant(newTrailingSortKeyColumn.getType()));
+        for (Column column : newTrailingSortKeyColumns) {
+            values.add(Variant.nullVariant(column.getType()));
+        }
         return new Tuple(values);
     }
 }
