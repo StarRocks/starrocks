@@ -1016,30 +1016,8 @@ public class PlanFragmentBuilder {
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        // Range-colocate scans use the dispatch facade when alignment
-                        // holds; if alignment is transiently broken the same scan still
-                        // needs a bucketSeq for non-colocate consumers, so fall back to
-                        // position-based and let the dispatch-time alignment guard in
-                        // OlapScanNode.getBucketNums() handle the colocate-dispatch path.
-                        if (dispatch != null) {
-                            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
-                            if (rangeColocateMap != null) {
-                                tabletId2BucketSeq.putAll(rangeColocateMap);
-                            } else {
-                                // Range-colocate but transiently unaligned: fall back to position-based
-                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
-                                // on the colocate-dispatch path by validating this built assignment against
-                                // the aligned mapping, so no unaligned observation needs to be recorded here.
-                                for (int i = 0; i < allTabletIds.size(); i++) {
-                                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                                }
-                            }
-                        } else {
-                            // HASH or range non-colocate: position-based bucketSeq.
-                            for (int i = 0; i < allTabletIds.size(); i++) {
-                                tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                            }
-                        }
+                        OlapScanNode.fillTabletId2BucketSeq(
+                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
