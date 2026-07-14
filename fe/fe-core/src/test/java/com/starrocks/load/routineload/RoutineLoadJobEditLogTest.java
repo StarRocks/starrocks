@@ -127,6 +127,30 @@ public class RoutineLoadJobEditLogTest {
     }
 
     @Test
+    public void testReplayModifyJobPreservesIncludeMetadata() throws Exception {
+        RoutineLoadJob job = createRoutineLoadJob(20L, "meta_job", 1L, 1L);
+        // A desc parsed from a statement carrying the clause (what CREATE/ALTER produces).
+        RoutineLoadDesc desc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD meta_job ON test_table "
+                        + "INCLUDE METADATA(PARTITION AS p, HEADERS AS h), COLUMNS(a, b) "
+                        + "PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"t\")", 0), null);
+        Assertions.assertNotNull(desc.getMetadata());
+
+        // Follower replay path: applies setRoutineLoadDesc + mergeLoadDescToOriginStatement (no editlog write).
+        job.replayModifyJob(desc, null, null);
+
+        // The job carries the clause in memory after replay...
+        Assertions.assertNotNull(job.getMetadata());
+        Assertions.assertEquals(2, job.getMetadata().getItems().size());
+        // ...and origStmt was regenerated WITH it, so a restart re-parse recovers it (guards the
+        // persistence round-trip: toSql write leg + getLoadDesc read leg through the job).
+        Assertions.assertTrue(job.getOrigStmt().originStmt.contains("INCLUDE METADATA"));
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(job.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed.getMetadata());
+        Assertions.assertEquals(2, reparsed.getMetadata().getItems().size());
+    }
+
+    @Test
     public void testUpdateStateToPausedNormalCase() throws Exception {
         // 1. Prepare test data
         String dbName = "test_db";
