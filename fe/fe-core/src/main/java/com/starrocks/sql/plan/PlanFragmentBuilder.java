@@ -24,7 +24,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -997,11 +996,7 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
-                RangeColocateScanDispatch dispatch = null;
-                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
-                }
+                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
