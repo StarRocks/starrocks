@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 
 #include <gtest/gtest.h>
 
@@ -38,7 +38,7 @@
 
 namespace starrocks {
 
-class TabletSinkTest : public ::testing::Test {
+class OlapTableSinkTest : public ::testing::Test {
 public:
     void SetUp() override {
         _db_id = 1;
@@ -261,7 +261,7 @@ protected:
     TDataSink _data_sink;
 };
 
-TEST_F(TabletSinkTest, test_varchar_error_log) {
+TEST_F(OlapTableSinkTest, test_varchar_error_log) {
     bool old_enable_check_string_lengths = config::enable_check_string_lengths;
     config::enable_check_string_lengths = true;
     DeferOp defer([&]() { config::enable_check_string_lengths = old_enable_check_string_lengths; });
@@ -276,7 +276,7 @@ TEST_F(TabletSinkTest, test_varchar_error_log) {
             "String", "too long");
 }
 
-TEST_F(TabletSinkTest, test_decimal_error_log) {
+TEST_F(OlapTableSinkTest, test_decimal_error_log) {
     _test_error_log(
             TYPE_DECIMALV2, 1, 2, 1,
             [](Column* col) {
@@ -286,7 +286,7 @@ TEST_F(TabletSinkTest, test_decimal_error_log) {
             "Decimal", "out of range");
 }
 
-TEST_F(TabletSinkTest, test_decimalv3_error_log) {
+TEST_F(OlapTableSinkTest, test_decimalv3_error_log) {
     _test_error_log(
             TYPE_DECIMAL64, 2, 2, 1,
             [](Column* col) {

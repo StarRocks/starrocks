@@ -26,7 +26,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/chunk_helper.h"

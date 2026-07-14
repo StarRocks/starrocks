@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "data_sink/tablet/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 #include "exec_primitive/async_data_sink.h"
 
 namespace starrocks {
