@@ -321,8 +321,8 @@ bool tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const Tup
 namespace {
 // Defensive caps applied to an untrusted range before any per-value decoding, to bound allocation.
 constexpr int kMaxRangeSortKeyArity = 128;
-constexpr int64_t kMaxRangeValueBytes = 16LL * 1024 * 1024;  // per value
-constexpr int64_t kMaxRangeTotalBytes = 64LL * 1024 * 1024;  // whole range (both bounds)
+constexpr int64_t kMaxRangeValueBytes = 16LL * 1024 * 1024; // per value
+constexpr int64_t kMaxRangeTotalBytes = 64LL * 1024 * 1024; // whole range (both bounds)
 } // namespace
 
 Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, const TabletSchema& new_schema) {
@@ -359,8 +359,7 @@ Status TabletRangeHelper::validate_range_structural(const TabletRangePB& range, 
             }
             total_bytes += static_cast<int64_t>(v.value().size());
             if (total_bytes > kMaxRangeTotalBytes) {
-                return Status::Corruption(
-                        fmt::format("range total value bytes exceed cap {}", kMaxRangeTotalBytes));
+                return Status::Corruption(fmt::format("range total value bytes exceed cap {}", kMaxRangeTotalBytes));
             }
             if (!v.has_type()) {
                 return Status::Corruption(fmt::format("range {} value {} is missing a type", which, i));
@@ -459,8 +458,10 @@ Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_
         }
         return Status::OK();
     };
-    RETURN_IF_ERROR(check_bound(old_range.has_lower_bound(), old_range.lower_bound(), new_range.lower_bound(), "lower"));
-    RETURN_IF_ERROR(check_bound(old_range.has_upper_bound(), old_range.upper_bound(), new_range.upper_bound(), "upper"));
+    RETURN_IF_ERROR(
+            check_bound(old_range.has_lower_bound(), old_range.lower_bound(), new_range.lower_bound(), "lower"));
+    RETURN_IF_ERROR(
+            check_bound(old_range.has_upper_bound(), old_range.upper_bound(), new_range.upper_bound(), "upper"));
     return Status::OK();
 }
 

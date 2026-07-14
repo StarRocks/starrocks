@@ -2012,7 +2012,8 @@ TEST_F(LakeRowsetTest, test_seek_range_trailing_sortkey_add_uses_current_schema)
     // applies the tablet range while merging, yielding a private output rowset with the two
     // in-range rows. Reading that output must still return the same two rows.
     int64_t compact_txn = next_id();
-    auto input_rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    auto input_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
     auto ctx = std::make_unique<CompactionTaskContext>(compact_txn, metadata->id(), metadata->version(),
                                                        /*force_base_compaction=*/false,
                                                        /*skip_write_txnlog=*/false, nullptr);
