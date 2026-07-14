@@ -2667,10 +2667,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
-                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
-                                           PrimaryKeyParam{true, PersistentIndexTypePB::LOCAL,
-                                                           PartialUpdateMode::ROW_MODE, true},
+                         ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
                                                            PartialUpdateMode::ROW_MODE, true}));
 

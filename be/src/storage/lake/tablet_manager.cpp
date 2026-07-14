@@ -292,6 +292,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
     auto compession_level = req.__isset.compression_level ? req.compression_level : -1;
     tablet_metadata_pb->mutable_schema()->set_compression_level(compession_level);
+    // Shared-data primary-key tablets only support the cloud-native persistent index. Normalize
+    // here too (not just on load) so a create request never persists LOCAL/in-memory flags that
+    // downstream cloud-native code paths would then read as stale.
+    force_cloud_native_pk_persistent_index(tablet_metadata_pb.get());
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
@@ -416,6 +420,9 @@ StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet
             }
         }
     }
+    // Shared-data primary-key tablets only support the cloud-native persistent index; keep the
+    // initial metadata consistent with that invariant regardless of what the FE sent.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     // flat json config
     if (meta.__isset.flat_json_config) {
@@ -1020,6 +1027,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
         item.CopyFrom(schema_it->second);
     }
+
+    // The schema was stripped from the bundle and only restored above, so the earlier
+    // normalize_tablet_metadata_after_load() could not tell this was a primary-key tablet.
+    // Re-apply the cloud-native persistent index normalization now that keys_type is known.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     for (auto& [_, schema_id] : metadata->rowset_to_schema()) {
         schema_it = bundle_metadata->schemas().find(schema_id);
