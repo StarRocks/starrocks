@@ -10081,7 +10081,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 key = metaKeyContext.getText();
             }
-            String alias = ((Identifier) visit(itemContext.alias)).getValue();
+            String alias = itemContext.alias == null ? key : ((Identifier) visit(itemContext.alias)).getValue();
             items.add(new ImportMetadataStmt.Item(key, alias, createPos(itemContext)));
         }
         return new ImportMetadataStmt(items, createPos(context));
