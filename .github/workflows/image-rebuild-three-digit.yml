@@ -46,6 +46,8 @@ jobs:
     if: github.event.pull_request.merged == true
     outputs:
       thirdparty: ${{ steps.filter-info.outputs.thirdparty }}
+      centos7: ${{ steps.distro.outputs.centos7 }}
+      rocky9: ${{ steps.distro.outputs.rocky9 }}
     steps:
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -68,6 +70,24 @@ jobs:
           fi
           echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
+      - name: Decide distros by version
+        id: distro
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # rocky9 replaces centos7 from 4.2 onward (CentOS 7 EOL):
+          #   < 4.2  -> ubuntu + centos7
+          #   >= 4.2 -> ubuntu + rocky9
+          # Without this, a three-digit branch promotes a distro whose per-PR
+          # source image was never built (e.g. rocky9 on branch-4.1.x), and
+          # elastic-update-image.sh's `imagetools create` fails with "not found".
+          ver=${BASE_REF#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+          if (( major > 4 || (major == 4 && minor >= 2) )); then
+            echo "centos7=false" >> $GITHUB_OUTPUT; echo "rocky9=true"  >> $GITHUB_OUTPUT
+          else
+            echo "centos7=true"  >> $GITHUB_OUTPUT; echo "rocky9=false" >> $GITHUB_OUTPUT
+          fi
+
   thirdparty-update-image:
     needs: thirdparty-filter
     runs-on: [self-hosted, normal]
@@ -89,11 +109,13 @@ jobs:
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
 
       - name: update image - centos7
+        if: needs.thirdparty-filter.outputs.centos7 == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
 
       - name: update image - rocky9
+        if: needs.thirdparty-filter.outputs.rocky9 == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
