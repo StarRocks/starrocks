@@ -22,6 +22,8 @@
 #include "data_sink/result/result_sink.h"
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
+#include "exec/data_sinks/hive_sink_builder.h"
+#include "exec/data_sinks/table_function_sink_builder.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -51,6 +53,10 @@
 #include "gen_cpp/Partitions_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+
+#ifndef __APPLE__
+#include "exec/data_sinks/iceberg_sink_builder.h"
+#endif
 
 namespace starrocks {
 
@@ -379,6 +385,21 @@ Status PipelineSinkBuilder::build(PipelineBuilderContext* context, OpFactories u
                 context->next_operator_id(), row_desc, output_exprs, fragment_ctx));
         context->add_pipeline(upstream);
         return Status::OK();
+#ifndef __APPLE__
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
+        return IcebergSinkBuilder(output_exprs).build(std::move(upstream), thrift_sink, context);
+#else
+    case TDataSinkType::ICEBERG_TABLE_SINK:
+    case TDataSinkType::ICEBERG_DELETE_SINK:
+    case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
+        return Status::NotSupported("Iceberg table sink is disabled on macOS");
+#endif
+    case TDataSinkType::HIVE_TABLE_SINK:
+        return HiveSinkBuilder(output_exprs).build(std::move(upstream), thrift_sink, context);
+    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
+        return TableFunctionSinkBuilder(output_exprs).build(std::move(upstream), thrift_sink, context);
     case TDataSinkType::DICTIONARY_CACHE_SINK:
         if (!thrift_sink.__isset.dictionary_cache_sink) {
             return Status::InternalError("Missing dictionary cache sink");

@@ -14,17 +14,11 @@
 
 #pragma once
 
-#include "connector/iceberg/iceberg_chunk_sink.h"
-#include "connector/iceberg/iceberg_delete_sink.h"
-#include "connector/iceberg/iceberg_row_delta_sink.h"
-#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec_primitive/data_sink.h"
 
 namespace starrocks {
 
 class ExprContext;
-class IcebergTableDescriptor;
-struct TExprNode;
 
 class IcebergTableSink : public DataSink {
 public:
@@ -50,30 +44,6 @@ public:
                                  pipeline::PipelineBuilderContext* context) const;
 
 private:
-    // Helper function to update slot references using column_slot_map
-    Status update_partition_expr_slot_refs_by_map(std::vector<TExpr>& partition_expr,
-                                                  const std::unordered_map<std::string, TExprNode>& column_slot_map,
-                                                  const std::vector<std::string>& partition_source_column_names) const;
-
-    // Helper functions to create sink contexts
-    Status create_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                      pipeline::PipelineBuilderContext* context,
-                                      IcebergTableDescriptor* iceberg_table_desc,
-                                      std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                      std::vector<TExpr>& partition_expr) const;
-
-    Status create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                    pipeline::PipelineBuilderContext* context,
-                                    IcebergTableDescriptor* iceberg_table_desc,
-                                    std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                    std::vector<TExpr>& partition_expr) const;
-
-    Status create_row_delta_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                         pipeline::PipelineBuilderContext* context,
-                                         IcebergTableDescriptor* iceberg_table_desc,
-                                         std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                         std::vector<TExpr>& partition_expr) const;
-
     ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;

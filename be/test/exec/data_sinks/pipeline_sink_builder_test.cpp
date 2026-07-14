@@ -110,13 +110,48 @@ TEST_F(PipelineSinkBuilderTest, RejectsMissingSinkDescriptors) {
          {TDataSinkType::RESULT_SINK, TDataSinkType::DATA_STREAM_SINK, TDataSinkType::MULTI_CAST_DATA_STREAM_SINK,
           TDataSinkType::SPLIT_DATA_STREAM_SINK, TDataSinkType::OLAP_TABLE_SINK, TDataSinkType::MULTI_OLAP_TABLE_SINK,
           TDataSinkType::EXPORT_SINK, TDataSinkType::MYSQL_TABLE_SINK, TDataSinkType::MEMORY_SCRATCH_SINK,
-          TDataSinkType::DICTIONARY_CACHE_SINK}) {
+          TDataSinkType::DICTIONARY_CACHE_SINK, TDataSinkType::HIVE_TABLE_SINK,
+          TDataSinkType::TABLE_FUNCTION_TABLE_SINK}) {
         TDataSink sink;
         sink.__set_type(type);
 
         auto status = build(sink);
         EXPECT_FALSE(status.ok()) << type;
         EXPECT_NE(status.message().find("Missing"), std::string::npos) << type << ": " << status;
+    }
+}
+
+TEST_F(PipelineSinkBuilderTest, RejectsMalformedConnectorSinkDescriptors) {
+    THiveTableSink hive;
+    hive.__set_data_column_names({"c1"});
+    TDataSink hive_sink;
+    hive_sink.__set_type(TDataSinkType::HIVE_TABLE_SINK);
+    hive_sink.__set_hive_table_sink(hive);
+    auto hive_status = build(hive_sink);
+    EXPECT_FALSE(hive_status.ok());
+    EXPECT_NE(hive_status.message().find("more data columns than output expressions"), std::string::npos);
+
+    TTableFunctionTableSink table_function;
+    TDataSink table_function_sink;
+    table_function_sink.__set_type(TDataSinkType::TABLE_FUNCTION_TABLE_SINK);
+    table_function_sink.__set_table_function_table_sink(table_function);
+    auto table_function_status = build(table_function_sink);
+    EXPECT_FALSE(table_function_status.ok());
+    EXPECT_NE(table_function_status.message().find("Missing table function target table"), std::string::npos);
+}
+
+TEST_F(PipelineSinkBuilderTest, DispatchesIcebergSinksByPlatform) {
+    for (auto type : {TDataSinkType::ICEBERG_TABLE_SINK, TDataSinkType::ICEBERG_DELETE_SINK,
+                      TDataSinkType::ICEBERG_ROW_DELTA_SINK}) {
+        TDataSink sink;
+        sink.__set_type(type);
+        auto status = build(sink);
+#ifdef __APPLE__
+        EXPECT_TRUE(status.is_not_supported()) << type << ": " << status;
+#else
+        EXPECT_FALSE(status.ok()) << type;
+        EXPECT_NE(status.message().find("Missing iceberg table sink"), std::string::npos) << type << ": " << status;
+#endif
     }
 }
 

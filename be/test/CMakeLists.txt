@@ -6,7 +6,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector_sink/iceberg_table_sink_test.cpp
+        ./connector_sink/iceberg_sink_builder_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp

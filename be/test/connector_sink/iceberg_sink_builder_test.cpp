@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_sink_builder.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -39,7 +39,7 @@
 
 namespace starrocks {
 
-class IcebergTableSinkTest : public ::testing::Test {
+class IcebergSinkBuilderTest : public ::testing::Test {
 protected:
     void SetUp() override {
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
@@ -73,7 +73,7 @@ connector::IcebergRowDeltaSinkProvider* get_iceberg_row_delta_sink_provider(
 
 } // namespace
 
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
+TEST_F(IcebergSinkBuilderTest, build) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
@@ -108,13 +108,14 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
-    data_sink.iceberg_table_sink = iceberg_table_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_TABLE_SINK);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
     std::vector<starrocks::TExpr> exprs = {};
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -125,8 +126,8 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     EXPECT_EQ(sink_ctx->sort_ordering->sort_descs.descs.size(), 1);
 }
 
-// Test case for verifying the path construction logic in IcebergTableSink
-TEST_F(IcebergTableSinkTest, path_construction_logic) {
+// Test case for verifying the path construction logic in IcebergSinkBuilder
+TEST_F(IcebergSinkBuilderTest, path_construction_logic) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
@@ -160,10 +161,10 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
         std::vector<starrocks::TExpr> exprs = {};
-        IcebergTableSink sink(&_pool, exprs);
+        IcebergSinkBuilder sink(exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -184,10 +185,10 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
         std::vector<starrocks::TExpr> exprs = {};
-        IcebergTableSink sink(&_pool, exprs);
+        IcebergSinkBuilder sink(exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(2, 2)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -208,10 +209,10 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
         std::vector<starrocks::TExpr> exprs = {};
-        IcebergTableSink sink(&_pool, exprs);
+        IcebergSinkBuilder sink(exprs);
         pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(3, 3)};
 
-        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+        EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -225,7 +226,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
 }
 
 // Test update_partition_expr_slot_refs_by_map function
-TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map) {
+TEST_F(IcebergSinkBuilderTest, update_partition_expr_slot_refs_by_map) {
     std::vector<TExpr> partition_expr;
     std::vector<std::string> partition_source_column_names;
     std::unordered_map<std::string, TExprNode> column_slot_map;
@@ -250,7 +251,7 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map) {
 
     // Create sink instance (need a valid TExpr vector for constructor)
     std::vector<TExpr> output_exprs;
-    IcebergTableSink sink(&_pool, output_exprs);
+    IcebergSinkBuilder sink(output_exprs);
 
     // Execute the function
     ASSERT_OK(sink.update_partition_expr_slot_refs_by_map(partition_expr, column_slot_map,
@@ -264,7 +265,7 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map) {
 }
 
 // Test update_partition_expr_slot_refs_by_map with mismatched sizes
-TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_mismatched_sizes) {
+TEST_F(IcebergSinkBuilderTest, update_partition_expr_slot_refs_by_map_mismatched_sizes) {
     std::vector<TExpr> partition_expr;
     std::vector<std::string> partition_source_column_names;
     std::unordered_map<std::string, TExprNode> column_slot_map;
@@ -279,7 +280,7 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_mismatched_s
 
     // Create sink instance
     std::vector<TExpr> output_exprs;
-    IcebergTableSink sink(&_pool, output_exprs);
+    IcebergSinkBuilder sink(output_exprs);
 
     // Should return error for mismatched sizes
     auto st =
@@ -289,7 +290,7 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_mismatched_s
 }
 
 // Test update_partition_expr_slot_refs_by_map with missing column slot
-TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot) {
+TEST_F(IcebergSinkBuilderTest, update_partition_expr_slot_refs_by_map_missing_slot) {
     std::vector<TExpr> partition_expr;
     std::vector<std::string> partition_source_column_names;
     std::unordered_map<std::string, TExprNode> column_slot_map;
@@ -303,7 +304,7 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot
 
     // Create sink instance
     std::vector<TExpr> output_exprs;
-    IcebergTableSink sink(&_pool, output_exprs);
+    IcebergSinkBuilder sink(output_exprs);
 
     // Should return error for missing slot reference
     auto st =
@@ -312,8 +313,8 @@ TEST_F(IcebergTableSinkTest, update_partition_expr_slot_refs_by_map_missing_slot
     EXPECT_TRUE(st.message().find("Could not find slot reference for partition column: dt") != std::string::npos);
 }
 
-// Test decompose_to_pipeline with ICEBERG_DELETE_SINK type
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
+// Test build with ICEBERG_DELETE_SINK type
+TEST_F(IcebergSinkBuilderTest, build_delete_sink) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -353,22 +354,22 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     iceberg_table_sink.__set_target_table_id(0);
     iceberg_table_sink.__set_tuple_id(0);
     iceberg_table_sink.__set_data_location("s3://bucket/table/data/");
-    data_sink.iceberg_table_sink = iceberg_table_sink;
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
     std::vector<TExpr> exprs;
     // Add 2 expressions to match the slots
     TExpr expr1, expr2;
     exprs.push_back(expr1);
     exprs.push_back(expr2);
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 }
 
 // Test that row lineage columns are appended to column_names and parquet_field_ids
 // when output expressions have more columns than the table descriptor (compaction mode)
-TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
+TEST_F(IcebergSinkBuilderTest, row_lineage_columns_extended_during_compaction) {
     // Create tuple descriptor with 3 slots: c1 (user col) + _row_id + _last_updated_sequence_number
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
@@ -427,10 +428,10 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     exprs.push_back(expr1);
     exprs.push_back(expr2);
     exprs.push_back(expr3);
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -453,7 +454,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
 
 // Test that parquet_field_ids is extended even when column_names already includes
 // row lineage columns but iceberg_schema still only contains user columns.
-TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_already_present) {
+TEST_F(IcebergSinkBuilderTest, row_lineage_field_ids_extended_when_column_names_already_present) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
@@ -514,10 +515,10 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
     exprs.push_back(expr1);
     exprs.push_back(expr2);
     exprs.push_back(expr3);
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -534,7 +535,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
 
 // Test that sink schema is rebuilt from tuple/output columns when TIcebergTable.columns
 // still contains hidden metadata columns that are not written by compaction.
-TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_columns) {
+TEST_F(IcebergSinkBuilderTest, row_lineage_field_ids_ignore_non_written_hidden_columns) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
@@ -599,10 +600,10 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
     exprs.push_back(expr1);
     exprs.push_back(expr2);
     exprs.push_back(expr3);
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -640,7 +641,7 @@ TExpr make_slot_ref_expr(int slot_id, std::optional<TypeDescriptor> type = std::
 }
 } // namespace
 
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
+TEST_F(IcebergSinkBuilderTest, build_row_delta_update) {
     // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, c1].
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
@@ -693,10 +694,10 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -725,7 +726,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
 // enum), producing a childless ARRAY/MAP TypeDescriptor whose to_thrift() dereferenced
 // children[0] on an empty vector -> SIGSEGV in TypeDescriptor::to_thrift(). The fix
 // passes the full slot->type(), so children are preserved here.
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type) {
+TEST_F(IcebergSinkBuilderTest, build_row_delta_update_complex_type) {
     // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, c1 ARRAY<INT>].
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
@@ -779,11 +780,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(10, 10)};
 
     // Without the fix this call crashes (SIGSEGV) while building override_tuple_desc.
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -804,17 +805,17 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
     EXPECT_EQ(data_type.children[0].type, TYPE_INT);
 }
 
-// Drives mixed row-delta create_row_delta_sink_context() end-to-end via decompose_to_pipeline,
+// Drives mixed row-delta create_row_delta_sink_context() end-to-end via build,
 // then exercises IcebergRowDeltaSinkProvider::create_sink() on the
 // resulting context. Covers:
-//   - the row-delta dispatch branch in decompose_to_pipeline
+//   - the row-delta dispatch branch in build
 //   - IcebergConnector::create_sink_provider()
 //   - the bulk of create_row_delta_sink_context() (delete sub-context, data
 //     sub-context, override_tuple_desc, op_code_index, and the unpartitioned
 //     branch)
 //   - IcebergRowDeltaSinkProvider::create_sink() success path, which in
 //     turn drives IcebergDeleteSinkProvider and IcebergChunkSinkProvider
-TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
+TEST_F(IcebergSinkBuilderTest, build_row_delta) {
     // Tuple layout for a MERGE-style row-delta write: [_file, _pos, c1, op_code]
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
@@ -878,10 +879,10 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     std::vector<TExpr> exprs = {make_slot_ref_expr(0, TYPE_VARCHAR_DESC), make_slot_ref_expr(1, TYPE_BIGINT_DESC),
                                 make_slot_ref_expr(2, TYPE_INT_DESC), make_slot_ref_expr(3, TYPE_TINYINT_DESC)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(11, 11)};
 
-    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+    EXPECT_OK(sink.build(prev_operators, data_sink, context.get()));
 
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
@@ -931,7 +932,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
 // Tuple too short to be a row-delta layout. With only [_file, _pos]
 // the layout invariant `data_column_count >= 0` fails and the function
 // returns InternalError without touching downstream sub-context setup.
-TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
+TEST_F(IcebergSinkBuilderTest, row_delta_invalid_column_layout) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -971,15 +972,15 @@ TEST_F(IcebergTableSinkTest, row_delta_invalid_column_layout) {
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(12, 12)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = sink.build(prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
 }
 
-TEST_F(IcebergTableSinkTest, row_delta_mixed_requires_data_column_before_op_column) {
+TEST_F(IcebergSinkBuilderTest, row_delta_mixed_requires_data_column_before_op_column) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -1021,15 +1022,15 @@ TEST_F(IcebergTableSinkTest, row_delta_mixed_requires_data_column_before_op_colu
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(13, 13)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = sink.build(prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta layout has no data columns"));
 }
 
-TEST_F(IcebergTableSinkTest, row_delta_routing_column_must_be_tinyint) {
+TEST_F(IcebergSinkBuilderTest, row_delta_routing_column_must_be_tinyint) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto file_slot = slot_desc_builder.type(LogicalType::TYPE_VARCHAR)
@@ -1075,10 +1076,10 @@ TEST_F(IcebergTableSinkTest, row_delta_routing_column_must_be_tinyint) {
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2),
                                 make_slot_ref_expr(3)};
 
-    IcebergTableSink sink(&_pool, exprs);
+    IcebergSinkBuilder sink(exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(14, 14)};
 
-    auto status = sink.decompose_to_pipeline(prev_operators, data_sink, context.get());
+    auto status = sink.build(prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta op column must be TINYINT"));
 }
