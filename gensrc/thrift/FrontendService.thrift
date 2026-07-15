@@ -919,6 +919,10 @@ struct TMasterOpResult {
     10:optional string sql_digest;
     // StarMgr max journal ID for shared-data mode follower sync
     11:optional i64 maxStarMgrJournalId;
+    // Table/view relations collected by Leader after analyze (fully-qualified, CTE excluded).
+    // Followers that forward the statement never analyze it locally, so they cannot resolve
+    // CTE aliases or qualify names; they reuse this list for the audit log instead.
+    12:optional list<string> queried_relations;
 }
 
 struct TIsMethodSupportedRequest {
