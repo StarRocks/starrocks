@@ -135,172 +135,31 @@ public class EditLog {
 
     private final BlockingQueue<JournalTask> journalQueue;
 
-    // WAL-apply fence (leader demotion). Guards, as one unit, the leader journal-write admission gate,
-    // the count of in-flight leader writes, and the first apply failure of this leader session. ALL four
-    // fields are accessed EXCLUSIVELY under editLogFenceLock (no lock-free reads). This fence lives here,
-    // not in GlobalStateMgr: the apply it protects (WALApplier.apply) runs in EditLog, and demotion drains
-    // it (awaitWalDrained) before sealing the journal writer. GlobalStateMgr's leader-role lifecycle only
-    // drives the gate open/closed via openWalGate/closeWalGate; it never shares this lock.
+    // WAL-apply fence (leader demotion). editLogFenceLock guards, as one unit, the leader journal-write
+    // admission gate (gateOpen), the count of in-flight leader writes (inFlight), and the first apply failure
+    // of this leader session (applyFailure); all three are accessed EXCLUSIVELY under it (no lock-free reads).
+    // The fence lives here (not in GlobalStateMgr) because the apply it protects (WALApplier.apply) runs in
+    // EditLog and demotion drains it (awaitWalDrained) before sealing the journal writer. gateOpen is fixed at
+    // construction for EditLogs that are never fenced (StarMgr, checkpoint, tests) and toggled by
+    // GlobalStateMgr for its own EditLog. The fence API is defined together below loadJournal, next to the
+    // log* write path that uses it.
     private final Object editLogFenceLock = new Object();
-    private boolean gateOpen = false;       // leader journal-write gate; open only while this node is the ACTIVE leader
-    private int inFlight = 0;               // count of ALL admitted (non-OP_STARMGR) writes not yet committed+applied
-    private Throwable applyFailure = null;  // first WALApplier.apply failure seen during this leader session
+    private boolean gateOpen;                // leader journal-write gate; open only while this node is the ACTIVE leader
+    private int inFlight = 0;                // count of ALL admitted writes not yet committed+applied
+    private Throwable applyFailure = null;   // first WALApplier.apply failure seen during this leader session
 
+    /** An EditLog whose WAL admission gate is always open (never fenced): StarMgr, checkpoint worker, tests. */
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
+        this(journalQueue, true);
+    }
+
+    /**
+     * @param gateOpen initial WAL admission gate state. GlobalStateMgr passes false and drives it open/closed
+     *                 across leader activation/demotion; every other caller passes true (never fenced).
+     */
+    public EditLog(BlockingQueue<JournalTask> journalQueue, boolean gateOpen) {
         this.journalQueue = journalQueue;
-    }
-
-    // ---- WAL-apply fence API (see the editLogFenceLock field comment) ----
-
-    /** Open the journal-write gate. Called by GlobalStateMgr on entering ACTIVE leadership. */
-    public void openWalGate() {
-        synchronized (editLogFenceLock) {
-            gateOpen = true;
-            applyFailure = null;
-            editLogFenceLock.notifyAll();
-        }
-    }
-
-    /** Close the gate. Called by GlobalStateMgr on leaving ACTIVE (activation begin/rollback, demotion begin/complete). */
-    public void closeWalGate() {
-        synchronized (editLogFenceLock) {
-            gateOpen = false;
-            editLogFenceLock.notifyAll();
-        }
-    }
-
-    /**
-     * Admit a leader write and register it in the fence. Returns true if the write is gated+counted (the
-     * caller MUST pair it with {@link #exitGate} in a finally); returns false for OP_STARMGR, which is never
-     * gated (StarMgr writes its own separate journal before this node becomes the global-state leader).
-     * The gate-check and the inFlight increment are one atomic step under editLogFenceLock, mutually
-     * exclusive with closeWalGate, so demotion's drain is lossless and converges.
-     */
-    private boolean enterGate(short op) throws JournalWriteException {
-        if (op == OperationType.OP_STARMGR) {
-            return false;
-        }
-        synchronized (editLogFenceLock) {
-            if (!gateOpen) {
-                throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
-                        "leader WAL gate is closed, submit log is not allowed");
-            }
-            inFlight++;
-            return true;
-        }
-    }
-
-    /** enterGate for the legacy no-throw callers: a closed gate surfaces as an unchecked IllegalStateException. */
-    private boolean enterGateUnchecked(short op) {
-        try {
-            return enterGate(op);
-        } catch (JournalWriteException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    /** Run the WALApplier under the fence: on failure record it (surfaced by awaitWalDrained) and rethrow. */
-    private void applyWithFence(WALApplier applier, Object obj) {
-        try {
-            applier.apply(obj);
-        } catch (Throwable t) {
-            recordApplyFailure(t);
-            throw t;
-        }
-    }
-
-    private void exitGate(boolean gated) {
-        if (!gated) {
-            return;
-        }
-        synchronized (editLogFenceLock) {
-            if (inFlight <= 0) {
-                throw new IllegalStateException("leader WAL fence underflow");
-            }
-            inFlight--;
-            editLogFenceLock.notifyAll();
-        }
-    }
-
-    // Package-private test accessor: current in-flight (admitted-but-not-yet-drained) leader write count.
-    int inFlightForTest() {
-        synchronized (editLogFenceLock) {
-            return inFlight;
-        }
-    }
-
-    /** Record the first WALApplier.apply failure; surfaced by awaitWalDrained -> fatal demotion. */
-    private void recordApplyFailure(Throwable t) {
-        synchronized (editLogFenceLock) {
-            if (applyFailure == null) {
-                applyFailure = t;
-            }
-        }
-    }
-
-    /**
-     * Wait until every admitted write's journal commit + apply has finished (inFlight -> 0). Called by
-     * demotion (GlobalStateMgr.sealJournalWriter) AFTER closeWalGate and BEFORE sealing the writer, so the
-     * writer is still alive to consume in-flight submits. FATAL on timeout or on any recorded apply failure:
-     * the caller lets the exception propagate to a clean process restart, because proceeding could seal past
-     * an unapplied write or leave a not-yet-consumed task orphaned.
-     */
-    public void awaitWalDrained(long timeoutMs) {
-        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
-        synchronized (editLogFenceLock) {
-            while (inFlight > 0) {
-                long remainingNs = deadlineNs - System.nanoTime();
-                if (remainingNs <= 0) {
-                    throw new IllegalStateException(
-                            "timed out waiting for leader WAL writes to drain. inFlight=" + inFlight);
-                }
-                try {
-                    TimeUnit.NANOSECONDS.timedWait(editLogFenceLock, remainingNs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("interrupted while waiting for leader WAL drain", e);
-                }
-            }
-            if (applyFailure != null) {
-                throw new IllegalStateException("leader WAL apply failed before demotion", applyFailure);
-            }
-        }
-    }
-
-    /**
-     * Serialize one op+payload and enqueue it. LOCK-FREE (outside editLogFenceLock): the caller has already
-     * registered the write via {@link #enterGate}. Blocks if the journal queue is full (backpressure). Throws
-     * InterruptedException so throw-path callers can react; no-throw callers retry via {@link #submitRawUninterruptibly}.
-     */
-    private JournalTask submitRaw(short op, Writable writable, long maxWaitIntervalMs) throws InterruptedException {
-        long startTimeNano = System.nanoTime();
-        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
-        try {
-            buffer.writeShort(op);
-            writable.write(buffer);
-        } catch (IOException | JsonParseException e) {
-            LOG.info("failed to serialize journal data", e);
-            throw new SerializeException("failed to serialize journal data");
-        }
-        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
-        this.journalQueue.put(task);
-        return task;
-    }
-
-    /** submitRaw for the legacy no-throw paths: retry the enqueue across spurious interrupts. */
-    private JournalTask submitRawUninterruptibly(short op, Writable writable, long maxWaitIntervalMs) {
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
-                }
-                return submitRaw(op, writable, maxWaitIntervalMs);
-            } catch (InterruptedException e) {
-                LOG.warn("failed to submit journal task, wait and retry {} times..: {}", cnt, e.toString());
-            }
-            cnt++;
-        }
+        this.gateOpen = gateOpen;
     }
 
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
@@ -1517,27 +1376,193 @@ public class EditLog {
         }
     }
 
+    // ---- WAL-apply fence API (see the editLogFenceLock field comment) ----
+
+    /** Open the journal-write gate. Called by GlobalStateMgr when this node enters ACTIVE leadership. */
+    public void openWalGate() {
+        synchronized (editLogFenceLock) {
+            gateOpen = true;
+            applyFailure = null;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    /** Close the gate. Called by GlobalStateMgr when this node leaves ACTIVE leadership (demotion begin). */
+    public void closeWalGate() {
+        synchronized (editLogFenceLock) {
+            gateOpen = false;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    /**
+     * Admit a leader write and count it in the fence; the caller MUST pair it with {@link #exitGate} in a
+     * finally. The gate check and the inFlight increment are one atomic step under editLogFenceLock, mutually
+     * exclusive with closeWalGate, so demotion's drain is lossless. Throws ADMISSION_CLOSED when the gate is
+     * closed (this node is not the ACTIVE leader).
+     */
+    private void enterGate() throws JournalWriteException {
+        synchronized (editLogFenceLock) {
+            if (!gateOpen) {
+                throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
+                        "leader WAL gate is closed, submit log is not allowed");
+            }
+            inFlight++;
+        }
+    }
+
+    /** enterGate for the legacy no-throw callers: a closed gate surfaces as an unchecked IllegalStateException. */
+    private void enterGateUnchecked() {
+        try {
+            enterGate();
+        } catch (JournalWriteException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Run the WALApplier under the fence: on failure record it (surfaced by awaitWalDrained) and rethrow. */
+    private void applyWithFence(WALApplier applier, Object obj) {
+        try {
+            applier.apply(obj);
+        } catch (Throwable t) {
+            recordApplyFailure(t);
+            throw t;
+        }
+    }
+
+    private void exitGate() {
+        synchronized (editLogFenceLock) {
+            if (inFlight <= 0) {
+                throw new IllegalStateException("leader WAL fence underflow");
+            }
+            inFlight--;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    // Package-private test accessor: current in-flight (admitted-but-not-yet-drained) leader write count.
+    int inFlightForTest() {
+        synchronized (editLogFenceLock) {
+            return inFlight;
+        }
+    }
+
+    /** Record the first WALApplier.apply failure; surfaced by awaitWalDrained -> fatal demotion. */
+    private void recordApplyFailure(Throwable t) {
+        synchronized (editLogFenceLock) {
+            if (applyFailure == null) {
+                applyFailure = t;
+            }
+        }
+    }
+
+    /**
+     * Wait until every admitted write's journal commit + apply has finished (inFlight -> 0). Called by
+     * demotion (GlobalStateMgr.sealJournalWriter) AFTER closeWalGate and BEFORE sealing the writer, so the
+     * writer is still alive to consume in-flight submits. FATAL on timeout or on any recorded apply failure:
+     * the caller lets the exception propagate to a clean process restart, because proceeding could seal past
+     * an unapplied write or leave a not-yet-consumed task orphaned.
+     */
+    public void awaitWalDrained(long timeoutMs) {
+        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
+        synchronized (editLogFenceLock) {
+            while (inFlight > 0) {
+                long remainingNs = deadlineNs - System.nanoTime();
+                if (remainingNs <= 0) {
+                    throw new IllegalStateException(
+                            "timed out waiting for leader WAL writes to drain. inFlight=" + inFlight);
+                }
+                try {
+                    TimeUnit.NANOSECONDS.timedWait(editLogFenceLock, remainingNs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting for leader WAL drain", e);
+                }
+            }
+            if (applyFailure != null) {
+                throw new IllegalStateException("leader WAL apply failed before demotion", applyFailure);
+            }
+        }
+    }
+
+    /**
+     * Serialize one op+payload and enqueue it. LOCK-FREE (outside editLogFenceLock): the caller has already
+     * registered the write via {@link #enterGate}. Blocks if the journal queue is full (backpressure). Throws
+     * InterruptedException so throw-path callers can react; no-throw callers retry via {@link #submitRawUninterruptibly}.
+     */
+    private JournalTask submitRaw(short op, Writable writable, long maxWaitIntervalMs) throws InterruptedException {
+        long startTimeNano = System.nanoTime();
+        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+        try {
+            buffer.writeShort(op);
+            writable.write(buffer);
+        } catch (IOException | JsonParseException e) {
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
+        }
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
+        this.journalQueue.put(task);
+        return task;
+    }
+
+    /** submitRaw for the no-throw paths: retry the enqueue across spurious interrupts. */
+    private JournalTask submitRawUninterruptibly(short op, Writable writable, long maxWaitIntervalMs) {
+        int cnt = 0;
+        while (true) {
+            try {
+                if (cnt != 0) {
+                    Thread.sleep(1000);
+                }
+                return submitRaw(op, writable, maxWaitIntervalMs);
+            } catch (InterruptedException e) {
+                LOG.warn("failed to submit journal task, wait and retry {} times..: {}", cnt, e.toString());
+            }
+            cnt++;
+        }
+    }
+
+    /**
+     * Submit a gated journal entry and return its task WITHOUT waiting for the commit. The WAL fence is held
+     * until the task completes (commit or abort) and released via a one-shot completion callback, so a caller
+     * can wait for durability later (e.g. outside a lock) without leaking the fence. Use this for the rare
+     * "submit here, wait elsewhere" pattern; the common case is logEdit / logJsonObject which wait inline.
+     */
+    public JournalTask submitLogNoWait(short op, Writable writable) {
+        enterGateUnchecked();
+        boolean handedOff = false;
+        try {
+            JournalTask task = submitRawUninterruptibly(op, writable, -1);
+            task.setOnDone(this::exitGate);
+            handedOff = true;
+            return task;
+        } finally {
+            if (!handedOff) {
+                exitGate();
+            }
+        }
+    }
+
     /**
      * submit log to queue, wait for JournalWriter
      */
     public void logEdit(short op, Writable writable) {
-        boolean gated = enterGateUnchecked(op);
+        enterGateUnchecked();
         try {
             waitInfinity(submitRawUninterruptibly(op, writable, -1));
         } finally {
-            exitGate(gated);
+            exitGate();
         }
     }
 
     private void logEdit(short op, Writable writable, WALApplier walApplier) {
-        boolean gated = enterGateUnchecked(op);
+        enterGateUnchecked();
         try {
             waitWalCommitOrThrowUnchecked(submitRawUninterruptibly(op, writable, -1));
             if (walApplier != null) {
                 applyWithFence(walApplier, writable);
             }
         } finally {
-            exitGate(gated);
+            exitGate();
         }
     }
 
@@ -1549,14 +1574,14 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         };
-        boolean gated = enterGate(op);
+        enterGate();
         try {
             waitOrThrow(submitRaw(op, writable, -1), -1);
             if (applier != null) {
                 applyWithFence(applier, obj);
             }
         } finally {
-            exitGate(gated);
+            exitGate();
         }
     }
 
@@ -1579,14 +1604,14 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         };
-        boolean gated = enterGateUnchecked(op);
+        enterGateUnchecked();
         try {
             waitWalCommitOrThrowUnchecked(submitRawUninterruptibly(op, writable, -1));
             if (applier != null) {
                 applyWithFence(applier, obj);
             }
         } finally {
-            exitGate(gated);
+            exitGate();
         }
     }
 
@@ -1839,29 +1864,14 @@ public class EditLog {
     }
 
     public JournalTask logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        short op = OperationType.OP_FINISH_CONSISTENCY_CHECK_V2;
-        // The caller submits under a db lock but waits for durability out of the lock (EditLog.waitInfinity),
-        // so we cannot exit the WAL admission fence inline. Enter it here and release it when the task
-        // actually commits/aborts, via a one-shot completion callback on the returned task.
-        boolean gated = enterGateUnchecked(op);
-        boolean handedOff = false;
-        try {
-            JournalTask task = submitRawUninterruptibly(op, new Writable() {
-                @Override
-                public void write(DataOutput out) throws IOException {
-                    Text.writeString(out, GsonUtils.GSON.toJson(info));
-                }
-            }, -1);
-            if (gated) {
-                task.setOnDone(() -> exitGate(true));
+        // Submitted under a db lock but waited on outside it (EditLog.waitInfinity), so use the deferred-wait
+        // submit that releases the WAL fence at durability rather than inline.
+        return submitLogNoWait(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(info));
             }
-            handedOff = true;
-            return task;
-        } finally {
-            if (gated && !handedOff) {
-                exitGate(true);
-            }
-        }
+        });
     }
 
     public void logAddComputeNode(ComputeNode computeNode, WALApplier applier) {
@@ -2358,8 +2368,9 @@ public class EditLog {
     }
 
     public JournalTask logStarMgrOperationNoWait(StarMgrJournal journal) {
-        // OP_STARMGR uses a separate journal system and is not gated by the leader WAL fence; submit directly.
-        return submitRawUninterruptibly(OperationType.OP_STARMGR, journal, -1);
+        // StarMgr's own EditLog is constructed gate-open, so this uses the same deferred-wait submit as any
+        // other no-wait write; the fence is released when the returned task completes.
+        return submitLogNoWait(OperationType.OP_STARMGR, journal);
     }
 
     public void logCreateUser(CreateUserInfo info, WALApplier walApplier) {

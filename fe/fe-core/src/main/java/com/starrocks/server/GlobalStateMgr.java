@@ -363,10 +363,11 @@ public class GlobalStateMgr {
     private volatile FrontendNodeType pendingDemotionTargetType;
     private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
     private volatile boolean leaderBootstrapActionsDone = false;
-    // Guards leader-role lifecycle transitions (leaderRoleState / leaderWorkAdmissionOpen / activeLeaderLease
-    // / leaderGeneration). The WAL-apply fence itself now lives in EditLog (editLogFenceLock); this lock only
-    // drives the lifecycle state machine and toggles editLog's WAL admission gate at the right transitions.
-    private final Object leaderLifecycleLock = new Object();
+    // Leader-role lifecycle fields (leaderRoleState / leaderWorkAdmissionOpen / activeLeaderLease /
+    // leaderGeneration / pendingDemotionTargetType) are each volatile/atomic and are transitioned only by the
+    // begin/publish/rollback/complete methods below, which run exclusively on the single-threaded
+    // StateChangeExecutor (one FE-type transition at a time). Transitions are therefore never concurrent and
+    // need no dedicated lock; the WAL-apply fence itself lives in EditLog (editLogFenceLock).
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -1318,7 +1319,7 @@ public class GlobalStateMgr {
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
-        editLog = new EditLog(journalQueue);
+        editLog = new EditLog(journalQueue, false);
     }
 
     // wait until FE is ready.
@@ -1522,41 +1523,38 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void beginLeaderActivation() {
-        synchronized (leaderLifecycleLock) {
-            leaderWorkAdmissionOpen.set(false);
-            activeLeaderLease = LeaderLease.INVALID;
-            pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.ACTIVATING);
-        }
-        // No leader writes are admitted until publishLeaderLease opens the gate at the end of activation.
-        closeEditLogWalGate();
+        // The WAL admission gate is already closed here: this node reaches activation only from INACTIVE
+        // (fresh, or after a demotion/rollback that closed it), so it need not be closed again.
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
     }
 
     @VisibleForTesting
     void publishLeaderLease(long haEpoch) {
-        synchronized (leaderLifecycleLock) {
-            Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
-            Preconditions.checkState(feType == FrontendNodeType.LEADER,
-                    "can only publish leader lease when FE type is LEADER, actual: %s", feType);
-            Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
-                    "can only publish leader lease during activation, actual state: %s", leaderRoleState);
-            long generation = leaderGeneration.incrementAndGet();
-            activeLeaderLease = new LeaderLease(haEpoch, generation);
-            leaderWorkAdmissionOpen.set(true);
-            pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.ACTIVE);        }
+        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+        Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+        long generation = leaderGeneration.incrementAndGet();
+        activeLeaderLease = new LeaderLease(haEpoch, generation);
+        leaderWorkAdmissionOpen.set(true);
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVE);
         // Open the WAL admission gate last, once the node is fully ACTIVE, so leader writes are accepted.
         openEditLogWalGate();
     }
 
     @VisibleForTesting
     void rollbackLeaderActivation() {
-        synchronized (leaderLifecycleLock) {
-            leaderWorkAdmissionOpen.set(false);
-            activeLeaderLease = LeaderLease.INVALID;
-            pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.INACTIVE);        }
-        closeEditLogWalGate();
+        // Rollback only happens during ACTIVATING, before publishLeaderLease opens the gate, so the gate is
+        // still closed and need not be closed again.
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
     }
 
     @VisibleForTesting
@@ -1595,26 +1593,24 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void beginLeaderDemotion(FrontendNodeType targetType) {
-        synchronized (leaderLifecycleLock) {
-            leaderWorkAdmissionOpen.set(false);
-            leaderGeneration.incrementAndGet();
-            activeLeaderLease = LeaderLease.INVALID;
-            pendingDemotionTargetType = targetType;
-            updateLeaderRoleState(LeaderRoleState.DEMOTING);        }
-        // Close the WAL admission gate as the first demotion step: no new leader writes are admitted, so the
-        // in-flight count can only decrease before sealJournalWriter drains and seals.
+        leaderWorkAdmissionOpen.set(false);
+        leaderGeneration.incrementAndGet();
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = targetType;
+        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+        // Close the WAL admission gate as the first demotion step (the only open -> closed transition): no
+        // new leader writes are admitted, so the in-flight count can only decrease before the seal drains it.
         closeEditLogWalGate();
     }
 
     @VisibleForTesting
     void completeLeaderDemotion() {
-        synchronized (leaderLifecycleLock) {
-            leaderWorkAdmissionOpen.set(false);
-            activeLeaderLease = LeaderLease.INVALID;
-            pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.INACTIVE);        }
-        closeEditLogWalGate();
-        // Reset the leader-session domination clock; this node is no longer the leader.
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+        // Reset the leader-session domination clock; this node is no longer the leader. The WAL gate was
+        // already closed by beginLeaderDemotion at the start of demotion.
         dominationStartTimeMs = 0L;
     }
 
@@ -2106,10 +2102,9 @@ public class GlobalStateMgr {
             return;
         }
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        // Close the WAL admission gate (idempotent with beginLeaderDemotion) so no new leader writes are
-        // admitted, then flip the writer out of RUNNING so a commit failure/interrupt during the drain is a
-        // graceful abort rather than a process exit.
-        closeEditLogWalGate();
+        // The WAL admission gate was already closed by beginLeaderDemotion (demotion stage 1). Flip the
+        // writer out of RUNNING so a commit failure/interrupt during the drain is a graceful abort rather
+        // than a process exit.
         journalWriter.beginSeal();
         // Drain every in-flight leader write (queue put + journal commit + WAL apply). When this returns the
         // in-flight count is zero, which implies the journal queue is empty and all writes are committed.

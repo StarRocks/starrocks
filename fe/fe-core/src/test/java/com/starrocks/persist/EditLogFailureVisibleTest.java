@@ -33,9 +33,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Covers the EditLog leader WAL-apply fence: the write-admission gate (open/close), the count-all in-flight
- * accounting, the WALApplier hook, and the demotion drain (awaitWalDrained). The gate/fence lives entirely in
- * EditLog now, so these tests drive it directly via openWalGate/closeWalGate with no GlobalStateMgr state.
+ * Covers the EditLog leader WAL-apply fence: the write-admission gate (open/close, fixed-open by
+ * construction), the count-all in-flight accounting, the WALApplier hook, and the demotion drain
+ * (awaitWalDrained). The gate/fence lives entirely in EditLog, so these tests drive it directly via the
+ * constructor gate state and openWalGate/closeWalGate, with no GlobalStateMgr state.
  */
 public class EditLogFailureVisibleTest {
 
@@ -43,8 +44,7 @@ public class EditLogFailureVisibleTest {
 
     @Test
     public void testGatedWriteRejectedWhenGateClosed() {
-        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-        // gate is closed by default (this node is not the ACTIVE leader)
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), false);
         JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
                 () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
         Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, e.getReason());
@@ -52,9 +52,8 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testGatedWriteRejectedAfterGateClosedAgain() {
-        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-        editLog.openWalGate();
+    public void testGatedWriteRejectedAfterCloseWalGate() {
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
         editLog.closeWalGate();
         JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
                 () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
@@ -62,13 +61,13 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testStarMgrWriteBypassesClosedGate() throws Exception {
+    public void testGateOpenByConstructorAdmitsWrites() throws Exception {
+        // An EditLog constructed gate-open (StarMgr, checkpoint, tests) admits writes with no openWalGate call.
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        // gate closed, but OP_STARMGR uses a separate journal system and is never gated/counted
+        EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
         Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObjectOrThrow(OperationType.OP_STARMGR, "payload", obj -> applied.set(true));
+        editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true));
         consumer.join();
         Assertions.assertTrue(applied.get());
         Assertions.assertEquals(0, editLog.inFlightForTest());
@@ -79,8 +78,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testNoApplierGatedWriteIsCounted() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
 
         // a plain write with no WALApplier is still admitted through the gate and counted (count-all)
         Thread writer = new Thread(() -> editLog.logJsonObject((short) 1, "payload"));
@@ -101,8 +99,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testGatedWriteAppliesOnSuccess() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread consumer = succeedQueuedTaskAsync(queue);
@@ -116,8 +113,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testGatedWriteDoesNotApplyOnAbortAndReleasesFence() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread consumer = abortQueuedTaskAsync(queue);
@@ -133,8 +129,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testOrThrowAppliesOnSuccess() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread consumer = succeedQueuedTaskAsync(queue);
@@ -148,8 +143,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testOrThrowDoesNotApplyOnAbort() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread consumer = abortQueuedTaskAsync(queue);
@@ -164,8 +158,7 @@ public class EditLogFailureVisibleTest {
 
     @Test
     public void testSerializeFailureReleasesFence() {
-        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
 
         Assertions.assertThrows(SerializeException.class,
                 () -> editLog.logEdit((short) 1, new Writable() {
@@ -181,7 +174,7 @@ public class EditLogFailureVisibleTest {
 
     @Test
     public void testAwaitWalDrainedReturnsImmediatelyWhenNoInFlight() {
-        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
         editLog.awaitWalDrained(1000L);
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
@@ -189,8 +182,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testAwaitWalDrainedWaitsForInFlightThenReturns() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
 
         Thread writer = new Thread(() -> editLog.logJsonObject((short) 1, "payload"));
         writer.setDaemon(true);
@@ -211,8 +203,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testAwaitWalDrainedTimesOutWhenInFlightStuck() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
 
         Thread writer = new Thread(() -> {
             try {
@@ -237,8 +228,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testAwaitWalDrainedSurfacesApplyFailure() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
 
         RuntimeException boom = new RuntimeException("apply boom");
         Thread consumer = succeedQueuedTaskAsync(queue);
@@ -258,8 +248,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testOpenGateClearsPriorApplyFailure() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
 
         RuntimeException boom = new RuntimeException("apply boom");
         Thread consumer = succeedQueuedTaskAsync(queue);

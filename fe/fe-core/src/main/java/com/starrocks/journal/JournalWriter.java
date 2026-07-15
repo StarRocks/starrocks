@@ -152,8 +152,9 @@ public class JournalWriter {
      * guarantees the journal queue is empty here.
      */
     public long close(long timeoutMs) {
-        // Ensure the writer is out of RUNNING so stopDaemon's interrupt is a graceful stop, not a process exit.
-        beginSeal();
+        // Flip out of RUNNING (if still running) so stopDaemon's interrupt is a graceful stop rather than the
+        // RUNNING-state process exit in runOneCycle.
+        writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
         stopDaemon(timeoutMs);
         writerState.set(WriterState.CLOSED);
         Preconditions.checkState(journalQueue.isEmpty(),

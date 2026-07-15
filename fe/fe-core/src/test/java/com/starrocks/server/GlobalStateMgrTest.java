@@ -473,8 +473,7 @@ public class GlobalStateMgrTest {
         globalStateMgr.setJournalWriterForTest(writer);
 
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(8);
-        EditLog editLog = new EditLog(queue);
-        editLog.openWalGate();
+        EditLog editLog = new EditLog(queue, true);
         globalStateMgr.setEditLog(editLog);
 
         // an admitted but not-yet-committed leader write keeps the WAL fence in-flight
