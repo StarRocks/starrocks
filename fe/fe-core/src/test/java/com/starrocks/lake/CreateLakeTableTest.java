@@ -49,6 +49,7 @@ import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
 import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletMetadataRequest;
 import com.starrocks.thrift.TGetTabletMetadataResponse;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletRange;
 import com.starrocks.utframe.UtFrameUtils;
@@ -305,6 +306,25 @@ public class CreateLakeTableTest {
 
             Assertions.assertNotEquals(0, resultSet.getResultRows().size());
         }
+    }
+
+    @Test
+    public void testGsonPostProcessNormalizesLegacyLocalPkIndex() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.legacy_local_pk\n" +
+                        "(c0 int, c1 string)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 1;"));
+        LakeTable lakeTable = getLakeTable("lake_test", "legacy_local_pk");
+        // Simulate a table created before the cloud-native-only restriction: force its FE metadata
+        // back to the deprecated LOCAL persistent index.
+        lakeTable.setEnablePersistentIndex(true);
+        lakeTable.setPersistentIndexType(TPersistentIndexType.LOCAL);
+        Assertions.assertEquals(TPersistentIndexType.LOCAL, lakeTable.getPersistentIndexType());
+        // A metadata reload (gsonPostProcess) must upgrade it back to the cloud-native index.
+        lakeTable.gsonPostProcess();
+        Assertions.assertTrue(lakeTable.enablePersistentIndex());
+        Assertions.assertEquals(TPersistentIndexType.CLOUD_NATIVE, lakeTable.getPersistentIndexType());
     }
 
     @Test

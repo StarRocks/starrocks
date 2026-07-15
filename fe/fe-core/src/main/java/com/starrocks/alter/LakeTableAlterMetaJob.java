@@ -130,6 +130,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                     String.valueOf(persistentIndexType));
             table.getTableProperty().buildPersistentIndexType();
+            if (isReplay) {
+                // Replaying a legacy alter log is metadata-only (no BE task is sent) and could
+                // re-apply a disabled/LOCAL persistent index, undoing the image-load migration in
+                // OlapTable.gsonPostProcess(). Re-normalize shared-data primary-key tables to the
+                // cloud-native index. On the live path we intentionally leave the values as-is so the
+                // FE catalog stays consistent with the BE task payload that was already built from
+                // them; the BE independently normalizes tablet metadata on load.
+                table.normalizeCloudNativePersistentIndex();
+            }
         }
         if (metaType == TTabletMetaType.ENABLE_FILE_BUNDLING) {
             table.setFileBundling(enableFileBundling);
