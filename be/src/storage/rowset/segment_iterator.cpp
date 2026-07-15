@@ -136,14 +136,10 @@ public:
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
-<<<<<<< HEAD
     Status init() override { return _init(); }
 
-    // Public entry point used by segment_seek_range_to_rowid_range(). The caller
-=======
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
->>>>>>> bd401961870... [Enhancement] Make the segment iterator reusable across scans (#76340)
     // must ensure the segment's short-key index has already been loaded; this
     // does not touch any other iterator state, so it is safe to invoke before
     // do_init() / do_get_next().
