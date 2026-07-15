@@ -827,6 +827,55 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     EXPECT_EQ(0, tablet_ranges.size());
 }
 
+// A flush_pk_memtable failure during an identical-tablet reshard must propagate out of
+// publish_resharding_tablet rather than copying stale, unflushed metadata onto the new tablet.
+TEST_F(LakeTabletReshardTest, test_identical_tablet_flush_failure_propagates) {
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+
+    auto* rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_0.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(3);
+    }
+    rowset_meta_pb->set_data_size(512);
+    rowset_meta_pb->set_num_rows(3);
+    metadata.mutable_sstable_meta()->add_sstables()->set_filename("test.sst");
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_for_identical;
+    auto& identical_tablet = *resharding_tablet_for_identical.mutable_identical_tablet_info();
+    identical_tablet.set_old_tablet_id(tablet_id);
+    identical_tablet.set_new_tablet_id(next_id());
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    // Force the PK-index flush to fail so we exercise handle_identical_tablet's error path.
+    // Disable the blanket skip first; restore both before asserting.
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto res =
+            lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet_for_identical, metadata.version(),
+                                            metadata.version() + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+
+    set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+
+    EXPECT_FALSE(res.ok());
+}
+
 // Phase-1 per-segment shared (end-to-end). After splitting a rowset whose two
 // segments occupy disjoint key ranges, each child keeps only its overlapping
 // segment, marks it private (shared=false), drops the sibling's segment,
