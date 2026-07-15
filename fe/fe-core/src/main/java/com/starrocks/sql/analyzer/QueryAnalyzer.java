@@ -712,6 +712,7 @@ public class QueryAnalyzer {
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
                 }
+                table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
                 Relation r;
                 if (table instanceof View) {
