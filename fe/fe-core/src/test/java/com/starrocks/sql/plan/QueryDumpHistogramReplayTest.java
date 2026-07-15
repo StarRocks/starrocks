@@ -14,11 +14,18 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -123,5 +130,51 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
         ColumnStatistic orderKey = lineitemStats.get("l_orderkey");
         Assertions.assertNotNull(orderKey, "l_orderkey column statistic should exist");
         Assertions.assertNull(orderKey.getHistogram(), "l_orderkey should have no histogram");
+    }
+
+    @Test
+    public void testDesensitizedDumpDoesNotLeakHistogramMcv() throws Exception {
+        // A histogram's MCV holds raw column values. On the desensitized dump path the histogram must not
+        // reach the output at all: column_histogram is skipped, and column_statistics must render the base
+        // statistic only (ColumnStatistic.toString() would otherwise emit the MCV preview).
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.withDatabase("hist_leak_db").useDatabase("hist_leak_db");
+        starRocksAssert.withTable("CREATE TABLE t_hist (k1 int, k2 date) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("hist_leak_db", "t_hist");
+
+        Histogram histogram = new Histogram(Lists.newArrayList(new Bucket(1.0, 10.0, 100L, 5L)),
+                ImmutableMap.of("SENSITIVE_MCV_VALUE", 50L));
+        ColumnStatistic stat = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4)
+                .setDistinctValuesCount(10).setHistogram(histogram).build();
+
+        QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+        dumpInfo.addTable("hist_leak_db", table);
+        dumpInfo.setOriginStmt("select * from hist_leak_db.t_hist");
+        // Analyze the statement so the desensitizer's collector can resolve table/column names.
+        dumpInfo.setStatement(UtFrameUtils.parseStmtWithNewParser("select * from hist_leak_db.t_hist", connectContext));
+        dumpInfo.addTableStatistics(table, "k1", stat);
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpSerializer())
+                .create();
+
+        // Non-desensitized dump: the full histogram (including its MCV) is emitted in column_histogram.
+        String normalDump = gson.toJson(dumpInfo, QueryDumpInfo.class);
+        Assertions.assertTrue(normalDump.contains("column_histogram"),
+                "non-desensitized dump should carry column_histogram");
+        Assertions.assertTrue(normalDump.contains("SENSITIVE_MCV_VALUE"),
+                "non-desensitized dump carries the real MCV value");
+
+        // Desensitized dump: no histogram section, and the raw MCV value must not leak via column_statistics.
+        dumpInfo.setDesensitizedInfo(true);
+        String desensitizedDump = gson.toJson(dumpInfo, QueryDumpInfo.class);
+        Assertions.assertFalse(desensitizedDump.contains("column_histogram"),
+                "desensitized dump must not carry column_histogram");
+        Assertions.assertFalse(desensitizedDump.contains("MCV:"),
+                "desensitized dump must not carry the histogram MCV preview");
+        Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MCV_VALUE"),
+                "desensitized dump must not leak raw MCV values");
     }
 }

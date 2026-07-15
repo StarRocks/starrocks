@@ -284,9 +284,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                // Strip the histogram before rendering: ColumnStatistic.toString() would otherwise emit
+                // histogram.getMcvString(), leaking the raw top-MCV column values into the desensitized dump.
+                // The histogram is intentionally not serialized at all on the desensitized path.
                 columnStatistics.addProperty(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        columnEntry.getValue().toString()
+                        stripHistogram(columnEntry.getValue()).toString()
                 );
             }
             String[] splits = entry.getKey().split("\\.");
@@ -300,6 +303,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
         }
 
+    }
+
+    // Returns the statistic without its histogram, so ColumnStatistic.toString() renders the base stat only.
+    // Used on the desensitized path so histogram MCV values (raw column data) never reach the dump.
+    private static ColumnStatistic stripHistogram(ColumnStatistic columnStatistic) {
+        if (columnStatistic.getHistogram() == null) {
+            return columnStatistic;
+        }
+        return ColumnStatistic.buildFrom(columnStatistic).setHistogram(null).build();
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
