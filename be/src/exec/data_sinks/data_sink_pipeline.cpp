@@ -20,11 +20,8 @@
 #include "data_sink/exchange/data_stream_sender.h"
 #include "data_sink/external/blackhole_table_sink.h"
 #include "data_sink/external/export_sink.h"
-<<<<<<< HEAD
-#include "data_sink/result/remote_scan_result_sink.h"
-=======
 #include "data_sink/external/hive_table_sink.h"
->>>>>>> df0619405bb... [Refactor] Move Hive sink out of Exec (#76371)
+#include "data_sink/result/remote_scan_result_sink.h"
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
