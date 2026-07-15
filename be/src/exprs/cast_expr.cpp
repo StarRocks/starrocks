@@ -165,9 +165,10 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
 
-    // Reused across rows so the parser's Builder/Buffer is allocated once for the
-    // whole column instead of once per row.
-    auto json_parser = JsonValue::make_reusable_parser();
+    std::shared_ptr<vpack::Parser> json_parser;
+    if constexpr (lt_is_string<FromType> || lt_is_variant<FromType>) {
+        json_parser = JsonValue::make_reusable_parser();
+    }
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
