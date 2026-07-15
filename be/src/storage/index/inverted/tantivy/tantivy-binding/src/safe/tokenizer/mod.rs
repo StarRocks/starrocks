@@ -29,6 +29,9 @@ use tantivy::tokenizer::{
     Language, LowerCaser, RawTokenizer, RemoveLongFilter, SimpleTokenizer, StopWordFilter,
     TextAnalyzer,
 };
+// Note: LowerCaser is still imported for english_analyzer().
+// CJK and jieba handle lowercasing inline to avoid the overhead of
+// Unicode case-mapping on CJK characters that have no case.
 
 use crate::error::{Result, TantivyBindingError};
 use cjk_bigram::CjkBigramTokenizer;
@@ -44,11 +47,9 @@ pub const TOKENIZER_NAME: &str = "sr_default";
 pub fn build(name: &str) -> Result<TextAnalyzer> {
     match name {
         TOKENIZER_ENGLISH => Ok(english_analyzer()),
-        TOKENIZER_CJK => Ok(TextAnalyzer::builder(CjkBigramTokenizer)
-            .filter(LowerCaser)
+        TOKENIZER_CJK => Ok(TextAnalyzer::builder(CjkBigramTokenizer::default())
             .build()),
         TOKENIZER_JIEBA => Ok(TextAnalyzer::builder(JiebaTokenizer::default())
-            .filter(LowerCaser)
             .build()),
         TOKENIZER_RAW => Ok(TextAnalyzer::builder(RawTokenizer::default()).build()),
         other => Err(TantivyBindingError::InvalidArgument(format!(

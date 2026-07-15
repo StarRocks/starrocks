@@ -1742,12 +1742,57 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
-// Whether to swallow per-row tantivy write errors stored in
+// Whether to swallow per-row tantivy write errors stoeed in
 // `TantivyInvertedWriter::_error_status` so finish_compound still proceeds to
 // commit. Default false: a real tantivy add/commit failure should fail the
 // segment fast (and surface a clear error) instead of being silently
 // committed in a half-written state. Flip back to true only for debugging.
 CONF_mBool(tantivy_ignore_write_error, "false");
 CONF_String(tantivy_index_local_tmp_dir, "tmp/tantivy_tmp");
+
+// tantivy IndexWriter memory budget per writer (bytes). When buffered
+// postings exceed this threshold tantivy spills an internal segment.
+// Larger values reduce segment count (fewer merges, faster writes) at
+// the cost of higher per-writer memory usage.  Default 256 MB.
+CONF_mInt64(tantivy_writer_memory_budget_bytes, "268435456");
+
+// tantivy merge policy applied after commit.
+// Options: "default" (= LogMergePolicy), "no_merge" (skip merging entirely).
+// Use "no_merge" for write-once scenarios (StarRocks packs the temp dir
+// into a compound .idx immediately after commit, so merging is pure overhead
+// unless query-time multi-segment perf is critical).
+CONF_mString(tantivy_writer_merge_policy, "default");
+
+// Number of tantivy indexing worker threads per IndexWriter. 0 uses tantivy's
+// built-in default (1). Workers are submitted to the shared
+// `tantivy_index_build` thread pool rather than dedicated OS threads, so
+// raising this increases per-writer indexing concurrency while the total thread
+// count stays bounded by the pool. Row-id alignment is preserved at any value
+// because the BE row id is stored in an explicit tantivy FAST field.
+CONF_mInt32(tantivy_writer_num_threads, "1");
+
+// Max threads of the *elastic* build pool that runs tantivy indexing workers
+// (the tasks that turn incoming documents into in-memory segments). Indexing
+// workers are RESIDENT: each blocks on its document channel from writer creation
+// until commit, holding its thread the whole time, and blocks on a maintenance
+// task (add_segment) submitted to the separate merge pool. A resident task that
+// never gets a running thread deadlocks any thread that joins it (commit) or
+// feeds it (flush) — so this pool grows a thread per worker on demand (queue
+// size 0) and must never reject in practice. 0 means adaptive:
+// max(1024, cpu_cores * 16). Idle threads are reaped, so the resting thread
+// count returns to zero when no import is running. Raise only if the number of
+// concurrent (flush_threads * indexed_columns * tantivy_writer_num_threads) live
+// workers could exceed the adaptive cap.
+CONF_Int32(tantivy_index_build_thread_pool_num_threads, "0");
+
+// Size (max threads) of the bounded *merge* pool that runs tantivy's segment
+// lifecycle maintenance: the segment-updater serial queue (registering built
+// segments via add_segment) and background merges. 0 means adaptive sizing based
+// on CPU cores. These tasks are transient — each releases its slot on completion
+// and never blocks on another task in this pool — so a bounded pool always makes
+// progress while capping merge concurrency. Indexing workers are NOT run here;
+// see tantivy_index_build_thread_pool_num_threads above and the two-pool
+// rationale in tantivy_ffi_pool_bridge.cpp.
+CONF_Int32(tantivy_index_merge_thread_pool_num_threads, "0");
 
 } // namespace starrocks::config

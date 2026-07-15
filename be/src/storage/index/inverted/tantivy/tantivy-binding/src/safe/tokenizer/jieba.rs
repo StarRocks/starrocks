@@ -14,9 +14,13 @@
 
 //! Jieba dictionary-based Chinese segmentation.
 //!
+//! Streaming design: reuses a single `Token` buffer across the entire
+//! token stream, eliminating per-token `String` allocations. ASCII
+//! characters are lowercased inline so the `LowerCaser` filter is not
+//! needed.
+//!
 //! Constructed only via the `tokenizer::build` factory; visibility is
-//! `pub(super)` so callers cannot bypass the LowerCaser filter applied
-//! at factory time.
+//! `pub(super)` so callers cannot bypass the factory.
 
 use std::sync::Arc;
 
@@ -24,12 +28,14 @@ use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 
 pub(super) struct JiebaTokenizer {
     jieba: Arc<jieba_rs::Jieba>,
+    token: Token,
 }
 
 impl Clone for JiebaTokenizer {
     fn clone(&self) -> Self {
         Self {
             jieba: self.jieba.clone(),
+            token: Token::default(),
         }
     }
 }
@@ -38,56 +44,75 @@ impl Default for JiebaTokenizer {
     fn default() -> Self {
         Self {
             jieba: Arc::new(jieba_rs::Jieba::new()),
+            token: Token::default(),
         }
     }
 }
 
-pub(super) struct JiebaTokenStream {
-    tokens: Vec<Token>,
+pub(super) struct JiebaTokenStream<'a> {
+    /// Raw jieba output — borrows word slices from the input text.
+    words: Vec<jieba_rs::Token<'a>>,
+    text: &'a str,
     index: usize,
+    position: usize,
+    token: &'a mut Token,
 }
 
-impl TokenStream for JiebaTokenStream {
+impl TokenStream for JiebaTokenStream<'_> {
     fn advance(&mut self) -> bool {
-        if self.index < self.tokens.len() {
+        while self.index < self.words.len() {
+            let w = &self.words[self.index];
             self.index += 1;
-            true
-        } else {
-            false
+
+            if w.word.trim().is_empty() {
+                continue;
+            }
+
+            let byte_start = w.word.as_ptr() as usize - self.text.as_ptr() as usize;
+            let byte_end = byte_start + w.word.len();
+
+            // Reuse the token buffer — no allocation.
+            self.token.text.clear();
+            // Inline lowercasing: ASCII chars are lowercased, CJK chars
+            // (and other non-ASCII) pass through unchanged.
+            for c in w.word.chars() {
+                if c.is_ascii() {
+                    self.token.text.push(c.to_ascii_lowercase());
+                } else {
+                    self.token.text.push(c);
+                }
+            }
+            self.token.offset_from = byte_start;
+            self.token.offset_to = byte_end;
+            self.token.position = self.position;
+            self.token.position_length = 1;
+            self.position += 1;
+            return true;
         }
+        false
     }
 
     fn token(&self) -> &Token {
-        &self.tokens[self.index - 1]
+        self.token
     }
 
     fn token_mut(&mut self) -> &mut Token {
-        &mut self.tokens[self.index - 1]
+        self.token
     }
 }
 
 impl Tokenizer for JiebaTokenizer {
-    type TokenStream<'a> = JiebaTokenStream;
+    type TokenStream<'a> = JiebaTokenStream<'a>;
 
     fn token_stream<'a>(&'a mut self, text: &'a str) -> Self::TokenStream<'a> {
         let words = self.jieba.tokenize(text, jieba_rs::TokenizeMode::Search, true);
-        let mut tokens = Vec::with_capacity(words.len());
-        let mut position = 0usize;
-        for w in &words {
-            if w.word.trim().is_empty() {
-                continue;
-            }
-            let byte_start = w.word.as_ptr() as usize - text.as_ptr() as usize;
-            let byte_end = byte_start + w.word.len();
-            tokens.push(Token {
-                offset_from: byte_start,
-                offset_to: byte_end,
-                position,
-                text: w.word.to_owned(),
-                position_length: 1,
-            });
-            position += 1;
+        self.token.reset();
+        JiebaTokenStream {
+            words,
+            text,
+            index: 0,
+            position: 0,
+            token: &mut self.token,
         }
-        JiebaTokenStream { tokens, index: 0 }
     }
 }

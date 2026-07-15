@@ -22,7 +22,7 @@ fn round_trip_create_add_commit_query() {
     let field = "title";
 
     let mut w =
-        IndexWriterWrapper::create(tmp.path(), field, "english").expect("create writer");
+        IndexWriterWrapper::create(tmp.path(), field, "english", true, true, 0, 0, "default").expect("create writer");
     w.add_strings_batch(&["hello world", "tantivy ffi", "starrocks integration"])
         .expect("add batch");
     w.commit().expect("commit");
@@ -43,11 +43,11 @@ fn create_fails_when_index_already_exists() {
     // pins that contract so a future tantivy version change is caught.
     let tmp = TempDir::new().expect("tempdir");
     let mut w =
-        IndexWriterWrapper::create(tmp.path(), "f", "english").expect("first create");
+        IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default").expect("first create");
     w.commit().expect("commit");
     drop(w);
 
-    let msg = match IndexWriterWrapper::create(tmp.path(), "f", "english") {
+    let msg = match IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default") {
         Ok(_) => panic!("second create over existing index must fail"),
         Err(e) => e.to_string(),
     };
@@ -65,7 +65,7 @@ fn commit_is_single_use() {
     // silently no-op'ing.
     let tmp = TempDir::new().expect("tempdir");
     let mut w =
-        IndexWriterWrapper::create(tmp.path(), "f", "english").expect("create");
+        IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default").expect("create");
     w.add_strings_batch(&["a", "b"]).expect("add ok");
     w.commit().expect("first commit");
 
@@ -87,7 +87,7 @@ fn commit_is_single_use() {
 #[test]
 fn null_placeholders_preserve_doc_id_alignment() {
     let tmp = TempDir::new().expect("tempdir");
-    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english").expect("create");
+    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default").expect("create");
     // Row 0 = "alpha", row 1 = NULL placeholder, row 2 = "alpha", row 3 = NULL.
     w.add_strings_batch(&["alpha", "", "alpha", ""]).expect("add");
     w.commit().expect("commit");
@@ -97,4 +97,68 @@ fn null_placeholders_preserve_doc_id_alignment() {
     let mut hits = r.term_query("alpha").expect("query");
     hits.sort_unstable();
     assert_eq!(hits, vec![0u32, 2u32], "rows 0 and 2 should match");
+}
+
+#[test]
+fn phrase_disabled_omits_positions() {
+    // When support_phrase=false, the index is built with WithFreqs (no
+    // positions). Phrase queries should fail because positions are missing.
+    let tmp = TempDir::new().expect("tempdir");
+    let mut w =
+        IndexWriterWrapper::create(tmp.path(), "f", "english", false, true, 0, 0, "default").expect("create");
+    w.add_strings_batch(&["hello world", "world hello"])
+        .expect("add");
+    w.commit().expect("commit");
+    drop(w);
+
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+
+    // Term query should still work (WithFreqs stores doc ids and TF).
+    let hits = r.term_query("hello").expect("term query");
+    assert_eq!(hits.len(), 2, "term query should still find both docs");
+
+    // Phrase query should fail — no positional data in the index.
+    let phrase_result = r.phrase_query(&["hello", "world"], 0);
+    assert!(
+        phrase_result.is_err(),
+        "phrase query should fail without position data, got: {:?}",
+        phrase_result
+    );
+}
+
+#[test]
+fn bm25_disabled_omits_fieldnorms() {
+    // When support_bm25=false, the index is built with fieldnorms=false.
+    // Basic queries should still work; scoring differences are not testable
+    // at this layer, but we verify the index is functional.
+    let tmp = TempDir::new().expect("tempdir");
+    let mut w =
+        IndexWriterWrapper::create(tmp.path(), "f", "english", true, false, 0, 0, "default").expect("create");
+    w.add_strings_batch(&["hello world", "tantivy ffi"])
+        .expect("add");
+    w.commit().expect("commit");
+    drop(w);
+
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+    let hits = r.term_query("hello").expect("query");
+    assert_eq!(hits, vec![0u32], "basic query should work without fieldnorms");
+}
+
+#[test]
+fn both_disabled_minimal_index() {
+    // When both support_phrase=false and support_bm25=false, the index uses
+    // WithFreqs + fieldnorms=false — the smallest index that still supports
+    // term-frequency-based features.
+    let tmp = TempDir::new().expect("tempdir");
+    let mut w =
+        IndexWriterWrapper::create(tmp.path(), "f", "english", false, false, 0, 0, "default").expect("create");
+    w.add_strings_batch(&["hello world", "tantivy ffi", "hello tantivy"])
+        .expect("add");
+    w.commit().expect("commit");
+    drop(w);
+
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+    let mut hits = r.term_query("hello").expect("query");
+    hits.sort_unstable();
+    assert_eq!(hits, vec![0u32, 2u32], "term query should work on minimal index");
 }

@@ -21,7 +21,7 @@ use crate::safe::{IndexReaderWrapper, IndexWriterWrapper};
 
 fn build(values: &[&str]) -> TempDir {
     let tmp = TempDir::new().expect("tempdir");
-    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english").expect("create");
+    let mut w = IndexWriterWrapper::create(tmp.path(), "f", "english", true, true, 0, 0, "default").expect("create");
     w.add_strings_batch(values).expect("add");
     w.commit().expect("commit");
     drop(w);
@@ -165,7 +165,7 @@ mod wildcard {
     /// gives wildcard the parser=none semantics.
     fn build_raw(values: &[&str]) -> TempDir {
         let tmp = TempDir::new().expect("tempdir");
-        let mut w = IndexWriterWrapper::create(tmp.path(), "f", "raw").expect("create");
+        let mut w = IndexWriterWrapper::create(tmp.path(), "f", "raw", true, true, 0, 0, "default").expect("create");
         w.add_strings_batch(values).expect("add");
         w.commit().expect("commit");
         drop(w);

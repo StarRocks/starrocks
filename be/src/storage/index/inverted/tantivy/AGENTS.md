@@ -214,15 +214,16 @@ C++ files in this module must include the standard Apache 2.0 license header.
 
 CJK bigram produces overlapping tokens, so `MATCH_PHRASE` requires slop proportional to the gap
 between target characters (e.g. matching "字节...推荐" with 3 intermediate bigrams needs `~3`
-slop). Phrase matching for CJK indexes is opt-in via:
+slop). Phrase matching is enabled by default for tantivy indexes:
 
 ```sql
 INDEX idx (col) USING GIN (
-    "imp_lib"="tantivy", "parser"="chinese", "support_phrase"="true"
+    "imp_lib"="tantivy", "parser"="chinese"
 )
 ```
 
-`support_phrase` defaults to `"false"` and is tantivy-only.
+`support_phrase` and `support_bm25` default to `"true"` for tantivy indexes and are auto-filled
+at DDL time, visible in `SHOW CREATE TABLE`.
 
 ## Query Types
 

@@ -17,6 +17,7 @@ pub mod handle;
 pub mod index_reader_c;
 pub mod index_writer_c;
 pub mod lifecycle_c;
+pub mod pool_c;
 pub mod result;
 
 pub use result::{RustResult, RustStringArray, RustU32Array, Value, ValueTag};

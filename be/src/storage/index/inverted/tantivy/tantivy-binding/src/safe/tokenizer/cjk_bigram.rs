@@ -14,9 +14,15 @@
 
 //! CJK bigram tokenizer (Lucene-style overlapping pairs).
 //!
+//! Streaming design: reuses a single `Token` buffer across the entire
+//! token stream, eliminating per-token heap allocations. ASCII tokens
+//! are lowercased inline so the `LowerCaser` filter is not needed.
+//!
 //! Constructed only via the `tokenizer::build` factory; visibility is
-//! `pub(super)` so callers cannot bypass the LowerCaser filter applied
-//! at factory time.
+//! `pub(super)` so callers cannot bypass the factory.
+
+use std::iter::Peekable;
+use std::str::CharIndices;
 
 use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 
@@ -34,126 +40,169 @@ fn is_cjk_char(c: char) -> bool {
     )
 }
 
-#[derive(Clone, Default)]
-pub(super) struct CjkBigramTokenizer;
-
-pub(super) struct CjkBigramTokenStream {
-    tokens: Vec<Token>,
-    index: usize,
+#[inline]
+fn is_word_char(c: char) -> bool {
+    !is_cjk_char(c) && (c.is_alphanumeric() || c == '_' || c == '+' || c == '#')
 }
 
-impl CjkBigramTokenStream {
-    fn build(text: &str) -> Self {
-        let mut tokens = Vec::new();
-        let mut position = 0usize;
+#[derive(Clone)]
+pub(super) struct CjkBigramTokenizer {
+    token: Token,
+}
 
-        let chars: Vec<(usize, char)> = text.char_indices().collect();
-        let len = chars.len();
-        let mut i = 0;
+impl Default for CjkBigramTokenizer {
+    fn default() -> Self {
+        Self {
+            token: Token::default(),
+        }
+    }
+}
 
-        while i < len {
-            let (byte_offset, c) = chars[i];
+pub(super) struct CjkBigramTokenStream<'a> {
+    text: &'a str,
+    chars: Peekable<CharIndices<'a>>,
+    token: &'a mut Token,
+    position: usize,
+    /// Previous CJK char waiting to form the next bigram.
+    prev_cjk: Option<(usize, char)>,
+    /// Whether `prev_cjk` has already been emitted as part of a bigram.
+    prev_emitted: bool,
+}
 
-            if is_cjk_char(c) {
-                // CJK bigram: overlapping pairs
-                let cjk_start = i;
-                // Collect contiguous CJK run
-                let mut cjk_end = i + 1;
-                while cjk_end < len && is_cjk_char(chars[cjk_end].1) {
-                    cjk_end += 1;
+impl<'a> CjkBigramTokenStream<'a> {
+    /// Byte offset of the next character in the iterator, or `text.len()`
+    /// if exhausted. Used to compute `offset_to` for bigram tokens.
+    #[inline]
+    fn next_byte_offset(&mut self) -> usize {
+        self.chars
+            .peek()
+            .map(|&(off, _)| off)
+            .unwrap_or(self.text.len())
+    }
+
+    /// Emit a token whose text is copied from `self.text[from..to]` with
+    /// no transformation (used for CJK tokens that need no lowercasing).
+    #[inline]
+    fn emit_raw(&mut self, from: usize, to: usize) {
+        self.token.text.clear();
+        self.token.text.push_str(&self.text[from..to]);
+        self.token.offset_from = from;
+        self.token.offset_to = to;
+        self.token.position = self.position;
+        self.token.position_length = 1;
+        self.position += 1;
+    }
+
+    /// Emit an ASCII/Latin word token with inline lowercasing.
+    #[inline]
+    fn emit_word_lowered(&mut self, from: usize, to: usize) {
+        self.token.text.clear();
+        for c in self.text[from..to].chars() {
+            if c.is_ascii() {
+                self.token.text.push(c.to_ascii_lowercase());
+            } else {
+                // Non-ASCII, non-CJK alphanumeric (e.g. accented Latin):
+                // use full Unicode lowercase for correctness.
+                for lc in c.to_lowercase() {
+                    self.token.text.push(lc);
                 }
+            }
+        }
+        self.token.offset_from = from;
+        self.token.offset_to = to;
+        self.token.position = self.position;
+        self.token.position_length = 1;
+        self.position += 1;
+    }
+}
 
-                let run_len = cjk_end - cjk_start;
-                if run_len == 1 {
-                    // Single CJK char: emit as-is
-                    let byte_start = chars[cjk_start].0;
-                    let byte_end = if cjk_start + 1 < len {
-                        chars[cjk_start + 1].0
-                    } else {
-                        text.len()
-                    };
-                    tokens.push(Token {
-                        offset_from: byte_start,
-                        offset_to: byte_end,
-                        position,
-                        text: text[byte_start..byte_end].to_owned(),
-                        position_length: 1,
-                    });
-                    position += 1;
-                } else {
-                    // Emit overlapping bigrams
-                    for j in cjk_start..cjk_end - 1 {
-                        let byte_start = chars[j].0;
-                        let byte_end = if j + 2 < len {
-                            chars[j + 2].0
-                        } else {
-                            text.len()
-                        };
-                        tokens.push(Token {
-                            offset_from: byte_start,
-                            offset_to: byte_end,
-                            position,
-                            text: text[byte_start..byte_end].to_owned(),
-                            position_length: 1,
-                        });
-                        position += 1;
+impl TokenStream for CjkBigramTokenStream<'_> {
+    fn advance(&mut self) -> bool {
+        // --- Phase 1: continue a CJK run from the previous advance() call ---
+        if let Some((prev_start, prev_c)) = self.prev_cjk {
+            if let Some(&(next_start, next_c)) = self.chars.peek() {
+                if is_cjk_char(next_c) {
+                    // Consume the next CJK char and emit bigram(prev, next).
+                    self.chars.next();
+                    let end = self.next_byte_offset();
+                    self.emit_raw(prev_start, end);
+                    self.prev_cjk = Some((next_start, next_c));
+                    self.prev_emitted = true;
+                    return true;
+                }
+            }
+            // CJK run ended. Emit prev as a single char only if it was
+            // never part of a bigram (run length == 1).
+            if !self.prev_emitted {
+                let end = prev_start + prev_c.len_utf8();
+                self.emit_raw(prev_start, end);
+                self.prev_cjk = None;
+                self.prev_emitted = false;
+                return true;
+            }
+            // prev was already emitted in a bigram; drop it and scan on.
+            self.prev_cjk = None;
+            self.prev_emitted = false;
+        }
+
+        // --- Phase 2: scan for the next token ---
+        while let Some((byte_offset, c)) = self.chars.next() {
+            if is_cjk_char(c) {
+                // Check if the next char is also CJK → bigram.
+                if let Some(&(next_start, next_c)) = self.chars.peek() {
+                    if is_cjk_char(next_c) {
+                        self.chars.next();
+                        let end = self.next_byte_offset();
+                        self.emit_raw(byte_offset, end);
+                        self.prev_cjk = Some((next_start, next_c));
+                        self.prev_emitted = true;
+                        return true;
                     }
                 }
-                i = cjk_end;
-            } else if c.is_alphanumeric() || c == '_' || c == '+' || c == '#' {
-                // ASCII/Latin word: collect contiguous alphanumeric (but not CJK)
+                // Single CJK char (run of length 1).
+                let end = byte_offset + c.len_utf8();
+                self.emit_raw(byte_offset, end);
+                return true;
+            } else if is_word_char(c) {
+                // Collect a contiguous ASCII/Latin word.
                 let word_start = byte_offset;
-                i += 1;
-                while i < len {
-                    let ch = chars[i].1;
-                    if !is_cjk_char(ch) && (ch.is_alphanumeric() || ch == '_' || ch == '+' || ch == '#') {
-                        i += 1;
+                while let Some(&(_next_start, next_c)) = self.chars.peek() {
+                    if is_word_char(next_c) {
+                        self.chars.next();
                     } else {
                         break;
                     }
                 }
-                let word_end = if i < len { chars[i].0 } else { text.len() };
-                tokens.push(Token {
-                    offset_from: word_start,
-                    offset_to: word_end,
-                    position,
-                    text: text[word_start..word_end].to_owned(),
-                    position_length: 1,
-                });
-                position += 1;
-            } else {
-                // Punctuation, whitespace, other: skip
-                i += 1;
+                let word_end = self.next_byte_offset();
+                self.emit_word_lowered(word_start, word_end);
+                return true;
             }
+            // Punctuation, whitespace, etc.: skip.
         }
-
-        CjkBigramTokenStream { tokens, index: 0 }
-    }
-}
-
-impl TokenStream for CjkBigramTokenStream {
-    fn advance(&mut self) -> bool {
-        if self.index < self.tokens.len() {
-            self.index += 1;
-            true
-        } else {
-            false
-        }
+        false
     }
 
     fn token(&self) -> &Token {
-        &self.tokens[self.index - 1]
+        self.token
     }
 
     fn token_mut(&mut self) -> &mut Token {
-        &mut self.tokens[self.index - 1]
+        self.token
     }
 }
 
 impl Tokenizer for CjkBigramTokenizer {
-    type TokenStream<'a> = CjkBigramTokenStream;
+    type TokenStream<'a> = CjkBigramTokenStream<'a>;
 
     fn token_stream<'a>(&'a mut self, text: &'a str) -> Self::TokenStream<'a> {
-        CjkBigramTokenStream::build(text)
+        self.token.reset();
+        CjkBigramTokenStream {
+            text,
+            chars: text.char_indices().peekable(),
+            token: &mut self.token,
+            position: 0,
+            prev_cjk: None,
+            prev_emitted: false,
+        }
     }
 }

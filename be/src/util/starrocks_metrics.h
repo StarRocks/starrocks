@@ -373,6 +373,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
+    METRICS_DEFINE_THREAD_POOL(tantivy_index_build);
+    METRICS_DEFINE_THREAD_POOL(tantivy_index_merge);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
 

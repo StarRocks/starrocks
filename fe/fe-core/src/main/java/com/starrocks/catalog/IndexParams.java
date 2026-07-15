@@ -103,9 +103,9 @@ public class IndexParams {
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.RERANK, false, false,
                 "false", null);
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.SUPPORT_PHRASE, false, false,
-                "false", null);
+                "true", null);
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.SUPPORT_BM25, false, false,
-                "false", null);
+                "true", null);
 
         /* NGramFilter */
         // index

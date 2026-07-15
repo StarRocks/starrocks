@@ -56,6 +56,7 @@ CompoundIndexEntry write_segment_index(const std::string& index_dir, const std::
     TypeInfoPtr typeinfo = get_type_info(TYPE_VARCHAR);
     TabletIndex tablet_index;
     tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+    tablet_index.add_index_properties("parser", "english");
 
     std::unique_ptr<InvertedWriter> writer;
     EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_writer(typeinfo, "content", index_dir, &tablet_index,
@@ -100,6 +101,7 @@ std::unique_ptr<TantivyInvertedReader> open_compound_reader(const std::string& b
     auto fs = FileSystem::Default();
     TabletIndex ti;
     ti.add_common_properties(INVERTED_IMP_KEY, TYPE_TANTIVY);
+    ti.add_index_properties("parser", "english");
     auto ti_sp = std::make_shared<TabletIndex>(ti);
     std::unique_ptr<InvertedReader> reader;
     EXPECT_OK(TantivyPlugin::get_instance().create_inverted_index_reader(dummy_dir, ti_sp, TYPE_VARCHAR, &reader));

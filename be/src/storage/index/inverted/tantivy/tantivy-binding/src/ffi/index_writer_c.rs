@@ -15,7 +15,8 @@
 //! C ABI shim for the writer side.
 //!
 //! Surface:
-//!   - tantivy_create_index_writer(path, field_name, tokenizer)
+//!   - tantivy_create_index_writer(path, field_name, tokenizer, support_phrase,
+//!     support_bm25, memory_budget_bytes, num_threads, merge_policy)
 //!   - tantivy_index_add_strings_batch(writer, values_ptr, count)
 //!   - tantivy_commit_index(writer)
 //!   - tantivy_free_index_writer(writer)
@@ -50,22 +51,56 @@ macro_rules! cstr_or_err {
 /// opaque writer handle in `RustResult.value.ptr`. Caller MUST release with
 /// `tantivy_free_index_writer` and the result with `free_rust_result`.
 ///
+/// `support_phrase`: when true, term positions are stored (needed for phrase
+/// queries). When false, only term frequencies are stored (smaller on disk).
+///
+/// `support_bm25`: when true, per-document fieldnorms are stored (needed for
+/// BM25 length normalization). When false, fieldnorms are omitted.
+///
+/// `memory_budget_bytes`: memory budget for the IndexWriter. 0 uses the
+/// compile-time default (256 MB).
+///
+/// `num_threads`: number of tantivy indexing worker threads. 0 uses the
+/// compile-time default (1). Workers run on the shared BE thread pool.
+///
+/// `merge_policy`: NUL-terminated C string selecting the merge policy.
+/// `"no_merge"` disables merging; anything else uses `LogMergePolicy`.
+/// NULL is treated as `"default"`.
+///
 /// SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
-/// C strings.
+/// C strings. `merge_policy` may be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn tantivy_create_index_writer(
     path: *const c_char,
     field_name: *const c_char,
     tokenizer: *const c_char,
+    support_phrase: bool,
+    support_bm25: bool,
+    memory_budget_bytes: usize,
+    num_threads: usize,
+    merge_policy: *const c_char,
 ) -> RustResult {
     catch_ffi(|| {
         let path_str = cstr_or_err!(path, "path");
         let field_name_str = cstr_or_err!(field_name, "field_name");
         let tokenizer_str = cstr_or_err!(tokenizer, "tokenizer");
+        let merge_policy_str = if merge_policy.is_null() {
+            "default"
+        } else {
+            match CStr::from_ptr(merge_policy).to_str() {
+                Ok(s) => s,
+                Err(_) => "default",
+            }
+        };
         match IndexWriterWrapper::create(
             std::path::Path::new(path_str),
             field_name_str,
             tokenizer_str,
+            support_phrase,
+            support_bm25,
+            memory_budget_bytes,
+            num_threads,
+            merge_policy_str,
         ) {
             Ok(w) => RustResult::ok_ptr(create_binding(w)),
             Err(e) => RustResult::err(e.to_string()),

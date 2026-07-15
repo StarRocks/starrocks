@@ -144,12 +144,14 @@ public class InvertedIndexUtil {
         // add default properties
         addDefaultProperties(properties);
 
-        // Tantivy-specific: ensure support_phrase is always present so that
-        // SHOW CREATE TABLE displays it for tantivy indexes.
+        // Tantivy-specific: ensure support_phrase and support_bm25 are always present
+        // so that SHOW CREATE TABLE displays them for tantivy indexes.
         String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
         if (TANTIVY.name().equalsIgnoreCase(impValue)) {
             String spKey = InvertedIndexParams.SearchParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT);
-            properties.putIfAbsent(spKey, "false");
+            properties.putIfAbsent(spKey, "true");
+            String bm25Key = InvertedIndexParams.SearchParamsKey.SUPPORT_BM25.name().toLowerCase(Locale.ROOT);
+            properties.putIfAbsent(bm25Key, "true");
         }
     }
 

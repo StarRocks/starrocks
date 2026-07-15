@@ -383,6 +383,10 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
+    ThreadPool* tantivy_index_build_thread_pool() { return _tantivy_index_build_thread_pool.get(); }
+
+    ThreadPool* tantivy_index_merge_thread_pool() { return _tantivy_index_merge_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -452,6 +456,17 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    // Elastic pool running tantivy's RESIDENT indexing workers (documents ->
+    // in-memory segments). Grows a thread per live worker on demand (queue size
+    // 0) so a worker never sits queued waiting for a slot, which would deadlock
+    // the commit that joins it and the flush that feeds it. Idle threads are
+    // reaped back to zero. See tantivy_ffi_pool_bridge.{h,cpp}.
+    std::unique_ptr<ThreadPool> _tantivy_index_build_thread_pool = nullptr;
+    // Bounded pool running tantivy's segment lifecycle maintenance: the
+    // segment-updater serial queue (add_segment) and merges. Transient tasks
+    // only; caps merge concurrency and carries the caller's mem tracker into each
+    // task. See tantivy_ffi_pool_bridge.{h,cpp}.
+    std::unique_ptr<ThreadPool> _tantivy_index_merge_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

@@ -86,6 +86,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service/staros_worker.h"
+#include "storage/index/inverted/tantivy/tantivy_ffi_pool_bridge.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
@@ -818,6 +819,44 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
+    {
+        // Two pools back tantivy's background work. See tantivy_ffi_pool_bridge
+        // for why the two task classes must not share one bounded pool.
+        int nproc = CpuInfo::num_cores();
+
+        // Build pool: runs the RESIDENT indexing workers. It must grow a thread
+        // per live worker on demand, so use an elastic pool (min 0, queue size 0
+        // => every submit either reuses an idle thread or spawns a new one up to
+        // max_threads; it only rejects at the cap). The cap is set high so it is
+        // never hit in practice — a rejected worker would run inline and hang its
+        // flush thread. Idle threads are reaped by the default idle timeout.
+        int build_cfg = config::tantivy_index_build_thread_pool_num_threads;
+        int build_threads = build_cfg > 0 ? build_cfg : std::max(1024, nproc * 16);
+        RETURN_IF_ERROR(ThreadPoolBuilder("tantivy_index_build")
+                                .set_min_threads(0)
+                                .set_max_threads(build_threads)
+                                .set_max_queue_size(0)
+                                .build(&_tantivy_index_build_thread_pool));
+
+        // Merge pool: runs the TRANSIENT segment-updater serial queue and merges.
+        // A bounded pool with an unbounded queue is safe here because these tasks
+        // never block on another task in this pool, so it always drains.
+        int merge_cfg = config::tantivy_index_merge_thread_pool_num_threads;
+        int merge_threads = merge_cfg > 0 ? merge_cfg : std::max(4, nproc);
+        RETURN_IF_ERROR(ThreadPoolBuilder("tantivy_index_merge")
+                                .set_min_threads(0)
+                                .set_max_threads(merge_threads)
+                                .set_max_queue_size(std::numeric_limits<int>::max())
+                                .build(&_tantivy_index_merge_thread_pool));
+
+        LOG(INFO) << "tantivy index thread pools: nproc=" << nproc << " build(elastic)_max=" << build_threads
+                  << " merge(bounded)_max=" << merge_threads;
+        register_tantivy_index_thread_pool(_tantivy_index_build_thread_pool.get(),
+                                           _tantivy_index_merge_thread_pool.get());
+    }
+    REGISTER_THREAD_POOL_METRICS(tantivy_index_build, _tantivy_index_build_thread_pool);
+    REGISTER_THREAD_POOL_METRICS(tantivy_index_merge, _tantivy_index_merge_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
@@ -895,6 +934,18 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pipeline_sink_io_pool->shutdown();
         component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
+    }
+
+    if (_tantivy_index_build_thread_pool) {
+        start = MonotonicMillis();
+        _tantivy_index_build_thread_pool->shutdown();
+        component_times.emplace_back("tantivy_index_build_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_tantivy_index_merge_thread_pool) {
+        start = MonotonicMillis();
+        _tantivy_index_merge_thread_pool->shutdown();
+        component_times.emplace_back("tantivy_index_merge_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -1077,6 +1128,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _tantivy_index_build_thread_pool.reset();
+    _tantivy_index_merge_thread_pool.reset();
     _metrics = nullptr;
 }
 

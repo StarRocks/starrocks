@@ -862,6 +862,7 @@ set(STARROCKS_LINK_LIBS
     IO
     Serde
     Storage
+    tantivy_binding
     Rowset
     Runtime
     Service
@@ -912,7 +913,6 @@ set(STARROCKS_DEPENDENCIES
     clucene-core
     clucene-shared
     clucene-contribs-lib
-    tantivy_binding
     rocksdb
     libs2
     snappy

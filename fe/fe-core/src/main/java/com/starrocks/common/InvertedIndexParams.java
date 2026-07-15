@@ -89,13 +89,13 @@ public class InvertedIndexParams {
          * Tantivy-only hint: enable phrase matching capability on the index.
          * Phase 1 only validates whitelist; BE always supports phrase regardless.
          */
-        SUPPORT_PHRASE("false"),
+        SUPPORT_PHRASE("true"),
         /**
          * Tantivy-only hint: enable BM25 scoring capability on the index.
          * Phase 1 only validates whitelist; Phase 2 will use this to enable
          * fieldnorms in the tantivy schema.
          */
-        SUPPORT_BM25("false");
+        SUPPORT_BM25("true");
 
         private String defaultValue;
 
