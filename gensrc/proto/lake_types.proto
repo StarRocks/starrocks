@@ -196,6 +196,10 @@ message DelfileWithRowsetId {
     // live at a snapshot-retained version. Unset (0) means "creation version unknown" and is treated
     // conservatively (retained under any covering retain version).
     optional int64 version = 6;
+    // Number of delete rows (tombstones) in this del file, recorded at write time. Used by the
+    // cloud-native PK index to account tombstone volume toward the rebuild-rows threshold. Absent
+    // on del files written before this field existed (treated as 0).
+    optional int64 num_rows = 7;
 }
 
 message SegmentMetadataPB {
@@ -422,6 +426,11 @@ message TxnLogPB {
         // that does not apply this leaves live duplicate primary keys, so this must be understood
         // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
         repeated DelvecDataPB seg_delvecs = 22;
+        // Parallel to `dels_meta` (index by del_id): the tombstone (delete row) count of each del
+        // file, recorded at write time. Carried through to DelfileWithRowsetId.num_rows so the
+        // cloud-native PK index can account tombstone volume toward its rebuild-rows threshold.
+        // Absent (size != dels_meta_size) means no del carries a count; such del files count as 0.
+        repeated int64 del_num_rows = 23;
     }
 
     message OpCompaction {

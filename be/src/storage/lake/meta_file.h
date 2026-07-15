@@ -100,7 +100,7 @@ public:
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, SegmentFileInfo>& replace_segments,
                     const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
-                    const std::vector<int64_t>& del_op_offsets);
+                    const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows);
     Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
@@ -163,6 +163,8 @@ private:
         // Parallel to `dels`: each del's op_offset already rebased into the merged rowset's segment
         // space, or < 0 when not recorded (falls back to the max segment id at persist time).
         std::vector<int64_t> del_op_offsets;
+        // Parallel to `dels`: each del file's tombstone (delete row) count, or < 0 when not recorded.
+        std::vector<int64_t> del_num_rows;
         uint32_t assigned_segment_idx = 0;
     };
 
