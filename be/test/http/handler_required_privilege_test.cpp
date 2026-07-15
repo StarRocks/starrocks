@@ -211,7 +211,7 @@ TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_are_authn_only) {
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
     ExecEnv env;
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
+    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -219,11 +219,11 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // Both transaction-management endpoints opt out of the framework Basic-Auth
     // gate — they use a label-bound session model (begin parses Basic, later ops
     // look up the StreamLoadContext by label).
-    TransactionManagerAction txn_mgr(nullptr);
+    TransactionManagerAction txn_mgr(nullptr, nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
     ExecEnv env;
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

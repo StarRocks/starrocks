@@ -25,10 +25,11 @@ namespace starrocks {
 class ExecEnv;
 class HttpRequest;
 class StreamLoadContext;
+class StreamLoadExecutor;
 
 class TransactionMgr {
 public:
-    explicit TransactionMgr(ExecEnv* exec_env);
+    TransactionMgr(ExecEnv* exec_env, StreamLoadExecutor* stream_load_executor);
     ~TransactionMgr();
 
     Status begin_transaction(const HttpRequest* req, std::string* resp);
@@ -47,6 +48,7 @@ private:
     void _clean_stream_context();
 
     ExecEnv* _exec_env;
+    StreamLoadExecutor* _stream_load_executor;
     std::thread _transaction_clean_thread;
     std::atomic<bool> _is_stopped = false;
 };

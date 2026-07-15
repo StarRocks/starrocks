@@ -247,7 +247,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
+    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
+                                          data_workflows_env->stream_load_executor()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
@@ -379,14 +380,16 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, orchestration_env.get(), *runtime_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            cache_env, exec_env, orchestration_env.get(), *runtime_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->stream_load_executor(), data_workflows_env->transaction_mgr(), config::be_http_port,
+            config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, orchestration_env.get(), *runtime_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            nullptr, exec_env, orchestration_env.get(), *runtime_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->stream_load_executor(), data_workflows_env->transaction_mgr(), config::be_http_port,
+            config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();

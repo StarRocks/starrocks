@@ -27,7 +27,9 @@ class LoadChannelMgr;
 class MemTracker;
 class MetricRegistry;
 class RejectedRecordSyncDaemon;
+class StreamLoadExecutor;
 class TableMetricsManager;
+class TransactionMgr;
 
 namespace lake {
 class TabletManager;
@@ -54,8 +56,14 @@ public:
 
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr.get(); }
     const LoadChannelMgr* load_channel_mgr() const { return _load_channel_mgr.get(); }
+    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor.get(); }
+    const StreamLoadExecutor* stream_load_executor() const { return _stream_load_executor.get(); }
+    TransactionMgr* transaction_mgr() { return _transaction_mgr.get(); }
+    const TransactionMgr* transaction_mgr() const { return _transaction_mgr.get(); }
 
 private:
+    std::unique_ptr<StreamLoadExecutor> _stream_load_executor;
+    std::unique_ptr<TransactionMgr> _transaction_mgr;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     std::unique_ptr<RejectedRecordSyncDaemon> _rejected_record_sync_daemon;
     bool _load_channel_mgr_started = false;

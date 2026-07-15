@@ -56,8 +56,6 @@
 #include "exec/runtime/query_context_manager.h"
 #include "exec/schema_scanner_factory.h"
 #include "exec/schema_scanner_factory_adapter.h"
-#include "exec/stream_load/stream_load_executor.h"
-#include "exec/stream_load/transaction_mgr.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "exprs/udf/python/env.h"
 #include "gutil/strings/join.h"
@@ -141,9 +139,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = stream_context_mgr();
-    _runtime_services.transaction_mgr = _transaction_mgr;
     _runtime_services.batch_write_mgr = _batch_write_mgr;
-    _runtime_services.stream_load_executor = _stream_load_executor;
     _runtime_services.runtime_filter_sender = _runtime_filter_sender;
     _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_query_lifecycle;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
@@ -211,9 +207,6 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
-
-    _stream_load_executor = new StreamLoadExecutor(this);
-    _transaction_mgr = new TransactionMgr(this);
 
     std::unique_ptr<ThreadPool> batch_write_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
@@ -329,8 +322,6 @@ void ExecEnv::clear_query_contexts() {
 }
 
 void ExecEnv::destroy() {
-    delete_and_null(_transaction_mgr);
-    delete_and_null(_stream_load_executor);
     delete_and_null(_connector_sink_spill_executor);
     delete_and_null(_query_context_mgr);
 
