@@ -20,6 +20,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -173,6 +174,18 @@ public class StateChangeExecutor extends Daemon {
                         case FOLLOWER:
                         case OBSERVER:
                         case UNKNOWN: {
+                            if (RunMode.isSharedDataMode()) {
+                                // Graceful in-place leader demotion is not supported in shared-data mode yet:
+                                // StarMgr writes its own journal (StarOSBDBJEJournalSystem) with no WALApplier,
+                                // so its in-flight state is not fenced/drained by the demotion. Exit for a clean
+                                // restart as a non-leader (the pre-graceful-demotion behavior): the new process
+                                // re-initializes StarMgr and replays the journal.
+                                String msg = "graceful leader demotion is not supported in shared-data mode; "
+                                        + "exit to restart as " + newType.name();
+                                LOG.warn(msg);
+                                Util.stdoutWithTime(msg);
+                                System.exit(-1);
+                            }
                             for (StateChangeExecution execution : executions) {
                                 execution.transferToNonLeader(newType);
                             }
