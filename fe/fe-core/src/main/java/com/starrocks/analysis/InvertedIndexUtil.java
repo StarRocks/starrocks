@@ -115,12 +115,6 @@ public class InvertedIndexUtil {
                 throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
 
-            // Phase 1 limitation: tantivy currently supports DUPLICATE_KEYS only.
-            // PRIMARY_KEYS / AGG_KEYS support is planned for Phase 2.
-            if (isTantivy && keysType != KeysType.DUP_KEYS) {
-                throw new SemanticException(
-                        "Tantivy inverted index only supports DUPLICATE_KEYS table in this release");
-            }
         } else if (RunMode.isSharedDataMode()) {
             // Default for shared-data mode remains BUILTIN (unchanged from prior behavior).
             // Users must opt into tantivy explicitly via "imp_lib"="tantivy".

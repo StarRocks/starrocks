@@ -37,6 +37,11 @@ public class Bm25ScoreLimitPushdownTest extends PlanTestBase {
                 + " status INT,"
                 + " INDEX idx_request (request) USING GIN ('imp_lib' = 'tantivy', 'parser' = 'english')"
                 + ") DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE test.bm25_pk_docs ("
+                + " id INT,"
+                + " request VARCHAR(1024),"
+                + " INDEX idx_request (request) USING GIN ('imp_lib' = 'tantivy', 'parser' = 'english')"
+                + ") PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
     }
 
     @Test
@@ -57,6 +62,13 @@ public class Bm25ScoreLimitPushdownTest extends PlanTestBase {
     public void skipsLimitForAscendingOrder() throws Exception {
         String plan = getFragmentPlan("SELECT score() s FROM bm25_docs "
                 + "WHERE request MATCH 'fox' ORDER BY s ASC LIMIT 10");
+        assertContains(plan, "BM25SCORE: ON, topk=0");
+    }
+
+    @Test
+    public void skipsLimitForPrimaryKeyTable() throws Exception {
+        String plan = getFragmentPlan("SELECT score() s FROM bm25_pk_docs "
+                + "WHERE request MATCH 'fox' ORDER BY s DESC LIMIT 10");
         assertContains(plan, "BM25SCORE: ON, topk=0");
     }
 

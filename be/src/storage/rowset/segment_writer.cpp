@@ -51,6 +51,7 @@
 #include "runtime/exec_env.h"
 #include "storage/index/compound_index_file_writer.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/options.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
@@ -181,8 +182,14 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
-
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.skip_tantivy_index) {
+            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
+            if (imp_type == InvertedImplementType::TANTIVY) {
+                opts.need_inverted_index = false;
+            }
+        }
+
         if (opts.need_inverted_index) {
             std::string index_dir;
             if (!_opts.segment_file_mark.rowset_path_prefix.empty()) {

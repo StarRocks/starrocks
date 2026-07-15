@@ -49,6 +49,7 @@
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"
@@ -357,9 +358,19 @@ Status Rowset::remove() {
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
 
+        std::string compound_index_path = IndexDescriptor::compound_index_file_path_from_segment(path);
+        auto compound_st = fs->delete_file(compound_index_path);
+        LOG_IF(WARNING, !(compound_st.ok() || compound_st.is_not_found()))
+                << "Fail to delete " << compound_index_path << ": " << compound_st;
+        merge_status(compound_st);
+
         // delete index
         for (const auto& index : *(_schema->indexes())) {
             if (index.index_type() == IndexType::GIN) {
+                auto imp_type = get_inverted_imp_type(index);
+                if (imp_type.ok() && imp_type.value() == InvertedImplementType::TANTIVY) {
+                    continue;
+                }
                 std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
                         _rowset_path, rowset_id().to_string(), i, index.index_id());
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
@@ -454,12 +465,26 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                     strings::Substitute("Fail to link segment data file from $0 to $1", src_file_path, dst_link_path));
         }
 
+        std::string src_compound_path = IndexDescriptor::compound_index_file_path_from_segment(src_file_path);
+        if (fs::path_exist(src_compound_path)) {
+            std::string dst_compound_path = IndexDescriptor::compound_index_file_path_from_segment(dst_link_path);
+            if (link(src_compound_path.c_str(), dst_compound_path.c_str()) != 0) {
+                PLOG(WARNING) << "Fail to link " << src_compound_path << " to " << dst_compound_path;
+                return Status::RuntimeError(strings::Substitute("Fail to link compound index file from $0 to $1",
+                                                                src_compound_path, dst_compound_path));
+            }
+        }
+
         // link inverted files
         if (!_schema->indexes()->empty()) {
             int segment_n = i;
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    auto imp_type = get_inverted_imp_type(index);
+                    if (imp_type.ok() && imp_type.value() == InvertedImplementType::TANTIVY) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -569,11 +594,22 @@ StatusOr<int64_t> Rowset::copy_files_to(KVStore* kvstore, const std::string& dir
             ncopy += copy_st.value();
         }
 
+        std::string src_compound_path = IndexDescriptor::compound_index_file_path_from_segment(src_path);
+        if (fs::path_exist(src_compound_path)) {
+            std::string dst_compound_path = IndexDescriptor::compound_index_file_path_from_segment(dst_path);
+            ASSIGN_OR_RETURN(auto compound_size, fs::copy_file(src_compound_path, dst_compound_path));
+            ncopy += compound_size;
+        }
+
         // copy index
         const auto& indexes = *_schema->indexes();
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    auto imp_type = get_inverted_imp_type(index);
+                    if (imp_type.ok() && imp_type.value() == InvertedImplementType::TANTIVY) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {

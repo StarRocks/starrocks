@@ -80,6 +80,10 @@ struct SegmentWriterOptions {
     SegmentFileMark segment_file_mark;
     std::string encryption_meta;
     bool is_compaction = false;
+    // When true, Tantivy GIN indexes are not produced inline. Row-mode PK
+    // partial update uses this so the final-row rebuilder is the only writer
+    // of the compound .idx file.
+    bool skip_tantivy_index = false;
     // Lake-mode identifiers used to isolate per-transaction tantivy temp dirs.
     // 0 means "not set" — callers in the shared-nothing path can leave them at default.
     int64_t tablet_id = 0;

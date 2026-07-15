@@ -1,7 +1,6 @@
 -- name: test_tantivy_ddl
--- DDL-only validation for tantivy imp_lib whitelist + DUP_KEYS limit + tantivy-only params.
--- Phase 1: BE plugin not yet wired, but FE-side DDL validation should accept the new
--- imp_lib value and reject the documented error cases.
+-- DDL validation for the tantivy imp_lib whitelist, DUP/PK table support, and
+-- tantivy-only params.
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 
 -- 1) imp_lib=tantivy on DUP_KEYS string column should be accepted by FE
@@ -47,7 +46,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
--- 3) imp_lib=tantivy on PK table should be REJECTED
+-- 3) imp_lib=tantivy on PK table should be accepted
 CREATE TABLE `t_tantivy_pk_table` (
   `id` bigint NOT NULL,
   `txt` varchar(200) NOT NULL
@@ -60,7 +59,6 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
--- This ALTER must FAIL at the FE side (Tantivy Phase 1 only supports DUPLICATE_KEYS)
 CREATE INDEX gin_pk ON t_tantivy_pk_table (txt) USING GIN ("imp_lib" = "tantivy");
 
 -- 4) support_phrase on clucene/builtin should be REJECTED (tantivy-only param)

@@ -25,7 +25,14 @@
 
 namespace starrocks {
 
+class TabletSchema;
+
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index);
+
+// Returns true when the schema contains at least one Tantivy-backed GIN index.
+// This is used by Primary Key write paths to select update modes that preserve
+// the segment-row-id to Tantivy-doc-id contract.
+bool has_tantivy_index(const TabletSchema& tablet_schema);
 
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);
 

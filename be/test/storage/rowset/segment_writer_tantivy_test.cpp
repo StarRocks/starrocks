@@ -31,6 +31,7 @@
 #include "storage/index/compound_index_common.h"
 #include "storage/index/compound_index_file_reader.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -270,6 +271,67 @@ TEST(SegmentWriterTantivyTest, SegmentFooterValid) {
     EXPECT_GT(file_size, 0u);
     EXPECT_GT(footer_position, 0u);
     EXPECT_EQ(writer.num_rows(), 2u);
+}
+
+// Row-mode partial update first writes only the supplied indexed columns. The
+// final rewrite must replace that partial sidecar with one containing every
+// Tantivy index declared by the full tablet schema.
+TEST(SegmentWriterTantivyTest, RowModePartialUpdateRebuildsAllTantivyIndexes) {
+    std::string temp_dir = make_tempdir("seg_tantivy_row_mode");
+    ASSERT_FALSE(temp_dir.empty());
+    PathCleanup cleanup{temp_dir};
+
+    auto partial_schema = make_tantivy_schema(1);
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    opts.segment_file_mark.rowset_path_prefix = temp_dir;
+    opts.segment_file_mark.rowset_id = "partial";
+
+    std::string src_path = temp_dir + "/partial_0.dat";
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(src_path));
+    SegmentWriter writer(std::move(wfile), 0, partial_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(partial_schema), 3);
+    for (int i = 0; i < 3; ++i) {
+        chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    chunk->get_column_by_index(1)->append_datum(Datum(Slice("old alpha")));
+    chunk->get_column_by_index(1)->append_datum(Datum(Slice("old beta")));
+    chunk->get_column_by_index(1)->append_datum(Datum());
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    FooterPointerPB partial_footer;
+    partial_footer.set_position(footer_position);
+    partial_footer.set_size(file_size - footer_position);
+
+    auto full_schema = make_tantivy_schema(2);
+    std::vector<uint32_t> missing_column_ids{2};
+    MutableColumns missing_columns;
+    const auto& missing_column = full_schema->column(2);
+    auto new_values = ChunkHelper::column_from_field_type(missing_column.type(), missing_column.is_nullable());
+    new_values->append_datum(Datum(Slice("new one")));
+    new_values->append_datum(Datum());
+    new_values->append_datum(Datum(Slice("new three")));
+    missing_columns.push_back(std::move(new_values));
+
+    std::string dest_path = temp_dir + "/final_0.dat";
+    FileInfo src{.path = src_path, .size = file_size};
+    FileInfo dest{.path = dest_path};
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src, &dest, full_schema, missing_column_ids, missing_columns, 0,
+                                                      partial_footer));
+
+    std::string compound_path = IndexDescriptor::compound_index_file_path_from_segment(dest_path);
+    ASSERT_TRUE(std::filesystem::exists(compound_path));
+    ASSIGN_OR_ABORT(auto compound_reader, CompoundIndexFileReader::open(compound_path));
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 100).status());
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 101).status());
 }
 
 } // namespace starrocks

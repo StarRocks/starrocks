@@ -16,6 +16,8 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 
+#include "storage/tablet_schema.h"
+
 namespace starrocks {
 
 StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_index) {
@@ -35,6 +37,19 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
     } else {
         return Status::InvalidArgument("Can not get inverted imp type");
     }
+}
+
+bool has_tantivy_index(const TabletSchema& tablet_schema) {
+    for (const auto& index : *tablet_schema.indexes()) {
+        if (index.index_type() != GIN) {
+            continue;
+        }
+        auto imp_type = get_inverted_imp_type(index);
+        if (imp_type.ok() && imp_type.value() == InvertedImplementType::TANTIVY) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type) {

@@ -38,7 +38,7 @@ import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_L
 /**
  * Tantivy-specific validation tests for {@link InvertedIndexUtil}, separate
  * from {@link GINIndexTest} so that adding tantivy enum values and the
- * support_phrase / support_bm25 / DUP_KEYS-only checks does not perturb the
+ * support_phrase / support_bm25 / table-model checks does not perturb the
  * existing CLucene/Builtin coverage.
  */
 public class InvertedIndexUtilTantivyTest extends PlanTestBase {
@@ -67,12 +67,10 @@ public class InvertedIndexUtilTantivyTest extends PlanTestBase {
     }
 
     @Test
-    public void tantivyOnPrimaryKeysTable_isRejected() {
+    public void tantivyOnPrimaryKeysTable_passes() {
         Column col = new Column("txt", Type.STRING, true);
-        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+        Assertions.assertDoesNotThrow(
                 () -> InvertedIndexUtil.checkInvertedIndexValid(col, tantivyProps(), KeysType.PRIMARY_KEYS));
-        Assertions.assertTrue(ex.getMessage().contains("DUPLICATE_KEYS"),
-                "expected DUPLICATE_KEYS in message: " + ex.getMessage());
     }
 
     @Test

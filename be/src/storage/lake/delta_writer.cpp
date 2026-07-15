@@ -26,6 +26,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/meta_file.h"
@@ -295,6 +296,14 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
+        const bool is_column_mode = _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+                                    _partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE;
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_partial_update() && is_column_mode &&
+            has_tantivy_index(*_tablet_schema)) {
+            return Status::NotSupported(
+                    "Tantivy inverted index on Primary Key table does not support column-mode partial update; "
+                    "use row mode instead");
+        }
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             _tablet_writer =
                     std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema, _txn_id,
