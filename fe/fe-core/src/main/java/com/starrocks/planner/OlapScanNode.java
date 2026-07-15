@@ -824,11 +824,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
-        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
-        RangeColocateScanDispatch dispatch = null;
-        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-            dispatch = RangeColocateScanDispatch.forTable(olapTable);
-        }
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
