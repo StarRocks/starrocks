@@ -19,12 +19,14 @@
 
 #include <utility>
 
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gutil/casts.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -188,6 +190,37 @@ TEST_F(ArrayExprTest, test_evaluate) {
         EXPECT_EQ(4, result->get(2).get_array()[1].get_int32());
         EXPECT_EQ(8, result->get(2).get_array()[2].get_int32());
     }
+}
+
+// NOLINTNEXTLINE
+GROUP_SLOW_PARALLEL_TEST(ArrayExprOverflowTest, test_flatten_bytes_exceed_uint32_capacity) {
+    // Two children share one 2100-row x 1MB varchar column, so the flattened element
+    // column is ~4.4GB and overflows BinaryColumn's uint32 offsets. Expect an explicit
+    // CapacityLimitExceed error instead of silently wrapped (corrupted) data.
+    // Transient peak memory is ~13GB due to bytes vector growth.
+    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
+    type_varchar.len = 1048576;
+    TypeDescriptor type_arr_str;
+    type_arr_str.type = LogicalType::TYPE_ARRAY;
+    type_arr_str.children.push_back(type_varchar);
+
+    const size_t num_rows = 2100;
+    const std::string payload(1024 * 1024, 'x');
+    auto fat_column_builder = BinaryColumn::create();
+    fat_column_builder->reserve(num_rows);
+    for (size_t i = 0; i < num_rows; i++) {
+        fat_column_builder->append(Slice(payload));
+    }
+    BinaryColumn::Ptr fat_column = std::move(fat_column_builder);
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_str));
+    expr->add_child(pool.add(new MockExpr(type_varchar, fat_column)));
+    expr->add_child(pool.add(new MockExpr(type_varchar, fat_column)));
+
+    auto result = expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded());
 }
 
 } // namespace starrocks
