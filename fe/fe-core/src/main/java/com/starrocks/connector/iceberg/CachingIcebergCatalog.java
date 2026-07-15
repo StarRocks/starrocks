@@ -32,7 +32,6 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -289,10 +288,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
-            Throwable ce = ExceptionUtils.getRootCause(e);
-            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
-            throw new StarRocksConnectorException(String.format("Failed to get iceberg table %s.%s.%s. %s",
-                    catalogName, dbName, tableName, errMsg), e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get iceberg table %s.%s.%s", catalogName, dbName, tableName), e);
         } finally {
             TABLE_LOAD_CONTEXT.remove();
         }
