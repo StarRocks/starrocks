@@ -40,9 +40,6 @@ public:
 
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
 
-    Status decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
-                                 pipeline::PipelineBuilderContext* context) const;
-
 private:
     ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;
