@@ -20,7 +20,7 @@
 #include "connector/iceberg/iceberg_connector.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "connector/iceberg/iceberg_utils.h"
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"

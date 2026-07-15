@@ -97,6 +97,7 @@ ADD_BE_LIB(DataSinkExternal
     external/blackhole_table_sink.cpp
     external/export_sink.cpp
     external/hive_table_sink.cpp
+    external/iceberg_table_sink.cpp
     external/mysql_table_sink.cpp
     external/mysql_table_writer.cpp
     external/schema_table_sink.cpp

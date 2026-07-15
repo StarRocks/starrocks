@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
 
 #include <sstream>
 
