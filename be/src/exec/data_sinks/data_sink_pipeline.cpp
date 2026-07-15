@@ -52,7 +52,8 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Partitions_types.h"
 #ifndef __APPLE__
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink_pipeline_builder.h"
 #endif
 #include "data_sink/exchange/multi_cast_data_stream_sink.h"
 #include "data_sink/external/mysql_table_sink.h"
@@ -279,7 +280,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 #ifndef __APPLE__
     } else if (typeid(*this) == typeid(IcebergTableSink)) {
         auto* iceberg_table_sink = down_cast<IcebergTableSink*>(this);
-        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(
+                decompose_iceberg_table_sink_to_pipeline(*iceberg_table_sink, prev_operators, thrift_sink, context));
 #endif
     } else if (typeid(*this) == typeid(HiveTableSink)) {
         auto* hive_table_sink = down_cast<HiveTableSink*>(this);
