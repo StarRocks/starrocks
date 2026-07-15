@@ -289,6 +289,9 @@ dependencies {
     }
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
+    // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+    // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+    implementation("org.tukaani:xz")
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:glue")
     implementation("software.amazon.awssdk:dynamodb")
