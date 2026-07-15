@@ -20,6 +20,11 @@ on:
         required: false
         default: 'all'
         type: string
+      limit:
+        description: 'Max cases to AI-analyze this run (caps claude calls/cost; 0 = no limit)'
+        required: false
+        default: '10'
+        type: string
 
 permissions:
   contents: read
@@ -66,6 +71,7 @@ jobs:
             --branch "${BRANCH}" \
             --types "${CASE_TYPES}" \
             --history-dir "${HIST}" \
+            --limit "${{ inputs.limit || '10' }}" \
             --out "${WORK}/out"
 
           # Publish to OSS (timestamped). Do NOT mask a failed upload with a
