@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -241,11 +240,11 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr expr, Void context) {
-            if (expr.getFn() instanceof AggregateFunction) {
+            if (expr.isAggregateFn()) {
                 List<FunctionCallExpr> aggFunc = Lists.newArrayList();
                 if (expr.getChildren().stream().anyMatch(childExpr -> {
                     childExpr.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                            ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, aggFunc);
+                            ((FunctionCallExpr) arg).isAggregateFn(), aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());

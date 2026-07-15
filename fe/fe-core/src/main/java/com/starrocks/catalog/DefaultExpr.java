@@ -19,6 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -180,7 +181,7 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
             FunctionCallExpr functionCallExpr =
                     new FunctionCallExpr(functionName, new FunctionParams(false, exprs));
             Function fn = ExprUtils.getBuiltinFunction(functionName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
-            functionCallExpr.setFn(fn);
+            AnalysisContext.populateCachedFields(functionCallExpr, fn);
             functionCallExpr.setType(fn.getReturnType());
             return functionCallExpr;
         }
@@ -242,7 +243,7 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
                 }
                 FunctionCallExpr newFuncExpr = new FunctionCallExpr(funcName, newChildren);
                 newFuncExpr.setType(funcExpr.getType());
-                newFuncExpr.setFn(funcExpr.getFn());
+                newFuncExpr.copyFnFieldsFrom(funcExpr);
                 return newFuncExpr;
             }
         }

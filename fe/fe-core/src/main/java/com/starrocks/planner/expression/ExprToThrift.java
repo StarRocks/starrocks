@@ -21,6 +21,7 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -502,7 +503,7 @@ public final class ExprToThrift {
             } else {
                 msg.node_type = TExprNodeType.FUNCTION_CALL;
             }
-            Function fn = node.getFn();
+            Function fn = AnalysisContext.getFunctionByExpr(node);
             if (fn != null) {
                 TFunction tfn = fn.toThrift();
                 tfn.setIgnore_nulls(node.getIgnoreNulls());

@@ -33,6 +33,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -305,13 +306,13 @@ public abstract class StatisticsCollectJob {
                 Function.CompareMode.IS_IDENTICAL);
 
         FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
-        unhexExpr.setFn(unhex);
+        AnalysisContext.populateCachedFields(unhexExpr, unhex);
         unhexExpr.setType(unhex.getReturnType());
 
         Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
-        fe.setFn(fn);
+        AnalysisContext.populateCachedFields(fe, fn);
         fe.setType(fn.getReturnType());
         return fe;
     }

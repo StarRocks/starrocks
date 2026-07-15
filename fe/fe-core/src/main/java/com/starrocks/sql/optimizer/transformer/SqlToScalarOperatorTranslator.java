@@ -23,6 +23,7 @@ import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -745,22 +746,23 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
-            if (node.getFn() instanceof SqlFunction) {
-                return visitSqlFunctionCall(node, arguments);
+            Function fn = AnalysisContext.getFunctionByExpr(node);
+            if (fn instanceof SqlFunction) {
+                return visitSqlFunctionCall(node, fn, arguments);
             }
 
             CallOperator callOperator = new CallOperator(
                     node.getFunctionName(),
                     node.getType(),
                     arguments,
-                    node.getFn(),
+                    fn,
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
             return callOperator;
         }
 
-        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
-            SqlFunction sqlFunction = (SqlFunction) node.getFn();
+        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, Function fn, List<ScalarOperator> arguments) {
+            SqlFunction sqlFunction = (SqlFunction) fn;
             Expr expr = sqlFunction.getAnalyzeExpr();
             if (expr == null) {
                 throw new StarRocksPlannerException("view function analyze expr is null",
@@ -791,7 +793,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             CallOperator callOperator =
                     new CallOperator(functionCallExpr.getFunctionName(), functionCallExpr.getType(), arguments,
-                            functionCallExpr.getFn(), functionCallExpr.getParams().isDistinct());
+                            AnalysisContext.getFunctionByExpr(functionCallExpr), functionCallExpr.getParams().isDistinct());
             callOperator.setIgnoreNulls(functionCallExpr.getIgnoreNulls());
             return callOperator;
         }
@@ -922,7 +924,8 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(),
+                    AnalysisContext.getFunctionByExpr(node), node.getType());
         }
 
         @Override

@@ -120,6 +120,11 @@ public class StringLiteral extends LiteralExpr {
     }
 
     @Override
+    public String toSimpleSql() {
+        return "'" + value + "'";
+    }
+
+    @Override
     public long getLongValue() {
         return Long.parseLong(value);
     }

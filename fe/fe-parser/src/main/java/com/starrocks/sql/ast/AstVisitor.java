@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.ArraySliceExpr;
@@ -33,6 +34,8 @@ import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -1264,6 +1267,19 @@ public interface AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Other Expressions --------------------------------
+
+    default R visitAnalyticExpr(AnalyticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitFunctionCall(FunctionCallExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitGroupingFunctionCall(GroupingFunctionCallExpr node, C context) {
+        return visitFunctionCall(node, context);
+    }
+
 
     default R visitArithmeticExpr(ArithmeticExpr node, C context) {
         return visitExpression(node, context);

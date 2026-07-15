@@ -22,6 +22,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -550,7 +551,7 @@ public class ScalarOperatorToExpr {
                     }
                     callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
-                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
+                    AnalysisContext.populateCachedFields((FunctionCallExpr) callExpr, call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
@@ -563,7 +564,7 @@ public class ScalarOperatorToExpr {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
                     Preconditions.checkNotNull(call.getFunction());
-                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
+                    AnalysisContext.populateCachedFields((FunctionCallExpr) callExpr, call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }

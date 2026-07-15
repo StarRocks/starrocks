@@ -95,11 +95,11 @@ public class FunctionAnalyzer {
     }
 
     public static void analyze(FunctionCallExpr functionCallExpr) {
-        if (functionCallExpr.getFn() instanceof AggregateFunction) {
+        if (functionCallExpr.isAggregateFn()) {
             analyzeBuiltinAggFunction(functionCallExpr);
         }
 
-        if (functionCallExpr.getParams().isStar() && !(functionCallExpr.getFn() instanceof AggregateFunction)) {
+        if (functionCallExpr.getParams().isStar() && !functionCallExpr.isAggregateFn()) {
             throw new SemanticException("Cannot pass '*' to scalar function.", functionCallExpr.getPos());
         }
 
@@ -175,7 +175,11 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
         }
-        Function fn = functionCallExpr.getFn();
+        Function fn = AnalysisContext.getFunctionByExpr(functionCallExpr);
+        if (fn == null) {
+            fn = ExprUtils.getBuiltinFunction(fnName, functionCallExpr.getFnArgTypes(),
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        }
         final String funcName = fnName;
         if (fn instanceof StateFunctionCombinator) {
             // analyze `_state` combinator function by using its arg function

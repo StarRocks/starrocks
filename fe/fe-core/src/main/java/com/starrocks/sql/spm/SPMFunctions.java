@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.Expr;
@@ -115,7 +116,8 @@ public class SPMFunctions {
         List<Expr> children = Lists.newArrayList(new IntLiteral(placeholderID, IntegerType.BIGINT));
         children.addAll(input);
         FunctionCallExpr expr = new FunctionCallExpr(func, children);
-        expr.setFn(getSPMFunction(func, NullType.NULL, children.stream().map(Expr::getType).toList()));
+        AnalysisContext.populateCachedFields(expr,
+                getSPMFunction(func, NullType.NULL, children.stream().map(Expr::getType).toList()));
         expr.setType(NullType.NULL);
         return expr;
     }

@@ -17,12 +17,12 @@ package com.starrocks.sql.optimizer.transformer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
@@ -110,10 +110,10 @@ public class WindowTransformer {
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (isRowNumberFn(callExpr.getFn())) {
+        if (isRowNumberFn(callExpr)) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for row_numer()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
-        } else if (isNtileFn(callExpr.getFn())) {
+        } else if (isNtileFn(callExpr)) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for NTILE()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
@@ -122,18 +122,18 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (isCumeFn(callExpr.getFn())) {
+        } else if (isCumeFn(callExpr)) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for "
-                    + callExpr.getFn().getFunctionName() + "()");
+                    + callExpr.getFunctionName() + "()");
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
-        } else if (isOffsetFn(callExpr.getFn())) {
+        } else if (isOffsetFn(callExpr)) {
             try {
                 Preconditions.checkState(windowFrame == null);
                 Type firstType = callExpr.getChild(0).getType();
                 // In old planner, the NullLiteral will cast to function arg type.
                 // But in new planner, the NullLiteral type is still null.
                 if (callExpr.getChild(0) instanceof NullLiteral) {
-                    firstType = callExpr.getFn().getArgs()[0];
+                    firstType = callExpr.getFnArgTypes()[0];
                 }
 
                 if (callExpr.getChildren().size() == 1) {
@@ -166,7 +166,7 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (isApproxTopKFn(callExpr.getFn())) {
+        } else if (isApproxTopKFn(callExpr)) {
             Preconditions.checkState(CollectionUtils.isEmpty(orderByElements),
                     "Unexpected order by clause for approx_top_k()");
             Preconditions.checkState(windowFrame == null, "Unexpected window set for approx_top_k()");
@@ -194,8 +194,8 @@ public class WindowTransformer {
             if (reversedFnName != null) {
                 callExpr.resetFnName("", reversedFnName);
                 Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
-                        callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
-                callExpr.setFn(reversedFn);
+                        callExpr.getFnArgTypes(), Function.CompareMode.IS_IDENTICAL);
+                AnalysisContext.populateCachedFields(callExpr, reversedFn);
             }
         }
 
@@ -578,50 +578,50 @@ public class WindowTransformer {
         return partitionPrefix.contains(subSet);
     }
 
-    public static boolean isAnalyticFn(Function fn) {
-        return fn instanceof AggregateFunction
-                && ((AggregateFunction) fn).isAnalyticFn();
+    public static boolean isAnalyticFn(FunctionCallExpr fn) {
+        return fn.isWindowFunction();
     }
 
-    public static boolean isOffsetFn(Function fn) {
+    public static boolean isOffsetFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.LEAD) || fn.functionName().equalsIgnoreCase(AnalyticExpr.LAG);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.LEAD) ||
+                fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.LAG);
     }
 
-    public static boolean isNtileFn(Function fn) {
+    public static boolean isNtileFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.NTILE);
     }
 
-    public static boolean isCumeFn(Function fn) {
+    public static boolean isCumeFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST) || fn.functionName().equalsIgnoreCase(
-                AnalyticExpr.PERCENTRANK);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST) ||
+                fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.PERCENTRANK);
     }
 
-    public static boolean isRowNumberFn(Function fn) {
+    public static boolean isRowNumberFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER);
     }
 
-    public static boolean isApproxTopKFn(Function fn) {
+    public static boolean isApproxTopKFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.APPROX_TOP_K);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.APPROX_TOP_K);
     }
 
     /**

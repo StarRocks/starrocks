@@ -293,6 +293,11 @@ public class SlotRef extends Expr {
         return helper.toString();
     }
 
+    @Override
+    public String toSimpleSql() {
+        return colName != null ? colName : (label != null ? label : debugString());
+    }
+
     public boolean isColumnRef() {
         return tblName != null && !isFromLambda();
     }

@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.HintNode;
@@ -72,23 +70,23 @@ public class AnalyticAnalyzer {
                     analyticExpr.getPos());
         }
 
-        if (!isAnalyticFn(analyticFunction.getFn())) {
+        if (!isAnalyticFn(analyticFunction)) {
             throw new SemanticException("Function '%s' not supported with OVER clause.",
                     ExprToSql.toSql(analyticExpr.getFnCall()), analyticFunction.getPos());
         }
 
         for (Expr e : analyticExpr.getFnCall().getChildren()) {
             if (e.getType().isBitmapType() &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION) &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
+                    !analyticFunction.getFunctionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
+                    !analyticFunction.getFunctionName().equals(FunctionSet.BITMAP_UNION) &&
+                    !analyticFunction.getFunctionName().equals(FunctionSet.LEAD) &&
+                    !analyticFunction.getFunctionName().equals(FunctionSet.LAG)) {
                 throw new SemanticException("bitmap type could only used for bitmap_union_count/bitmap_union/lead/lag " +
                         "window function", e.getPos());
             } else if (e.getType().isHllType() &&
-                    !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
-                    !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
+                    !analyticFunction.getFunctionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
+                    !analyticFunction.getFunctionName().equals(FunctionSet.LEAD) &&
+                    !analyticFunction.getFunctionName().equals(FunctionSet.LAG)) {
                 throw new SemanticException("hll type could only used for hll_union_agg/lead/lag window function",
                         e.getPos());
             } else if (e.getType().isPercentile()) {
@@ -96,7 +94,7 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (isOffsetFn(analyticFunction.getFn()) && analyticFunction.getChildren().size() > 1) {
+        if (isOffsetFn(analyticFunction) && analyticFunction.getChildren().size() > 1) {
             Expr offset = analyticFunction.getChild(1);
             if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
@@ -110,7 +108,7 @@ public class AnalyticAnalyzer {
                 Type firstType = analyticFunction.getChild(0).getType();
 
                 if (analyticFunction.getChild(0) instanceof NullLiteral) {
-                    firstType = analyticFunction.getFn().getArgs()[0];
+                    firstType = analyticFunction.getFnArgTypes()[0];
                 }
 
                 try {
@@ -138,7 +136,7 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (isNtileFn(analyticFunction.getFn())) {
+        if (isNtileFn(analyticFunction)) {
             Expr numBuckets = analyticFunction.getChild(0);
             if (!isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
@@ -166,8 +164,8 @@ public class AnalyticAnalyzer {
         }
 
         if (analyticExpr.getWindow() != null) {
-            if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
-                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
+            if ((isRankingFn(analyticFunction) || isCumeFn(analyticFunction) ||
+                    isOffsetFn(analyticFunction) || isHllAggFn(analyticFunction))) {
                 throw new SemanticException("Windowing clause not allowed with '" + ExprToSql.toSql(analyticFunction) + "'",
                         analyticExpr.getPos());
             }
@@ -401,66 +399,66 @@ public class AnalyticAnalyzer {
         }
     }
 
-    private static boolean isAnalyticFn(Function fn) {
-        return fn instanceof AggregateFunction && ((AggregateFunction) fn).isAnalyticFn();
+    private static boolean isAnalyticFn(FunctionCallExpr fn) {
+        return fn.isWindowFunction();
     }
 
-    private static boolean isOffsetFn(Function fn) {
+    private static boolean isOffsetFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.LEAD) ||
-                fn.functionName().equalsIgnoreCase(AnalyticExpr.LAG);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.LEAD) ||
+                fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.LAG);
     }
 
-    private static boolean isMinMax(Function fn) {
+    private static boolean isMinMax(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.MIN) ||
-                fn.functionName().equalsIgnoreCase(AnalyticExpr.MAX);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.MIN) ||
+                fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.MAX);
     }
 
-    private static boolean isRankingFn(Function fn) {
+    private static boolean isRankingFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.RANK)
-                || fn.functionName().equalsIgnoreCase(AnalyticExpr.DENSERANK)
-                || fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER)
-                || fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.RANK)
+                || fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.DENSERANK)
+                || fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER)
+                || fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.NTILE);
     }
 
-    private static boolean isCumeFn(Function fn) {
+    private static boolean isCumeFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST)
-                || fn.functionName().equalsIgnoreCase(AnalyticExpr.PERCENTRANK);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST)
+                || fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.PERCENTRANK);
     }
 
-    private static boolean isNtileFn(Function fn) {
+    private static boolean isNtileFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.NTILE);
     }
 
-    private static boolean isStatisticFn(Function fn) {
-        return STATISTIC_FUNCTIONS.contains(fn.functionName().toLowerCase());
+    private static boolean isStatisticFn(FunctionCallExpr fn) {
+        return STATISTIC_FUNCTIONS.contains(fn.getFunctionName().toLowerCase());
     }
 
-    private static boolean isHllAggFn(Function fn) {
+    private static boolean isHllAggFn(FunctionCallExpr fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(AnalyticExpr.HLL_UNION_AGG);
+        return fn.getFunctionName().equalsIgnoreCase(AnalyticExpr.HLL_UNION_AGG);
     }
 
     private static boolean isPositiveConstantInteger(Expr offset) {
