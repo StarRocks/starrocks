@@ -31,6 +31,11 @@ on:
         required: false
         default: '2'
         type: string
+      target_probation:
+        description: 'PROBATION target watermark — drip fills probation up to this many cases from the recovered pool'
+        required: false
+        default: '30'
+        type: string
       dry_run:
         description: 'Only print decisions; do not write files or open a PR'
         required: false
@@ -73,6 +78,8 @@ jobs:
             --resolve-record files/unstable_case_resolve_record.json \
             --repo "${{ github.repository }}" --branch "${BRANCH}" \
             --k "${{ inputs.k || '5' }}" --min-days "${{ inputs.min_days || '2' }}" --q "${{ inputs.q || '2' }}" \
+            --recovered-pool files/unstable_case_recovered_pool.json \
+            --target-probation "${{ inputs.target_probation || '30' }}" \
             ${DRY}
 
           if [[ -n "${DRY}" ]]; then
@@ -100,7 +107,7 @@ jobs:
           # push is rejected non-fast-forward — making the workflow un-retriable.
           BR="auto/probation-promote-demote-$(date +%Y-%m-%d)-${ch_branch}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
-          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json
+          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json files/unstable_case_recovered_pool.json
           git commit -m "[Tool] probation promote/demote ${BRANCH} (auto)"
           git push origin "$BR"
           BODY=$(mktemp)
