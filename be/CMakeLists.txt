@@ -578,19 +578,22 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
     # Concrete data sinks are PRIVATE dependencies of Exec. Keep them in the
-    # main link list ahead of Storage, format, and thirdparty provider archives
-    # so one-pass static linkers see their unresolved references first.
+    # main link list ahead of connectors, Storage, format, and thirdparty
+    # provider archives so one-pass static linkers see their unresolved
+    # references first.
     DataSinkResult
     DataSinkExchange
     DataSinkExternal
     DataSinkDictionaryCache
     DataSinkTablet
     DataSinkFile
-    Storage
-    # Connectors depend on the format libs and thirdparty archives below; keep ahead.
+    # ConnectorLake depends on Storage, while connectors also depend on the
+    # format libs and thirdparty archives below; keep them ahead of those
+    # dependencies.
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
     ${WL_END_GROUP}
+    Storage
     # The concrete format libraries must be linked ahead of the thirdparty
     # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
     # the Formats aggregate lets CMake append its concrete members after that
