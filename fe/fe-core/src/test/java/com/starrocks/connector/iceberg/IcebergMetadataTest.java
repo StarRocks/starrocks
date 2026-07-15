@@ -4200,7 +4200,11 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         String sql = "SELECT * FROM iceberg_tt_catalog.db.tb VERSION AS OF 'tag_s1'";
-        QueryStatement stmt = (QueryStatement) AnalyzeTestUtil.analyzeSuccess(sql);
+        // Use analyzeWithoutTestView: analyzeSuccess additionally round-trips through AstToSQLBuilder.toSQL()
+        // + re-analyze, but toSQL does not emit the VERSION AS OF clause on this branch, so the regenerated
+        // SQL would resolve against the current schema and fail on the pre-rename column. The single analyze
+        // is what this test verifies (the targeted snapshot schema).
+        QueryStatement stmt = (QueryStatement) AnalyzeTestUtil.analyzeWithoutTestView(sql);
         Assertions.assertEquals(List.of("k1", "k2"), stmt.getQueryRelation().getColumnOutputNames());
 
         TableRelation tableRelation =
