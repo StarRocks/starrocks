@@ -14,6 +14,23 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/data_sink")
 
+ADD_BE_LIB(DataSinkPipelineCore
+    pipeline/pipeline_sink_dispatcher.cpp
+    pipeline/pipeline_sink_registry.cpp
+)
+
+target_link_libraries(DataSinkPipelineCore PUBLIC
+    ExecPrimitive
+    Common
+    Base
+    StarRocksGen
+)
+
+target_link_libraries(DataSinkPipelineCore PRIVATE
+    ExecRuntime
+    Gutil
+)
+
 ADD_BE_LIB(DataSinkFile
     file/parquet_builder.cpp
     file/plain_text_builder.cpp

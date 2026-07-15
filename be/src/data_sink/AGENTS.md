@@ -5,6 +5,14 @@ This section is generated from `be/module_boundary_manifest.json`.
 Run `python3 build-support/render_be_agents.py --write` after changing the manifest.
 Run `python3 build-support/check_be_module_boundaries.py --mode full` to validate the same rules mechanically.
 
+### DataSinkPipelineCore (`datasinkpipelinecore`)
+Immutable pipeline sink provider contracts and dispatch over execution-runtime primitives without concrete Exec pipeline composition, sink implementations, or orchestration coupling.
+- Targets: `DataSinkPipelineCore`
+- Allowed internal include prefixes: `data_sink/pipeline/`, `exec/runtime/query_context.h`, `exec/pipeline/fragment_execution_params.h`, `exec_primitive/`, `runtime/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecRuntime`, `ExecPrimitive`, `Runtime`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `data_sink_pipeline_core_test`
+- Remediation: Keep provider metadata, immutable lookup, and dispatch independent of concrete pipeline graph construction; place graph adapters in Orchestration and sink implementations in their owning data-sink modules.
+
 ### DataSinkFile (`datasinkfile`)
 Reusable file sink builders for delimited text and Parquet output over explicit format, filesystem, expression, and column dependencies without full Exec, concrete Storage, or orchestration coupling.
 - Targets: `DataSinkFile`

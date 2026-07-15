@@ -372,6 +372,31 @@
       "remediation": "Keep format code inside the Format module; move connector orchestration and higher execution policy upward."
     },
     {
+      "id": "datasinkpipelinecore",
+      "doc_label": "DataSinkPipelineCore",
+      "summary": "Immutable pipeline sink provider contracts and dispatch over execution-runtime primitives without concrete Exec pipeline composition, sink implementations, or orchestration coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkPipelineCore"],
+      "owned_roots": ["be/src/data_sink/pipeline"],
+      "allowed_include_prefixes": [
+        "data_sink/pipeline/",
+        "exec/runtime/query_context.h",
+        "exec/pipeline/fragment_execution_params.h",
+        "exec_primitive/",
+        "runtime/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "compute_env/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h", "exec/pipeline/pipeline_builder.h"],
+      "allowed_target_deps": ["ExecRuntime", "ExecPrimitive", "Runtime", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_pipeline_core_test"],
+      "allowed_test_link_deps": ["DataSinkPipelineCore", "ExecRuntime", "ExecPrimitive", "Runtime", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep provider metadata, immutable lookup, and dispatch independent of concrete pipeline graph construction; place graph adapters in Orchestration and sink implementations in their owning data-sink modules."
+    },
+    {
       "id": "datasinkfile",
       "doc_label": "DataSinkFile",
       "summary": "Reusable file sink builders for delimited text and Parquet output over explicit format, filesystem, expression, and column dependencies without full Exec, concrete Storage, or orchestration coupling.",
