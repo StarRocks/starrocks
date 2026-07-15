@@ -91,6 +91,11 @@ message FileMetaPB {
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
     optional bytes encryption_meta = 4;
+    // The tablet metadata version at which the file was created. Stamped when the file is moved into
+    // orphan_files so lake vacuum can tell whether the file was live at a snapshot-retained version
+    // without reading that version's tablet metadata. Unset (0) means "creation version unknown" and
+    // is treated conservatively (retained under any covering retain version).
+    optional int64 version = 5;
 }
 
 message DelvecMetadataPB {
@@ -142,6 +147,13 @@ message DelfileWithRowsetId {
     optional bytes encryption_meta = 4;
     // Whether this file shared by multiple tablets
     optional bool shared = 5 [default=false];
+    // The tablet metadata version at which this del file was created. Stamped once at creation and
+    // carried verbatim by CopyFrom when the del file is transferred to a compaction output rowset or
+    // inherited across tablet split/merge, so it reflects the ORIGINAL creation version even after
+    // the containing rowset is re-versioned. Lake vacuum uses it to tell whether the del file was
+    // live at a snapshot-retained version. Unset (0) means "creation version unknown" and is treated
+    // conservatively (retained under any covering retain version).
+    optional int64 version = 6;
 }
 
 message SegmentMetadataPB {
