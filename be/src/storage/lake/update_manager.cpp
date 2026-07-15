@@ -234,6 +234,7 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
 }
 
 DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
+DEFINE_FAIL_POINT(fail_lake_pk_index_flush);
 
 StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
                                                              int64_t generation_version) {
@@ -241,6 +242,9 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
     // they exercise the metadata merge/split logic without materializing a real index.
     FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_flush, { return metadata; });
+    // Test-only: inject a flush failure so callers can exercise their error-propagation paths.
+    FAIL_POINT_TRIGGER_EXECUTE(fail_lake_pk_index_flush,
+                               { return Status::InternalError("injected flush_pk_memtable failure"); });
     if (!is_primary_key(*metadata) || !metadata->enable_persistent_index() ||
         metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return metadata;
