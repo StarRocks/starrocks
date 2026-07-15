@@ -48,6 +48,16 @@ on:
   schedule:
     - cron: '0 19 * * *'    # daily 19:00 UTC (03:00 Asia/Shanghai) → reconcile (pending-only)
     - cron: '0 20 * * 0'    # weekly Sun 20:00 UTC (Mon 04:00 Asia/Shanghai) → reconcile-all (concrete too)
+  workflow_dispatch:        # manual trigger — run a self-heal sweep on demand, don't only wait for cron
+    inputs:
+      mode:
+        description: 'Self-heal sweep to run (same jobs the cron fires)'
+        type: choice
+        required: true
+        default: reconcile
+        options:
+          - reconcile        # = daily: index-fix pending sweep + affected-versions cause self-heal
+          - reconcile-all    # = weekly: re-check concrete records too (heavier)
 
 # Concurrency is per-ORIGIN for the single-origin EVENTS (origin-merge / backport-merge share
 # `BVI-…-origin-N`, so different origins run in parallel but the same origin serializes — a
@@ -182,7 +192,9 @@ jobs:
 
   # ④ daily self-heal → pending-only sweep across all maintained lines.
   reconcile:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * *'
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '0 19 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'reconcile')
     concurrency:
       group: BVI-${{ github.repository }}-reconcile
       cancel-in-progress: false
@@ -220,7 +232,9 @@ jobs:
   # (reverse error like #74855: stored 4.1.3 but really 4.1.2). Heavier — every maintained-line
   # origin is rebuilt from GitHub — so weekly, off-peak, not on the daily cron.
   reconcile-all:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 20 * * 0'
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '0 20 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'reconcile-all')
     concurrency:
       group: BVI-${{ github.repository }}-reconcile-all
       cancel-in-progress: false
