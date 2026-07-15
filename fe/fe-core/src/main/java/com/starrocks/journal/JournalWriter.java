@@ -15,6 +15,7 @@
 
 package com.starrocks.journal;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
@@ -25,9 +26,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -41,40 +39,11 @@ public class JournalWriter {
         // Normal serving state. New append tasks are accepted and fatal journal failures
         // keep the historical process-exit behavior.
         RUNNING,
-        // Demotion drain is in progress. New append tasks should be rejected/aborted and
-        // commit failures are converted into drain results instead of exiting the process.
+        // Demotion drain is in progress. Commit failures and interrupts are converted into graceful
+        // task aborts (WRITER_ABORTED) instead of exiting the process, so in-flight writes unwind.
         SEALING,
-        // The writer has finished sealing and will not process any more append tasks.
+        // The writer daemon has stopped; any straggler task taken from the queue is aborted.
         CLOSED
-    }
-
-    public static class DrainResult {
-        public enum Status {
-            // The barrier was observed after all earlier committed appends became durable.
-            BARRIER_REACHED,
-            // The writer lost the ability to commit while sealing, so the returned watermark
-            // is only the last successfully committed journal id.
-            LEADER_LOST,
-            // The caller stopped waiting before the barrier completed. The returned watermark
-            // is the latest committed journal id visible at timeout.
-            TIMEOUT
-        }
-
-        private final Status status;
-        private final long lastCommittedJournalId;
-
-        public DrainResult(Status status, long lastCommittedJournalId) {
-            this.status = status;
-            this.lastCommittedJournalId = lastCommittedJournalId;
-        }
-
-        public Status getStatus() {
-            return status;
-        }
-
-        public long getLastCommittedJournalId() {
-            return lastCommittedJournalId;
-        }
     }
 
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
@@ -111,8 +80,6 @@ public class JournalWriter {
 
     private long lastSlowEditLogTimeNs = -1L;
     private final AtomicReference<WriterState> writerState = new AtomicReference<>(WriterState.RUNNING);
-    private volatile DrainResult latestDrainResult;
-    private volatile JournalTask activeDrainBarrierTask;
     private volatile Daemon daemon;
 
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
@@ -126,8 +93,6 @@ public class JournalWriter {
     public void init(long maxJournalId) throws JournalException {
         this.nextVisibleJournalId = maxJournalId + 1;
         this.lastCommittedJournalId = maxJournalId;
-        this.latestDrainResult = null;
-        this.activeDrainBarrierTask = null;
         this.writerState.set(WriterState.RUNNING);
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
@@ -173,19 +138,27 @@ public class JournalWriter {
         d.start();
     }
 
-    public DrainResult sealAndStop(long timeoutMs) {
-        DrainResult result;
-        try {
-            result = sealAndGetCommittedWatermark(timeoutMs);
-            LOG.info("journal writer sealed: status={}, lastCommittedJournalId={}",
-                    result.getStatus(), result.getLastCommittedJournalId());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            LOG.warn("interrupted while sealing journal writer", e);
-            result = new DrainResult(DrainResult.Status.TIMEOUT, lastCommittedJournalId);
-        }
+    /**
+     * Flip the writer out of RUNNING so a commit failure or interrupt during the demotion drain becomes a
+     * graceful task abort instead of a process exit. Idempotent; a no-op once already sealing/closed.
+     */
+    public void beginSeal() {
+        writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
+    }
+
+    /**
+     * Stop the writer daemon and return the last committed journal id. Call only after the WAL admission
+     * gate is closed and all in-flight leader writes have drained (EditLog.awaitWalDrained), which
+     * guarantees the journal queue is empty here.
+     */
+    public long close(long timeoutMs) {
+        // Ensure the writer is out of RUNNING so stopDaemon's interrupt is a graceful stop, not a process exit.
+        beginSeal();
         stopDaemon(timeoutMs);
-        return result;
+        writerState.set(WriterState.CLOSED);
+        Preconditions.checkState(journalQueue.isEmpty(),
+                "journal queue not empty after draining in-flight leader writes: remaining=%s", journalQueue.size());
+        return lastCommittedJournalId;
     }
 
     private void stopDaemon(long timeoutMs) {
@@ -214,19 +187,12 @@ public class JournalWriter {
         currentJournal = journalQueue.take();
 
         if (writerState.get() == WriterState.CLOSED) {
-            drainClosedTasks(currentJournal);
-            return;
-        }
-
-        if (currentJournal.isBarrierTask()) {
-            completeBarrier(currentJournal, DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId, null);
-            writerState.set(WriterState.CLOSED);
-            drainClosedTasks(journalQueue.poll());
+            // Writer already stopped serving; abort the straggler so its waiter unwinds instead of hanging.
+            abortJournalTask(currentJournal, "journal writer is closed");
             return;
         }
 
         long nextJournalId = nextVisibleJournalId;
-        JournalTask barrierTask = null;
         initBatch();
 
         try {
@@ -242,10 +208,6 @@ public class JournalWriter {
                 }
 
                 currentJournal = journalQueue.take();
-                if (currentJournal.isBarrierTask()) {
-                    barrierTask = currentJournal;
-                    break;
-                }
             }
         } catch (JournalException e) {
             // abort current task
@@ -253,16 +215,13 @@ public class JournalWriter {
             abortJournalTask(currentJournal, e.getMessage());
         } finally {
             try {
-                // commit
+                // commit. The retry predicate only gates *retries*: the first commit attempt always runs, so
+                // healthy batches still become durable while the writer is SEALING during a demotion drain.
                 journal.batchWriteCommit(() -> writerState.get() == WriterState.RUNNING);
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
                 lastCommittedJournalId = nextJournalId - 1;
                 markCurrentBatchSucceed();
-                if (barrierTask != null) {
-                    completeBarrier(barrierTask, DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId, null);
-                    writerState.set(WriterState.CLOSED);
-                }
             } catch (JournalException e) {
                 // abort
                 LOG.warn("failed to commit batch, will abort current {} journals.",
@@ -272,26 +231,16 @@ public class JournalWriter {
                 } catch (JournalException e2) {
                     LOG.warn("failed to abort batch, will ignore and continue.", e);
                 }
-                if (writerState.get() == WriterState.SEALING) {
-                    JournalWriteException abortException = new JournalWriteException(
-                            JournalWriteException.Reason.WRITER_ABORTED,
-                            "journal commit failed while sealing", e);
-                    abortCurrentBatch(e.getMessage(), abortException);
-                    latestDrainResult = new DrainResult(DrainResult.Status.LEADER_LOST, lastCommittedJournalId);
-                    if (barrierTask != null) {
-                        completeBarrier(barrierTask, DrainResult.Status.LEADER_LOST, lastCommittedJournalId,
-                                abortException);
-                    }
-                    writerState.set(WriterState.CLOSED);
-                } else {
+                if (writerState.get() == WriterState.RUNNING) {
+                    // Commit failure while still serving is fatal (abortJournalTask exits the process).
                     abortCurrentBatch(e.getMessage());
+                } else {
+                    // Demotion drain (SEALING/CLOSED): unblock waiters with a terminal WRITER_ABORTED so they
+                    // stop retrying and release the WAL fence, letting the drain converge instead of exiting.
+                    abortCurrentBatch(e.getMessage(), new JournalWriteException(
+                            JournalWriteException.Reason.WRITER_ABORTED, "journal commit failed while sealing", e));
                 }
             }
-        }
-
-        if (writerState.get() == WriterState.CLOSED) {
-            drainClosedTasks(journalQueue.poll());
-            return;
         }
 
         if (writerState.get() != WriterState.RUNNING) {
@@ -430,22 +379,6 @@ public class JournalWriter {
         return d != null && d.isAlive();
     }
 
-    public synchronized DrainResult sealAndGetCommittedWatermark(long timeoutMs) throws InterruptedException {
-        if (writerState.get() == WriterState.CLOSED) {
-            return latestDrainResult != null
-                    ? latestDrainResult
-                    : new DrainResult(DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId);
-        }
-
-        if (activeDrainBarrierTask == null) {
-            writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
-            activeDrainBarrierTask = JournalTask.createBarrierTask();
-            journalQueue.put(activeDrainBarrierTask);
-        }
-
-        return waitForDrainResult(activeDrainBarrierTask, timeoutMs);
-    }
-
     private boolean needForceRollJournal() {
         if (forceRollJournal) {
             // Reset flag, alter system create image only trigger new image once
@@ -480,64 +413,4 @@ public class JournalWriter {
         }
     }
 
-    private DrainResult waitForDrainResult(JournalTask barrierTask, long timeoutMs) throws InterruptedException {
-        try {
-            if (timeoutMs < 0) {
-                barrierTask.get();
-            } else {
-                barrierTask.get(timeoutMs, TimeUnit.MILLISECONDS);
-            }
-            return buildDrainResult(barrierTask, DrainResult.Status.BARRIER_REACHED);
-        } catch (ExecutionException e) {
-            return buildDrainResult(barrierTask, DrainResult.Status.LEADER_LOST);
-        } catch (TimeoutException e) {
-            return new DrainResult(DrainResult.Status.TIMEOUT, lastCommittedJournalId);
-        }
-    }
-
-    private DrainResult buildDrainResult(JournalTask barrierTask, DrainResult.Status fallbackStatus) {
-        DrainResult.Status status = barrierTask.getDrainStatus() == null ? fallbackStatus : barrierTask.getDrainStatus();
-        DrainResult result = new DrainResult(status,
-                barrierTask.getCommittedJournalId() >= 0 ? barrierTask.getCommittedJournalId() : lastCommittedJournalId);
-        if (status != DrainResult.Status.TIMEOUT) {
-            latestDrainResult = result;
-        }
-        return result;
-    }
-
-    private void completeBarrier(JournalTask barrierTask, DrainResult.Status status,
-                                 long committedJournalId, Exception cause) {
-        if (barrierTask == null) {
-            return;
-        }
-        if (status == DrainResult.Status.BARRIER_REACHED) {
-            barrierTask.markBarrierReached(committedJournalId);
-        } else {
-            barrierTask.markBarrierFailed(status, committedJournalId, cause);
-        }
-        activeDrainBarrierTask = null;
-        latestDrainResult = new DrainResult(status, committedJournalId);
-    }
-
-    private void drainClosedTasks(JournalTask firstTask) {
-        JournalTask task = firstTask;
-        while (task != null) {
-            if (task.isBarrierTask()) {
-                DrainResult result = latestDrainResult != null
-                        ? latestDrainResult
-                        : new DrainResult(DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId);
-                Exception cause = null;
-                if (result.getStatus() == DrainResult.Status.LEADER_LOST) {
-                    cause = new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                            "journal writer already closed after sealing");
-                }
-                completeBarrier(task, result.getStatus(), result.getLastCommittedJournalId(), cause);
-            } else {
-                abortJournalTask(task, "journal writer is closed after sealing",
-                        new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                                "journal writer is closed after sealing"));
-            }
-            task = journalQueue.poll();
-        }
-    }
 }

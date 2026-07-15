@@ -17,82 +17,264 @@ package com.starrocks.persist;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.SerializeException;
-import com.starrocks.server.GlobalStateMgr;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.DataOutput;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Covers the EditLog leader WAL-apply fence: the write-admission gate (open/close), the count-all in-flight
+ * accounting, the WALApplier hook, and the demotion drain (awaitWalDrained). The gate/fence lives entirely in
+ * EditLog now, so these tests drive it directly via openWalGate/closeWalGate with no GlobalStateMgr state.
+ */
 public class EditLogFailureVisibleTest {
-    @BeforeEach
-    public void setUp() throws Exception {
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
-        setLeaderRoleState("ACTIVE");
-        setLeaderWorkAdmissionOpen(false);
-    }
 
-    @AfterEach
-    public void tearDown() throws Exception {
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
-        setLeaderRoleState("ACTIVE");
-        setLeaderWorkAdmissionOpen(false);
-    }
+    // ---- write-admission gate ----
 
     @Test
-    public void testSubmitLogOrThrowRejectsClosedAdmission() {
+    public void testGatedWriteRejectedWhenGateClosed() {
         EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.submitLogOrThrow((short) 1, new Text("111"), -1));
-        Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, exception.getReason());
+        // gate is closed by default (this node is not the ACTIVE leader)
+        JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
+                () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
+        Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, e.getReason());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
     @Test
-    public void testSubmitLogOrThrowRejectsNotLeader() throws Exception {
+    public void testGatedWriteRejectedAfterGateClosedAgain() {
         EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.submitLogOrThrow((short) 1, new Text("111"), -1));
-        Assertions.assertEquals(JournalWriteException.Reason.NOT_LEADER, exception.getReason());
+        editLog.openWalGate();
+        editLog.closeWalGate();
+        JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
+                () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
+        Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, e.getReason());
     }
 
     @Test
-    public void testSubmitLogOrThrowAllowsStarMgrOnFollower() throws Exception {
+    public void testStarMgrWriteBypassesClosedGate() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue);
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        // gate closed, but OP_STARMGR uses a separate journal system and is never gated/counted
+        AtomicBoolean applied = new AtomicBoolean(false);
+        Thread consumer = succeedQueuedTaskAsync(queue);
+        editLog.logJsonObjectOrThrow(OperationType.OP_STARMGR, "payload", obj -> applied.set(true));
+        consumer.join();
+        Assertions.assertTrue(applied.get());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
 
-        JournalTask task = editLog.submitLogOrThrow(OperationType.OP_STARMGR, new Text("111"), -1);
+    // ---- count-all in-flight accounting ----
 
-        Assertions.assertSame(task, queue.poll(1, TimeUnit.SECONDS));
+    @Test
+    public void testNoApplierGatedWriteIsCounted() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+
+        // a plain write with no WALApplier is still admitted through the gate and counted (count-all)
+        Thread writer = new Thread(() -> editLog.logJsonObject((short) 1, "payload"));
+        writer.setDaemon(true);
+        writer.start();
+
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+
+        task.markSucceed();
+        writer.join(5000);
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    // ---- WALApplier hook ----
+
+    @Test
+    public void testGatedWriteAppliesOnSuccess() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread consumer = succeedQueuedTaskAsync(queue);
+        editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true));
+        consumer.join();
+
+        Assertions.assertTrue(applied.get());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
     @Test
-    public void testSubmitLogOrThrowSerializeFailure() throws Exception {
+    public void testGatedWriteDoesNotApplyOnAbortAndReleasesFence() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread consumer = abortQueuedTaskAsync(queue);
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                () -> editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true)));
+        consumer.join();
+
+        Assertions.assertInstanceOf(JournalWriteException.class, exception.getCause());
+        Assertions.assertFalse(applied.get());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testOrThrowAppliesOnSuccess() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread consumer = succeedQueuedTaskAsync(queue);
+        editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true));
+        consumer.join();
+
+        Assertions.assertTrue(applied.get());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testOrThrowDoesNotApplyOnAbort() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread consumer = abortQueuedTaskAsync(queue);
+        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
+                () -> editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true)));
+        consumer.join();
+
+        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
+        Assertions.assertFalse(applied.get());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testSerializeFailureReleasesFence() {
         EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
-        setLeaderWorkAdmissionOpen(true);
+        editLog.openWalGate();
 
         Assertions.assertThrows(SerializeException.class,
-                () -> editLog.submitLogOrThrow((short) 1, new Writable() {
+                () -> editLog.logEdit((short) 1, new Writable() {
                     @Override
-                    public void write(java.io.DataOutput out) throws IOException {
+                    public void write(DataOutput out) throws IOException {
                         throw new IOException("boom");
                     }
-                }, -1));
+                }));
+        Assertions.assertEquals(0, editLog.inFlightForTest());
     }
+
+    // ---- demotion drain (awaitWalDrained) ----
+
+    @Test
+    public void testAwaitWalDrainedReturnsImmediatelyWhenNoInFlight() {
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4));
+        editLog.awaitWalDrained(1000L);
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testAwaitWalDrainedWaitsForInFlightThenReturns() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+
+        Thread writer = new Thread(() -> editLog.logJsonObject((short) 1, "payload"));
+        writer.setDaemon(true);
+        writer.start();
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+
+        CompletableFuture<Void> drain = CompletableFuture.runAsync(() -> editLog.awaitWalDrained(5000L));
+        Thread.sleep(150L);
+        Assertions.assertFalse(drain.isDone(), "drain must block while a write is in flight");
+
+        task.markSucceed();
+        drain.get(5, TimeUnit.SECONDS);
+        writer.join(5000);
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testAwaitWalDrainedTimesOutWhenInFlightStuck() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+
+        Thread writer = new Thread(() -> {
+            try {
+                editLog.logJsonObject((short) 1, "payload");
+            } catch (Throwable ignore) {
+                // released below
+            }
+        });
+        writer.setDaemon(true);
+        writer.start();
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class,
+                () -> editLog.awaitWalDrained(200L));
+        Assertions.assertTrue(e.getMessage().contains("timed out"));
+
+        task.markSucceed();
+        writer.join(5000);
+    }
+
+    @Test
+    public void testAwaitWalDrainedSurfacesApplyFailure() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+
+        RuntimeException boom = new RuntimeException("apply boom");
+        Thread consumer = succeedQueuedTaskAsync(queue);
+        RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
+                () -> editLog.logJsonObject((short) 1, "payload", obj -> {
+                    throw boom;
+                }));
+        consumer.join();
+        Assertions.assertSame(boom, thrown);
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+
+        IllegalStateException drainEx = Assertions.assertThrows(IllegalStateException.class,
+                () -> editLog.awaitWalDrained(1000L));
+        Assertions.assertTrue(drainEx.getMessage().contains("apply failed"));
+    }
+
+    @Test
+    public void testOpenGateClearsPriorApplyFailure() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+
+        RuntimeException boom = new RuntimeException("apply boom");
+        Thread consumer = succeedQueuedTaskAsync(queue);
+        Assertions.assertThrows(RuntimeException.class,
+                () -> editLog.logJsonObject((short) 1, "payload", obj -> {
+                    throw boom;
+                }));
+        consumer.join();
+
+        // a fresh leader session (openWalGate) clears the recorded apply failure
+        editLog.openWalGate();
+        editLog.awaitWalDrained(1000L);
+    }
+
+    // ---- static wait helpers (unchanged terminal/transient classification) ----
 
     @Test
     public void testWaitOrThrowPropagatesAbortReason() throws Exception {
@@ -136,11 +318,10 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testWaitInfinityStopsWhenJournalTaskAbortedDuringLeaderDemotion() throws Exception {
+    public void testWaitInfinityStopsOnTerminalAbort() throws Exception {
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
         task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
                 "journal commit failed while sealing"));
-        setLeaderRoleState("DEMOTING");
 
         CountDownLatch finished = new CountDownLatch(1);
         AtomicBoolean failedWithAbort = new AtomicBoolean(false);
@@ -157,87 +338,8 @@ public class EditLogFailureVisibleTest {
         waiter.start();
 
         Assertions.assertTrue(finished.await(1, TimeUnit.SECONDS),
-                "waitInfinity should stop after a demotion-time journal abort");
+                "waitInfinity must stop after a terminal (WRITER_ABORTED) journal abort");
         Assertions.assertTrue(failedWithAbort.get());
-    }
-
-    @Test
-    public void testLogJsonObjectLegacyCompletesSuccessfully() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-
-        Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObject((short) 1, "payload");
-        consumer.join();
-    }
-
-    @Test
-    public void testLogJsonObjectLegacyWalApplierAppliesOnSuccess() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        AtomicBoolean applied = new AtomicBoolean(false);
-
-        Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true));
-        consumer.join();
-
-        Assertions.assertTrue(applied.get());
-    }
-
-    @Test
-    public void testLogJsonObjectLegacyWalApplierClosesApplyFenceOnAbort() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        AtomicBoolean applied = new AtomicBoolean(false);
-
-        Thread consumer = abortQueuedTaskAsync(queue);
-        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
-                () -> editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true)));
-        consumer.join();
-
-        Assertions.assertInstanceOf(JournalWriteException.class, exception.getCause());
-        Assertions.assertEquals(0, getLeaderWalApplyInFlight());
-        Assertions.assertFalse(applied.get());
-    }
-
-    @Test
-    public void testLogJsonObjectOrThrowAppliesOnSuccess() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        AtomicBoolean applied = new AtomicBoolean(false);
-
-        Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObjectOrThrow(OperationType.OP_STARMGR, "payload", obj -> applied.set(true));
-        consumer.join();
-
-        Assertions.assertTrue(applied.get());
-    }
-
-    @Test
-    public void testLogJsonObjectOrThrowDoesNotApplyOnAbort() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue);
-        AtomicBoolean applied = new AtomicBoolean(false);
-
-        Thread consumer = new Thread(() -> {
-            try {
-                JournalTask task = queue.poll(5, TimeUnit.SECONDS);
-                if (task != null) {
-                    task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                            "journal writer closed"));
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        consumer.start();
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.logJsonObjectOrThrow(OperationType.OP_STARMGR, "payload", obj -> applied.set(true)));
-        consumer.join();
-
-        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
-        Assertions.assertFalse(applied.get());
     }
 
     private Thread abortQueuedTaskAsync(BlockingQueue<JournalTask> queue) {
@@ -275,26 +377,5 @@ public class EditLogFailureVisibleTest {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, "x".repeat(size - 4));
         return buffer;
-    }
-
-    private int getLeaderWalApplyInFlight() throws Exception {
-        Field field = GlobalStateMgr.class.getDeclaredField("leaderWalApplyInFlight");
-        field.setAccessible(true);
-        return (int) field.get(GlobalStateMgr.getCurrentState());
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private void setLeaderRoleState(String stateName) throws Exception {
-        Field field = GlobalStateMgr.class.getDeclaredField("leaderRoleState");
-        field.setAccessible(true);
-        Class<? extends Enum> stateClass = (Class<? extends Enum>) field.getType().asSubclass(Enum.class);
-        field.set(GlobalStateMgr.getCurrentState(), Enum.valueOf(stateClass, stateName));
-    }
-
-    private void setLeaderWorkAdmissionOpen(boolean open) throws Exception {
-        Field field = GlobalStateMgr.class.getDeclaredField("leaderWorkAdmissionOpen");
-        field.setAccessible(true);
-        AtomicBoolean admissionOpen = (AtomicBoolean) field.get(GlobalStateMgr.getCurrentState());
-        admissionOpen.set(open);
     }
 }

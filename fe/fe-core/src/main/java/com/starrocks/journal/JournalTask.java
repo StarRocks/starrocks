@@ -25,17 +25,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
-    public enum TaskType {
-        // A normal edit log append that consumes a real journal id and writes data to the journal.
-        APPEND,
-        // An internal in-memory barrier used to seal the writer and observe the last committed
-        // journal watermark. It does not write a journal entry or consume a journal id.
-        BARRIER
-    }
-
     // serialized JournalEntity
     private final DataOutputBuffer buffer;
-    private final TaskType taskType;
     // write result
     private Boolean isSucceed = null;
     // count down latch, the producer which called logEdit() will wait on it.
@@ -45,17 +36,13 @@ public class JournalTask implements Future<Boolean> {
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
     private final long startTimeNano;
-    private volatile JournalWriter.DrainResult.Status drainStatus;
-    private volatile long committedJournalId = -1L;
+    // Optional one-shot callback, run exactly once when this task completes (commit or abort). Used by
+    // split submit-then-wait-later callers to release the EditLog WAL admission fence at durability.
+    private Runnable onDone;
 
     public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
-        this(startTimeNano, buffer, maxWaitIntervalMs, TaskType.APPEND);
-    }
-
-    private JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs, TaskType taskType) {
         this.startTimeNano = startTimeNano;
         this.buffer = buffer;
-        this.taskType = taskType;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
             this.betterCommitBeforeTimeInNano = System.nanoTime() + maxWaitIntervalMs * 1000000;
@@ -64,25 +51,14 @@ public class JournalTask implements Future<Boolean> {
         }
     }
 
-    public static JournalTask createBarrierTask() {
-        return new JournalTask(System.nanoTime(), null, -1, TaskType.BARRIER);
-    }
-
     public long getStartTimeNano() {
         return startTimeNano;
-    }
-
-    public TaskType getTaskType() {
-        return taskType;
-    }
-
-    public boolean isBarrierTask() {
-        return taskType == TaskType.BARRIER;
     }
 
     public void markSucceed() {
         isSucceed = true;
         latch.countDown();
+        runOnDone();
     }
 
     public void markAbort() {
@@ -93,18 +69,36 @@ public class JournalTask implements Future<Boolean> {
         executeException = e;
         isSucceed = false;
         latch.countDown();
+        runOnDone();
     }
 
-    public void markBarrierReached(long committedJournalId) {
-        this.committedJournalId = committedJournalId;
-        this.drainStatus = JournalWriter.DrainResult.Status.BARRIER_REACHED;
-        markSucceed();
+    /**
+     * Register a one-shot completion callback. Runs immediately if the task already completed, otherwise
+     * runs once on the JournalWriter thread when the task is marked succeeded/aborted.
+     */
+    public void setOnDone(Runnable callback) {
+        boolean runNow = false;
+        synchronized (this) {
+            if (isDone()) {
+                runNow = true;
+            } else {
+                this.onDone = callback;
+            }
+        }
+        if (runNow) {
+            callback.run();
+        }
     }
 
-    public void markBarrierFailed(JournalWriter.DrainResult.Status drainStatus, long committedJournalId, Exception e) {
-        this.committedJournalId = committedJournalId;
-        this.drainStatus = drainStatus;
-        markAbort(e);
+    private void runOnDone() {
+        Runnable callback;
+        synchronized (this) {
+            callback = onDone;
+            onDone = null;
+        }
+        if (callback != null) {
+            callback.run();
+        }
     }
 
     public long getBetterCommitBeforeTimeInNano() {
@@ -121,14 +115,6 @@ public class JournalTask implements Future<Boolean> {
 
     public DataOutputBuffer getBuffer() {
         return buffer;
-    }
-
-    public JournalWriter.DrainResult.Status getDrainStatus() {
-        return drainStatus;
-    }
-
-    public long getCommittedJournalId() {
-        return committedJournalId;
     }
 
     @Override

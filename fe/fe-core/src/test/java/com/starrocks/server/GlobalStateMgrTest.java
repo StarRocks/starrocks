@@ -54,6 +54,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.persist.EditLog;
@@ -91,6 +92,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -429,74 +431,73 @@ public class GlobalStateMgrTest {
     }
 
     @Test
-    public void testSealJournalWriterFailsFastOnTimeoutWithoutAdvancingReplayId() {
+    public void testSealJournalWriterAdvancesReplayIdToWatermark() {
         GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
-        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
         globalStateMgr.setReplayedJournalIdForTest(10L);
-        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(
-                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.TIMEOUT, 12L)));
+        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(12L));
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
 
-        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
-                globalStateMgr::sealJournalWriter);
+        globalStateMgr.sealJournalWriter();
 
-        Assertions.assertTrue(exception.getMessage().contains("TIMEOUT"));
+        Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
+    }
+
+    @Test
+    public void testSealJournalWriterDoesNotRegressReplayId() {
+        GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
+        globalStateMgr.setReplayedJournalIdForTest(10L);
+        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(8L));
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+
+        globalStateMgr.sealJournalWriter();
+
         Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
     }
 
     @Test
-    public void testSealJournalWriterLeaderLostWaitsForWalApplyFenceBeforeAdvancingReplayId() throws Exception {
+    public void testSealJournalWriterFailsFastOnCloseFailureWithoutAdvancingReplayId() {
         GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
         globalStateMgr.setReplayedJournalIdForTest(10L);
-        StubJournalWriter writer = new StubJournalWriter(
-                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.LEADER_LOST, 12L));
-        globalStateMgr.setJournalWriterForTest(writer);
-
-        GlobalStateMgr.LeaderWalApplyScope applyScope =
-                globalStateMgr.enterLeaderWalApply(OperationType.OP_CREATE_DB_V2);
+        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(12L, true));
         globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        try {
-            Future<?> sealFuture = executor.submit(globalStateMgr::sealJournalWriter);
-            Assertions.assertTrue(writer.awaitSealCalled());
-            Thread.sleep(100L);
 
-            Assertions.assertFalse(sealFuture.isDone());
-            Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
-
-            applyScope.close();
-            sealFuture.get(5, TimeUnit.SECONDS);
-            Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
-        } finally {
-            applyScope.close();
-            executor.shutdownNow();
-        }
+        Assertions.assertThrows(IllegalStateException.class, globalStateMgr::sealJournalWriter);
+        Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
     }
 
     @Test
-    public void testSealJournalWriterWaitsForWalApplyFenceBeforeAdvancingReplayId() throws Exception {
+    public void testSealJournalWriterDrainsInFlightBeforeAdvancingReplayId() throws Exception {
         GlobalStateMgr globalStateMgr = createActiveLeaderForDemotionTest();
         globalStateMgr.setReplayedJournalIdForTest(10L);
-        StubJournalWriter writer = new StubJournalWriter(
-                new JournalWriter.DrainResult(JournalWriter.DrainResult.Status.BARRIER_REACHED, 12L));
+        StubJournalWriter writer = new StubJournalWriter(12L);
         globalStateMgr.setJournalWriterForTest(writer);
 
-        GlobalStateMgr.LeaderWalApplyScope applyScope =
-                globalStateMgr.enterLeaderWalApply(OperationType.OP_CREATE_DB_V2);
-        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(8);
+        EditLog editLog = new EditLog(queue);
+        editLog.openWalGate();
+        globalStateMgr.setEditLog(editLog);
+
+        // an admitted but not-yet-committed leader write keeps the WAL fence in-flight
+        Thread writerThread = new Thread(() -> editLog.logJsonObject((short) 1, "payload"));
+        writerThread.setDaemon(true);
+        writerThread.start();
+        JournalTask inFlight = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(inFlight);
+
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             Future<?> sealFuture = executor.submit(globalStateMgr::sealJournalWriter);
             Assertions.assertTrue(writer.awaitSealCalled());
-            Thread.sleep(100L);
+            Thread.sleep(150L);
 
-            Assertions.assertFalse(sealFuture.isDone());
+            Assertions.assertFalse(sealFuture.isDone(), "seal must block on the WAL drain");
             Assertions.assertEquals(10L, globalStateMgr.getReplayedJournalId());
 
-            applyScope.close();
+            inFlight.markSucceed();
             sealFuture.get(5, TimeUnit.SECONDS);
             Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
+            writerThread.join(5000);
         } finally {
-            applyScope.close();
             executor.shutdownNow();
         }
     }
@@ -510,18 +511,31 @@ public class GlobalStateMgrTest {
     }
 
     private static class StubJournalWriter extends JournalWriter {
-        private final DrainResult drainResult;
+        private final long watermark;
+        private final boolean failOnClose;
         private final CountDownLatch sealCalled = new CountDownLatch(1);
 
-        private StubJournalWriter(DrainResult drainResult) {
+        private StubJournalWriter(long watermark) {
+            this(watermark, false);
+        }
+
+        private StubJournalWriter(long watermark, boolean failOnClose) {
             super(null, new ArrayBlockingQueue<>(1));
-            this.drainResult = drainResult;
+            this.watermark = watermark;
+            this.failOnClose = failOnClose;
         }
 
         @Override
-        public DrainResult sealAndStop(long timeoutMs) {
+        public void beginSeal() {
             sealCalled.countDown();
-            return drainResult;
+        }
+
+        @Override
+        public long close(long timeoutMs) {
+            if (failOnClose) {
+                throw new IllegalStateException("stub journal writer close failure");
+            }
+            return watermark;
         }
 
         private boolean awaitSealCalled() throws InterruptedException {

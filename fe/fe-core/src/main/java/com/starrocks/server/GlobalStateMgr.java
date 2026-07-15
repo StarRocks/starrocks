@@ -135,7 +135,6 @@ import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -280,7 +279,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -365,9 +363,10 @@ public class GlobalStateMgr {
     private volatile FrontendNodeType pendingDemotionTargetType;
     private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
     private volatile boolean leaderBootstrapActionsDone = false;
-    private final Object leaderWalApplyFenceLock = new Object();
-    private int leaderWalApplyInFlight = 0;
-    private Throwable leaderWalApplyFailure = null;
+    // Guards leader-role lifecycle transitions (leaderRoleState / leaderWorkAdmissionOpen / activeLeaderLease
+    // / leaderGeneration). The WAL-apply fence itself now lives in EditLog (editLogFenceLock); this lock only
+    // drives the lifecycle state machine and toggles editLog's WAL admission gate at the right transitions.
+    private final Object leaderLifecycleLock = new Object();
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -1523,18 +1522,19 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void beginLeaderActivation() {
-        synchronized (leaderWalApplyFenceLock) {
+        synchronized (leaderLifecycleLock) {
             leaderWorkAdmissionOpen.set(false);
             activeLeaderLease = LeaderLease.INVALID;
             pendingDemotionTargetType = null;
-            leaderWalApplyFailure = null;
             updateLeaderRoleState(LeaderRoleState.ACTIVATING);
         }
+        // No leader writes are admitted until publishLeaderLease opens the gate at the end of activation.
+        closeEditLogWalGate();
     }
 
     @VisibleForTesting
     void publishLeaderLease(long haEpoch) {
-        synchronized (leaderWalApplyFenceLock) {
+        synchronized (leaderLifecycleLock) {
             Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
             Preconditions.checkState(feType == FrontendNodeType.LEADER,
                     "can only publish leader lease when FE type is LEADER, actual: %s", feType);
@@ -1544,20 +1544,19 @@ public class GlobalStateMgr {
             activeLeaderLease = new LeaderLease(haEpoch, generation);
             leaderWorkAdmissionOpen.set(true);
             pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.ACTIVE);
-            leaderWalApplyFenceLock.notifyAll();
-        }
+            updateLeaderRoleState(LeaderRoleState.ACTIVE);        }
+        // Open the WAL admission gate last, once the node is fully ACTIVE, so leader writes are accepted.
+        openEditLogWalGate();
     }
 
     @VisibleForTesting
     void rollbackLeaderActivation() {
-        synchronized (leaderWalApplyFenceLock) {
+        synchronized (leaderLifecycleLock) {
             leaderWorkAdmissionOpen.set(false);
             activeLeaderLease = LeaderLease.INVALID;
             pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.INACTIVE);
-            leaderWalApplyFenceLock.notifyAll();
-        }
+            updateLeaderRoleState(LeaderRoleState.INACTIVE);        }
+        closeEditLogWalGate();
     }
 
     @VisibleForTesting
@@ -1596,220 +1595,40 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void beginLeaderDemotion(FrontendNodeType targetType) {
-        synchronized (leaderWalApplyFenceLock) {
+        synchronized (leaderLifecycleLock) {
             leaderWorkAdmissionOpen.set(false);
             leaderGeneration.incrementAndGet();
             activeLeaderLease = LeaderLease.INVALID;
             pendingDemotionTargetType = targetType;
-            updateLeaderRoleState(LeaderRoleState.DEMOTING);
-            leaderWalApplyFenceLock.notifyAll();
-        }
+            updateLeaderRoleState(LeaderRoleState.DEMOTING);        }
+        // Close the WAL admission gate as the first demotion step: no new leader writes are admitted, so the
+        // in-flight count can only decrease before sealJournalWriter drains and seals.
+        closeEditLogWalGate();
     }
 
     @VisibleForTesting
     void completeLeaderDemotion() {
-        synchronized (leaderWalApplyFenceLock) {
+        synchronized (leaderLifecycleLock) {
             leaderWorkAdmissionOpen.set(false);
             activeLeaderLease = LeaderLease.INVALID;
             pendingDemotionTargetType = null;
-            updateLeaderRoleState(LeaderRoleState.INACTIVE);
-            leaderWalApplyFenceLock.notifyAll();
-        }
+            updateLeaderRoleState(LeaderRoleState.INACTIVE);        }
+        closeEditLogWalGate();
         // Reset the leader-session domination clock; this node is no longer the leader.
         dominationStartTimeMs = 0L;
     }
 
-    public <T> T runWithLeaderJournalAdmission(short op, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        return runWithLeaderJournalAdmission(op, false, action);
-    }
-
-    public <T> T runWithLeaderJournalAdmissionOrThrow(short op, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        return runWithLeaderJournalAdmission(op, true, action);
-    }
-
-    private <T> T runWithLeaderJournalAdmission(short op, boolean requirePublishedLease, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        if (op == OperationType.OP_STARMGR) {
-            return callLeaderAdmissionAction(action);
-        }
-        synchronized (leaderWalApplyFenceLock) {
-            ensureLeaderJournalAdmissionLocked(requirePublishedLease);
-            return callLeaderAdmissionAction(action);
+    private void openEditLogWalGate() {
+        EditLog editLog = this.editLog;
+        if (editLog != null) {
+            editLog.openWalGate();
         }
     }
 
-    public <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmission(short op, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        return runWithLeaderWalApplyAdmission(op, false, action);
-    }
-
-    public <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmissionOrThrow(short op, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        return runWithLeaderWalApplyAdmission(op, true, action);
-    }
-
-    private <T> LeaderWalApplyRegistration<T> runWithLeaderWalApplyAdmission(
-            short op, boolean requirePublishedLease, Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        if (op == OperationType.OP_STARMGR) {
-            return new LeaderWalApplyRegistration<>(LeaderWalApplyScope.noop(), callLeaderAdmissionAction(action));
-        }
-        synchronized (leaderWalApplyFenceLock) {
-            ensureLeaderJournalAdmissionLocked(requirePublishedLease);
-            leaderWalApplyInFlight++;
-            boolean registered = false;
-            try {
-                T result = callLeaderAdmissionAction(action);
-                registered = true;
-                return new LeaderWalApplyRegistration<>(new LeaderWalApplyScope(this), result);
-            } finally {
-                if (!registered) {
-                    finishLeaderWalApplyLocked(null);
-                }
-            }
-        }
-    }
-
-    @VisibleForTesting
-    LeaderWalApplyScope enterLeaderWalApply(short op) throws JournalWriteException {
-        if (op == OperationType.OP_STARMGR) {
-            return LeaderWalApplyScope.noop();
-        }
-        synchronized (leaderWalApplyFenceLock) {
-            ensureLeaderJournalAdmissionLocked(false);
-            leaderWalApplyInFlight++;
-            return new LeaderWalApplyScope(this);
-        }
-    }
-
-    private <T> T callLeaderAdmissionAction(Callable<T> action)
-            throws JournalWriteException, InterruptedException {
-        try {
-            return action.call();
-        } catch (JournalWriteException | InterruptedException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private void ensureLeaderJournalAdmissionLocked(boolean requirePublishedLease) throws JournalWriteException {
-        if (!isLeader()) {
-            throw new JournalWriteException(JournalWriteException.Reason.NOT_LEADER,
-                    String.format("Current node is not leader, but %s, submit log is not allowed", getFeType()));
-        }
-        if (requirePublishedLease && !leaderWorkAdmissionOpen.get()) {
-            throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
-                    "leader work admission is closed");
-        }
-        // Reject writes while demoting AND while activating. During ACTIVATING the node has already
-        // set feType=LEADER (so the isLeader() check above passes) but has not yet published the lease;
-        // no legitimate leader work runs in that window (journal replay happens before it, bootstrap
-        // after the lease is published), so rejecting it fences a stale straggler thread whose journal
-        // write would otherwise slip through between feType=LEADER and publishLeaderLease.
-        if (leaderRoleState == LeaderRoleState.DEMOTING || leaderRoleState == LeaderRoleState.ACTIVATING) {
-            throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
-                    "leader role state is " + leaderRoleState + ", submit log is not allowed");
-        }
-    }
-
-    private void finishLeaderWalApply(Throwable failure) {
-        synchronized (leaderWalApplyFenceLock) {
-            finishLeaderWalApplyLocked(failure);
-        }
-    }
-
-    private void finishLeaderWalApplyLocked(Throwable failure) {
-        if (failure != null && leaderWalApplyFailure == null) {
-            leaderWalApplyFailure = failure;
-        }
-        if (leaderWalApplyInFlight <= 0) {
-            throw new IllegalStateException("leader WAL apply fence underflow");
-        }
-        leaderWalApplyInFlight--;
-        leaderWalApplyFenceLock.notifyAll();
-    }
-
-    private void awaitLeaderWalAppliesDrained(long timeoutMs) {
-        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
-        synchronized (leaderWalApplyFenceLock) {
-            while (leaderWalApplyInFlight > 0) {
-                long remainingNs = deadlineNs - System.nanoTime();
-                if (remainingNs <= 0) {
-                    throw new IllegalStateException("timed out waiting for leader WAL applies to finish. inFlight="
-                            + leaderWalApplyInFlight);
-                }
-                try {
-                    TimeUnit.NANOSECONDS.timedWait(leaderWalApplyFenceLock, remainingNs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("interrupted while waiting for leader WAL applies to finish", e);
-                }
-            }
-            if (leaderWalApplyFailure != null) {
-                throw new IllegalStateException("leader WAL apply failed before demotion", leaderWalApplyFailure);
-            }
-        }
-    }
-
-    public static final class LeaderWalApplyRegistration<T> {
-        private final LeaderWalApplyScope scope;
-        private final T result;
-
-        private LeaderWalApplyRegistration(LeaderWalApplyScope scope, T result) {
-            this.scope = scope;
-            this.result = result;
-        }
-
-        public LeaderWalApplyScope getScope() {
-            return scope;
-        }
-
-        public T getResult() {
-            return result;
-        }
-    }
-
-    public static final class LeaderWalApplyScope implements AutoCloseable {
-        private static final LeaderWalApplyScope NOOP = new LeaderWalApplyScope(null);
-
-        private final GlobalStateMgr globalStateMgr;
-        private boolean closed = false;
-        private Throwable failure = null;
-
-        private LeaderWalApplyScope(GlobalStateMgr globalStateMgr) {
-            this.globalStateMgr = globalStateMgr;
-        }
-
-        private static LeaderWalApplyScope noop() {
-            return NOOP;
-        }
-
-        public void recordApplyFailure(Throwable failure) {
-            if (globalStateMgr == null) {
-                return;
-            }
-            if (this.failure == null) {
-                this.failure = failure;
-            }
-        }
-
-        @Override
-        public void close() {
-            if (globalStateMgr == null) {
-                return;
-            }
-            synchronized (this) {
-                if (closed) {
-                    return;
-                }
-                closed = true;
-            }
-            globalStateMgr.finishLeaderWalApply(failure);
+    private void closeEditLogWalGate() {
+        EditLog editLog = this.editLog;
+        if (editLog != null) {
+            editLog.closeWalGate();
         }
     }
 
@@ -2287,16 +2106,18 @@ public class GlobalStateMgr {
             return;
         }
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
-        JournalWriter.DrainResult result = journalWriter.sealAndStop(timeoutMs);
-        if (result.getStatus() == JournalWriter.DrainResult.Status.TIMEOUT) {
-            throw new IllegalStateException("failed to seal journal writer. status=" + result.getStatus()
-                    + ", lastCommittedJournalId=" + result.getLastCommittedJournalId());
-        } else if (result.getStatus() == JournalWriter.DrainResult.Status.LEADER_LOST) {
-            LOG.warn("journal writer lost leadership while sealing; will advance replayedJournalId only after "
-                    + "leader WAL applies drain, lastCommittedJournalId={}", result.getLastCommittedJournalId());
+        // Close the WAL admission gate (idempotent with beginLeaderDemotion) so no new leader writes are
+        // admitted, then flip the writer out of RUNNING so a commit failure/interrupt during the drain is a
+        // graceful abort rather than a process exit.
+        closeEditLogWalGate();
+        journalWriter.beginSeal();
+        // Drain every in-flight leader write (queue put + journal commit + WAL apply). When this returns the
+        // in-flight count is zero, which implies the journal queue is empty and all writes are committed.
+        if (editLog != null) {
+            editLog.awaitWalDrained(timeoutMs);
         }
-        awaitLeaderWalAppliesDrained(timeoutMs);
-        long watermark = result.getLastCommittedJournalId();
+        // Stop the writer daemon and take the committed watermark; the queue is asserted empty here.
+        long watermark = journalWriter.close(timeoutMs);
         long current = replayedJournalId.get();
         if (watermark > current) {
             replayedJournalId.set(watermark);
