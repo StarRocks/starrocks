@@ -317,6 +317,131 @@ Iceberg テーブルに対する各 UPDATE ステートメントは、以下の 
 | `iceberg_update_bytes` | バイト | `file_type`（`data`、`position_delete`） | Iceberg UPDATE が書き込んだ総バイト数。新規データファイルと position delete ファイルを別々に集計します。 |
 | `iceberg_update_files` | 件数 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE が書き込んだファイル総数。新規データファイルと position delete ファイルを別々に集計します。 |
 
+## MERGE INTO
+
+MERGE INTO ステートメントを使用すると、ソースリレーションの各行がターゲットテーブルと一致するかどうかに基づいて、Iceberg テーブルの行の更新・削除・挿入を単一の原子的なステートメントで条件付きに実行できます。この機能は v4.2 以降でサポートされています。
+
+MERGE INTO は UPDATE と同じ Iceberg V2 の **Merge-On-Read** コミットパスを再利用します。更新または削除された一致行は position delete ファイルを生成し、更新された行と新しく挿入された行は新しいデータファイルを生成し、それらすべてが単一の Iceberg スナップショットで一緒にコミットされます。読み取り側は常に MERGE 前または MERGE 後の状態のみを観測し、中間状態を観測することはありません。書き込み結果は Spark などの他の Iceberg 対応エンジンとも相互運用可能です。
+
+### 構文
+
+```SQL
+MERGE INTO <target_table> [ [AS] <target_alias> ]
+USING <source_relation> [ [AS] <source_alias> ]
+ON <merge_condition>
+[ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
+[ ... ]
+[ WHEN NOT MATCHED [ AND <condition> ] THEN { INSERT (<column_name> [, ...]) VALUES (<expression> [, ...]) | INSERT * } ]
+[ ... ]
+```
+
+### パラメーター
+
+- `target_table`: 変更対象の Iceberg テーブル。使用可能な形式：
+  - 完全修飾名：`catalog_name.database_name.table_name`
+  - データベース修飾名（catalog 設定後）：`database_name.table_name`
+  - テーブル名のみ（catalog とデータベース設定後）：`table_name`
+
+- `source_relation`: merge を駆動するデータソース。テーブル、ビュー、または括弧で囲まれたサブクエリを指定できます。`ON` 条件または `WHEN` 句がその列を参照する場合は、エイリアスを付けてください。
+
+- `merge_condition`: ターゲット行とソース行が一致するかどうかを判定する `ON` 述語。通常はキー列でターゲットとソースを結合します。
+
+- `WHEN MATCHED [AND <condition>] THEN ...`: ソース行に一致するターゲット行に適用されます。アクションは `UPDATE SET`（列挙した列を書き換える）または `DELETE`（一致行を削除する）のいずれかです。複数の `WHEN MATCHED` 句を記述でき、それぞれに任意の `AND <condition>` を付けられます。ある行に対しては、条件が成立する最初の句が適用されます。
+
+- `WHEN NOT MATCHED [AND <condition>] THEN ...`: どのターゲット行にも一致しないソース行に適用されます。アクションは新しい行の挿入で、明示的な列と値のリスト（`INSERT (...) VALUES (...)`）、または `INSERT *`（同名のソース列から各ターゲット列にマッピングする）を使用します。
+
+### 使用上の注意
+
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3 テーブル、または非 Iceberg テーブル（ネイティブ OLAP テーブルなど）への MERGE INTO は解析時に拒否されます。
+- 少なくとも 1 つの `WHEN` 句が必要です。
+- 各ターゲット行は **最大 1 つ** のソース行にのみ一致できます。あるターゲット行が複数のソース行に一致した場合、あいまいな変更を適用する代わりに、ステートメントは実行時に失敗します。必要に応じて、事前にソースを重複排除または集約してください。
+- `WHEN MATCHED ... THEN UPDATE` 句ではパーティション列を更新できません。
+- 隠しメタデータ列 `_file` および `_pos` は `UPDATE SET` で代入できず、`INSERT` の対象にもできません。
+- Iceberg V2 には列のデフォルト値セマンティクスが存在しないため、`DEFAULT` 値はサポートされていません。
+- `INSERT (...) VALUES (...)` では、値の数が列挙した列の数と一致する必要があり、同じ列を複数回列挙することはできません。
+- 無条件の `WHEN MATCHED` 句は `WHEN MATCHED` 句の最後になければならず、無条件の `WHEN NOT MATCHED` 句は `WHEN NOT MATCHED` 句の最後になければなりません。
+- `INSERT *` は、ソースを名前で参照できることを要求します。明示的なエイリアス、または素のテーブル（この場合はテーブル名が使用されます）のいずれかです。ソースがサブクエリの場合は、明示的なエイリアスが必要です。
+- 既存の Iceberg sink と同様に、Parquet 形式の Iceberg テーブルのみサポートされます。
+
+### 例
+
+以下の例は、`id`、`name`、`age`、`salary` 列を持つ Iceberg テーブル `iceberg_catalog.db.t_merge` を対象とします。
+
+#### Upsert（一致行を UPDATE、新しい行を INSERT）
+
+最も一般的な MERGE パターンでは、既に存在する行を更新し、存在しない行を挿入します：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_updates AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### 一致行のみを UPDATE
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 3 AS id, 'UPDATED' AS name, 75000 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, salary = s.salary;
+```
+
+#### 一致行を DELETE
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 2 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+```
+
+#### 一致しない行を INSERT
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 10 AS id, 'Frank' AS name, 40 AS age, 80000 AS salary) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### 条件付き句
+
+`WHEN` 句に `AND <condition>` を追加すると、行ごとにアクションを選択できます。一般的なユースケースは変更ストリーム（CDC）の適用です。ソース `t_changes` は各行を更新・削除・挿入のいずれかとしてマークする `op` 列を持ち、1 つの MERGE ステートメントでこの 3 種類すべてを振り分けます：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING iceberg_catalog.db.t_changes AS s
+ON t.id = s.id
+WHEN MATCHED AND s.op = 'DELETE' THEN DELETE
+WHEN MATCHED AND s.op = 'UPDATE' THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED AND s.op <> 'DELETE' THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### INSERT *
+
+ソースがターゲットと同名の列を公開している場合、`INSERT *` は列を列挙せずにすべてのターゲット列を挿入します。ソースは名前で参照できる必要があり、サブクエリのソースにはエイリアスが必要です：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_new_rows AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT *;
+```
+
+### モニタリング指標
+
+Iceberg テーブルに実際に書き込む MERGE INTO ステートメントは、コミット後に以下の FE 側指標を更新します。ファイルを生成しない no-op MERGE（たとえば空のソース、または一致・非一致のすべての行がフィルターされてどのアクションも適用されない場合）はコミットされずにスキップされ、これらのカウンターは増加しません。これらは既存の `iceberg_write_*`、`iceberg_delete_*`、`iceberg_update_*` と同じ `iceberg_*` 名前空間を共有し、標準の FE メトリクスエンドポイントから取得できます。
+
+| 指標 | 単位 | ラベル | 説明 |
+| --- | --- | --- | --- |
+| `iceberg_merge_total` | 件数 | `status`（`success`、`failed`）、`reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`） | Iceberg テーブルを対象とする MERGE INTO タスク総数。各タスク終了時に 1 ずつ加算されます。 |
+| `iceberg_merge_duration_ms_total` | ミリ秒 | — | Iceberg MERGE INTO タスクの累積実行時間。 |
+| `iceberg_merge_rows` | 行 | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO が処理した行の総数を、ファイル種別ごとに集計します。`position_delete` は UPDATE または DELETE によって命中したターゲット行（position delete として追加される）をカウントし、`data` は書き込まれたデータ行（更新された行と挿入された行）をカウントします。 |
+| `iceberg_merge_bytes` | バイト | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO が書き込んだ総バイト数。新規データファイルと position delete ファイルを別々に集計します。 |
+| `iceberg_merge_files` | 件数 | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO が書き込んだファイル総数。新規データファイルと position delete ファイルを別々に集計します。 |
+
 ## TRUNCATE
 
 Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。

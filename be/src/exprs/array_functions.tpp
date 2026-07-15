@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <memory>
+#include <type_traits>
 
 #include "base/bit/bit_mask.h"
 #include "base/orlp/pdqsort.h"
@@ -26,8 +27,8 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
@@ -847,33 +848,36 @@ private:
     }
 
     static void _reverse_binary_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
-        auto& offsets = down_cast<BinaryColumn*>(column)->get_offset();
-        // convert offset ot size
-        for (size_t i = offsets.size() - 1; i > 0; i--) {
-            offsets[i] = offsets[i] - offsets[i - 1];
-        }
-
-        for (size_t i = 0; i < chunk_size; i++) {
-            size_t begin = array_offsets[i];
-            size_t end = array_offsets[i + 1];
-
-            // revert size
-            std::reverse(offsets.begin() + begin + 1, offsets.begin() + end + 1);
-
-            // convert size to offset
-            for (size_t j = begin; j < end; j++) {
-                offsets[j + 1] = offsets[j] + offsets[j + 1];
+        auto* binary_column = down_cast<BinaryColumn*>(column);
+        auto& offsets = binary_column->get_offset();
+        auto& bytes = binary_column->get_bytes();
+        offsets.visit_storage([&](auto& offsets_buf) {
+            // convert offset ot size
+            for (size_t i = offsets_buf.size() - 1; i > 0; i--) {
+                offsets_buf[i] = offsets_buf[i] - offsets_buf[i - 1];
             }
 
-            // revert all byte of one array
-            auto& bytes = down_cast<BinaryColumn*>(column)->get_bytes();
-            std::reverse(bytes.begin() + offsets[begin], bytes.begin() + offsets[end]);
+            for (size_t i = 0; i < chunk_size; i++) {
+                size_t begin = array_offsets[i];
+                size_t end = array_offsets[i + 1];
 
-            // revert string one by one
-            for (size_t j = begin; j < end; j++) {
-                std::reverse(bytes.begin() + offsets[j], bytes.begin() + offsets[j + 1]);
+                // revert size
+                std::reverse(offsets_buf.begin() + begin + 1, offsets_buf.begin() + end + 1);
+
+                // convert size to offset
+                for (size_t j = begin; j < end; j++) {
+                    offsets_buf[j + 1] = offsets_buf[j] + offsets_buf[j + 1];
+                }
+
+                // revert all byte of one array
+                std::reverse(bytes.begin() + offsets_buf[begin], bytes.begin() + offsets_buf[end]);
+
+                // revert string one by one
+                for (size_t j = begin; j < end; j++) {
+                    std::reverse(bytes.begin() + offsets_buf[j], bytes.begin() + offsets_buf[j + 1]);
+                }
             }
-        }
+        });
     }
 
     static void _reverse_json_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
@@ -2291,62 +2295,72 @@ private:
         const char* str_bytes = reinterpret_cast<const char*>(str_column->raw_bytes());
         const uint32_t target_len = static_cast<uint32_t>(target.size);
 
-        size_t j = 0;
-        constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
+        size_t found = 0;
+        str_offsets.visit_storage([&](const auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            const auto* offsets_data = offsets_buf.data();
+            size_t j = 0;
+            constexpr int kSimdWidth = SIMD::kStringLenSimdWidth;
 
-        for (; j + kSimdWidth <= array_size; j += kSimdWidth) {
-            size_t base = array_offset + j;
+            if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+                for (; j + kSimdWidth <= array_size; j += kSimdWidth) {
+                    size_t base = array_offset + j;
 
-            if constexpr (CheckNull) {
-                bool all_null = true;
-                for (int k = 0; k < kSimdWidth; k++) {
-                    if (elements_null_data[base + k] == 0) {
-                        all_null = false;
-                        break;
+                    if constexpr (CheckNull) {
+                        bool all_null = true;
+                        for (int k = 0; k < kSimdWidth; k++) {
+                            if (elements_null_data[base + k] == 0) {
+                                all_null = false;
+                                break;
+                            }
+                        }
+                        if (all_null) {
+                            continue;
+                        }
                     }
-                }
-                if (all_null) {
-                    continue;
-                }
-            }
 
-            uint32_t mask = SIMD::length_eq_mask(str_offsets.data(), base, target_len);
-            if (mask == 0) {
-                continue;
-            }
-
-            while (mask) {
-                uint32_t bit = __builtin_ctz(mask);
-                size_t elem_idx = base + bit;
-
-                if constexpr (CheckNull) {
-                    if (elements_null_data[elem_idx]) {
-                        mask &= (mask - 1);
+                    uint32_t mask = SIMD::length_eq_mask(offsets_data, base, target_len);
+                    if (mask == 0) {
                         continue;
                     }
-                }
 
-                const char* elem_ptr = str_bytes + str_offsets[elem_idx];
-                if (memcmp(elem_ptr, target.data, target_len) == 0) {
-                    return j + bit + 1;
+                    while (mask) {
+                        uint32_t bit = __builtin_ctz(mask);
+                        size_t elem_idx = base + bit;
+
+                        if constexpr (CheckNull) {
+                            if (elements_null_data[elem_idx]) {
+                                mask &= (mask - 1);
+                                continue;
+                            }
+                        }
+
+                        const char* elem_ptr = str_bytes + offsets_data[elem_idx];
+                        if (memcmp(elem_ptr, target.data, target_len) == 0) {
+                            found = j + bit + 1;
+                            return;
+                        }
+                        mask &= (mask - 1);
+                    }
                 }
-                mask &= (mask - 1);
             }
-        }
-        for (; j < array_size; j++) {
-            size_t elem_idx = array_offset + j;
-            if constexpr (CheckNull) {
-                if (elements_null_data[elem_idx]) continue;
-            }
-            uint32_t elem_len = str_offsets[elem_idx + 1] - str_offsets[elem_idx];
-            if (elem_len == target_len) {
-                const char* elem_ptr = str_bytes + str_offsets[elem_idx];
-                if (memcmp(elem_ptr, target.data, target_len) == 0) {
-                    return j + 1;
+
+            for (; j < array_size; j++) {
+                size_t elem_idx = array_offset + j;
+                if constexpr (CheckNull) {
+                    if (elements_null_data[elem_idx]) continue;
+                }
+                uint32_t elem_len = offsets_data[elem_idx + 1] - offsets_data[elem_idx];
+                if (elem_len == target_len) {
+                    const char* elem_ptr = str_bytes + offsets_data[elem_idx];
+                    if (memcmp(elem_ptr, target.data, target_len) == 0) {
+                        found = j + 1;
+                        return;
+                    }
                 }
             }
-        }
-        return 0;
+        });
+        return found;
     }
 
     static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {

@@ -590,12 +590,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 sortKeyIdxes.add(idx);
             }
         }
-        boolean hasReplace = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
-            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
-                hasReplace = true;
-            }
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
@@ -1252,6 +1248,34 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
             if (!colSet.add(col)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, col);
+            }
+        }
+        List<String> sortKeys = clause.getSortKeys();
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            if (!(table instanceof OlapTable
+                    && ((OlapTable) table).isRangeDistribution()
+                    && table.isCloudNativeTable())) {
+                throw new SemanticException(
+                        "ORDER BY on ADD ROLLUP is only supported for shared-data range-distribution tables");
+            }
+            Set<String> rollupColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            rollupColSet.addAll(columnNames);
+            Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String sk : sortKeys) {
+                if (!rollupColSet.contains(sk)) {
+                    throw new SemanticException("ORDER BY column '" + sk + "' is not in the rollup column list");
+                }
+                if (!seen.add(sk)) {
+                    throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
+                }
+                // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
+                // they must be sortable -- reject JSON and other non-distributable types, mirroring base-table
+                // and rollup key validation (createRangeRollupJob re-derives key flags from these columns).
+                Column sortKeyColumn = table.getColumn(sk);
+                if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
+                    throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
+                            + sortKeyColumn.getType() + "' and cannot be a range rollup sort key");
+                }
             }
         }
         clause.setBaseRollupName(Strings.emptyToNull(clause.getBaseRollupName()));

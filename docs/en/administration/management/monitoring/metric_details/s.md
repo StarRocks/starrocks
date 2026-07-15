@@ -290,6 +290,23 @@ description: "Alphabetical s"
 - Type: Instantaneous
 - Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
 
+## `starrocks_fe_alter_duration_ms`
+
+- Unit: ms
+- Type: Summary
+- Labels: `execution_mode` (`fse`, `legacy_fse`, or `rewrite`), `is_leader`
+- Description: Time in milliseconds to apply an ALTER TABLE change, per statement. Reported only by the Leader FE (`is_leader="true"`). Includes the 0.75/0.95/0.98/0.99/0.999 quantiles plus `_sum` and `_count`. The `execution_mode` label indicates how the change was applied:
+  - `fse`: the current Fast Schema Evolution (FSE), applied immediately while the statement runs.
+  - `legacy_fse`: the legacy FSE path, which runs in the background and is usually far slower. Occurs only in shared-data clusters with `cloud_native_fast_schema_evolution_v2` disabled (enabled by default, which uses `fse`).
+  - `rewrite`: the change had to physically rewrite the table data, which also runs in the background.
+
+## `starrocks_fe_alter_operation_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`add_column`, `drop_column`, or `modify_column`), `is_leader`
+- Description: Number of ALTER TABLE column operations, by type. A single statement can contain several operations — for example, `ADD COLUMN a, DROP COLUMN b` — and each is counted separately under its type. Renames, reorders, and comment-only changes are not counted. Reported only by the Leader FE (`is_leader="true"`).
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -551,6 +568,12 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Instantaneous
 - Description: Indicates the number of tablets on each BE node.
+
+## `starrocks_fe_txn_max_committed_pending_publish_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: The longest time, in milliseconds, that a transaction is currently sitting in the `COMMITTED` status pending publish to `VISIBLE`, that is, the age of the oldest committed-but-not-yet-published transaction. Unlike `starrocks_fe_txn_publish_*` metrics, which are summaries recorded after a transaction finishes, this is a live gauge of the worst-case in-flight wait. The value is reported per database via the `db` label and only by the Leader FE node (`is_leader="true"`). It returns `0` when no committed transaction is pending publish. A high or continuously growing value indicates that version publishing is stuck or lagging behind commits.
 
 ## `starrocks_fe_txn_publish_ack_latency_ms`
 

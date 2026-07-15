@@ -194,6 +194,7 @@ option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires br
 option(WITH_BENCH "Build binary with bench" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
 option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
@@ -537,49 +538,89 @@ else()
     set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
 endif()
 
+include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
+
+# Concrete connectors reach the BE binary only as transitive PRIVATE deps of
+# ModuleBootstrap/Exec, which CMake places after the thirdparty group. List every
+# connector ModuleBootstrap pulls (guarded by the same options) ahead of it.
+set (DIRECT_CONNECTOR_LINK_LIBS
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+    ConnectorCacheStats
+)
+if (WITH_CONNECTOR_BENCHMARK)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorBenchmark)
+endif()
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorElasticsearch)
+endif()
+if (WITH_CONNECTOR_JDBC)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorJDBC)
+endif()
+if (WITH_CONNECTOR_MYSQL)
+    list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorMySQL)
+endif()
+
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Webserver
+    HttpService
     Tools
     AgentServer
+    Script
+    ModuleBootstrap
+    Orchestration
     DataWorkflows
     ${WL_START_GROUP}
-    Connector
-    # Legacy connector registration pulls concrete connector objects that
-    # depend on Exec symbols, so keep it in the static library group.
-    ConnectorBuiltinRegistry
     Exec
-    ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
-    FileSystem
-    Formats
-    Storage
-    Rowset
-    Runtime
-    Udf
-    Util
-    Script
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
-    FormatAvro
-    FormatCsv
-    FormatJson
+    # Concrete data sinks are PRIVATE dependencies of Exec. Keep them in the
+    # main link list ahead of connectors, Storage, format, and thirdparty
+    # provider archives so one-pass static linkers see their unresolved
+    # references first.
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkDictionaryCache
+    DataSinkTablet
+    DataSinkFile
+    # ConnectorLake depends on Storage, while connectors also depend on the
+    # format libs and thirdparty archives below; keep them ahead of those
+    # dependencies.
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
+    Storage
+    # The concrete format libraries must be linked ahead of the thirdparty
+    # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
+    # the Formats aggregate lets CMake append its concrete members after that
+    # group as transitive deps, which leaves FormatAvro's avro/avrocpp
+    # references unresolved. List the members explicitly, with FormatCore last,
+    # to keep them ahead of their thirdparty archives.
+    Formats
+    FormatParquet
     FormatOrc
+    FormatAvro
+    FormatJson
+    FormatCsv
     FormatCore
     ExecRuntime
     ComputeEnv
     ExecPrimitive
-    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
-    Serde
+    StoragePrimitive
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:Expr> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
-    RuntimeEnv
-    RuntimeCore
+    $<TARGET_FILE:HdfsFileSystem>
+    Runtime
     Platform
-    $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
-    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:FileSystem>
     $<TARGET_FILE:IO>
-    StarOSIntegration
     Geo
     $<TARGET_FILE:Common>
     $<TARGET_FILE:Base>
@@ -644,6 +685,7 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    arrow_testing
     arrow_flight
     arrow_flight_sql
     gRPC::grpc
@@ -684,6 +726,7 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
 
@@ -860,7 +903,7 @@ if (APPLE)
         list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
     endif()
 else()
-    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -liberty -lc -lm -ldl -rdynamic -pthread)
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -lc -lm -ldl -rdynamic -pthread)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
@@ -876,17 +919,23 @@ endif()
 # Set libraries for test. TestUtil is UT-only and intentionally stays out of
 # STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
 # compile or link test helper code.
-set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ConnectorBuiltinRegistry
-    ConnectorBootstrap
+set (TEST_LINK_LIBS
+    Orchestration
+    ${STARROCKS_LINK_LIBS}
     TestUtil
     ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
     gmock
     gtest
     ${WL_END_GROUP}
 )
 
-set (BENCH_LINK_LIBS ${STARROCKS_LINK_LIBS})
+set (BENCH_LINK_LIBS
+    ${STARROCKS_LINK_LIBS}
+    ${WL_START_GROUP}
+    ${DIRECT_CONNECTOR_LINK_LIBS}
+    ${WL_END_GROUP}
+)
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
@@ -935,7 +984,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
-    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -956,7 +1005,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
-    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
@@ -968,12 +1017,17 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
-add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/staros_integration)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/fs_ext)
+add_subdirectory(${SRC_DIR}/exec_primitive)
+add_subdirectory(${SRC_DIR}/connector_primitive)
+add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/module)
+add_subdirectory(${SRC_DIR}/data_sink)
 add_subdirectory(${SRC_DIR}/exec)
+add_subdirectory(${SRC_DIR}/schema_scanner)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)
 add_subdirectory(${SRC_DIR}/geo)
@@ -981,18 +1035,19 @@ add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
 add_subdirectory(${SRC_DIR}/platform)
+add_subdirectory(${SRC_DIR}/storage_primitive)
 add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/data_workflows)
+add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
-add_subdirectory(${SRC_DIR}/serde)
+add_subdirectory(${SRC_DIR}/exprs_ext)
+add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
-add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
 if (BUILD_FORMAT_LIB)

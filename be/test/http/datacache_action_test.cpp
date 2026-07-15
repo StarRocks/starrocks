@@ -23,8 +23,8 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/brpc/brpc_stub_cache.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
 
 namespace starrocks {
 

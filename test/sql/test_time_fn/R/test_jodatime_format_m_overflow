@@ -1,0 +1,18 @@
+-- name: test_jodatime_format_m_overflow @sequential
+CREATE TABLE t_joda_m (k INT, dt DATETIME, fmt VARCHAR(500))
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_joda_m VALUES (1, "2023-05-15 10:20:30", repeat("m", 200));
+-- result:
+-- !result
+SELECT jodatime_format(dt, "yyyy-MM-dd HH:mm:ss") FROM t_joda_m;
+-- result:
+2023-05-15 10:20:30
+-- !result
+[UC] SELECT jodatime_format(dt, fmt) FROM t_joda_m;
+SELECT count(*) FROM t_joda_m;
+-- result:
+1
+-- !result

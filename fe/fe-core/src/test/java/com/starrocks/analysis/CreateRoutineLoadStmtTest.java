@@ -473,6 +473,61 @@ public class CreateRoutineLoadStmtTest {
         Assertions.assertEquals("+08:00", createRoutineLoadStmt.getTimezone());
     }
 
+    private CreateRoutineLoadStmt buildKafkaCreateStmt(Map<String, String> dataSourceProperties) {
+        LabelName labelName = new LabelName("db1", "job1");
+        List<ParseNode> loadPropertyList = new ArrayList<>();
+        loadPropertyList.add(new ColumnSeparator(","));
+        Map<String, String> jobProperties = Maps.newHashMap();
+        jobProperties.put(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY, "2");
+        return new CreateRoutineLoadStmt(labelName, "table1", loadPropertyList, jobProperties,
+                LoadDataSourceType.KAFKA.name(), dataSourceProperties);
+    }
+
+    @Test
+    public void testAnalyzeKafkaPartitionDiscovery() {
+        Map<String, String> dataSourceProperties = Maps.newHashMap();
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "10,20,30");
+        dataSourceProperties.put("property.kafka_partition_discovery", "true");
+        CreateRoutineLoadStmt stmt = buildKafkaCreateStmt(dataSourceProperties);
+
+        CreateRoutineLoadAnalyzer.analyze(stmt, connectContext);
+
+        Assertions.assertEquals("true", stmt.getCustomKafkaProperties().get("kafka_partition_discovery"));
+        Assertions.assertTrue(stmt.isKafkaPartitionDiscovery());
+        Assertions.assertEquals(3, stmt.getKafkaPartitionOffsets().size());
+    }
+
+    @Test
+    public void testAnalyzeKafkaPartitionDiscoveryInvalidValue() {
+        Map<String, String> dataSourceProperties = Maps.newHashMap();
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
+        dataSourceProperties.put("property.kafka_partition_discovery", "yes");
+        CreateRoutineLoadStmt stmt = buildKafkaCreateStmt(dataSourceProperties);
+
+        RuntimeException e = Assertions.assertThrows(RuntimeException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("kafka_partition_discovery"), e.getMessage());
+    }
+
+    @Test
+    public void testAnalyzeKafkaPartitionDiscoveryWithoutPartitions() {
+        Map<String, String> dataSourceProperties = Maps.newHashMap();
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
+        dataSourceProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
+        dataSourceProperties.put("property.kafka_partition_discovery", "true");
+        CreateRoutineLoadStmt stmt = buildKafkaCreateStmt(dataSourceProperties);
+
+        RuntimeException e = Assertions.assertThrows(RuntimeException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY),
+                e.getMessage());
+    }
+
     @Test
     public void testAnalyzeJsonConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +

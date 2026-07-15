@@ -433,7 +433,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         try {
             long baseIndexMetaId = tbl.getBaseIndexMetaId();
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            MaterializedIndexMeta index = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
@@ -900,6 +899,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        }
+
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
         }
 
         LOG.info("schema change job finished: {}", jobId);

@@ -26,13 +26,13 @@
 #include "base/testutil/id_generator.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "platform/platform_env.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/filenames.h"
@@ -149,8 +149,10 @@ protected:
 };
 
 struct PrimaryKeyParam {
-    bool enable_persistent_index = false;
-    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    // Shared-data primary-key tablets support only the cloud-native persistent index; the
+    // in-memory index and the LOCAL persistent index are deprecated. Default accordingly.
+    bool enable_persistent_index = true;
+    PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
     bool enable_transparent_data_encryption = false;
 };

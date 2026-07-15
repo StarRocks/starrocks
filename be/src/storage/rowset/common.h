@@ -37,7 +37,7 @@
 #include <limits>
 
 #include "base/utility/alignment.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/rowid_types.h"
 
 enum { BINARY_DICT_PAGE_HEADER_SIZE = 4 };
 enum { BITSHUFFLE_PAGE_HEADER_SIZE = 16 };

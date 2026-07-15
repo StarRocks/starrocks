@@ -34,11 +34,11 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -214,11 +214,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             return RewriteStatus::ALWAYS_FALSE;
         }
@@ -234,11 +230,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kNotInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             if (!field->is_nullable()) {
                 return RewriteStatus::ALWAYS_TRUE;

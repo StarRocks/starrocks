@@ -18,7 +18,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
-#include "storage/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -136,7 +136,12 @@ StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chu
 }
 
 void SegmentPKIterator::close() {
-    _iter->close();
+    // _iter is null when this wraps a lost segment ignored via experimental_lake_ignore_lost_segment
+    // (get_each_segment_iterator returns a nullptr placeholder for that slot). _load() already tolerates
+    // a null _iter; guard close() too so PK publish/partial-update paths don't crash on the empty slot.
+    if (_iter != nullptr) {
+        _iter->close();
+    }
 }
 
 } // namespace starrocks::lake

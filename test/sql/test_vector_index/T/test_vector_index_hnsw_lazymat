@@ -5,6 +5,9 @@
 
 ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
+-- IVFPQ is quantized; refine so its embedding stays eager and distances are exact (the eager check below).
+SET enable_vector_index_refine = true;
+
 CREATE TABLE lm_hnsw (
     id bigint(20) NOT NULL,
     v ARRAY<FLOAT> NOT NULL,

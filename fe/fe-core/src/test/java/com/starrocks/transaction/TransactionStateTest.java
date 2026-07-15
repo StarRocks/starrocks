@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -92,7 +93,9 @@ public class TransactionStateTest {
         partitionCommitInfo.setDataVersion(11L);
         partitionCommitInfo.setVersionEpoch(12L);
         partitionCommitInfo.setIsDoubleWrite(true);
-        partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().put(40000L, 123L);
+        TabletStatPB stat = new TabletStatPB();
+        stat.numRows = 123L;
+        partitionCommitInfo.getTabletStats().put(40000L, stat);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         original.putIdToTableCommitInfo(20000L, tableCommitInfo);
 
@@ -115,7 +118,7 @@ public class TransactionStateTest {
 
         partitionCommitInfo.setVersion(20L);
         assertEquals(10L, copiedPartitionCommitInfo.getVersion());
-        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().get(40000L));
+        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletStats().get(40000L).numRows);
     }
 
     @Test
@@ -304,6 +307,25 @@ public class TransactionStateTest {
         assertEquals(2, ids.size());
         assertEquals(id1, ids.get(0));
         assertEquals(id2, ids.get(1));
+    }
+
+    @Test
+    public void testShadowRewriteViaSourceType() {
+        // isShadowRewrite() is now driven solely by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_shadow", null,
+                LoadJobSourceType.SHADOW_REWRITE, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertTrue(txn.isShadowRewrite());
+
+        TransactionState normal = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_normal", null,
+                LoadJobSourceType.INSERT_STREAMING, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertFalse(normal.isShadowRewrite());
+
+        // Verify sourceType round-trips through GSON (it is serialized as "st" on TransactionState).
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState replayed = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(replayed.isShadowRewrite());
     }
 
     @Test

@@ -26,24 +26,15 @@
 namespace starrocks {
 
 class Status;
-class TabletColumn;
 class TabletSchema;
 
 class ChunkHelper {
 public:
-    // Convert TabletColumn to Field. This function will generate format
-    // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
-    static Field convert_field(ColumnId id, const TabletColumn& c);
-
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema);
 
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema, const std::vector<ColumnId>& cids);
-
-    // Convert TabletColumns to Schema order by col_names
-    static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
-                                    const std::vector<std::string_view>& col_names);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
@@ -60,29 +51,6 @@ public:
 
     // Padding one char column
     static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
-};
-
-// Accumulate small chunk into desired size
-class ChunkAccumulator {
-public:
-    // Avoid accumulate too many chunks in case that chunks' selectivity is very low
-    static inline size_t kAccumulateLimit = 64;
-
-    ChunkAccumulator() = default;
-    ChunkAccumulator(size_t desired_size);
-    void set_desired_size(size_t desired_size);
-    void reset();
-    void finalize();
-    bool empty() const;
-    bool reach_limit() const;
-    Status push(ChunkPtr&& chunk);
-    ChunkPtr pull();
-
-private:
-    size_t _desired_size;
-    ChunkPtr _tmp_chunk;
-    std::deque<ChunkPtr> _output;
-    size_t _accumulate_count = 0;
 };
 
 class ChunkPipelineAccumulator {

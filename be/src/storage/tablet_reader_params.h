@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <limits>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -23,15 +26,20 @@
 #include "compute_env/runtime_range_pruner.h"
 #include "options.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/olap_tuple.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
-#include "storage/runtime_filter_predicate.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/olap_tuple.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 
 class RuntimeProfile;
 class RuntimeState;
+
+namespace lake {
+struct PreparedSegmentReadState;
+struct PreparedTabletReadState;
+} // namespace lake
 
 class ColumnPredicate;
 struct RowidRangeOption;
@@ -88,6 +96,14 @@ struct TabletReaderParams {
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    std::shared_ptr<lake::PreparedTabletReadState> prepared_tablet_read_state = nullptr;
+    std::shared_ptr<lake::PreparedSegmentReadState> prepared_segment_read_state = nullptr;
+    size_t prepared_rowset_index = std::numeric_limits<size_t>::max();
+    size_t prepared_segment_index = std::numeric_limits<size_t>::max();
+    bool refine_initial_coarse_split_and_append_refined_tasks = false;
+    // Per-scan decision that this lake scan should take the prepared physical split scan path. Set by the
+    // lake scan connector in a follow-up; defaults off, so this path is inert until the connector wires it.
+    bool enable_prepared_physical_split_scan = false;
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;
@@ -110,6 +126,10 @@ struct TabletReaderParams {
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    // Set by the scan source (OlapChunkSource / LakeDataSource) when a predicate for this scan is
+    // evaluated ABOVE the segment iterator; routes vector-filter queries to exact brute-force so a
+    // segment-level ANN k-limit cannot under-return. See design doc §7.
+    bool has_predicate_above_iterator = false;
 
 public:
     std::string to_string() const;

@@ -52,6 +52,7 @@ public class TabletPreSplitCoordinatorTest {
 
     private static final long PARTITION_ID = 10001L;
     private static final long BASE_INDEX_META_ID = 200L;
+    private static final long ROLLUP_INDEX_META_ID = 201L;
 
     private Database database;
     private OlapTable table;
@@ -62,6 +63,7 @@ public class TabletPreSplitCoordinatorTest {
     private boolean savedConfigBrokerLoad;
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigReshardMinSplitSize;
     private long savedConfigSampleByteLimit;
 
     @BeforeEach
@@ -70,12 +72,14 @@ public class TabletPreSplitCoordinatorTest {
         savedConfigBrokerLoad = Config.enable_tablet_pre_split_for_broker_load;
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         savedConfigSampleByteLimit = Config.tablet_pre_split_sample_byte_limit;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_reshard_min_split_size = 2L * DebugUtil.GIGABYTE;
         Config.tablet_pre_split_sample_byte_limit = 16L * DebugUtil.MEGABYTE;
 
         // Bind a fresh ConnectContext so the coordinator's session-var check finds one.
@@ -87,11 +91,16 @@ public class TabletPreSplitCoordinatorTest {
 
         database = mock(Database.class);
         baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
         when(baseIndex.getRowCount()).thenReturn(0L);
 
         partition = mock(PhysicalPartition.class);
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        // Default: base index only, visible to resolveVisibleIndexTargets. Tests that add a
+        // rollup override this via stubRollupIndex(...).
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
 
         table = mock(OlapTable.class);
         when(table.isRangeDistribution()).thenReturn(true);
@@ -126,6 +135,34 @@ public class TabletPreSplitCoordinatorTest {
         when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
     }
 
+    /**
+     * Add a visible rollup index (alongside the default base index) with {@code tabletCount}
+     * tablets and {@code sortKeyColumns} as its sort key, mirroring {@link #stubSortKeyColumns}
+     * for the base index. Overrides the default {@code partition.getLatestMaterializedIndices}
+     * stub so both indices are visible to {@link PreSplitTargets#resolveVisibleIndexTargets}.
+     */
+    private void stubRollupIndex(int tabletCount, Column... sortKeyColumns) {
+        List<Integer> sortKeyIdxes = new java.util.ArrayList<>(sortKeyColumns.length);
+        for (int columnIndex = 0; columnIndex < sortKeyColumns.length; columnIndex++) {
+            sortKeyIdxes.add(columnIndex);
+        }
+        MaterializedIndexMeta rollupIndexMeta = mock(MaterializedIndexMeta.class);
+        when(rollupIndexMeta.getSchema()).thenReturn(List.of(sortKeyColumns));
+        when(rollupIndexMeta.getSortKeyIdxes()).thenReturn(sortKeyIdxes);
+        when(table.getIndexMetaByMetaId(ROLLUP_INDEX_META_ID)).thenReturn(rollupIndexMeta);
+
+        MaterializedIndex rollupIndex = mock(MaterializedIndex.class);
+        when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
+        List<Tablet> tablets = new java.util.ArrayList<>(tabletCount);
+        for (int tabletIndex = 0; tabletIndex < tabletCount; tabletIndex++) {
+            tablets.add(mock(Tablet.class));
+        }
+        when(rollupIndex.getTablets()).thenReturn(tablets);
+
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex, rollupIndex));
+    }
+
     @AfterEach
     public void tearDown() {
         ConnectContext.remove();
@@ -133,6 +170,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = savedConfigBrokerLoad;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
         Config.tablet_pre_split_sample_byte_limit = savedConfigSampleByteLimit;
     }
 
@@ -212,12 +250,32 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     @Test
-    public void testMaterializedViewOrRollupSkipped() {
-        // visibleIndexMetas.size() > 1 means at least one MV or rollup is attached.
-        when(table.getVisibleIndexMetas()).thenReturn(
-                List.of(mock(MaterializedIndexMeta.class), mock(MaterializedIndexMeta.class)));
+    public void maybeAct_baseAndEligibleRollup_eligible() {
+        // A visible rollup with its own single tablet and scalar sort key no longer
+        // disqualifies the table -- the getVisibleIndexMetas().size() != 1 gate is gone;
+        // resolveVisibleIndexTargets checks every visible index independently instead.
+        stubRollupIndex(/*tabletCount*/ 1, PresplitTestSupport.bigintColumn("k2"));
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, invokeMaybeAct());
+    }
+
+    @Test
+    public void maybeAct_ineligibleRollup_skips() {
+        // A rollup that fails per-index resolution (here: more than one tablet) must
+        // still skip the whole target under HAS_MATERIALIZED_VIEW_OR_ROLLUP.
+        stubRollupIndex(/*tabletCount*/ 2, PresplitTestSupport.bigintColumn("k2"));
 
         assertSkipped(invokeMaybeAct(), SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+    }
+
+    @Test
+    public void maybeAct_baseNonEmptyWithRollup_partitionNotEmpty() {
+        // The base-index row-count check must still gate ahead of the per-index rollup
+        // resolution, even when an otherwise-eligible rollup is present.
+        when(baseIndex.getRowCount()).thenReturn(42L);
+        stubRollupIndex(/*tabletCount*/ 1, PresplitTestSupport.bigintColumn("k2"));
+
+        assertSkipped(invokeMaybeAct(), SkipReason.PARTITION_NOT_EMPTY);
     }
 
     @Test
@@ -291,19 +349,61 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testTabletCountSmallLoadOnThreeComputeNodes() {
-        // 1 GB / 10 GB target rounds up to 1 tablet by bytes; compute-node floor of 3 wins.
-        Assertions.assertEquals(3, selectTabletCount(DebugUtil.GIGABYTE, 3));
+        // 1 GB load fills zero whole 2 GB min-split-size tablets, so the node count used for
+        // alignment collapses to 1 instead of 3. Clamp lifts the result to the minimum 2 —
+        // far better than 3 tablets of ~340 MB each.
+        Assertions.assertEquals(2, selectTabletCount(DebugUtil.GIGABYTE, 3));
     }
 
     @Test
     public void testTabletCountLargeLoadOnThreeComputeNodes() {
-        // 100 GB / 10 GB target = 10 tablets by bytes; beats the compute-node floor of 3.
-        Assertions.assertEquals(10, selectTabletCount(100L * DebugUtil.GIGABYTE, 3));
+        // 100 GB / 10 GB target = 10 tablets by bytes; rounded up to the next multiple
+        // of the 3 compute nodes -> 12, so each node owns exactly 4 tablets.
+        Assertions.assertEquals(12, selectTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountRoundsUpToComputeNodeMultiple() {
+        // 70 GB / 10 GB target = 7 tablets by bytes; rounded up to the next multiple
+        // of 3 -> 9 (avoids an uneven 3/2/2 spread across the nodes).
+        Assertions.assertEquals(9, selectTabletCount(70L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountAlreadyComputeNodeMultipleIsUnchanged() {
+        // 60 GB / 10 GB target = 6 tablets by bytes, already a multiple of 3 -> 6.
+        Assertions.assertEquals(6, selectTabletCount(60L * DebugUtil.GIGABYTE, 3));
     }
 
     @Test
     public void testTabletCountSmallLoadOnTwelveComputeNodes() {
-        Assertions.assertEquals(12, selectTabletCount(DebugUtil.GIGABYTE, 12));
+        // A small load on a large cluster must NOT become one tiny tablet per node: 1 GB fills
+        // zero whole 2 GB tablets, so alignment collapses to 1 and the result clamps to 2
+        // (was 12 tablets of ~85 MB each before the min-split-size bound).
+        Assertions.assertEquals(2, selectTabletCount(DebugUtil.GIGABYTE, 12));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeBoundsComputeNodeAlignment() {
+        // 30 GB on 100 nodes: the byte target is 3 tablets and node alignment would otherwise
+        // round/floor up to 100. The 2 GB min-split-size lets the input fill only 30 GB / 2 GB
+        // = 15 tablets, so alignment is bounded to 15 nodes -> 15 tablets of 2 GB each.
+        Assertions.assertEquals(15, selectTabletCount(30L * DebugUtil.GIGABYTE, 100));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeCapKeepsNodeMultiple() {
+        // 5 GB on 10 nodes: fills only 5 GB / 2 GB = 2 whole min-split-size tablets, so
+        // alignment collapses from 10 to 2 nodes -> 2 tablets of 2.5 GB rather than 10 of 512 MB.
+        Assertions.assertEquals(2, selectTabletCount(5L * DebugUtil.GIGABYTE, 10));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeIsTunable() {
+        // Raising the min-split-size to 5 GB tightens the bound: 30 GB / 5 GB = 6 whole tablets,
+        // so alignment is bounded to 6 nodes -> 6 tablets even though 100 nodes are available.
+        Config.tablet_reshard_min_split_size = 5L * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(6, selectTabletCount(30L * DebugUtil.GIGABYTE, 100));
     }
 
     @Test
@@ -317,6 +417,16 @@ public class TabletPreSplitCoordinatorTest {
         // 10 PB / 10 GB target ≈ 1M tablets by bytes; clamps to tablet_reshard_max_split_count.
         Assertions.assertEquals(Config.tablet_reshard_max_split_count,
                 selectTabletCount(10L * 1024L * DebugUtil.TERABYTE, 1));
+    }
+
+    @Test
+    public void testTabletCountHugeEstimateSaturatesWithoutOverflow() {
+        // Tiny target_size + near-Long.MAX_VALUE estimate: the node-count rounding
+        // must not overflow (which would collapse the count to the node floor).
+        // The estimate is clamped before alignment, so it saturates at max_split_count.
+        Config.tablet_reshard_target_size = 1L;
+        Assertions.assertEquals(Config.tablet_reshard_max_split_count,
+                selectTabletCount(Long.MAX_VALUE, 3));
     }
 
     @Test

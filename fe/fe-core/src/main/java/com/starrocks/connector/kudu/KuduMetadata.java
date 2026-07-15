@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -33,6 +34,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -309,10 +311,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         KuduTable kuduTable = (KuduTable) table;
         long rowCount;
@@ -326,8 +326,9 @@ public class KuduMetadata implements ConnectorMetadata {
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
             } catch (RpcRemoteException e) {
                 if (isGetTableStatisticsUnsupported(e)) {
-                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
-                    rowCount = 1;
+                    LOG.warn("GetTableStatistics method not supported. Fallback to default row count {}.",
+                            Config.default_statistics_output_row_count);
+                    rowCount = Config.default_statistics_output_row_count;
                 } else {
                     throw new RuntimeException("RPC error while getting table statistics", e);
                 }
@@ -336,6 +337,17 @@ public class KuduMetadata implements ConnectorMetadata {
             }
         }
         builder.setOutputRowCount(rowCount);
+        for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+            ConnectorNdvEstimator.TypeCategory cat =
+                    ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+            double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+            builder.addColumnStatistic(entry.getKey(), ColumnStatistic.builder()
+                    .setDistinctValuesCount(ndv)
+                    .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build());
+        }
         return builder.build();
     }
 

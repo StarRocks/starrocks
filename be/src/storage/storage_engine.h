@@ -52,14 +52,13 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
@@ -84,8 +83,6 @@ class TAllocateAutoIncrementIdParam;
 class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class DictionaryCacheManager;
-class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 class ThreadPool;
@@ -232,11 +229,7 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
-    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
-
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
-
-    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() { return _load_spill_block_merge_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -501,8 +494,6 @@ private:
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
-    std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
-
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
@@ -521,8 +512,6 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 

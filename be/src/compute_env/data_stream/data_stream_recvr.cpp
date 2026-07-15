@@ -54,7 +54,7 @@
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -246,7 +246,7 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
-        DCHECK(prev_tracker == nullptr || prev_tracker == GlobalEnv::GetInstance()->process_mem_tracker());
+        DCHECK(prev_tracker == nullptr || prev_tracker == RuntimeEnv::GetInstance()->process_mem_tracker());
     });
     // TODO: We just need to notify the affected channels.
     auto notify = this->defer_notify();

@@ -27,14 +27,14 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/primitives/driver_state.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/schedule/event_scheduler.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
 

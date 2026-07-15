@@ -27,18 +27,19 @@
 #include "base/utility/defer_op.h"
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
+#include "data_workflows/clone/engine_clone_task.h"
 #include "data_workflows/load/engine_batch_load_task.h"
+#include "exec/exec_env.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "platform/store_path.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
-#include "storage/olap_define.h"
+#include "runtime/runtime_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/tablet_manager.h"
-#include "storage/task/engine_clone_task.h"
 #include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
@@ -127,7 +128,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     remote_snapshot_request.__set_tablet_id(_tablet_id);
     remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_schema_hash(_schema_hash);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -153,7 +154,7 @@ TEST_F(AgentTaskTest, test_replication_txn) {
     replicate_snapshot_request.__set_tablet_id(_tablet_id);
     replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -278,7 +279,7 @@ TEST_F(AgentTaskTest, batch_load_task_reports_invalid_push_type_through_storage_
     push_req.__set_push_type(static_cast<TPushType::type>(-1));
 
     std::vector<TTabletInfo> tablet_infos;
-    EngineBatchLoadTask task(push_req, &tablet_infos, 1, GlobalEnv::GetInstance()->load_mem_tracker());
+    EngineBatchLoadTask task(push_req, &tablet_infos, 1, RuntimeEnv::GetInstance()->load_mem_tracker());
     Status st = StorageEngine::instance()->execute_task(&task);
 
     ASSERT_TRUE(st.is_invalid_argument()) << st;

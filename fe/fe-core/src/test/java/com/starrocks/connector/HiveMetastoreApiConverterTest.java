@@ -23,9 +23,11 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.thrift.TTextFileDesc;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -75,6 +77,85 @@ public class HiveMetastoreApiConverterTest {
         hudiFields.add(new Schema.Field("col3",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiSchema = Schema.createRecord(hudiFields);
+    }
+
+    @Test
+    void testToTextFileFormatDescForOpenCSVSerde() {
+        String openCSVSerde = "org.apache.hadoop.hive.serde2.OpenCSVSerde";
+
+        // OpenCSVSerde applies separator/quote/escape defaults even when unset.
+        TextFileFormatDesc def = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>(), openCSVSerde);
+        Assertions.assertEquals(",", def.getFieldDelim());
+        Assertions.assertEquals('"', def.getEnclose());
+        Assertions.assertEquals('\\', def.getEscape());
+
+        // Explicit separator/quote/escape are honored.
+        Map<String, String> params = new HashMap<>();
+        params.put("separatorChar", "|");
+        params.put("quoteChar", "'");
+        params.put("escapeChar", "/");
+        TextFileFormatDesc explicit = HiveMetastoreApiConverter.toTextFileFormatDesc(params, openCSVSerde);
+        Assertions.assertEquals("|", explicit.getFieldDelim());
+        Assertions.assertEquals('\'', explicit.getEnclose());
+        Assertions.assertEquals('/', explicit.getEscape());
+
+        // enclose/escape are carried over thrift.
+        TTextFileDesc thrift = def.toThrift();
+        Assertions.assertEquals('"', thrift.getEnclose());
+        Assertions.assertEquals('\\', thrift.getEscape());
+
+        // Non-OpenCSVSerde (LazySimpleSerDe): no enclose/escape, naive path stays.
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals(0, lazy.getEscape());
+
+        // Backward-compatible single-arg overload behaves like the non-OpenCSVSerde case.
+        TextFileFormatDesc legacy = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>());
+        Assertions.assertEquals(0, legacy.getEnclose());
+        Assertions.assertEquals(0, legacy.getEscape());
+
+        // Explicitly empty quote/escape disables that char (the !isEmpty guard): a
+        // degenerate OpenCSVSerde config then falls back to the naive (v1) path.
+        Map<String, String> emptyParams = new HashMap<>();
+        emptyParams.put("quoteChar", "");
+        emptyParams.put("escapeChar", "");
+        TextFileFormatDesc empty = HiveMetastoreApiConverter.toTextFileFormatDesc(emptyParams, openCSVSerde);
+        Assertions.assertEquals(0, empty.getEnclose());
+        Assertions.assertEquals(0, empty.getEscape());
+    }
+
+    @Test
+    void testToTextFileFormatDescForLazySimpleEscape() {
+        // LazySimpleSerDe with ESCAPED BY (serde property 'escape.delim'): the escape
+        // char must reach the BE so "a\,b" is one field, while enclose stays unset.
+        Map<String, String> params = new HashMap<>();
+        params.put("field.delim", ",");
+        params.put("escape.delim", "\\");
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                params, "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals('\\', lazy.getEscape());
+
+        // Like the delimiters, only the first character is used.
+        Map<String, String> multiChar = new HashMap<>();
+        multiChar.put("escape.delim", "#!");
+        TextFileFormatDesc first = HiveMetastoreApiConverter.toTextFileFormatDesc(multiChar, null);
+        Assertions.assertEquals('#', first.getEscape());
+
+        // Without the property, escaping stays off.
+        TextFileFormatDesc off = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, off.getEscape());
+
+        // OpenCSVSerde ignores LazySimpleSerDe's escape.delim: its own escapeChar
+        // (here explicitly disabled) wins.
+        Map<String, String> mixed = new HashMap<>();
+        mixed.put("escape.delim", "#");
+        mixed.put("escapeChar", "");
+        TextFileFormatDesc opencsv = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                mixed, "org.apache.hadoop.hive.serde2.OpenCSVSerde");
+        Assertions.assertEquals(0, opencsv.getEscape());
     }
 
     @Test
@@ -261,14 +342,19 @@ public class HiveMetastoreApiConverterTest {
         properties.put("collection.delim", "|");
         properties.put("mapkey.delim", ":");
         properties.put("line.delim", "\n");
+        // escape.delim (ESCAPED BY) must survive CREATE TABLE and reach HMS SerDeInfo,
+        // or a table created through StarRocks silently loses its escape setting and
+        // later scans (by StarRocks or by Hive itself) fall back to unescaped splitting.
+        properties.put("escape.delim", "\\");
         properties.put("some_other_prop", "value");
 
         Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
-        Assertions.assertEquals(4, serdeProps.size());
+        Assertions.assertEquals(5, serdeProps.size());
         Assertions.assertEquals(",", serdeProps.get("field.delim"));
         Assertions.assertEquals("|", serdeProps.get("collection.delim"));
         Assertions.assertEquals(":", serdeProps.get("mapkey.delim"));
         Assertions.assertEquals("\n", serdeProps.get("line.delim"));
+        Assertions.assertEquals("\\", serdeProps.get("escape.delim"));
         Assertions.assertFalse(serdeProps.containsKey("file_format"));
         Assertions.assertFalse(serdeProps.containsKey("some_other_prop"));
     }

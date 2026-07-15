@@ -18,13 +18,18 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/system/cpu_info.h"
 
 namespace starrocks {
 
 class DiagnoseDaemonTest : public testing::Test {
 public:
+    static void SetUpTestSuite() { CpuInfo::init(); }
+
     void SetUp() override {
         _daemon = std::make_unique<DiagnoseDaemon>();
         ASSERT_OK(_daemon->init());
@@ -44,6 +49,8 @@ protected:
 using SymbolizeTuple = std::tuple<void*, char*, size_t>;
 
 TEST_F(DiagnoseDaemonTest, test_stack_trace) {
+    SCOPED_UPDATE(int64_t, config::diagnose_stack_trace_interval_ms, 1800000);
+
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("StackTraceTask::symbolize");

@@ -71,13 +71,11 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
@@ -90,6 +88,7 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
 
@@ -134,8 +133,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _storage_cleanup_executor(new StorageCleanupExecutor()),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _compaction_manager(new CompactionManager()),
-          _dictionary_cache_manager(new DictionaryCacheManager()) {
+          _compaction_manager(new CompactionManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -152,7 +150,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
 #endif
 #ifndef BE_TEST
-    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t process_limit = RuntimeEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
     MetadataCache::create_cache(lru_cache_limit);
     StorageMetrics::instance()->register_metadata_cache_bytes_total_hook(
@@ -249,29 +247,24 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    StorageMetrics::instance()->register_thread_pool_metrics(
-            "async_delta_writer",
+    REGISTER_STORAGE_THREAD_POOL_METRICS(
+            StorageMetrics::instance(), async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
-
-    _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
-    RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
-    StorageMetrics::instance()->register_thread_pool_metrics("load_spill_block_merge",
-                                                             _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("memtable_flush",
-                                                             _memtable_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), memtable_flush,
+                                         _memtable_flush_executor->get_thread_pool());
 
     _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
                               "init lake MemTableFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
-                                                             _lake_memtable_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), lake_memtable_flush,
+                                         _lake_memtable_flush_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
-                                                             _storage_cleanup_executor->thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), storage_cleanup,
+                                         _storage_cleanup_executor->thread_pool());
 
     // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
     // index building inside a single ADD INDEX job). Physically isolated
@@ -288,18 +281,18 @@ Status StorageEngine::_open(const EngineOptions& options) {
                             .set_max_threads(calc_lake_schema_change_thread_pool_max_threads())
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_schema_change_thread_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("lake_schema_change",
-                                                             _lake_schema_change_thread_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), lake_schema_change,
+                                         _lake_schema_change_thread_pool.get());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("segment_flush",
-                                                             _segment_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), segment_flush,
+                                         _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("segment_replicate",
-                                                             _segment_replicate_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), segment_replicate,
+                                         _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
@@ -908,7 +901,7 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     }
     auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(tablet->tablet_id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker());
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();

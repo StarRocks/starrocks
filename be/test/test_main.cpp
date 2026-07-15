@@ -15,6 +15,7 @@
 #include <cstdio>
 
 #include "formats/orc/lzo_decompressor_registration.h"
+#include "schema_scanner/builtin_schema_scanner_factory.h"
 #include "testutil/init_test_env.h"
 
 int main(int argc, char** argv) {
@@ -24,5 +25,5 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    return starrocks::init_test_env(argc, argv);
+    return starrocks::init_test_env(argc, argv, starrocks::create_builtin_schema_scanner_factory());
 }

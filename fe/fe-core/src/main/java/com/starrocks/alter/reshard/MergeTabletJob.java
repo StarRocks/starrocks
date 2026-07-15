@@ -40,7 +40,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -91,6 +90,7 @@ public class MergeTabletJob extends TabletReshardJob {
         return dbId;
     }
 
+    @Override
     public long getTableId() {
         return tableId;
     }
@@ -207,8 +207,7 @@ public class MergeTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -572,6 +571,18 @@ public class MergeTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
+
+            // Installing the new materialized indexes changes the partition's tablet layout:
+            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
+            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
+            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+            // the change and re-plans against the new layout. Mirrors SplitTabletJob's bump at the
+            // same commit point. This runs on both the leader (runRunningJob) and the replay path
+            // (replayCleaningJob), so followers re-plan too.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 
@@ -723,7 +734,7 @@ public class MergeTabletJob extends TabletReshardJob {
                             table.getPartitionFilePathInfo(physicalPartitionId),
                             table.getPartitionFileCacheInfo(physicalPartitionId),
                             newIndex.getShardGroupId(),
-                            properties, WarehouseManager.DEFAULT_RESOURCE);
+                            properties, resolveComputeResource(tableId));
                 }
             }
         } catch (StarRocksException e) {

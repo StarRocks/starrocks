@@ -986,6 +986,10 @@ struct TMasterOpResult {
     10:optional string sql_digest;
     // StarMgr max journal ID for shared-data mode follower sync
     11:optional i64 maxStarMgrJournalId;
+    // Table/view relations collected by Leader after analyze (fully-qualified, CTE excluded).
+    // Followers that forward the statement never analyze it locally, so they cannot resolve
+    // CTE aliases or qualify names; they reuse this list for the audit log instead.
+    12:optional list<string> queried_relations;
 }
 
 struct TIsMethodSupportedRequest {
@@ -2439,6 +2443,16 @@ struct TBatchGetTabletMetadataResponse {
     2: optional list<TGetTabletMetadataResponse> responses;
 }
 
+// information_schema.fe_metrics: the BE scanner fetches each FE's metrics over the getFeMetrics
+// RPC (instead of scraping the HTTP /metrics endpoint), so fe_metrics works regardless of
+// `enable_http_auth` and no longer depends on HTTP Basic auth. The RPC takes no arguments —
+// FE process metrics are global with no per-object RBAC to authorize.
+struct TFeMetricsResult {
+    1: optional Status.TStatus status
+    // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
+    2: optional string json_metrics
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2539,6 +2553,9 @@ service FrontendService {
 
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
+    // information_schema.fe_metrics
+    TFeMetricsResult getFeMetrics()
 
     // information_schema.column_stats_uage
     TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)

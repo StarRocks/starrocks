@@ -229,10 +229,10 @@ PULSAR_SOURCE=pulsar-client-cpp-3.3.0
 PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.7.tar.gz"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"
 ZSTD_NAME=zstd-1.5.7.tar.gz
 ZSTD_SOURCE=zstd-1.5.7
-ZSTD_MD5SUM="619a019adbbc4536e7fb93cdbb01af3e"
+ZSTD_MD5SUM="780fc1896922b1bc52a4e90980cdda48"
 
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
@@ -247,10 +247,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-19.0.1.tar.gz"
-ARROW_NAME="arrow-apache-arrow-19.0.1.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-19.0.1"
-ARROW_MD5SUM="8c5091da0f8fb41a47d7f4dad7b712df"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-24.0.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-24.0.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-24.0.0"
+ARROW_MD5SUM="66c53bd00baa79034bd2ca167beea436"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -410,10 +410,10 @@ LLVM_SOURCE="llvm-project-18.1.8.src"
 LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2026.04.09.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2026.04.09"
-CLUCENE_MD5SUM="a06ce32908dad5b2b834b19a8879a2c8"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2026.06.23.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2026.06.23"
+CLUCENE_MD5SUM="774561443bc372ec6e8e56f46f3e9f4a"
 
 
 #absl
@@ -447,10 +447,10 @@ ICU_SOURCE="icu"
 ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
 
 # xsimd
-XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz"
-XSIMD_NAME="xsimd-13.2.0.tar.gz"
-XSIMD_SOURCE="xsimd-13.2.0"
-XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
+XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/14.0.0.tar.gz"
+XSIMD_NAME="xsimd-14.0.0.tar.gz"
+XSIMD_SOURCE="xsimd-14.0.0"
+XSIMD_MD5SUM="75c0d34cf7011924ba19978076c76dc1"
 
 # libxml2
 LIBXML2_DOWNLOAD="https://github.com/GNOME/libxml2/archive/refs/tags/v2.11.7.tar.gz"

@@ -59,7 +59,7 @@ jobs:
       - name: Analyze FE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           thrift --version
           whereis thrift
@@ -71,5 +71,5 @@ jobs:
           export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
           export MAVEN_OPTS="-Xms3072m -Xmx12288m"
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
-            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
-            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.organization=starrocks \
+            -Dsonar.branch.name=${{ github.ref_name }}

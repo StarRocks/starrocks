@@ -33,7 +33,6 @@ public class PrivilegeCollectionTest {
         PrivilegeType insert = PrivilegeType.INSERT;
         PrivilegeType delete = PrivilegeType.DELETE;
         TablePEntryObject table1 = new TablePEntryObject("1", "2");
-        ObjectType system = ObjectType.SYSTEM;
 
         Assertions.assertFalse(collection.check(table, insert, table1));
         Assertions.assertFalse(collection.check(table, delete, table1));

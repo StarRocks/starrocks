@@ -1240,7 +1240,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     public synchronized List<List<String>> getCatalogRecycleBinInfo() {
-        Map<Long, Long> dbToDataSize = Maps.newHashMap();
         List<List<String>> tableInfos = Lists.newArrayList();
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {

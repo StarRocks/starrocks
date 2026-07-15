@@ -1,0 +1,31 @@
+-- name: test_url_extract_parameter_truncated_escape
+-- description: url_extract_parameter on a column value whose parameter ends in a truncated
+--              percent-escape ("...%" or "...%X") must not read past the value. The decoder
+--              previously read value[i+1]/value[i+2] with no bound check; for the non-NUL-
+--              terminated column slice that was an out-of-bounds read of adjacent row bytes,
+--              so the result depended on neighbouring data. With the fix it is a clean error
+--              (NULL) regardless of what follows in memory, and valid escapes still decode.
+
+CREATE DATABASE IF NOT EXISTS test_url_extract_parameter_truncated_escape_db;
+USE test_url_extract_parameter_truncated_escape_db;
+
+CREATE TABLE ta (id INT, u VARCHAR(100)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE tb (id INT, u VARCHAR(100)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- row 1 is identical in both tables; only the following row's bytes differ. Before the fix the
+-- truncated "ab%" read into row 2 and the results diverged (hex 6162AB vs NULL); now both NULL.
+INSERT INTO ta VALUES (1, 'http://x/p?k1=ab%'), (2, 'ABABABAB');
+INSERT INTO tb VALUES (1, 'http://x/p?k1=ab%'), (2, 'ZZZZZZZZ');
+
+SELECT id, hex(url_extract_parameter(u, 'k1')) AS vhex FROM ta WHERE id = 1;
+SELECT id, hex(url_extract_parameter(u, 'k1')) AS vhex FROM tb WHERE id = 1;
+
+-- value ending in a single trailing hex digit after '%' is also truncated -> clean NULL
+INSERT INTO ta VALUES (3, 'http://x/p?k1=cd%4');
+SELECT id, url_extract_parameter(u, 'k1') FROM ta WHERE id = 3;
+
+-- a complete escape still decodes correctly (%41 = 'A')
+INSERT INTO ta VALUES (4, 'http://x/p?k1=z%41');
+SELECT id, url_extract_parameter(u, 'k1') FROM ta WHERE id = 4;

@@ -653,7 +653,7 @@ public class ClusterSnapshotTest {
             mgr.setAutomatedSnapshotOn(storageVolumeName);
             ClusterSnapshotJob good = mgr.createAutomatedSnapshotJob();
             good.setState(ClusterSnapshotJobState.FINISHED);
-            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob(); // INITIALIZING, created after good
+            mgr.createAutomatedSnapshotJob(); // INITIALIZING, created after good
             Assertions.assertEquals(good.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
             mgr.setAutomatedSnapshotOff();
         }

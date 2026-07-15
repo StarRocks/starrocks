@@ -31,18 +31,18 @@
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_runtime_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/catalog_scan_metrics.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/query_scan_metrics.h"
-#include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
@@ -53,7 +53,6 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -61,10 +60,10 @@
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -350,6 +349,14 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
+
+    // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
+    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
+    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
+    // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
+    _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
+                                           _scan_node->is_filtered_above_iterator();
 
     // Range
     for (const auto& key_range : key_ranges) {

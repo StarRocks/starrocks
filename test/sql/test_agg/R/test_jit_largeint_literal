@@ -1,0 +1,35 @@
+-- name: test_jit_largeint_literal
+CREATE DATABASE IF NOT EXISTS test_jit_largeint_literal_db;
+-- result:
+-- !result
+USE test_jit_largeint_literal_db;
+-- result:
+-- !result
+CREATE TABLE jitli (id INT, v LARGEINT NULL) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO jitli SELECT generate_series, 1 FROM TABLE(generate_series(1, 5000)) g;
+-- result:
+-- !result
+SET jit_level = 0;
+-- result:
+-- !result
+SELECT sum(v + 18446744073709551616 - v) FROM jitli;
+-- result:
+92233720368547758080000
+-- !result
+SET jit_level = -1;
+-- result:
+-- !result
+SELECT sum(v + 18446744073709551616 - v) FROM jitli;
+-- result:
+92233720368547758080000
+-- !result
+SET jit_level = -1;
+-- result:
+-- !result
+SELECT sum(v + 100000000000000000000 - v) FROM jitli;
+-- result:
+500000000000000000000000
+-- !result

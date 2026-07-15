@@ -104,7 +104,6 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -381,10 +380,23 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     @Override
     public Void visitDropPersistentIndexClause(DropPersistentIndexClause clause, ConnectContext context) {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        // This clause is dispatched via the unlocked else branch in visitAlterTableStatement, so take the
+        // table WRITE lock here (mirroring the other clause handlers): processLakeTableDropPersistentIndex
+        // walks the table's partition/index/tablet structures and runs a check-then-set on
+        // LakeTablet.rebuildPindexVersion, and that work must be serialized against concurrent alters.
+        // NOTE: this lock does NOT serialize with the lake publish path. That reader (Utils.processTablets)
+        // reads rebuildPindexVersion lock-free after publishPartition has released its own table lock, so
+        // cross-thread visibility relies solely on the field being volatile. A publish already in flight for
+        // the marked version can still miss the rebuild request -- that is a pre-existing version-matching
+        // TOCTOU in the publish/flag protocol, not something an FE-side lock can close.
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             schemaChangeHandler.processLakeTableDropPersistentIndex(clause, db, (OlapTable) table);
         } catch (StarRocksException e) {
             throw new AlterJobException(e.getMessage(), e);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
         return null;
     }
@@ -592,11 +604,21 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
-                boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
-                        properties, TTabletMetaType.FLAT_JSON_CONFIG);
-                if (!isSuccess) {
-                    throw new DdlException("modify flat json config of FEMeta failed");
-
+                if (table.isCloudNativeTable()) {
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                    try {
+                        schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
+                    } finally {
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+                    }
+                    isSynchronous = false;
+                } else {
+                    boolean isSuccess = schemaChangeHandler.updateFlatJsonConfigMeta(db, table.getId(),
+                            properties, TTabletMetaType.FLAT_JSON_CONFIG);
+                    if (!isSuccess) {
+                        throw new DdlException("modify flat json config of FEMeta failed");
+                    }
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -711,7 +733,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
     @Override
     public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
@@ -970,8 +991,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         PropertyAnalyzer.analyzeBooleanProp(properties,
                 PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         // 4. tablet type
-        TTabletType tTabletType =
-                PropertyAnalyzer.analyzeTabletType(properties);
+        PropertyAnalyzer.analyzeTabletType(properties);
 
         // 5. enable data cache
         Boolean newEnableDataCache = null;
@@ -1078,6 +1098,12 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 ctx.getSessionVariable().getSqlMode(),
                 alterViewClause.getComment(),
                 alterViewClause.getOriginalViewDefineSql());
+        // For CREATE OR REPLACE VIEW, redefine the SQL SECURITY characteristic atomically with the definition.
+        // A null value (plain ALTER VIEW ... AS) leaves the view's existing characteristic unchanged.
+        if (alterViewClause.getSecurity() != null) {
+            alterViewInfo.setUpdateSecurity(true);
+            alterViewInfo.setSecurity(alterViewClause.getSecurity());
+        }
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;

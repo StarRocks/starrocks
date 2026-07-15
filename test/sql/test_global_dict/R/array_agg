@@ -17,6 +17,24 @@ PROPERTIES (
 );
 -- result:
 -- !result
+CREATE TABLE `t2` (
+  `id` int(11) NOT NULL COMMENT "",
+  `grp` int(11) NOT NULL COMMENT "",
+  `str1` varchar(65533) NOT NULL COMMENT "",
+  `str2` varchar(65533) NULL COMMENT "",
+  `val` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
 INSERT INTO t VALUES
     (1,  1, 'apple',  'X', 10),
     (2,  1, 'banana', 'Y', 20),
@@ -32,6 +50,11 @@ INSERT INTO t VALUES
     (12, 3, 'banana', 'Y', 65);
 -- result:
 -- !result
+INSERT INTO t2 
+SELECT i, i % 5, CAST(i % 5 AS STRING), CAST(i AS STRING), i * 10
+FROM TABLE (generate_series(1, 300)) AS g(i);
+-- result:
+-- !result
 [UC] analyze full table t;
 -- result:
 test_db_66e489ab3c1b4d32bb75d4cb9cb7d0ce.t	analyze	status	OK
@@ -41,6 +64,14 @@ function: wait_global_dict_ready('str1', 't')
 
 -- !result
 function: wait_global_dict_ready('str2', 't')
+-- result:
+
+-- !result
+[UC] analyze full table t2;
+-- result:
+test_db_66e489ab3c1b4d32bb75d4cb9cb7d0ce.t2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('str1', 't2')
 -- result:
 
 -- !result
@@ -345,6 +376,47 @@ SELECT /*+SET_VAR(new_planner_agg_stage=2, cbo_enable_low_cardinality_optimize=f
 2	["apple","banana","date","cherry"]
 3	["date","cherry","banana","cherry"]
 -- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(str2 ORDER BY str1, val DESC)[1] FROM t2 GROUP BY  1 ORDER BY 1;
+-- result:
+0	300
+1	296
+2	297
+3	298
+4	299
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(str2 ORDER BY str1, val DESC)[1] FROM t2 GROUP BY  1 ORDER BY 1;
+-- result:
+0	300
+1	296
+2	297
+3	298
+4	299
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=1)*/ grp, array_agg(val ORDER BY str1, str2 DESC)[1] FROM t2 GROUP BY  1 ORDER BY 1;
+-- result:
+0	950
+1	960
+2	970
+3	980
+4	990
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ grp, array_agg(val ORDER BY str1, str2 DESC)[1] FROM t2 GROUP BY  1 ORDER BY 1;
+-- result:
+0	950
+1	960
+2	970
+3	980
+4	990
+-- !result
+SELECT grp, array_agg('x' ORDER BY str1) FROM t GROUP BY grp ORDER BY grp;
+-- result:
+1	["x","x","x","x"]
+2	["x","x","x","x"]
+3	["x","x","x","x"]
+-- !result
 drop table t;
+-- result:
+-- !result
+drop table t2;
 -- result:
 -- !result

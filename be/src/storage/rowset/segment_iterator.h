@@ -16,30 +16,49 @@
 
 #include <memory>
 #include <optional>
+#include <roaring/roaring.hh>
 #include <vector>
 
 #include "common/statusor.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class Segment;
 class SeekRange;
 
+class ColumnIterator;
 class ColumnPredicate;
+class PredicateTree;
 class Schema;
 class SegmentReadOptions;
 struct LakeIOOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
+// Returns a per-scan iterator backed by |reusable_slot|. Closing the returned
+// iterator does not close |reusable_slot|; the slot owner must close it.
+StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                                         const Schema& iterator_schema, const Schema& output_schema,
+                                                         const SegmentReadOptions& options,
+                                                         ChunkIteratorPtr* reusable_slot);
+StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                                       const SegmentReadOptions& options);
 
-// Resolve a key-space SeekRange to the corresponding rowid range within |segment|.
-// Wraps the lookup machinery of SegmentIterator so callers outside the
-// iterator scan path can convert a TabletRangePB-derived SeekRange into a
-// contiguous [lower, upper) rowid window.
-// Returns std::nullopt when the range is empty on this segment.
+// Build a block-aligned rowid range from key-space SeekRanges. The segment's
+// short-key index must be loaded before calling this when |ranges| is non-empty.
+StatusOr<SparseRange<>> block_aligned_rowid_range_from_seek_ranges(Segment* segment,
+                                                                   const std::vector<SeekRange>& ranges);
+
+// Resolve key-space SeekRanges to corresponding rowid ranges within |segment|.
+// This wraps SegmentIterator's lookup machinery so callers outside the scan
+// path can precompute rowid windows and reuse them later.
+// Each result is std::nullopt when the corresponding range is empty on this segment.
+StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
+        const LakeIOOptions& lake_io_opts);
+// Convenience wrapper for a single SeekRange.
 StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
                                                                           const SeekRange& range,
                                                                           const LakeIOOptions& lake_io_opts);
@@ -52,5 +71,29 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
 // index and return _columns[0], which the brute-force kernel would then downcast to
 // ArrayColumn and corrupt memory.
 StatusOr<ColumnPtr> resolve_brute_force_vector_column(const Chunk* chunk, const Chunk* dict_chunk, ColumnId vec_col_id);
+
+// Evaluate the WHOLE `pred_tree` (AND / OR / compound / expr) over the rows in `candidate` by
+// reading the predicate columns, returning the matching subset as an exact row bitmap. Declared
+// here so it can be unit-tested directly, like resolve_brute_force_vector_column above.
+//
+//   schema                   supplies the Field (field->id() == ColumnId) per predicate column.
+//   column_iterators_by_cid  positioned readers indexed by ColumnId; non-predicate entries may be
+//                            null. A predicate column missing from either is an InternalError --
+//                            silently skipping it would widen the bitmap.
+//   fallback_rowids          optional; filled per batch with the batch's segment rowids, for
+//                            predicates that resolve chunk rows back to rowids (the inverted-index
+//                            fallback for a MATCH inside an OR).
+//   dict_code_candidates_by_cid
+//                            optional; flags columns whose predicates the ColumnPredicateRewriter
+//                            rewrote into dict codes. A flagged, all-page-dict-encoded column is
+//                            read as codes (DictCodeColumnIterator + code-typed field) so the
+//                            rewritten predicates evaluate against matching values.
+//
+// Reads in <= 4096-row batches and seeks every batch, so prior iterator positions do not matter.
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
+        const PredicateTree& pred_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid = nullptr);
 
 } // namespace starrocks

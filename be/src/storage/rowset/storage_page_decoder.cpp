@@ -137,6 +137,7 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     }
     case FOR_ENCODING:
     case PLAIN_ENCODING:
+    case PLAIN_ENCODING_DELTA_OFFSET:
     case PREFIX_ENCODING:
     case RLE: {
         return &g_base_decoder;

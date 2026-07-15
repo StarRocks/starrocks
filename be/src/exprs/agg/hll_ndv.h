@@ -110,9 +110,10 @@ public:
 
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 10);
-        result->get_offset().resize(chunk_size + 1);
-
         size_t old_size = bytes.size();
+        auto& offsets = result->get_offset();
+        offsets.resize(chunk_size + 1);
+
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
@@ -123,8 +124,7 @@ public:
             size_t new_size = old_size + hll.max_serialized_size();
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
-
-            result->get_offset()[i + 1] = new_size;
+            offsets.set(i + 1, new_size);
             old_size = new_size;
         }
     }

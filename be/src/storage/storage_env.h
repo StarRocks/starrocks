@@ -23,7 +23,9 @@
 namespace starrocks {
 
 class MemTracker;
+class LoadSpillBlockMergeExecutor;
 class StorePathRegistry;
+class VectorIndexCache;
 
 namespace lake {
 class LakePersistentIndexParallelCompactMgr;
@@ -47,6 +49,8 @@ struct StorageEnvOptions {
     LakeLocationProviderMode lake_location_provider_mode = LakeLocationProviderMode::kDisabled;
     const StorePathRegistry* store_path_registry = nullptr;
     MemTracker* update_mem_tracker = nullptr;
+    int64_t process_mem_limit = 0;
+    MemTracker* vector_index_mem_tracker = nullptr;
     int64_t lake_metadata_cache_limit = 0;
 };
 
@@ -63,10 +67,15 @@ public:
     StorageEnv& operator=(const StorageEnv&) = delete;
 
     Status init(const StorageEnvOptions& options);
+    Status init_vector_index_cache(int64_t process_mem_limit, MemTracker* vector_index_mem_tracker);
     void stop();
     void stop_lake_tablet_manager();
+    // Keep this explicit: the cache must be destroyed after vector index users
+    // are drained and before RuntimeEnv::stop() releases the mem tracker tree.
+    void destroy_vector_index_cache();
     void destroy();
 
+    VectorIndexCache* vector_index_cache() const { return _vector_index_cache.get(); }
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager.get(); }
@@ -74,6 +83,10 @@ public:
     lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() const { return _parallel_compact_mgr.get(); }
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr; }
     void set_spill_dir_mgr(spill::DirManager* spill_dir_mgr) { _spill_dir_mgr = spill_dir_mgr; }
+    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() const { return _load_spill_block_merge_executor; }
+    void set_load_spill_block_merge_executor(LoadSpillBlockMergeExecutor* executor) {
+        _load_spill_block_merge_executor = executor;
+    }
 
 private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
@@ -82,6 +95,8 @@ private:
     std::unique_ptr<lake::ReplicationTxnManager> _lake_replication_txn_manager;
     std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
     spill::DirManager* _spill_dir_mgr = nullptr;
+    LoadSpillBlockMergeExecutor* _load_spill_block_merge_executor = nullptr;
+    std::unique_ptr<VectorIndexCache> _vector_index_cache;
 };
 
 } // namespace starrocks

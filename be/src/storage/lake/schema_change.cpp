@@ -42,6 +42,7 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks::lake {
 
@@ -462,7 +463,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
         if (!request.__isset.query_options || !request.__isset.query_globals) {
             return Status::InternalError("change materialized view but query_options/query_globals is not set");
         }
-        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals, _exec_env);
 
         RuntimeState* runtime_state = chunk_changer->get_runtime_state();
         RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
@@ -490,7 +491,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
         sc_params.sc_directly = true;
 
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
-                                          request.materialized_column_req.query_globals);
+                                          request.materialized_column_req.query_globals, _exec_env);
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
@@ -573,6 +574,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

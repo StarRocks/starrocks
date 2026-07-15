@@ -29,15 +29,17 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -49,13 +51,12 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -92,7 +93,15 @@ public:
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
-        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+        // Serial flush: write() below produces this flush's own segment (even a delete-only flush
+        // writes a 0-row segment for the empty upsert chunk), which will occupy index
+        // segments().size() since flush_del_file() runs before it. The delete logically follows that
+        // segment (delete rssid = rowset_id + op_offset), so it sorts after this flush's own upserts
+        // and before any later-flush re-upsert of the same key, preserving the in-transaction order.
+        // A leading delete-only flush is handled the same way: its empty segment takes this slot and
+        // the re-upsert lands in a later segment that correctly wins.
+        const uint32_t op_offset = static_cast<uint32_t>(_writer->segments().size());
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes, op_offset));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
@@ -257,6 +266,13 @@ private:
     const std::vector<SlotDescriptor*>* const _slots;
 
     int64_t _max_buffer_size;
+
+    // Snapshot the in-transaction upsert/delete-order feature flag once for the whole load.
+    // lake_enable_pk_preserve_txn_delete_order is a mutable BE config, but it must not change
+    // mid-load: it drives both whether the spill path keeps the __op column (fixing LoadChunkSpiller's
+    // serde/schema from the first chunk) and whether finish() emits the del_op_offsets array. Reading
+    // it live in each place could tear a single load across the legacy and op-aware paths.
+    const bool _preserve_txn_delete_order = config::lake_enable_pk_preserve_txn_delete_order;
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
@@ -426,12 +442,13 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
                         _tablet_manager->tablet_root_location(_tablet_id), nullptr,
+                        StorageEnv::GetInstance()->spill_dir_mgr(),
                         /*enable_flat_layout=*/true, _txn_id);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
-            _mem_table_sink =
-                    std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(), _profile);
+            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(),
+                                                                  _profile, _preserve_txn_delete_order);
             // Use concurrent flush token to improve the flush speed when spilling is enabled.
             // PERFORMANCE: Concurrent mode allows multiple memtables to flush in parallel,
             // which improves throughput when data is spilled to temporary storage before
@@ -658,7 +675,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
-            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+            is_tracker_hit_hard_limit(RuntimeEnv::GetInstance()->load_mem_tracker(),
                                       config::load_process_max_memory_hard_limit_ratio)) {
             return Status::MemoryLimitExceeded(
                     "memory limit exceeded, please reduce load frequency or increase config "
@@ -817,8 +834,27 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         uint32_t segment_idx = op_write->rowset().segment_metas_size();
         f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
-    for (const auto& f : _tablet_writer->dels()) {
-        to_file_meta_pb(f, op_write->add_dels_meta());
+    {
+        const auto& del_op_offsets = _tablet_writer->del_op_offsets();
+        size_t del_idx = 0;
+        for (const auto& f : _tablet_writer->dels()) {
+            auto* del_meta = op_write->add_dels_meta();
+            to_file_meta_pb(f, del_meta);
+            ++del_idx;
+        }
+        // Carry the per-del op_offset (parallel to dels_meta, index by del_id) so the apply/persist
+        // path can preserve in-transaction upsert/delete ordering. A kUnknownDelOpOffset entry (spill /
+        // concurrent flush) keeps the array aligned and is read as "not recorded" -> max segment id.
+        // Downgrade-safety gate: only emit the array when explicitly enabled. While disabled (the
+        // default), it stays empty so apply/persist/rebuild uniformly fall back to the legacy "delete
+        // after all segments" path -- this never writes the new on-disk state that a pre-fix BE
+        // (rollback / not-yet-upgraded node / cross-version OpReplication target) would misread into a
+        // duplicate primary key. See config::lake_enable_pk_preserve_txn_delete_order.
+        if (_preserve_txn_delete_order) {
+            for (size_t i = 0; i < del_idx; ++i) {
+                op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
+            }
+        }
     }
     for (const auto& sst : _tablet_writer->ssts()) {
         to_file_meta_pb(sst, op_write->add_ssts());

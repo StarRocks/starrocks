@@ -348,6 +348,13 @@ public class EsTable extends Table implements GsonPostProcessable {
         return tTableDescriptor;
     }
 
+    @Override
+    public String getCatalogName() {
+        // EsTable has no resource-mapping path (unlike HiveTable), so fall back directly to the internal catalog
+        // for old-style ES external tables created without an external catalog.
+        return catalogName != null ? catalogName : InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
     // TODO, identify the remote table that created after deleted
     @Override
     public String getUUID() {

@@ -1,0 +1,136 @@
+-- name: test_gin_lower_case_${uuid0}
+CREATE DATABASE test_gin_lower_case_${uuid0};
+-- result:
+-- !result
+USE test_gin_lower_case_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE t_gin_lc_cs (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="false") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE t_gin_lc_ci (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="true") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t_gin_lc_cs VALUES (1,'Hello World'),(2,'hello world'),(3,'Hello WORLD'),(4,'Foo Bar'),(5,'apple Banana');
+-- result:
+-- !result
+INSERT INTO t_gin_lc_ci VALUES (1,'Hello World'),(2,'hello world'),(3,'Hello WORLD'),(4,'Foo Bar'),(5,'apple Banana');
+-- result:
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'Hello' ORDER BY k;
+-- result:
+1
+3
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'hello' ORDER BY k;
+-- result:
+2
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'WORLD' ORDER BY k;
+-- result:
+3
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'banana' ORDER BY k;
+-- result:
+-- !result
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'hello' ORDER BY k;
+-- result:
+1
+2
+3
+-- !result
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'Hello' ORDER BY k;
+-- result:
+-- !result
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'banana' ORDER BY k;
+-- result:
+5
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ANY 'Hello Foo' ORDER BY k;
+-- result:
+1
+3
+4
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ANY 'hello world' ORDER BY k;
+-- result:
+2
+-- !result
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ALL 'Hello World' ORDER BY k;
+-- result:
+1
+-- !result
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH_ANY 'Hello Foo' ORDER BY k;
+-- result:
+1
+2
+3
+4
+-- !result
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH_ALL 'Hello World' ORDER BY k;
+-- result:
+1
+2
+3
+-- !result
+CREATE TABLE t_gin_lc_default (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t_gin_lc_default VALUES (1,'Hello World');
+-- result:
+-- !result
+SELECT k FROM t_gin_lc_default WHERE msg MATCH 'hello' ORDER BY k;
+-- result:
+1
+-- !result
+SELECT k FROM t_gin_lc_default WHERE msg MATCH 'Hello' ORDER BY k;
+-- result:
+-- !result
+CREATE TABLE t_gin_lc_upperkey (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","LOWER_CASE"="false") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t_gin_lc_upperkey VALUES (1,'Hello World');
+-- result:
+-- !result
+SELECT k FROM t_gin_lc_upperkey WHERE msg MATCH 'Hello' ORDER BY k;
+-- result:
+1
+-- !result
+SELECT k FROM t_gin_lc_upperkey WHERE msg MATCH 'hello' ORDER BY k;
+-- result:
+-- !result
+CREATE TABLE t_gin_lc_bad (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="abc") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: INVERTED index lower_case should be true or false..')
+-- !result
+DROP DATABASE IF EXISTS test_gin_lower_case_${uuid0};
+-- result:
+-- !result

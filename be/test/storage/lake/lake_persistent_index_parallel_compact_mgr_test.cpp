@@ -27,11 +27,11 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
 
 namespace starrocks::lake {

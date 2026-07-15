@@ -31,7 +31,7 @@
 #include "common/statusor.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/utils.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

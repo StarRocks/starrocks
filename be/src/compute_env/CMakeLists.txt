@@ -16,15 +16,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/compute_env")
 
 set(COMPUTE_ENV_SORTING_FILES
     sorting/chunk_cursor.cpp
-    sorting/compare_column.cpp
     sorting/data_segment.cpp
     sorting/merge.cpp
     sorting/merge_cascade.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
-    sorting/sort_column.cpp
     sorting/sort_cursor.cpp
-    sorting/sort_permute.cpp
     sorting/sorted_chunks_merger.cpp
 )
 
@@ -67,17 +64,27 @@ set(COMPUTE_ENV_SPILL_FILES
 set(COMPUTE_ENV_QUERY_CACHE_FILES
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
+    query_cache/query_cache_metrics.cpp
 )
 
 set(COMPUTE_ENV_QUERY_FILES
     query/connector_scan_mem_share_arbitrator.cpp
     query/file_scan_split_context.cpp
     query/global_late_materialization_context.cpp
+    query/partition_scan_range_pruner.cpp
+    query/query_runtime_state.cpp
+    query/query_scan_metrics.cpp
+    query/scan_conjuncts_manager.cpp
 )
 
 set(COMPUTE_ENV_GLOBAL_DICT_FILES
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
+)
+
+set(COMPUTE_ENV_DICTIONARY_CACHE_FILES
+    dictionary_cache/chunk_util.cpp
+    dictionary_cache/dictionary_cache_manager.cpp
 )
 
 set(COMPUTE_ENV_LOAD_PATH_FILES
@@ -86,6 +93,33 @@ set(COMPUTE_ENV_LOAD_PATH_FILES
     load_path/dummy_load_path_mgr.cpp
     load_path/rejected_record_writer.cpp
 )
+
+set(COMPUTE_ENV_LOAD_FILES
+    load/stream_context_mgr.cpp
+    load/stream_load_context_handle.cpp
+    load/stream_load_context.cpp
+    load/stream_load_metrics.cpp
+    load/stream_load_pipe.cpp
+    load/time_bounded_stream_load_pipe.cpp
+)
+
+set(COMPUTE_ENV_LOAD_SPILL_FILES
+    load_spill/load_chunk_spiller.cpp
+    load_spill/load_spill_block_manager.cpp
+    load_spill/load_spill_block_merge_executor.cpp
+)
+
+set(COMPUTE_ENV_STAROS_FILES
+    staros/staros_status.cpp
+    staros/staros_starcache.cpp
+    staros/staros_worker.cpp
+    staros/staros_worker_metrics.cpp
+    staros/staros_worker_runtime.cpp
+)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND COMPUTE_ENV_STAROS_FILES staros/starlet_filesystem.cpp)
+endif()
 
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
@@ -106,19 +140,23 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_QUERY_CACHE_FILES}
     ${COMPUTE_ENV_QUERY_FILES}
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
+    ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
+    ${COMPUTE_ENV_LOAD_FILES}
+    ${COMPUTE_ENV_LOAD_SPILL_FILES}
+    ${COMPUTE_ENV_STAROS_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
+    Cache
     StoragePrimitive
     ExecPrimitive
-    ExprCore
-    Serde
-    RuntimeEnv
-    RuntimeCore
+    Expr
+    Runtime
     Platform
-    FSCore
+    FileSystem
     IO
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types

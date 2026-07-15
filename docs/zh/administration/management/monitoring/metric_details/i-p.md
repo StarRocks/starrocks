@@ -4,6 +4,8 @@ hide_table_of_contents: true
 description: "Alphabetical i - p"
 ---
 
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
 # 指标 i 到 p
 
 :::note
@@ -16,6 +18,8 @@ description: "Alphabetical i - p"
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
 
 :::
+
+<MetricsIP />
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -82,6 +86,42 @@ description: "Alphabetical i - p"
   - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
   - `delete_type` (`position` 或 `metadata`)
 - 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
+
+## `iceberg_merge_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的总字节数，按文件类型拆分。`data` 表示新数据文件（更新后的行和插入的行）的大小；`position_delete` 表示标记被命中旧行的位置删除文件大小。
+
+## `iceberg_merge_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积
+- 描述：Iceberg `MERGE INTO` 任务的总执行时间（毫秒）。每个任务的耗时在其结束后累加。
+
+## `iceberg_merge_files`
+
+- 单位：计数
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的文件总数，按文件类型拆分。`data` 统计新数据文件个数，`position_delete` 统计位置删除文件个数。
+
+## `iceberg_merge_rows`
+
+- 单位：行
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务处理的总行数，按文件类型拆分。`position_delete` 统计被 UPDATE 或 DELETE 命中的目标行（写为位置删除）；`data` 统计写入的数据行（更新的行加上插入的行）。
+
+## `iceberg_merge_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+- 描述：目标表为 Iceberg 的 `MERGE INTO` 任务总数。无论任务成功还是失败，每当任务结束时该指标都会加 1。Iceberg MERGE INTO 采用 V2 Merge-On-Read 模型，在单个 snapshot 中原子写入数据文件和位置删除文件。
 
 ## `iceberg_metadata_table_query_total`
 

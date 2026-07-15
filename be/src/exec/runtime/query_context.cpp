@@ -24,12 +24,12 @@
 #include "compute_env/query/global_late_materialization_context.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/runtime/fragment_context.h"
 #include "exec/runtime/fragment_context_manager.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/query_statistics.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_state.h"
@@ -200,7 +200,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _query_runtime_state.set_global_late_materialization_ctx_mgr(_global_late_materialization_ctx_mgr);
 
         {
-            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            MemTracker* connector_scan_parent = RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker();
             if (wg != nullptr) {
                 connector_scan_parent = wg->connector_scan_mem_tracker();
             }

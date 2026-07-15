@@ -18,6 +18,8 @@
 #include <arrow/compute/api.h>
 #include <fmt/format.h>
 
+#include <type_traits>
+
 #include "arrow/array/array_binary.h"
 #include "arrow/array/array_nested.h"
 #include "arrow/scalar.h"
@@ -226,14 +228,14 @@ struct ArrowConverter {
 
 // {List, Binary, String}Type in arrow use int32_t as offset type, so offsets can be copied via SIMD,
 // Large{List, Binary, String}Type use int64_t, so must copy offset elements one by one.
-template <typename T>
+template <typename T, typename DstOffset>
 void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, size_t num_elements,
-                  uint32_t* __restrict offsets_data, uint32_t base_offset) {
+                  DstOffset* __restrict offsets_data, uint64_t base_offset) {
     for (auto i = 0; i < num_elements; ++i) {
         // never change following code to
         // base_offsets - arrow_base_offset + arrow_offsets_data[i],
         // that would cause underflow for unsigned int;
-        offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
+        offsets_data[i] = static_cast<DstOffset>(base_offset + (arrow_offsets_data[i] - arrow_base_offset));
     }
 }
 
@@ -251,18 +253,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     static void optimize_not_nullable_fixed_size_binary(const ArrowArrayType* array, size_t array_start_idx,
                                                         size_t num_elements, ColumnType* column,
                                                         size_t column_start_idx) {
+        DCHECK_EQ(column_start_idx, column->size());
         uint32_t width = array->byte_width();
-        column->resize(column->size() + num_elements);
         const auto* array_data = array->GetValue(array_start_idx);
-        auto& bytes = column->get_bytes();
-        auto& offsets = column->get_offset();
-        size_t copy_size = width * num_elements;
-        bytes.resize(bytes.size() + width * num_elements);
-        const auto base_offset = offsets[column_start_idx];
-        strings::memcpy_inlined(bytes.data() + base_offset, array_data, copy_size);
-        for (auto i = 0; i < num_elements; ++i) {
-            offsets[column_start_idx + i + 1] = base_offset + (i + 1) * width;
-        }
+        auto ret = column->append_continuous_fixed_length_strings(reinterpret_cast<const char*>(array_data),
+                                                                  num_elements, static_cast<int>(width));
+        DCHECK(ret);
     }
 
     static void optimize_nullable_fixed_size_binary(const ArrowArrayType* array, size_t array_start_idx,
@@ -275,15 +271,20 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         size_t bytes_off = bytes.size();
         bytes.resize(bytes_off + width * num_elements);
         auto* bytes_start = (uint8_t*)&bytes.front();
-        for (auto i = 0; i < num_elements; ++i) {
-            size_t array_idx = array_start_idx + i;
-            size_t offsets_idx = column_start_idx + i + 1;
-            if (!array->IsNull(array_idx)) {
-                strings::memcpy_inlined(bytes_start + bytes_off, array_data + i * width, width);
-                bytes_off += width;
+        offsets.ensure_width_for_value(bytes_off + width * num_elements);
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            auto* offsets_data = offsets_buf.data() + column_start_idx + 1;
+            for (size_t i = 0; i < num_elements; ++i) {
+                size_t array_idx = array_start_idx + i;
+                if (!array->IsNull(array_idx)) {
+                    strings::memcpy_inlined(bytes_start + bytes_off, array_data + static_cast<size_t>(i) * width,
+                                            width);
+                    bytes_off += width;
+                }
+                offsets_data[i] = static_cast<OffsetValue>(bytes_off);
             }
-            offsets[offsets_idx] = bytes_off;
-        }
+        });
         bytes.resize(bytes_off);
     }
 
@@ -303,19 +304,14 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
         bytes.resize(bytes.size() + copy_size);
         const auto base_offset = offsets[column_start_idx];
         strings::memcpy_inlined(bytes.data() + base_offset, array_data, copy_size);
-        auto* offsets_data = &offsets[column_start_idx + 1];
-        auto* arrow_offsets_data = array->raw_value_offsets() + array_start_idx + 1;
         const auto arrow_base_offset = array->value_offset(array_start_idx);
-        offsets_copy<ArrowOffsetType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data, base_offset);
-    }
-
-    // Fill num_elements# empty string into column, started at position column_start_idx
-    static void fill_empty_string(ColumnType* column, size_t column_start_idx, size_t num_elements) {
-        column->resize(column->size() + num_elements);
-        auto& offsets = column->get_offset();
-        const auto base_offset = offsets[column_start_idx];
-        auto* offsets_data = &offsets[column_start_idx + 1];
-        std::fill_n(offsets_data, num_elements, base_offset);
+        auto* arrow_offsets_data = array->raw_value_offsets() + array_start_idx + 1;
+        offsets.ensure_width_for_value(base_offset + copy_size);
+        offsets.visit_storage([&](auto& offsets_buf) {
+            auto* offsets_data = offsets_buf.data() + column_start_idx + 1;
+            offsets_copy<ArrowOffsetType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data,
+                                          base_offset);
+        });
     }
 
     static Status length_exceeds_limit_error(int length, int limit) {
@@ -338,7 +334,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
             uint32_t width = concrete_array->byte_width();
             // FixedSizeBinary's length exceeds maximum length of varchar/var
             if (width > max_length) {
-                fill_empty_string(concrete_column, column_start_idx, num_elements);
+                DCHECK_EQ(column_start_idx, concrete_column->size());
+                concrete_column->append_default(num_elements);
                 // Invalid data are regarded as nulls if target Column is nullable and is_strict is
                 // false; a not-nullable column can not accept nulls, so discards invalid data;
                 // Strict-mode(is_strict=true) loading also discards invalid data.

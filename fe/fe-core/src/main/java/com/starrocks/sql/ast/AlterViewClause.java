@@ -29,6 +29,8 @@ public class AlterViewClause extends AlterClause {
     protected String comment;
     protected int queryStartIndex = -1;
     protected int queryStopIndex = -1;
+    // The SQL SECURITY characteristic to apply, or null to leave the view's existing characteristic unchanged.
+    protected Boolean security;
 
     public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement, NodePosition nodePosition) {
         super(nodePosition);
@@ -90,6 +92,14 @@ public class AlterViewClause extends AlterClause {
 
     public void setQueryStopIndex(int queryStopIndex) {
         this.queryStopIndex = queryStopIndex;
+    }
+
+    public Boolean getSecurity() {
+        return security;
+    }
+
+    public void setSecurity(Boolean security) {
+        this.security = security;
     }
 
     @Override

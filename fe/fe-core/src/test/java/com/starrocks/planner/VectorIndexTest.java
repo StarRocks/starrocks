@@ -377,19 +377,39 @@ public class VectorIndexTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "VECTORINDEX: OFF");
 
-        // Cannot deal with approx_l2_distance with other predicates.
-        sql = "select c1 from test_l2 " +
-                "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 and c0 < 10 " +
-                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
-        plan = getVerboseExplain(sql);
-        assertContains(plan, "VECTORINDEX: OFF");
-
         // OR
         sql = "select c1 from test_l2 " +
                 "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 or approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 1000 " +
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "VECTORINDEX: OFF");
+    }
+
+    @Test
+    public void testResidualScalarPredicate() throws Exception {
+        String sql;
+        String plan;
+
+        // A pure scalar predicate on a non-vector column no longer disables the vector index: it is kept
+        // as a residual on the scan, and the BE pre/post-filters it against the ANN. (Used to be OFF.)
+        sql = "select c1 from test_l2 " +
+                "where c0 < 10 " +
+                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        // The residual predicate must be retained on the scan (dropping it would give wrong results);
+        // c0 is not in the select list, so its only appearance is the retained predicate.
+        assertContains(plan, "c0");
+
+        // Mixed: a vector-distance range AND a scalar residual. The range folds into the ANN; the scalar
+        // stays as a residual on the scan.
+        sql = "select c1 from test_l2 " +
+                "where approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) <= 100 and c0 < 10 " +
+                "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "Predicate Range: 100.0");
+        assertContains(plan, "c0");
     }
 
     @Test
@@ -680,7 +700,9 @@ public class VectorIndexTest extends PlanTestBase {
 
         String sql7 = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score"
                 + " from test.test_cosine where c0 = 1 order by score desc limit 10";
-        assertPlanContains(sql7, "VECTORINDEX: OFF");
+        // The scalar predicate c0 = 1 is now kept as a residual on the scan (BE pre/post-filters it
+        // against the ANN), so the vector index is used instead of falling back to a brute-force scan.
+        assertPlanContains(sql7, "VECTORINDEX: ON");
 
         String sql8 = "select c1, approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) as score"
                 + " from test.test_cosine having score >= cast(0.8 as float) order by score desc limit 10";

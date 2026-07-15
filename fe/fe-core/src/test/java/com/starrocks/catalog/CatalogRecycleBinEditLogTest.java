@@ -228,7 +228,7 @@ public class CatalogRecycleBinEditLogTest {
     @Test
     public void testPickTablesToEraseNormalCase() throws Exception {
         // 1. Create and recycle a table
-        Database db = createDatabase(DB_ID, DB_NAME);
+        createDatabase(DB_ID, DB_NAME);
         OlapTable table = createOlapTable(TABLE_ID, TABLE_NAME);
         recycleBin.recycleTable(DB_ID, table, true);
         

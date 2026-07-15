@@ -21,7 +21,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -151,7 +150,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
         LOG.info("create sample statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
@@ -183,8 +181,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createFullStatisticsTable(ConnectContext context) {
         LOG.info("create full statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME,
-                FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
@@ -217,7 +213,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create histogram statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -255,7 +250,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createExternalFullStatisticsTable(ConnectContext context) {
         LOG.info("create external full statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
@@ -288,7 +282,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createExternalHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create external histogram statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -330,7 +323,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createMultiColumnStatisticsTable(ConnectContext context) {
         LOG.info("create multi column statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
 
         try {
@@ -367,7 +359,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createSPMBaselinesTable(ConnectContext context) {
         LOG.info("create spm_baselines table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME);
         KeysType keysType = KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -406,7 +397,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private boolean createQueryHistoryTable(ConnectContext context) {
         LOG.info("create query_history table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, QUERY_HISTORY_TABLE_NAME);
         KeysType keysType = KeysType.DUP_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {

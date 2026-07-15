@@ -129,11 +129,10 @@ public class AgentTaskTest {
         columns.add(new Column("k1", IntegerType.INT, false, null, "1", ""));
         columns.add(new Column("v1", IntegerType.INT, false, AggregateType.SUM, "1", ""));
 
-        PartitionKey pk1 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), false);
-        PartitionKey pk2 =
-                PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("10")), Arrays.asList(columns.get(0)));
+        PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), false);
+        PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("10")), Arrays.asList(columns.get(0)));
 
-        PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
+        PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
         tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexId1)
@@ -321,7 +320,7 @@ public class AgentTaskTest {
 
     @Test
     public void testBackendNoAlive() {
-        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+        new LocalMetastore(GlobalStateMgr.getCurrentState(),
                 null, null);
         List<CreateReplicaTask> tasks = new ArrayList<>();
         tasks.add((CreateReplicaTask) createReplicaTask);
@@ -345,7 +344,7 @@ public class AgentTaskTest {
             }
         };
 
-        LocalMetastore localMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+        new LocalMetastore(GlobalStateMgr.getCurrentState(),
                 null, null);
         List<CreateReplicaTask> tasks = new ArrayList<>();
         tasks.add((CreateReplicaTask) createReplicaTask);

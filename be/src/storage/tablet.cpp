@@ -49,10 +49,11 @@
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "common/util/table_metrics.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
@@ -60,8 +61,6 @@
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/size_tiered_compaction_policy.h"
@@ -70,6 +69,8 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/flat_json_config.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 
@@ -86,7 +87,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableM
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     _keys_type = _max_version_schema->keys_type();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
     if (_table_metrics_mgr != nullptr) {
         _table_metrics_mgr->register_table(_tablet_meta->table_id());
     }
@@ -94,11 +95,11 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableM
 
 Tablet::Tablet(KeysType keys_type) {
     _keys_type = keys_type;
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::~Tablet() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
     if (_table_metrics_mgr != nullptr && _tablet_meta != nullptr) {
         _table_metrics_mgr->unregister_table(_tablet_meta->table_id());
     }
@@ -492,6 +493,21 @@ void Tablet::update_binlog_config(const BinlogConfig& new_config) {
 
     LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
               << ", minimum version: " << _tablet_meta->get_binlog_min_lsn();
+}
+
+void Tablet::update_flat_json_config(const FlatJsonConfig& new_config) {
+    std::shared_ptr<FlatJsonConfig> old_config = _tablet_meta->get_flat_json_config();
+    int64_t new_version = new_config.get_flat_json_config_version();
+    if (old_config != nullptr) {
+        int64_t old_version = old_config->get_flat_json_config_version();
+        if (old_version >= new_version) {
+            VLOG(3) << "skip to update flat_json_config of tablet: " << tablet_id()
+                    << ", current version: " << old_version << ", new version: " << new_version;
+            return;
+        }
+    }
+    _tablet_meta->set_flat_json_config(new_config);
+    LOG(INFO) << "set flat_json_config of tablet: " << tablet_id() << ", " << new_config.to_string();
 }
 
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
@@ -1567,6 +1583,10 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
         tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
         if (_tablet_meta->get_binlog_config() != nullptr) {
             tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        }
+        if (_tablet_meta->get_flat_json_config() != nullptr) {
+            tablet_info->__set_flat_json_config_version(
+                    _tablet_meta->get_flat_json_config()->get_flat_json_config_version());
         }
         if (_updates == nullptr) {
             int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();

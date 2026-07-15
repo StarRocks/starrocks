@@ -984,7 +984,7 @@ public class VectorIndexBuildSchedulerTest {
     public void testScheduleFromPendingStopsAtMaxConcurrent() {
         // Pre-fill runningTasks to MAX_CONCURRENT_TASKS so the loop breaks immediately.
         for (int i = 0; i < VectorIndexBuildScheduler.MAX_CONCURRENT_TASKS; i++) {
-            ComputeNode node = Mockito.mock(ComputeNode.class);
+            Mockito.mock(ComputeNode.class);
             getRunningTasks().put((long) (10_000 + i),
                     createTaskWithStartTime(10_000 + i, 1L, System.currentTimeMillis()));
         }

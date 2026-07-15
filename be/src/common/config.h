@@ -114,6 +114,17 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
+// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
+// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
+// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
+// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
+CONF_String(jemalloc_conf,
+            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
+            "background_thread:true,prof:true,prof_active:false");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
@@ -266,7 +277,7 @@ CONF_Bool(sys_log_timezone, "false");
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
-// The maximum number of bytes to display on the debug webserver's log page.
+// The maximum number of bytes to display on the debug HTTP service's log page.
 CONF_Int64(web_log_bytes, "1048576");
 // The number of threads available to serve backend execution requests.
 CONF_Int32(be_service_threads, "64");
@@ -305,7 +316,7 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
 // Number of threads for internal JVM calls that must run on pthreads.
-CONF_Int32(jvm_call_thread_pool_size, "1");
+CONF_Int32(jvm_call_thread_pool_size, "4");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -372,6 +383,16 @@ CONF_Int32(min_file_descriptor_number, "60000");
 
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
+
+// When true, high-cardinality string columns that fall back to plain encoding are written with
+// the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
+// deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
+// strings and compress far better than monotonically increasing absolute offsets, while the
+// uncompressed trailer keeps the same size. The format is identified by the column encoding
+// recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
+// encoding fails to open the segment instead of misreading it. Only the write side is gated by
+// this config; default false.
+CONF_mBool(enable_binary_plain_delta_offset, "false");
 
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
@@ -852,6 +873,10 @@ CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+// Release retained chunk capacity in compaction when the current tracker consumption exceeds this percentage.
+// Currently only used by PK compaction in shared-nothing mode.
+// Set it to a negative value to disable this behavior.
+CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
@@ -1237,6 +1262,12 @@ CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
+// Maximum number of object storage clients (S3 and Azure Blob) cached per client factory.
+// Mutable at runtime: the value is snapshotted on each client creation, so a lowered value
+// takes effect as cached clients are evicted on subsequent creations. Values below 1 are
+// treated as 1.
+CONF_mInt64(object_storage_client_cache_size, "8");
+
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
@@ -1431,6 +1462,16 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
+// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
+// the legacy path is used and no incompatible on-disk state is written.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
@@ -1515,10 +1556,10 @@ CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
 // a file has it, regardless of this flag; the flag only controls the write format. Defaults to
-// false: enable it only after the whole cluster has been upgraded to a version that understands
-// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
-// the legacy reader and cannot parse files written in the new format.
-CONF_mBool(lake_enable_protobuf_file_checksum, "false");
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
@@ -1602,6 +1643,9 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// Route the spillable sort (ORDER BY / TOP-N) operator onto the pipeline event scheduler instead of the busy-poller.
+CONF_mBool(enable_spill_sort_events, "false");
 
 // The max number of threads for exec_state_report thread pool.
 CONF_mInt32(exec_state_report_max_threads, "2");
@@ -2058,6 +2102,13 @@ CONF_mBool(enable_vector_adaptive_search, "true");
 CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
 CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// PRE short-circuit: when the residual pre-filter bitmap holds at most this fraction of the segment's
+// rows, skip the filtered ANN search and score the candidates exactly (a sparse bitmap makes the HNSW
+// traversal slow and likely to under-return, paying the exact rescan on top of the wasted search).
+// Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
+// ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
+CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

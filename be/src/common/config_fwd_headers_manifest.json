@@ -174,6 +174,7 @@
         "spill_max_dir_bytes_ratio",
         "spill_read_buffer_min_bytes",
         "mem_limited_chunk_queue_block_size",
+        "enable_spill_sort_events",
         "exec_state_report_max_threads",
         "priority_exec_state_report_max_threads",
         "report_exec_rpc_request_retry_num",
@@ -356,6 +357,7 @@
         "vector_adaptive_ef_alpha",
         "vector_adaptive_ef_cap",
         "vector_adaptive_ef_baseline_rows",
+        "vector_index_brute_selectivity_threshold",
         "vector_index_build_flush_threshold_rows"
       ]
     },
@@ -593,6 +595,7 @@
         "object_storage_rename_file_request_timeout_ms",
         "object_storage_max_retries",
         "object_storage_retry_scale_factor",
+        "object_storage_client_cache_size",
         "fallback_to_hadoop_fs_list",
         "s3_compatible_fs_list",
         "s3_use_list_objects_v1",
@@ -703,6 +706,7 @@
         "size_tiered_level_num",
         "chaos_test_enable_random_compaction_strategy",
         "compaction_memory_limit_per_worker",
+        "compaction_chunk_reset_memory_tracker_threshold_percent",
         "flush_thread_num_per_store",
         "max_segment_file_size",
         "meta_threshold_to_manual_compact",
@@ -800,7 +804,8 @@
         "enable_pk_strict_memcheck",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
-        "column_mode_partial_update_insert_batch_size"
+        "column_mode_partial_update_insert_batch_size",
+        "lake_enable_pk_preserve_txn_delete_order"
       ]
     },
     {
@@ -817,6 +822,7 @@
         "string_prefix_zonemap_prefix_len",
         "max_row_source_mask_memory_bytes",
         "dictionary_encoding_ratio",
+        "enable_binary_plain_delta_offset",
         "dictionary_page_size",
         "small_dictionary_page_size",
         "dictionary_encoding_ratio_for_non_string_column",

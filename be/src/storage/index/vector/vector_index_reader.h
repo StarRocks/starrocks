@@ -50,6 +50,11 @@ public:
     VectorIndexReader() = default;
     virtual ~VectorIndexReader() = default;
 
+    // Whether the reader can restrict the ANN search to a candidate id set efficiently (filtered
+    // search), which enables true pre-filtering. Readers that cannot should be queried via
+    // post-filtering (oversample + filter the result). Conservative default: false.
+    virtual bool supports_efficient_filtered_search() const { return false; }
+
 #ifdef WITH_TENANN
     virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path,
                                  FileSystem* fs = nullptr) = 0;

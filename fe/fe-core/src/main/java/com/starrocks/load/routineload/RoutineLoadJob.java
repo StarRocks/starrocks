@@ -51,7 +51,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -90,6 +92,7 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
@@ -203,6 +206,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     //    protected RoutineLoadDesc routineLoadDesc; // optional
     protected PartitionNames partitions; // optional
     protected List<ImportColumnDesc> columnDescs; // optional
+    // INCLUDE METADATA clause; optional. Transient like columnDescs — not GSON-persisted; rebuilt from
+    // origStmt on restart via gsonPostProcess -> getLoadDesc -> setRoutineLoadDesc.
+    protected ImportMetadataStmt metadata; // optional
     protected Expr whereExpr; // optional
     protected ColumnSeparator columnSeparator; // optional
     protected RowDelimiter rowDelimiter; // optional
@@ -481,6 +487,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 columnDescs.addAll(columnsStmt.getColumns());
             }
         }
+        if (routineLoadDesc.getMetadata() != null) {
+            metadata = routineLoadDesc.getMetadata();
+        }
         if (routineLoadDesc.getWherePredicate() != null) {
             whereExpr = routineLoadDesc.getWherePredicate().getExpr();
         }
@@ -628,6 +637,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public List<ImportColumnDesc> getColumnDescs() {
         return columnDescs;
+    }
+
+    public ImportMetadataStmt getMetadata() {
+        return metadata;
     }
 
     public Expr getWhereExpr() {
@@ -921,12 +934,31 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
-    // call before first scheduling
+    // called by the scheduler every time this job is scheduled, i.e. whenever it is in
+    // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
+    // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        this.computeResource = acquireComputeResource();
+    }
+
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. Only the scheduling path (prepare()) writes the field, so
+    // validation-only callers (partition checks at CREATE/ALTER) acquire a local resource to
+    // route their broker RPC to the right warehouse without racing the scheduler/refresh paths
+    // that read computeResource under the job lock. An unavailable warehouse is rethrown as a
+    // checked LoadException so that every caller handles it as a regular job/DDL failure: the
+    // scheduler in particular only catches StarRocksException per job, and an escaping
+    // RuntimeException would abort the whole scheduler round and stall all other routine load
+    // jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        try {
+            return warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
@@ -1388,6 +1420,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return;
         }
 
+        checkMetadataAliasCollision(table, routineLoadDesc.getMetadata());
+
         PartitionRef partitionNames = routineLoadDesc.getPartitionNames();
         if (partitionNames == null) {
             return;
@@ -1402,6 +1436,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // columns will be checked when planing
+    }
+
+    // Rejects an INCLUDE METADATA alias that collides with a destination-table column. The alias becomes
+    // a hidden source column, so a clash would shadow the table column; checked at CREATE and ALTER where
+    // the table is available, so the job fails fast instead of failing every task at planning.
+    private static void checkMetadataAliasCollision(Table table, ImportMetadataStmt metadata) throws DdlException {
+        if (metadata == null || metadata.getItems() == null || !(table instanceof OlapTable)) {
+            return;
+        }
+        for (ImportMetadataStmt.Item item : metadata.getItems()) {
+            if (((OlapTable) table).getColumn(item.getAlias()) != null) {
+                throw new DdlException("INCLUDE METADATA alias '" + item.getAlias()
+                        + "' collides with a column of table " + table.getName());
+            }
+        }
     }
 
     public void updateState(JobState jobState, ErrorReason reason) throws StarRocksException {
@@ -1778,6 +1827,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return sb.toString();
     }
 
+    // Escape a value for embedding in a double-quoted SQL string literal: backslash first, then
+    // double quote. Pairs with the parser's escapeBackSlash() so the emitted DDL parses back to
+    // the original value. escapeJava is unsuitable here: it emits \\uXXXX for non-ASCII chars,
+    // which escapeBackSlash() cannot decode, silently corrupting e.g. CJK jsonpaths.
+    private static String escapeForDoubleQuotedSql(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     public String jobPropertiesToSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
@@ -1806,13 +1863,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(getFormat()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONPATHS).append("\"=\"");
-        sb.append(getJsonPaths()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonPaths())).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
         sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
-        sb.append(getJsonRoot()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonRoot())).append("\",\n");
 
         if (!Strings.isNullOrEmpty(getEnvelope())) {
             sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
@@ -1833,7 +1890,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
-            sb.append(getMergeCondition()).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(getMergeCondition())).append("\",\n");
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
@@ -1886,6 +1943,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
                           OriginStatementInfo originStatement) throws DdlException {
+        // ALTER can replace the COLUMNS / INCLUDE METADATA clauses, so re-validate the metadata against
+        // this job's source and format. A clause omitted by the ALTER keeps the job's existing one, so
+        // collisions are checked against the effective pair. CREATE is validated in CreateRoutineLoadAnalyzer.
+        List<ImportColumnDesc> columnDescsForCheck =
+                (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
+                        ? routineLoadDesc.getColumnsInfo().getColumns()
+                        : this.columnDescs;
+        ImportMetadataStmt metadataForCheck =
+                (routineLoadDesc != null && routineLoadDesc.getMetadata() != null)
+                        ? routineLoadDesc.getMetadata()
+                        : this.metadata;
+        RoutineLoadMetadata.validateIncludeMetadata(metadataForCheck, columnDescsForCheck, getDataSourceTypeName(),
+                getFormat());
+        // ALTER persists before planning, so check the alias/table-column collision here too (CREATE does
+        // it in unprotectedCheckMeta); otherwise an ALTER adding a colliding alias only fails every task.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            checkMetadataAliasCollision(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId),
+                    metadataForCheck);
+        }
         if (jobProperties != null) {
             checkCommonJobProperties(jobProperties);
         }
@@ -1963,6 +2041,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         if (routineLoadDesc.getPartitionNames() != null) {
             originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
+        }
+        if (routineLoadDesc.getMetadata() != null) {
+            originLoadDesc.setMetadata(routineLoadDesc.getMetadata());
         }
 
         String tableName = null;

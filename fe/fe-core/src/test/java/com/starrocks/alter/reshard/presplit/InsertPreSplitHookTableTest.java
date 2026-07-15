@@ -81,6 +81,8 @@ import static org.mockito.Mockito.when;
  */
 public class InsertPreSplitHookTableTest {
 
+    private static final long BASE_INDEX_META_ID = 10L;
+
     private boolean savedConfigInsertFromTable;
 
     @BeforeEach
@@ -247,15 +249,6 @@ public class InsertPreSplitHookTableTest {
         // INSERT INTO t SELECT * FROM FILES(...) — handled by the FILES hook, not this one.
         InsertStmt stmt = insertStmtWithQueryRelation(
                 bareStarSelectRelationOver(mock(FileTableFunctionRelation.class)));
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
-    }
-
-    @Test
-    public void testTargetColumnListShortCircuits() throws Exception {
-        InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
-
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
@@ -650,7 +643,10 @@ public class InsertPreSplitHookTableTest {
             when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
             when(target.isRangeDistribution()).thenReturn(true);
             when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-            when(target.getVisibleIndexMetas()).thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
+            com.starrocks.catalog.MaterializedIndexMeta baseMeta = mock(com.starrocks.catalog.MaterializedIndexMeta.class);
+            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            when(target.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+            when(target.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
             when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columnsOf(targetColumns));
             PartitionInfo targetPartitionInfo = mock(PartitionInfo.class);
             when(targetPartitionInfo.isPartitioned()).thenReturn(false);
@@ -713,6 +709,8 @@ public class InsertPreSplitHookTableTest {
 
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target))
                     .thenReturn(List.of(bigintColumn("k")));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(target), eq(BASE_INDEX_META_ID)))
+                    .thenReturn(List.of(bigintColumn("k")));
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(targetDb), any())).thenReturn(target);
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any())).thenReturn(sourceTable);
 
@@ -732,7 +730,7 @@ public class InsertPreSplitHookTableTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
 
         /**

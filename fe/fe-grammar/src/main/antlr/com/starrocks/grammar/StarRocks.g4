@@ -537,7 +537,11 @@ rollupDesc
     ;
 
 rollupItem
-    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    : rollupName=identifier identifierList (dupKeys)? (rollupOrderByDesc)? (fromRollup)? properties?
+    ;
+
+rollupOrderByDesc
+    : ORDER BY identifierList
     ;
 
 dupKeys
@@ -558,6 +562,7 @@ ifNotExists:
 createTableAsSelectStatement
     : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        engineDesc?
         keyDesc?
         comment?
         partitionDesc?
@@ -752,7 +757,8 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause |
         addMVColumnClause |
-        dropMVColumnClause )
+        dropMVColumnClause |
+        reorderColumnsClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
@@ -1408,6 +1414,7 @@ loadProperties
     : colSeparatorProperty
     | rowDelimiterProperty
     | importColumns
+    | includeMetadata
     | WHERE expression
     | partitionNames
     ;
@@ -1428,6 +1435,18 @@ columnProperties
     : '('
         (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
+    ;
+
+includeMetadata
+    : INCLUDE METADATA '(' metadataItem (',' metadataItem)* ')'
+    ;
+
+metadataItem
+    : metaKey (AS alias=identifier)?
+    ;
+
+metaKey
+    : KEY | PARTITION | identifier
     ;
 
 jobProperties
@@ -2177,11 +2196,11 @@ showExportStatement
 // ------------------------------------------- Plugin Statement --------------------------------------------------------
 
 installPluginStatement
-    : INSTALL PLUGIN FROM identifierOrString properties?
+    : INSTALL PLUGIN (IF NOT EXISTS)? FROM identifierOrString properties?
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN identifierOrString
+    : UNINSTALL PLUGIN (IF EXISTS)? identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
@@ -2812,7 +2831,6 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-    | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
     | PARAMETER                                                                           #Parameter
     ;
@@ -3191,10 +3209,6 @@ unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
-unitBoundary
-    : FLOOR | CEIL
-    ;
-
 filesSchema
     : filesSchemaColumn (',' filesSchemaColumn)* EOF
     ;
@@ -3350,11 +3364,11 @@ nonReserved
     | FUNCTIONS
     | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HOURS | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCLUDE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LEADER | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS | LEADING
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCHED | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | METADATA | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
