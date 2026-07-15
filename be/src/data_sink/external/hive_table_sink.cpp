@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/hive_table_sink.h"
+#include "data_sink/external/hive_table_sink.h"
 
 #include "common/runtime_profile.h"
 #include "exprs/expr_executor.h"

@@ -96,6 +96,7 @@ target_link_libraries(DataSinkExchange PRIVATE
 ADD_BE_LIB(DataSinkExternal
     external/blackhole_table_sink.cpp
     external/export_sink.cpp
+    external/hive_table_sink.cpp
     external/mysql_table_sink.cpp
     external/mysql_table_writer.cpp
     external/schema_table_sink.cpp

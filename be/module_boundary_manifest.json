@@ -457,7 +457,7 @@
     {
       "id": "datasinkexternal",
       "doc_label": "DataSinkExternal",
-      "summary": "Export, MySQL, schema, blackhole, and no-op sinks over reusable file builders, formats, filesystem, execution contracts, and runtime helpers without full Exec or concrete Storage coupling.",
+      "summary": "Export, MySQL, Hive, schema, blackhole, and no-op sinks over reusable file builders, formats, filesystem, execution contracts, and runtime helpers without full Exec or concrete Storage coupling.",
       "agents_path": "be/src/data_sink/AGENTS.md",
       "owned_targets": ["DataSinkExternal"],
       "owned_roots": ["be/src/data_sink/external"],

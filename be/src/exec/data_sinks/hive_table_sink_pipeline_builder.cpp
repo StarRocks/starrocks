@@ -18,7 +18,7 @@
 
 #include "connector/connector_registry.h"
 #include "connector/hive/hive_chunk_sink.h"
-#include "exec/data_sinks/hive_table_sink.h"
+#include "data_sink/external/hive_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
