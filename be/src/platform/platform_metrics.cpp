@@ -581,8 +581,8 @@ void PlatformMetrics::_update_psi_mem_metrics() {
         char tag[16];
         double a10 = 0, a60 = 0, a300 = 0;
         uint64_t total = 0;
-        int num = sscanf(_line_ptr, "%15s avg10=%lf avg60=%lf avg300=%lf total=%" SCNu64, tag, &a10, &a60, &a300,
-                         &total);
+        int num =
+                sscanf(_line_ptr, "%15s avg10=%lf avg60=%lf avg300=%lf total=%" SCNu64, tag, &a10, &a60, &a300, &total);
         if (num != 5) {
             continue;
         }
