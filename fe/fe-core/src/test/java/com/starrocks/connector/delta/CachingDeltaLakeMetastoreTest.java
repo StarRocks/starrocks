@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -247,6 +248,8 @@ public class CachingDeltaLakeMetastoreTest {
         } catch (Exception e) {
             Assertions.assertTrue(e instanceof StarRocksConnectorException);
             Assertions.assertTrue(e.getMessage().contains("invalidated cache"));
+            Assertions.assertNotNull(e.getCause());
+            Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(e).contains("no such obj"));
         }
 
         new MockUp<DeltaLakeMetastore>() {
