@@ -331,6 +331,7 @@ jobs:
           if git diff --quiet files/unstable_case_recovered_pool.json; then
             echo "No recovered-pool changes this run — skipping PR"
             echo "pr_url=" >> $GITHUB_OUTPUT
+            echo "_recovered pool unchanged → no PR opened._" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -364,6 +365,7 @@ jobs:
           rm -f "$BODY_FILE"
           echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
           echo "Opened PR: ${PR_URL}"
+          echo "**recovered-pool PR opened:** ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Notify int-cd-rd-ci Slack channel
         if: steps.open_pr.outputs.pr_url != ''
