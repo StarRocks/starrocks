@@ -155,6 +155,12 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.SHUFFLE_ENFORCE;
     }
 
+    // True for any shuffle-derived source type: SHUFFLE_AGG / SHUFFLE_JOIN (isShuffle) plus the
+    // enforced variant SHUFFLE_ENFORCE. Broader than isShuffle(), which excludes SHUFFLE_ENFORCE.
+    public boolean isShuffleLike() {
+        return isShuffle() || isShuffleEnforce();
+    }
+
     public boolean isBucketJoin() {
         return this.sourceType == SourceType.BUCKET;
     }
