@@ -41,11 +41,10 @@ DO sleep(10000);
 ENDRULE
 
 # Hangs the in-memory apply of a CREATE DATABASE while the leader WAL fence still counts it in-flight
-# but the fence lock is not held (unprotectCreateDb runs inside EditLog.applyWithFence, after the
+# but the fence lock is not held (unprotectCreateDb runs in the EditLog WALApplier.apply, after the
 # journal commit), so a concurrent demotion's EditLog.awaitWalDrained sees inFlight>0 and times out ->
-# deterministic drain-timeout self-fence (TC-HA-FP-02). Hooked on the CREATE-DB-specific applier
-# (NOT the hot applyWithFence path) so only the test's CREATE DATABASE hangs. sleep must exceed the
-# test's leader_demotion_drain_timeout_sec.
+# deterministic drain-timeout self-fence (TC-HA-FP-02). Hooked on the CREATE-DB-specific applier so only
+# the test's CREATE DATABASE hangs. sleep must exceed the test's leader_demotion_drain_timeout_sec.
 RULE wal_apply_hang
 CLASS com.starrocks.server.LocalMetastore
 METHOD unprotectCreateDb

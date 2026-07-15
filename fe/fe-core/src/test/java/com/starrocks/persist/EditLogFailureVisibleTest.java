@@ -226,7 +226,7 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testAwaitWalDrainedSurfacesApplyFailure() throws Exception {
+    public void testApplierFailurePropagatesAndReleasesFence() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue, true);
 
@@ -240,26 +240,7 @@ public class EditLogFailureVisibleTest {
         Assertions.assertSame(boom, thrown);
         Assertions.assertEquals(0, editLog.inFlightForTest());
 
-        IllegalStateException drainEx = Assertions.assertThrows(IllegalStateException.class,
-                () -> editLog.awaitWalDrained(1000L));
-        Assertions.assertTrue(drainEx.getMessage().contains("apply failed"));
-    }
-
-    @Test
-    public void testOpenGateClearsPriorApplyFailure() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue, true);
-
-        RuntimeException boom = new RuntimeException("apply boom");
-        Thread consumer = succeedQueuedTaskAsync(queue);
-        Assertions.assertThrows(RuntimeException.class,
-                () -> editLog.logJsonObject((short) 1, "payload", obj -> {
-                    throw boom;
-                }));
-        consumer.join();
-
-        // a fresh leader session (openWalGate) clears the recorded apply failure
-        editLog.openWalGate();
+        // apply failures are not (yet) surfaced by the drain; the fence is released, so the drain returns.
         editLog.awaitWalDrained(1000L);
     }
 
@@ -271,7 +252,7 @@ public class EditLogFailureVisibleTest {
         task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed"));
 
         JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task, 1000L));
+                () -> EditLog.waitOrThrow(task));
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
     }
 
@@ -282,7 +263,7 @@ public class EditLogFailureVisibleTest {
         task.markAbort(cause);
 
         JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task, 1000L));
+                () -> EditLog.waitOrThrow(task));
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
         Assertions.assertSame(cause, exception.getCause());
     }
@@ -293,17 +274,8 @@ public class EditLogFailureVisibleTest {
         task.markAbort();
 
         JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task, -1L));
+                () -> EditLog.waitOrThrow(task));
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
-    }
-
-    @Test
-    public void testWaitOrThrowTimesOut() {
-        JournalTask task = new JournalTask(System.nanoTime(), new DataOutputBuffer(), -1);
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task, 1L));
-        Assertions.assertEquals(JournalWriteException.Reason.TIMEOUT, exception.getReason());
     }
 
     @Test
