@@ -15,6 +15,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
 import org.junit.jupiter.api.Assertions;
@@ -69,6 +70,26 @@ public class LogUtilTest {
         RuntimeException e = new RuntimeException((String) null);
         String output = LogUtil.getUnwoundExceptionMessage(e);
         Assertions.assertNull(output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageUnpeelsContentFreeWrapper() {
+        // mirrors ErrorReport.wrapWithRuntimeException: `new RuntimeException(cause)` with no message
+        // of its own, so its message defaults to `cause.toString()` (JDK default) and adds nothing new
+        DdlException ddl = new DdlException("table already exists");
+        RuntimeException wrapper = new RuntimeException(ddl);
+        String output = LogUtil.getUnwoundExceptionMessage(wrapper);
+        Assertions.assertEquals("table already exists", output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageUnpeelsNullMessageWrapper() {
+        // a layer with an explicit null message (e.g. `new Foo(null, cause)`) carries no information
+        // of its own either, so it should be unpeeled just like the cause.toString()-default case
+        RuntimeException cause = new RuntimeException("root cause");
+        RuntimeException wrapper = new RuntimeException((String) null, cause);
+        String output = LogUtil.getUnwoundExceptionMessage(wrapper);
+        Assertions.assertEquals("root cause", output);
     }
 
     @Test

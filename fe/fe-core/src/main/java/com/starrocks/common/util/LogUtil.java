@@ -212,8 +212,15 @@ public class LogUtil {
             if (e instanceof InvocationTargetException) {
                 parent = ((InvocationTargetException) e).getTargetException();
             } else {
-                skip = false;
                 parent = e.getCause();
+                // A layer contributes nothing beyond its cause when either:
+                //  - it has no message of its own (e.g. `new Foo(null, cause)`), or
+                //  - its message is just the JDK default `Throwable(Throwable cause)` ctor's
+                //    `cause.toString()` (e.g. ErrorReport.wrapWithRuntimeException's bare
+                //    `new RuntimeException(ddlException)`, used purely to smuggle a checked
+                //    exception past a signature that can't declare one).
+                // Unpeel such layers instead of showing the same text twice.
+                skip = parent != null && (e.getMessage() == null || Objects.equals(e.getMessage(), parent.toString()));
             }
             if (!skip) {
                 result.add(e);
@@ -243,8 +250,13 @@ public class LogUtil {
             }
             prevMsg = msg;
         }
-        if (result.size() <= 1) {
+        if (result.isEmpty()) {
             return e.getMessage();
+        }
+        if (result.size() == 1) {
+            // e itself may have been unpeeled away as a content-free wrapper; report the surviving
+            // layer's own message rather than the original (possibly now-irrelevant) top-level message.
+            return result.get(0).getMessage();
         }
         // The outermost layer is usually a generic internal wrapper (e.g. StarRocksConnectorException,
         // AnalysisException) whose class name carries no value to the user; only deeper layers reveal
