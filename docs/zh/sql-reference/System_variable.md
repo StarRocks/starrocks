@@ -638,6 +638,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
+### enable_lake_prepared_physical_split_scan
+
+* 描述：是否为存算分离集群中的云原生表开启 prepared physical split scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.

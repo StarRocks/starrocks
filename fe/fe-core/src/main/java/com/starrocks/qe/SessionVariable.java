@@ -304,6 +304,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
     public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
+
+    public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
+            "enable_lake_prepared_physical_split_scan";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
@@ -1637,6 +1640,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
 
+    // Lake prepared physical split scan: seed prunes each segment once and shares the prepared read state
+    // across split children. Default off; a per-scan decision in PlanFragmentBuilder gates it further.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN)
+    private boolean enableLakePreparedPhysicalSplitScan = false;
+
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_MODE)
     private String connectorSinkShuffleMode = ConnectorSinkShuffleMode.AUTO.modeName();
 
@@ -2440,6 +2448,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
+    }
+
+    public boolean isEnableLakePreparedPhysicalSplitScan() {
+        return enableLakePreparedPhysicalSplitScan;
+    }
+
+    public void setEnableLakePreparedPhysicalSplitScan(boolean enableLakePreparedPhysicalSplitScan) {
+        this.enableLakePreparedPhysicalSplitScan = enableLakePreparedPhysicalSplitScan;
     }
 
     public long getSplitTopNAggLimit() {

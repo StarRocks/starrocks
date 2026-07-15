@@ -770,6 +770,14 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");

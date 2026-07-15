@@ -730,6 +730,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
 
+### enable_lake_prepared_physical_split_scan
+
+* **Description**: Whether to enable the prepared physical split scan for Cloud-native (lake) tables in a shared-data cluster. When enabled, each segment is pruned once and the resulting prepared read state is shared across the tablet's split children, which can speed up scans of large or skewed tablets. The optimization is decided per scan node and additionally requires a Cloud-native table with Query Cache disabled. Takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.

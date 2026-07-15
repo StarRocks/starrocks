@@ -96,6 +96,12 @@ public:
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
+    // Whether this provider's data sources support the prepared-physical-split chunk-source reuse
+    // path (a segment's prepared read state / reader shared across a tablet's split children). Only
+    // the lake provider overrides it; exposing it here lets the generic ConnectorScanOperator gate
+    // reuse without depending on any concrete provider implementation.
+    virtual bool enable_prepared_split_chunk_source_reuse() const { return false; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<TBucketProperty> _bucket_properties;
