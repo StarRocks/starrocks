@@ -10,7 +10,8 @@ run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.numbe
 #   ① origin bugfix PR merges to main      → :index-fix (seed versions) + :affected-versions (cache cause)
 #   ② a backport PR merges to branch-X.Y*  → :index-fix (rebuild the origin's versions record)
 #   ③ a release tag X.Y.Z is pushed        → :index-fix <tag> (resolve pending-<line> → concrete tag)
-#   ④ daily schedule                       → :index-fix reconcile (pending-only self-heal)
+#   ④ daily schedule                       → :index-fix reconcile (pending-only, versions/fix side)
+#                                             + :affected-versions reconcile (cause cache self-heal)
 #   ⑤ weekly schedule                      → :index-fix reconcile-all (re-check concrete too — corrects
 #                                             a wrong concrete tag / reverse error; heavier)
 #
@@ -19,7 +20,9 @@ run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.numbe
 #
 # The index steps FAIL LOUD: no `|| true`, and `defaults.run.shell: bash` forces `-o pipefail`
 # so a failing `claude ... | tee` propagates claude's non-zero exit (tee's success does not mask it).
-# The cause step (affected-versions) stays best-effort; the daily reconcile backs up transient failures.
+# The cause step (affected-versions) stays best-effort; the daily `affected-versions reconcile` job
+# (④) re-selects any origin still cause-missing/partial/stale, so a transient origin-merge cause
+# failure self-heals on a later run (bounded + per-record backoff — see the skill's Reconcile mode).
 #
 # PREREQUISITES on the [ubuntu, ai] runner (one-time, infra):
 #   - `gh` (authenticated via GITHUB_TOKEN), `git`, `python3` on PATH — version_backfill.py uses gh
@@ -196,9 +199,22 @@ jobs:
         run: git fetch origin '+refs/heads/branch-*:refs/remotes/origin/branch-*' || true
       - name: index-fix reconcile (re-sweep pending on all maintained lines) [FAIL-LOUD]
         run: |
-          echo "daily reconcile"
+          echo "daily reconcile (versions / fix side)"
           claude --dangerously-skip-permissions \
             -p "/github-bugfix-versions:index-fix reconcile" 2>&1 | tee "${RUNNER_TEMP}/reconcile.txt"
+      - name: affected-versions reconcile (cause cache self-heal) [best-effort]
+        if: always()
+        continue-on-error: true
+        run: |
+          # Cause-side self-heal: fill/refresh task_summaries for in-scope bugfixes whose cause is
+          # missing/partial/stale (e.g. an origin-merge cause step that failed best-effort, or a
+          # historical gap). Bounded per run (N=30d priority / M=50 cap / R=10 reserved backlog),
+          # with per-record backoff so a poison record can't starve the quota — see the skill.
+          # Best-effort + `|| true`: cause is heuristic; a transient blip must not fail the FAIL-LOUD
+          # versions reconcile above, and tomorrow's run re-selects anything left cause-incomplete.
+          echo "daily reconcile (cause side)"
+          claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:affected-versions reconcile" 2>&1 | tee "${RUNNER_TEMP}/affected_reconcile.txt" || true
 
   # ⑤ weekly deep self-heal → re-check concrete records too, correcting a wrong concrete tag
   # (reverse error like #74855: stored 4.1.3 but really 4.1.2). Heavier — every maintained-line
