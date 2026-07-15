@@ -485,6 +485,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
+                    newOlapScan.setBm25SearchOptions(scanOperator.getBm25SearchOptions());
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);

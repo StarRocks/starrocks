@@ -223,6 +223,18 @@ public class AnalyzerUtils {
         }
     }
 
+    // The builtin score() is only valid in a full-text top-N SELECT (validated by Bm25ScoreValidator); it
+    // must not appear in other expression clauses (JOIN/VALUES/set-op ORDER BY/table function), where it
+    // could never be rewritten and would reach the BE with no implementation.
+    public static void verifyNoScoreFunction(Expr expression, String clause) {
+        List<FunctionCallExpr> functions = Lists.newArrayList();
+        expression.collectAll((Predicate<Expr>) arg ->
+                arg instanceof FunctionCallExpr && ((FunctionCallExpr) arg).isBM25ScoreCall(), functions);
+        if (!functions.isEmpty()) {
+            throw new SemanticException(clause + " clause cannot contain score()", expression.getPos());
+        }
+    }
+
     public static boolean isAggregate(List<FunctionCallExpr> aggregates, List<Expr> groupByExpressions) {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }

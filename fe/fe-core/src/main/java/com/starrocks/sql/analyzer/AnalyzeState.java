@@ -40,6 +40,9 @@ public class AnalyzeState {
     private List<Expr> outputExpressions;
     private Scope outputScope;
     private boolean isDistinct = false;
+    // Set true when a bare builtin score() is seen while analyzing this block's expressions, so the
+    // BM25 shape validation only runs for blocks that actually use score() (no extra tree walk otherwise).
+    private boolean usesBm25Score = false;
     private Expr predicate;
     private Relation relation;
     private LimitElement limit;
@@ -99,6 +102,14 @@ public class AnalyzeState {
 
     public Map<Expr, FieldId> getColumnReferences() {
         return columnReferences;
+    }
+
+    public boolean usesBm25Score() {
+        return usesBm25Score;
+    }
+
+    public void setUsesBm25Score(boolean usesBm25Score) {
+        this.usesBm25Score = usesBm25Score;
     }
 
     public Scope getOrderScope() {

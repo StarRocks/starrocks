@@ -34,6 +34,16 @@ public class InvertedIndexParams {
         BUILTIN,
     }
 
+    /**
+     * Posting-mode of a builtin GIN index. DOCS stores only doc lists (filter-only); DOCS_AND_FREQS
+     * additionally captures term frequencies / doc lengths, which BM25 scoring (score()) requires.
+     * Mirrors the BE {@code IndexOptions} proto enum. Absence is treated as DOCS.
+     */
+    public enum InvertedIndexOption {
+        DOCS,
+        DOCS_AND_FREQS,
+    }
+
     public enum CommonIndexParamKey implements ParamsKey {
         /**
          * index implement lib, default is clucene
@@ -62,7 +72,13 @@ public class InvertedIndexParams {
          * Whether to lowercase tokens.
          * Only effective for imp_lib=builtin & parser=english.
          */
-        LOWER_CASE("true");
+        LOWER_CASE("true"),
+
+        /**
+         * Posting mode of a builtin GIN index: DOCS (default) or DOCS_AND_FREQS. DOCS_AND_FREQS captures
+         * term frequencies / doc lengths, which BM25 score() ranking requires. Absence is treated as DOCS.
+         */
+        INDEX_OPTIONS("DOCS");
 
 
         private final String defaultValue;

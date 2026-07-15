@@ -317,7 +317,28 @@ public class FunctionCallExpr extends Expr {
         if (fnName.equalsIgnoreCase("sleep")) {
             return false;
         }
+        // The builtin score() is a per-row value, never constant. Syntactic form: isConstantImpl may run
+        // before the function is resolved, so it must not depend on getFn().
+        if (isBM25ScoreSyntactic()) {
+            return false;
+        }
         return super.isConstantImpl();
+    }
+
+    /**
+     * Whether this is the builtin BM25 {@code score()}: zero-arg, unqualified, and resolved to the builtin
+     * (not a user function named {@code score}). Requires the function to be resolved; call only after
+     * analysis has set {@code fn}. Matches the optimizer twin {@code CallOperator.isBM25ScoreCall()}.
+     */
+    public boolean isBM25ScoreCall() {
+        return isBM25ScoreSyntactic() && getFn() != null && !getFn().isUdf();
+    }
+
+    // Name + zero args + unqualified, independent of resolution. For pre-resolution callers (isConstantImpl).
+    private boolean isBM25ScoreSyntactic() {
+        return FunctionSet.SCORE.equalsIgnoreCase(getFunctionName())
+                && getChildren().isEmpty()
+                && (getDbName() == null || getDbName().isEmpty());
     }
 
     /*

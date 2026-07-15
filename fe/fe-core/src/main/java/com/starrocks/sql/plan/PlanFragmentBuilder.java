@@ -912,6 +912,7 @@ public class PlanFragmentBuilder {
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
+            scanNode.setBm25SearchOptions(node.getBm25SearchOptions());
             scanNode.setSample(node.getSample());
             currentExecGroup.add(scanNode);
 

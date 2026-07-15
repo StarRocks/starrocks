@@ -406,6 +406,36 @@ public class SetStmtAnalyzer {
             }
         }
 
+        // BM25 term-frequency saturation k1 must be a finite, non-negative number.
+        if (variable.equalsIgnoreCase(SessionVariable.BM25_K1)) {
+            String val = resolvedExpression.getStringValue();
+            double k1;
+            try {
+                k1 = Double.parseDouble(val);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("failed to parse %s value %s", SessionVariable.BM25_K1, val));
+            }
+            if (Double.isNaN(k1) || Double.isInfinite(k1) || k1 < 0) {
+                throw new SemanticException(String.format("%s must be a finite non-negative number, got %s",
+                        SessionVariable.BM25_K1, val));
+            }
+        }
+
+        // BM25 length-normalization b must be in the range [0, 1].
+        if (variable.equalsIgnoreCase(SessionVariable.BM25_B)) {
+            String val = resolvedExpression.getStringValue();
+            double b;
+            try {
+                b = Double.parseDouble(val);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("failed to parse %s value %s", SessionVariable.BM25_B, val));
+            }
+            if (Double.isNaN(b) || b < 0 || b > 1) {
+                throw new SemanticException(String.format("%s must be in the range [0, 1], got %s",
+                        SessionVariable.BM25_B, val));
+            }
+        }
+
         // count_distinct_implementation
         if (variable.equalsIgnoreCase(SessionVariable.COUNT_DISTINCT_IMPLEMENTATION)) {
             String rewriteModeName = resolvedExpression.getStringValue();

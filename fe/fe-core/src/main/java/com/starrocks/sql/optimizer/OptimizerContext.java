@@ -79,6 +79,8 @@ public class OptimizerContext {
 
     private boolean isObtainedFromInternalStatistics = false;
     private boolean inMemoPhase = false;
+    // True iff the query uses the builtin score() (carried from analysis); gates the BM25 rewrite pass.
+    private boolean usesBm25Score = false;
 
     // Is not null predicate can be derived from inner join or semi join,
     // which should be kept to be used to convert outer join into inner join.
@@ -249,6 +251,14 @@ public class OptimizerContext {
 
     public boolean isInMemoPhase() {
         return this.inMemoPhase;
+    }
+
+    public void setUsesBm25Score(boolean usesBm25Score) {
+        this.usesBm25Score = usesBm25Score;
+    }
+
+    public boolean isUsesBm25Score() {
+        return usesBm25Score;
     }
 
     public TvrOptContext getTvrOptContext() {

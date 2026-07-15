@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.BM25SearchOptions;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -59,6 +60,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private long gtid = 0;
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+    private BM25SearchOptions bm25SearchOptions = new BM25SearchOptions();
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -189,6 +192,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.vectorSearchOptions = vectorSearchOptions;
     }
 
+    public BM25SearchOptions getBm25SearchOptions() {
+        return bm25SearchOptions;
+    }
+
+    public void setBm25SearchOptions(BM25SearchOptions bm25SearchOptions) {
+        this.bm25SearchOptions = bm25SearchOptions;
+    }
+
     public TableSampleClause getSample() {
         return sample;
     }
@@ -262,6 +273,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.usePkIndex = scanOperator.usePkIndex;
             builder.fromSplitOR = scanOperator.fromSplitOR;
             builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
+            builder.bm25SearchOptions = scanOperator.bm25SearchOptions;
             builder.sample = scanOperator.getSample();
             return this;
         }
@@ -332,6 +344,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setSample(TableSampleClause sample) {
             builder.sample = sample;
+            return this;
+        }
+
+        public Builder setBm25SearchOptions(BM25SearchOptions bm25SearchOptions) {
+            builder.bm25SearchOptions = bm25SearchOptions;
             return this;
         }
     }

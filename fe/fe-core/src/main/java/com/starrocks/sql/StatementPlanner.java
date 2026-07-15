@@ -131,6 +131,8 @@ public class StatementPlanner {
         // 1. For all queries, we need db lock when analyze phase
         PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
         try (var guard = session.bindScope()) {
+            // Reset per-query; analysis sets it iff the query uses builtin score() (gates the BM25 rewrite pass).
+            session.setUsesBm25Score(false);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
 

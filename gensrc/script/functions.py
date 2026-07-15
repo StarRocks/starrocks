@@ -1580,6 +1580,11 @@ vectorized_functions = [
 
     # gin functions
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
+    # score(): zero-arg BM25 relevance of the current row w.r.t. the WHERE MATCH predicate. It is never
+    # executed by the BE -- RewriteToBM25PlanRule replaces the call with the synthetic __bm25_score column
+    # ref -- so it carries a nullptr BE symbol (no BE builtin is emitted, mirroring `if`). Any score() that
+    # survives to execution is a bug already rejected fail-fast by Bm25ScoreValidator in the analyzer.
+    [190001, 'score', True, False, 'DOUBLE', [], 'nullptr'],
 
     # ai functions
     [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"],

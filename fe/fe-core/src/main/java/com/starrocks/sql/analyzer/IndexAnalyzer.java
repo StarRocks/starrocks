@@ -78,6 +78,10 @@ public class IndexAnalyzer {
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
     public static String INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
+    public static String INVERTED_INDEX_OPTIONS_KEY =
+            InvertedIndexParams.IndexParamsKey.INDEX_OPTIONS.name().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY =
+            InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT);
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -196,6 +200,7 @@ public class IndexAnalyzer {
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexNgram(properties);
         checkInvertedIndexLowerCase(properties);
+        checkInvertedIndexOptions(properties);
 
         // add default properties
         addDefaultProperties(properties);
@@ -241,6 +246,36 @@ public class IndexAnalyzer {
         String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
         if (!BUILTIN.name().equalsIgnoreCase(impValue)) {
             throw new SemanticException("INVERTED index with " + impValue + " implement is invalid for dict gram.");
+        }
+    }
+
+    public static void checkInvertedIndexOptions(Map<String, String> properties) {
+        String indexOptions = getPropertyIgnoreCase(properties, INVERTED_INDEX_OPTIONS_KEY);
+        if (indexOptions == null) {
+            return;
+        }
+        boolean valid = false;
+        for (InvertedIndexParams.InvertedIndexOption option : InvertedIndexParams.InvertedIndexOption.values()) {
+            if (option.name().equalsIgnoreCase(indexOptions)) {
+                valid = true;
+                break;
+            }
+        }
+        if (!valid) {
+            throw new SemanticException("INVERTED index index_options should be DOCS or DOCS_AND_FREQS.");
+        }
+
+        // index_options and omit_term_freq_and_position both influence whether term frequencies are stored.
+        // Reject only the genuinely contradictory pair: omit_term_freq_and_position=true drops term
+        // frequencies, but index_options='DOCS_AND_FREQS' needs them. Every other combination is accepted,
+        // including the two documented defaults (index_options=DOCS with omit_term_freq_and_position=false).
+        String omit = getPropertyIgnoreCase(properties, INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY);
+        boolean omitFreqs = "true".equalsIgnoreCase(omit);
+        boolean wantFreqs =
+                InvertedIndexParams.InvertedIndexOption.DOCS_AND_FREQS.name().equalsIgnoreCase(indexOptions);
+        if (omitFreqs && wantFreqs) {
+            throw new SemanticException("INVERTED index index_options='DOCS_AND_FREQS' conflicts with "
+                    + "omit_term_freq_and_position=true, which drops the term frequencies BM25 scoring needs.");
         }
     }
 
@@ -441,12 +476,14 @@ public class IndexAnalyzer {
     }
 
     /**
-     * Look up a property by name in a case-insensitive fashion.
-     * Needed because vector-index properties are not normalized until after
-     * {@link #checkVectorIndexValid} returns, but cross-field validation runs
-     * before that normalization.
+     * Look up a property by name in a case-insensitive fashion. Index property keys are only
+     * lowercased after per-type validation runs, so cross-field checks that run before that
+     * normalization must compare keys case-insensitively to see the user's original input.
      */
-    private static String getPropertyIgnoreCase(Map<String, String> properties, String key) {
+    public static String getPropertyIgnoreCase(Map<String, String> properties, String key) {
+        if (properties == null) {
+            return null;
+        }
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().equalsIgnoreCase(key)) {
                 return entry.getValue();

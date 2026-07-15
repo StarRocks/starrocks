@@ -3550,6 +3550,11 @@ public class Config extends ConfigBase {
             "Disabled by default; when false ContextMetaManager does not start. Takes effect on FE restart.")
     public static boolean enable_context_base = false;
 
+    // Gate for the builtin GIN BM25 full-text score() top-N ranking. When false (default), score() is
+    // rejected in the analyzer and no BM25 plan rewrite happens, so the plan is identical to today.
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_bm25 = false;
+
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 

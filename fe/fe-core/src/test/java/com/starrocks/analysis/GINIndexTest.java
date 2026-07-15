@@ -154,6 +154,51 @@ public class GINIndexTest extends PlanTestBase {
     }
 
     @Test
+    public void testIndexOptionsConflictsWithOmitTermFreq() {
+        String optionsKey = IndexAnalyzer.INVERTED_INDEX_OPTIONS_KEY;
+        String omitKey = IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT);
+
+        // The only genuinely contradictory pair: omit=true drops term frequencies, but DOCS_AND_FREQS
+        // needs them.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(optionsKey, "DOCS_AND_FREQS");
+                    put(omitKey, "true");
+                }}));
+
+        // The two documented defaults (DOCS + omit=false) are compatible and must be accepted even when
+        // spelled out explicitly (regression: they were wrongly rejected as "contradictory").
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(optionsKey, "DOCS");
+                    put(omitKey, "false");
+                }}));
+
+        // Other consistent combinations pass.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(optionsKey, "DOCS_AND_FREQS");
+                    put(omitKey, "false");
+                }}));
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(optionsKey, "DOCS");
+                    put(omitKey, "true");
+                }}));
+
+        // Only one of the two knobs set: nothing to reconcile.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(optionsKey, "DOCS_AND_FREQS");
+                }}));
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexOptions(new HashMap<String, String>() {{
+                    put(omitKey, "true");
+                }}));
+    }
+
+    @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "test_index";

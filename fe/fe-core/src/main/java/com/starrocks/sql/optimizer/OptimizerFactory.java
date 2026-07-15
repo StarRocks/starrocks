@@ -46,6 +46,7 @@ public class OptimizerFactory {
         OptimizerContext oc = new OptimizerContext(context);
         oc.setColumnRefFactory(columnRefFactory);
         oc.setOptimizerOptions(config);
+        oc.setUsesBm25Score(context.isUsesBm25Score());
         config.applyDisableRuleFromSessionVariable(context.getSessionVariable());
         return oc;
     }

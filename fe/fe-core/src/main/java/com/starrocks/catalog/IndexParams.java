@@ -106,6 +106,8 @@ public class IndexParams {
                 false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.LOWER_CASE,
                 false, false, null, null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.INDEX_OPTIONS,
+                false, false, null, null);
 
         // search
         register(builder, IndexType.GIN, IndexParamType.SEARCH, InvertedIndexParams.SearchParamsKey.IS_SEARCH_ANALYZED, false,

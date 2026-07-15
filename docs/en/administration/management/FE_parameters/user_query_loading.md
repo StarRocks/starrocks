@@ -263,6 +263,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to support the DECIMAL V3 data type.
 - Introduced in: -
 
+### `enable_experimental_bm25`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the experimental BM25 full-text relevance ranking. When enabled, the zero-argument `score()` function can be used in a single-table full-text top-N query of the form `SELECT ... WHERE <col> MATCH_ANY|MATCH_ALL '<query>' ORDER BY score() [DESC] LIMIT <n>`, where the MATCH column has a GIN index built with `index_options='DOCS_AND_FREQS'`. When disabled (default), any use of `score()` is rejected.
+- Introduced in: -
+
 ### `enable_experimental_mv`
 
 - Default: true

@@ -63,6 +63,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.BM25SearchOptions;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -201,6 +202,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    private BM25SearchOptions bm25SearchOptions = new BM25SearchOptions();
+
     private boolean enableGlobalLateMaterialization = false;
     private List<Expr> partitionConjuncts = Lists.newArrayList();
 
@@ -233,6 +236,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
         this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public void setBm25SearchOptions(BM25SearchOptions bm25SearchOptions) {
+        this.bm25SearchOptions = bm25SearchOptions;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -989,6 +996,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
         }
 
+        // BM25 top-N scoring reuses the GIN inverted index; it is a scan attribute, not a separate index,
+        // so only surface it when this scan actually carries the pushdown -- no per-scan on/off line otherwise.
+        if (bm25SearchOptions != null && bm25SearchOptions.isEnable()) {
+            output.append(bm25SearchOptions.getExplainString(prefix));
+        }
+
         if (!getHeavyExprs().isEmpty()) {
             output.append(prefix).append("heavy exprs: ").append("\n");
             List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
@@ -1260,6 +1273,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
             }
 
+            if (bm25SearchOptions != null && bm25SearchOptions.isEnable()) {
+                msg.lake_scan_node.setBm25_search_options(bm25SearchOptions.toThrift());
+            }
+
             if (enableGlobalLateMaterialization) {
                 msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
@@ -1326,6 +1343,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
+            if (bm25SearchOptions != null && bm25SearchOptions.isEnable()) {
+                msg.olap_scan_node.setBm25_search_options(bm25SearchOptions.toThrift());
             }
 
             if (enableGlobalLateMaterialization) {
@@ -1655,6 +1676,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        // A BM25 scan carries per-query scoring state -- the MATCH query terms and the session
+        // bm25_k1/bm25_b params -- that is not part of the normal form built below, so caching this
+        // fragment could serve stale scores to a later query that differs only in those. Keep it out of
+        // the query cache.
+        if (bm25SearchOptions != null && bm25SearchOptions.isEnable()) {
+            normalizer.setUncacheable(true);
+        }
         TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
         // Cache Key has this form: [digest, partition id, partition column range, tablet_id].
         // Partition information of OlapScanNodes is handled in different ways that depends on

@@ -750,6 +750,12 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
 
+        // Only run the BM25 rewrite for queries that use score() (flag carried from analysis); non-score
+        // queries skip the pass entirely.
+        if (rootTaskContext.getOptimizerContext().isUsesBm25Score()) {
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.BM25_REWRITE_RULES);
+        }
+
         scheduler.rewriteOnce(tree, rootTaskContext, SplitJoinORToUnionRule.getInstance());
         // this rule should be after mv
         // @TODO: it can also be applied to other table scan operator

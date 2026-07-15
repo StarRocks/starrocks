@@ -681,6 +681,15 @@ public class QueryAnalyzer {
                         selectRelation.getLimit());
 
                 selectRelation.fillResolvedAST(analyzeState);
+                // Fail-fast: reject any score() used outside the supported full-text top-N shape. Only runs
+                // when this block actually uses score() (flagged during expression analysis), so a block
+                // without score() pays nothing.
+                if (analyzeState.usesBm25Score()) {
+                    // Surface to the query-level flag so the optimizer runs the BM25 rewrite pass only for
+                    // queries that use score().
+                    session.setUsesBm25Score(true);
+                    Bm25ScoreValidator.validate(selectRelation);
+                }
                 GeneratedColumnExprMappingCollector collector = new GeneratedColumnExprMappingCollector();
                 collector.process(selectRelation, sourceScope);
                 return analyzeState.getOutputScope();
@@ -1334,6 +1343,7 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoAggregateFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
+                AnalyzerUtils.verifyNoScoreFunction(joinEqual, "JOIN");
 
                 if (!joinEqual.getType().matchesType(BooleanType.BOOLEAN)
                         && !joinEqual.getType().matchesType(NullType.NULL)) {
@@ -1689,6 +1699,11 @@ public class QueryAnalyzer {
                     throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                 }
 
+                // A bare score() is only valid as the ORDER BY key of a full-text top-N SELECT (validated
+                // by Bm25ScoreValidator). This clause handles set-operation / subquery-relation ORDER BY,
+                // where score() can never be rewritten, so reject it here rather than let it reach the BE.
+                AnalyzerUtils.verifyNoScoreFunction(expression, "set-operation or subquery ORDER BY");
+
                 orderByElement.setExpr(expression);
             }
         }
@@ -1877,6 +1892,14 @@ public class QueryAnalyzer {
                 }
             }
 
+            // score() cannot be rewritten in a VALUES relation (e.g. INSERT ... VALUES (score())), so it
+            // would reach the BE with no implementation; reject it here.
+            for (List<Expr> row : rows) {
+                for (Expr e : row) {
+                    AnalyzerUtils.verifyNoScoreFunction(e, "VALUES");
+                }
+            }
+
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
@@ -2011,6 +2034,7 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "Table Function");
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoScoreFunction(args.get(i), "Table Function");
             }
             List<String> names = node.getFunctionParams().getExprsNames();
             Scope queryTableScope = tryResolveJdbcQueryTableFunction(node, names);

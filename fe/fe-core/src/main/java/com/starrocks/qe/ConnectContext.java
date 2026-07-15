@@ -290,6 +290,10 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // Set during analysis iff the query uses the builtin score() (BM25). The optimizer reads it to skip the
+    // BM25 rewrite pass for non-score queries; reset per query in StatementPlanner.plan.
+    private boolean usesBm25Score = false;
+
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
     // Null means no override (normal visible-version path).
@@ -1927,6 +1931,14 @@ public class ConnectContext {
 
     public boolean isCTAS() {
         return isCTAS;
+    }
+
+    public void setUsesBm25Score(boolean usesBm25Score) {
+        this.usesBm25Score = usesBm25Score;
+    }
+
+    public boolean isUsesBm25Score() {
+        return usesBm25Score;
     }
 
     public interface Listener {

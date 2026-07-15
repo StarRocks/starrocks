@@ -254,6 +254,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：DECIMAL V3 データ型をサポートするかどうか。
 - 導入時期：-
 
+### `enable_experimental_bm25`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：実験的な BM25 全文関連性ランキングを有効にするかどうか。有効にすると、`SELECT ... WHERE <col> MATCH_ANY|MATCH_ALL '<query>' ORDER BY score() [DESC] LIMIT <n>` の形式の単一テーブル全文 top-N クエリで引数なしの `score()` 関数を使用できます。MATCH 列には `index_options='DOCS_AND_FREQS'` で構築された GIN インデックスが必要です。無効（デフォルト）の場合、`score()` の使用はすべて拒否されます。
+- 導入時期：-
+
 ### `enable_experimental_mv`
 
 - デフォルト：true

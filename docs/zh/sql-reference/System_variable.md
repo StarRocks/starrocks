@@ -248,6 +248,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **合法取值**：`CIRCULAR`、`RANDOM`
 * **引入版本**：-
 
+### bm25_b
+
+* **范围**：Session
+* **描述**：builtin GIN 全文 `score()` 相关性排序使用的 BM25 长度归一化参数 `b`（由 FE 配置项 `enable_experimental_bm25` 启用）。取值越大，对长文档的惩罚越强。必须在 [0, 1] 范围内。
+* **默认值**：0.75
+* **类型**：Double
+* **引入版本**：-
+
+### bm25_k1
+
+* **范围**：Session
+* **描述**：builtin GIN 全文 `score()` 相关性排序使用的 BM25 词频饱和参数 `k1`（由 FE 配置项 `enable_experimental_bm25` 启用）。取值越大，重复词项对得分的提升越持续。必须为有限的非负数。
+* **默认值**：1.2
+* **类型**：Double
+* **引入版本**：-
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。

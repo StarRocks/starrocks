@@ -440,6 +440,16 @@ public class ScalarOperatorToExpr {
             if (!FeConstants.runningUnitTest && SPMFunctions.isSPMFunctions(call)) {
                 throw UnsupportedException.unsupportedException("spm function only used in create baseline stmt");
             }
+            // The builtin score() has no BE implementation; it must have been rewritten to the synthetic
+            // __bm25_score column by RewriteToBM25PlanRule. Reaching expression translation still as a bare
+            // score() means the query shape prevented that rewrite (e.g. a subquery/join in the block turned
+            // TopN -> OlapScan into TopN -> ... -> Join -> Scan). Reject it here rather than ship an
+            // unexecutable call to the BE. This is the last-line guard behind the analyzer's Bm25ScoreValidator.
+            if (call.isBM25ScoreCall()) {
+                throw new SemanticException("score() is only supported for full-text top-N ranking "
+                        + "(SELECT ... WHERE <col> MATCH '<q>' ORDER BY score() [DESC] LIMIT <n>); "
+                        + "it could not be applied to this query shape");
+            }
             switch (fnName.toLowerCase()) {
                 /*
                  * Arithmetic

@@ -165,9 +165,26 @@ public class CallOperator extends ArgsScalarOperator {
         return used;
     }
 
+    /**
+     * Whether this is the builtin BM25 {@code score()} call: a zero-arg call bound to a builtin function,
+     * never a user function named {@code score} ({@code score(col)} / {@code db.score()}). Identity is by
+     * the resolved builtin, not the raw name. Single source of truth shared by {@link #isConstant()} and
+     * {@code RewriteToBM25PlanRule}.
+     */
+    public boolean isBM25ScoreCall() {
+        return FunctionSet.SCORE.equalsIgnoreCase(fnName)
+                && getChildren().isEmpty()
+                && fn != null && !fn.isUdf();
+    }
+
     @Override
     public boolean isConstant() {
         if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+            return false;
+        }
+        // The builtin score() is a per-row value, never a constant. It is zero-arg, so the loop below would
+        // otherwise judge it vacuously constant and let it pollute the projection const-map.
+        if (isBM25ScoreCall()) {
             return false;
         }
         for (ScalarOperator child : getChildren()) {

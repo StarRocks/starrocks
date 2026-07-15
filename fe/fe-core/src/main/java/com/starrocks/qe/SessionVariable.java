@@ -1106,6 +1106,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
 
+    // BM25 scoring parameters (Lucene/Doris defaults). Passed to the BE BM25 scorer via TBM25SearchOptions.
+    public static final String BM25_K1 = "bm25_k1";
+    public static final String BM25_B = "bm25_b";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -3297,12 +3301,34 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
     private boolean enableVectorIndexRefine = false;
 
+    @VarAttr(name = BM25_K1)
+    private double bm25K1 = 1.2;
+
+    @VarAttr(name = BM25_B)
+    private double bm25B = 0.75;
+
     public boolean isEnableVectorIndexRefine() {
         return enableVectorIndexRefine;
     }
 
     public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
         this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
+
+    public double getBm25K1() {
+        return bm25K1;
+    }
+
+    public void setBm25K1(double bm25K1) {
+        this.bm25K1 = bm25K1;
+    }
+
+    public double getBm25B() {
+        return bm25B;
+    }
+
+    public void setBm25B(double bm25B) {
+        this.bm25B = bm25B;
     }
 
     public int getPrepareMetadataPoolSize() {

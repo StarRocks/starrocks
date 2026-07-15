@@ -750,6 +750,29 @@ struct TVectorSearchOptions {
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
 }
 
+// One (indexed column, query string) unit of a BM25 full-text ranking scan. v1 always carries exactly
+// one; the list-of-one shape leaves room for multi-column MATCH without a scalar->list migration later.
+struct TBM25ColumnQuery {
+  // Stable column identity (Column.columnId), NOT the FE unique id: it is unchanged by rename and is the
+  // same key the scan/index already use (TColumn.column_name, TOlapTableIndex.columns). The BE resolves it
+  // to the GIN index the same way as a MATCH predicate: field_index(column_id) -> tablet column -> its
+  // unique id -> get_indexes_for_column(unique_id, GIN).
+  1: optional string column_id
+  2: optional string query
+}
+
+// BM25 top-N ranking options, set by RewriteToBM25PlanRule and consumed by the BE score-all scorer.
+// All fields optional; an older BE simply ignores the field on the scan node.
+struct TBM25SearchOptions {
+  1: optional bool   enable
+  2: optional list<TBM25ColumnQuery> columns   // exactly one entry today (single-column BM25); list allows multiple columns later
+  3: optional string score_column_name         // "__bm25_score"
+  4: optional i32    score_slot_id
+  5: optional double k1                         // global BM25 k1 (session bm25_k1)
+  6: optional double b                          // global BM25 b (session bm25_b)
+  7: optional i64    topk                        // LIMIT+OFFSET pushed into the scored scan; 0 = score all matched rows
+}
+
 enum SampleMethod {
   BY_BLOCK,
   BY_PAGE,
@@ -796,6 +819,7 @@ struct TOlapScanNode {
 
   40: optional TVectorSearchOptions vector_search_options
   41: optional TTableSampleOptions sample_options;
+  42: optional TBM25SearchOptions bm25_search_options
 
   //back pressure
   50: optional bool enable_topn_filter_back_pressure
@@ -868,6 +892,8 @@ struct TLakeScanNode {
   56: optional bool enable_global_late_materialization
 
   57: optional TVectorSearchOptions vector_search_options
+
+  58: optional TBM25SearchOptions bm25_search_options
 
   60: optional list<Exprs.TExpr> partition_conjuncts
 }

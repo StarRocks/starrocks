@@ -198,6 +198,12 @@ public class FunctionSet {
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
+    // Full-text (GIN BM25) functions:
+    // score() is a zero-arg DOUBLE function returning the BM25 relevance of the current row w.r.t. the
+    // WHERE MATCH predicate. It is only valid in a single-table full-text top-N query and is rewritten
+    // into a synthetic score column by RewriteToBM25PlanRule; it is never executed by the BE.
+    public static final String SCORE = "score";
+
     // Geo functions:
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
