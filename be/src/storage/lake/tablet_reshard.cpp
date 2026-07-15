@@ -28,6 +28,7 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "util/defer_op.h"
 
@@ -321,7 +322,20 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
         return old_tablet_old_metadata_or.status();
     }
 
-    const auto& old_tablet_old_metadata = old_tablet_old_metadata_or.value();
+    // Flush the old tablet's PK-index memtable into sstables before copying metadata to the
+    // identical new tablet, mirroring the pre-split flush in split_tablet. Without it the identical
+    // child inherits an sstable_meta that does not cover recently-written rowsets whose
+    // overwrite/delete resolution lived only in the in-memory memtable; the child's cold PK-index
+    // rebuild then re-derives an index inconsistent with the inherited delvec, surfacing as a
+    // duplicate-key on rebuild or a delvec-inconsistency when a cross-published op_write is applied.
+    // flush_pk_memtable is a no-op for non-PK / non-cloud-native-persistent-index tablets.
+    auto flushed_old_metadata_or =
+            tablet_manager->update_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(), new_version);
+    if (!flushed_old_metadata_or.ok()) {
+        g_tablet_reshard_identical_failed << 1;
+        return flushed_old_metadata_or.status();
+    }
+    const auto& old_tablet_old_metadata = flushed_old_metadata_or.value();
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
     old_tablet_new_metadata->set_version(new_version);
