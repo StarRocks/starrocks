@@ -12,62 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/hive_table_sink.h"
+#include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
 
-#include "common/runtime_profile.h"
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "connector/connector_registry.h"
+#include "connector/hive/hive_chunk_sink.h"
+#include "data_sink/external/hive_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
-#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/column_evaluator.h"
 #include "formats/csv/csv_defaults.h"
+#include "formats/csv/csv_file_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks {
 
-HiveTableSink::HiveTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
-        : _pool(pool), _t_output_expr(t_exprs) {}
-
-HiveTableSink::~HiveTableSink() = default;
-
-Status HiveTableSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::init(thrift_sink, state));
-    RETURN_IF_ERROR(prepare(state));
-    RETURN_IF_ERROR(open(state));
-    return Status::OK();
-}
-
-Status HiveTableSink::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
-    std::stringstream title;
-    title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
-    _profile = _pool->add(new RuntimeProfile(title.str()));
-    return Status::OK();
-}
-
-Status HiveTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
-    return Status::OK();
-}
-
-Status HiveTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
-    return Status::OK();
-}
-
-Status HiveTableSink::close(RuntimeState* state, const Status& exec_status) {
-    ExprExecutor::close(_output_expr_ctxs, state);
-    return Status::OK();
-}
-
-Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
-                                            pipeline::PipelineBuilderContext* context) const {
+Status decompose_hive_table_sink_to_pipeline(const HiveTableSink& sink, pipeline::OpFactories prev_operators,
+                                             const TDataSink& thrift_sink, pipeline::PipelineBuilderContext* context) {
     auto runtime_state = context->runtime_state();
     auto fragment_ctx = context->fragment_context();
-    auto output_exprs = this->get_output_expr();
+    auto output_exprs = sink.get_output_expr();
     const auto& t_hive_sink = thrift_sink.hive_table_sink;
     const auto num_data_columns = t_hive_sink.data_column_names.size();
     std::vector<TExpr> data_exprs(output_exprs.begin(), output_exprs.begin() + num_data_columns);
