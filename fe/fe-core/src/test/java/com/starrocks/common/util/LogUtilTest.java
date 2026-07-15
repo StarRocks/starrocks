@@ -15,6 +15,7 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
 import org.junit.jupiter.api.Assertions;
@@ -42,5 +43,66 @@ public class LogUtilTest {
         Config.audit_log_modules = new String[] {"slow_query", "query", "connection"};
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
         Assertions.assertFalse(QueryDetailQueue.getQueryDetailsAfterTime(0L).isEmpty());
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessage() {
+        // single exception with no cause chain: plain message, no class name
+        RuntimeException e = new RuntimeException("hello");
+        String output = LogUtil.getUnwoundExceptionMessage(e);
+        Assertions.assertEquals("hello", output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageNested() {
+        // nested chain: outermost layer is plain (no class name), deeper layers include the class name
+        RuntimeException inner = new RuntimeException("inner cause");
+        RuntimeException outer = new RuntimeException("outer msg", inner);
+        String output = LogUtil.getUnwoundExceptionMessage(outer);
+        Assertions.assertTrue(output.contains("outer msg"));
+        Assertions.assertFalse(output.contains("RuntimeException: outer msg"));
+        Assertions.assertTrue(output.contains("RuntimeException: inner cause"));
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageNullMessage() {
+        // single exception with null message and no cause chain: null, no NPE
+        RuntimeException e = new RuntimeException((String) null);
+        String output = LogUtil.getUnwoundExceptionMessage(e);
+        Assertions.assertNull(output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageUnpeelsContentFreeWrapper() {
+        // mirrors ErrorReport.wrapWithRuntimeException: `new RuntimeException(cause)` with no message
+        // of its own, so its message defaults to `cause.toString()` (JDK default) and adds nothing new
+        DdlException ddl = new DdlException("table already exists");
+        RuntimeException wrapper = new RuntimeException(ddl);
+        String output = LogUtil.getUnwoundExceptionMessage(wrapper);
+        Assertions.assertEquals("table already exists", output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageUnpeelsNullMessageWrapper() {
+        // a layer with an explicit null message (e.g. `new Foo(null, cause)`) carries no information
+        // of its own either, so it should be unpeeled just like the cause.toString()-default case
+        RuntimeException cause = new RuntimeException("root cause");
+        RuntimeException wrapper = new RuntimeException((String) null, cause);
+        String output = LogUtil.getUnwoundExceptionMessage(wrapper);
+        Assertions.assertEquals("root cause", output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageCircularReference() {
+        // Covers the safety guard: when getCause() returns self, the loop breaks after the first layer
+        Throwable circular = new RuntimeException("circular") {
+            @Override
+            public Throwable getCause() {
+                return this;
+            }
+        };
+        String output = LogUtil.getUnwoundExceptionMessage(circular);
+        Assertions.assertTrue(output.contains("circular"));
+        Assertions.assertFalse(output.contains("\n")); // only one layer, not an infinite chain
     }
 }

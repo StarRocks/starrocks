@@ -484,7 +484,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             deleteFiles.commit();
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException("Failed to truncate iceberg table: %s.%s", dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to truncate iceberg table: %s.%s", dbName, tableName), e);
         }
     }
 
@@ -728,8 +729,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
             ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
-            throw new StarRocksConnectorException("Failed to execute metadata delete on %s.%s: %s",
-                    dbName, tableName, e.getMessage());
+            throw new StarRocksConnectorException(
+                    String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
         } finally {
             ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
                     System.currentTimeMillis() - startMs, deleteType);
@@ -1218,7 +1219,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 partitionKeys.add(createPartitionKeyWithType(values, srTypes, table.getType()));
             } catch (Exception e) {
                 LOG.error("create partition key failed.", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw new StarRocksConnectorException("create partition key failed", e);
             }
         }
 
