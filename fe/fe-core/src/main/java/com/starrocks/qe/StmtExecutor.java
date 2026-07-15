@@ -80,11 +80,7 @@ import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.ProfileKeyDictionary;
->>>>>>> 8728cd92b1 ([Enhancement] Expose auth/connectivity error details from connector metadata operations to end users (#75490))
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
