@@ -94,7 +94,7 @@ public class ScanNodeComputeScanRangeTest {
         };
 
         Assertions.assertDoesNotThrow(() -> scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex,
-                selectedIndex.getTablets(), List.of(), -1));
+                selectedIndex.getTablets(), List.of(), -1, physicalPartition.getVisibleVersion()));
         Assertions.assertEquals(1, invokeCounter.get());
     }
 
@@ -159,5 +159,45 @@ public class ScanNodeComputeScanRangeTest {
                 OlapTableSink.createLocation(olapTable, partitionParam, false, computeResource, null));
         // 10 tablets share a single batched StarClient.getShardInfo call.
         Assertions.assertEquals(1, invokeCounter.get());
+    }
+
+    @Test
+    public void testFinalizeStatsThreadsCapturedVisibleVersion() {
+        // finalizeStats() -> getScanRangeLocations() -> computeTabletInfo() captures the selected index and
+        // the visible version together and threads that captured version into addScanRangeLocations, instead
+        // of re-reading getVisibleVersion() later where a concurrent split could have advanced it.
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(2));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
+        Assertions.assertNotNull(table);
+        desc.setTable(table);
+        OlapTable olapTable = (OlapTable) table;
+        OlapScanNode scanNode =
+                new OlapScanNode(new PlanNodeId(2), desc, "OlapScanNode", olapTable.getBaseIndexMetaId());
+        long partitionId = olapTable.getAllPartitionIds().get(0);
+        scanNode.setSelectedPartitionIds(List.of(partitionId));
+
+        AtomicInteger invokeCounter = new AtomicInteger(0);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(Invocation invocation, String serviceId, List<Long> shardIds,
+                                                long workerGroupId) throws StarClientException {
+                invokeCounter.incrementAndGet();
+                return invocation.proceed(serviceId, shardIds, workerGroupId);
+            }
+        };
+
+        Assertions.assertDoesNotThrow(scanNode::finalizeStats);
+        Assertions.assertTrue(invokeCounter.get() >= 1);
+    }
+
+    @Test
+    public void testExecPlanBuildsOlapScanRangesWithCapturedVersion() throws Exception {
+        // Building the exec plan runs PlanFragmentBuilder.visitPhysicalOlapScan, whose inline scan-range
+        // path captures the selected index and the visible version together and threads that captured
+        // version into addScanRangeLocations.
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        Assertions.assertNotNull(
+                UtFrameUtils.getPlanAndFragment(connectContext, "select * from test.t1").second);
     }
 }

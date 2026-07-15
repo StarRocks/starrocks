@@ -613,7 +613,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
                                       List<TKeyRange> partitionRanges,
-                                      long localBeId) throws StarRocksException {
+                                      long localBeId,
+                                      long partitionVisibleVersion) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
         boolean skipDiskCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipLocalDiskCache();
@@ -622,7 +623,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         String schemaHashStr = String.valueOf(schemaHash);
         ConnectContext ctx = ConnectContext.get();
-        long visibleVersion = chooseScanVersion(physicalPartition.getVisibleVersion(), physicalPartition.getId(),
+        // Use the visibleVersion the caller captured together with the selected index, so a concurrent
+        // split cannot make us pair this index with a mismatched version (404 on a live tablet).
+        long visibleVersion = chooseScanVersion(partitionVisibleVersion, physicalPartition.getId(),
                 ctx == null ? null : ctx.getScanVersionOverride());
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
@@ -835,7 +838,16 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 final List<Tablet> tablets = Lists.newArrayList();
+                // Capture the selected index and the visible version together here and thread the captured
+                // version through to addScanRangeLocations, so the scan's version is the one paired with THIS
+                // index -- not re-read later, when a concurrent split may have advanced it. Read the index
+                // first, then the version: a split bumps the version (setVisibleVersion) before adding the
+                // child index, both under the catalog write lock, so index-then-version leaves only a
+                // sub-statement torn window whose sole outcome is (commitVersion, split parent) -- and the
+                // split parent stays readable at commitVersion until CLEANING (see the orphan-shard-group
+                // grace), making that rare pairing safe rather than a 404.
                 final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                final long partitionVisibleVersion = physicalPartition.getVisibleVersion();
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
@@ -853,7 +865,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId,
+                        partitionVisibleVersion);
             }
         }
     }
