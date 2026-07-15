@@ -99,6 +99,36 @@ under the License.
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
+<<<<<<< HEAD
+=======
+            <artifactId>fe-grammar</artifactId>
+        </dependency>
+
+        <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+             jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+        <dependency>
+            <groupId>org.tukaani</groupId>
+            <artifactId>xz</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-parser</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+>>>>>>> 4f9d89297d ([BugFix][CVE] Exclude unused avro-ipc that bundles vulnerable jquery 1.4.2 (#76270))
             <artifactId>spark-dpp</artifactId>
         </dependency>
 
