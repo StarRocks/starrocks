@@ -329,6 +329,46 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Total bytes sent over the network (maximum value among all network interfaces).
 
+## `mem_psi_full_avg10`
+
+- Unit: -
+- Description: Linux memory PSI (Pressure Stall Information) `full` percentage over the last 10 seconds, i.e. the share of time during which every non-idle task was stalled waiting on memory. A sustained high value means the whole machine (or the BE cgroup) is stuck on memory reclaim. Read from the BE process's cgroup v2 `memory.pressure`, falling back to `/proc/pressure/memory`. Reported as 0 on kernels without PSI support.
+
+## `mem_psi_full_avg300`
+
+- Unit: -
+- Description: Memory PSI `full` percentage over the last 300 seconds. See `mem_psi_full_avg10`.
+
+## `mem_psi_full_avg60`
+
+- Unit: -
+- Description: Memory PSI `full` percentage over the last 60 seconds. See `mem_psi_full_avg10`.
+
+## `mem_psi_full_total_us`
+
+- Unit: us
+- Description: Monotonic total time (microseconds) during which every non-idle task was stalled waiting on memory. Use `rate()` to derive the stall ratio precisely.
+
+## `mem_psi_some_avg10`
+
+- Unit: -
+- Description: Memory PSI `some` percentage over the last 10 seconds, i.e. the share of time during which at least one task was stalled waiting on memory. Indicates memory pressure before it becomes a full stall.
+
+## `mem_psi_some_avg300`
+
+- Unit: -
+- Description: Memory PSI `some` percentage over the last 300 seconds. See `mem_psi_some_avg10`.
+
+## `mem_psi_some_avg60`
+
+- Unit: -
+- Description: Memory PSI `some` percentage over the last 60 seconds. See `mem_psi_some_avg10`.
+
+## `mem_psi_some_total_us`
+
+- Unit: us
+- Description: Monotonic total time (microseconds) during which at least one task was stalled waiting on memory.
+
 ## `memory_pool_bytes_total`
 
 - Unit: Bytes

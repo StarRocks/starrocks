@@ -18,6 +18,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/metrics.h"
@@ -29,6 +30,7 @@ class DiskMetrics;
 class NetMetrics;
 class FileDescriptorMetrics;
 class SnmpMetrics;
+class PsiMemoryMetrics;
 
 class PlatformMetrics {
 public:
@@ -65,6 +67,13 @@ private:
     void _install_snmp_metrics(MetricRegistry* registry);
     void _update_snmp_metrics();
 
+    void _install_psi_mem_metrics(MetricRegistry* registry);
+    void _update_psi_mem_metrics();
+    // Resolve the PSI memory-pressure source once: prefer this process's cgroup v2
+    // `memory.pressure`, fall back to the host-wide `/proc/pressure/memory`. Returns
+    // an empty string if the kernel exposes no PSI source.
+    const std::string& _psi_mem_source_path();
+
 private:
     static const char* const _s_hook_name;
 
@@ -74,6 +83,9 @@ private:
     std::unique_ptr<FileDescriptorMetrics> _fd_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
+    std::unique_ptr<PsiMemoryMetrics> _psi_mem_metrics;
+    std::string _psi_mem_path;
+    bool _psi_mem_path_resolved = false;
 
     std::mutex _update_mutex;
     char* _line_ptr = nullptr;

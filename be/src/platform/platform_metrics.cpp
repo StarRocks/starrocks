@@ -14,6 +14,8 @@
 
 #include "platform/platform_metrics.h"
 
+#include <unistd.h>
+
 #include <cctype>
 #include <cinttypes>
 #include <cstdio>
@@ -88,6 +90,27 @@ public:
     METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
 };
 
+// Linux PSI (Pressure Stall Information) for memory, read from either this
+// process's cgroup v2 `memory.pressure` or the host-wide `/proc/pressure/memory`.
+// Each line looks like:
+//   some avg10=0.00 avg60=0.00 avg300=0.00 total=12345
+//   full avg10=0.00 avg60=0.00 avg300=0.00 total=6789
+// "some" = at least one task stalled waiting on memory; "full" = every non-idle
+// task stalled at once, i.e. the whole machine/cgroup is stuck on memory.
+class PsiMemoryMetrics {
+public:
+    // Percentage (0-100) of wall time stalled, averaged over the trailing window.
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_some_avg10, MetricUnit::PERCENT);
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_some_avg60, MetricUnit::PERCENT);
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_some_avg300, MetricUnit::PERCENT);
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_full_avg10, MetricUnit::PERCENT);
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_full_avg60, MetricUnit::PERCENT);
+    METRIC_DEFINE_DOUBLE_GAUGE(mem_psi_full_avg300, MetricUnit::PERCENT);
+    // Monotonic total stall time in microseconds, for precise rate() calculation.
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(mem_psi_some_total_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(mem_psi_full_total_us, MetricUnit::MICROSECONDS);
+};
+
 PlatformMetrics::PlatformMetrics() = default;
 
 PlatformMetrics* PlatformMetrics::instance() {
@@ -128,6 +151,7 @@ void PlatformMetrics::install(MetricRegistry* registry, const std::set<std::stri
     _install_net_metrics(registry, network_interfaces);
     _install_fd_metrics(registry);
     _install_snmp_metrics(registry);
+    _install_psi_mem_metrics(registry);
     _registry = registry;
 }
 
@@ -144,6 +168,7 @@ void PlatformMetrics::update() {
     _update_net_metrics();
     _update_fd_metrics();
     _update_snmp_metrics();
+    _update_psi_mem_metrics();
 }
 
 void PlatformMetrics::_install_cpu_metrics(MetricRegistry* registry) {
@@ -161,6 +186,7 @@ const char* k_ut_diskstats_path; // NOLINT
 const char* k_ut_net_dev_path;   // NOLINT
 const char* k_ut_fd_path;        // NOLINT
 const char* k_ut_net_snmp_path;  // NOLINT
+const char* k_ut_psi_mem_path;   // NOLINT
 #endif
 
 void PlatformMetrics::_update_cpu_metrics() {
@@ -478,6 +504,103 @@ void PlatformMetrics::_update_fd_metrics() {
 
     if (ferror(fp) != 0) {
         PLOG(WARNING) << "getline failed";
+    }
+    fclose(fp);
+}
+
+void PlatformMetrics::_install_psi_mem_metrics(MetricRegistry* registry) {
+    _psi_mem_metrics = std::make_unique<PsiMemoryMetrics>();
+    registry->register_metric("mem_psi_some_avg10", &_psi_mem_metrics->mem_psi_some_avg10);
+    registry->register_metric("mem_psi_some_avg60", &_psi_mem_metrics->mem_psi_some_avg60);
+    registry->register_metric("mem_psi_some_avg300", &_psi_mem_metrics->mem_psi_some_avg300);
+    registry->register_metric("mem_psi_full_avg10", &_psi_mem_metrics->mem_psi_full_avg10);
+    registry->register_metric("mem_psi_full_avg60", &_psi_mem_metrics->mem_psi_full_avg60);
+    registry->register_metric("mem_psi_full_avg300", &_psi_mem_metrics->mem_psi_full_avg300);
+    registry->register_metric("mem_psi_some_total_us", &_psi_mem_metrics->mem_psi_some_total_us);
+    registry->register_metric("mem_psi_full_total_us", &_psi_mem_metrics->mem_psi_full_total_us);
+}
+
+const std::string& PlatformMetrics::_psi_mem_source_path() {
+    if (_psi_mem_path_resolved) {
+        return _psi_mem_path;
+    }
+    _psi_mem_path_resolved = true;
+#ifdef BE_TEST
+    _psi_mem_path = k_ut_psi_mem_path != nullptr ? k_ut_psi_mem_path : "";
+    return _psi_mem_path;
+#else
+    // Prefer this process's own cgroup v2 memory.pressure (reflects the BE
+    // container in k8s/cgroup deployments), then fall back to the host-wide file.
+    // The cgroup v2 line in /proc/self/cgroup is `0::<relative-path>`.
+    if (FILE* cg = fopen("/proc/self/cgroup", "r"); cg != nullptr) {
+        while (getline(&_line_ptr, &_line_buf_size, cg) > 0) {
+            if (strncmp(_line_ptr, "0::", 3) != 0) {
+                continue;
+            }
+            std::string rel(_line_ptr + 3);
+            while (!rel.empty() && (rel.back() == '\n' || rel.back() == '\r')) {
+                rel.pop_back();
+            }
+            std::string candidate = "/sys/fs/cgroup" + rel + "/memory.pressure";
+            if (access(candidate.c_str(), R_OK) == 0) {
+                _psi_mem_path = candidate;
+            }
+            break;
+        }
+        fclose(cg);
+    }
+    if (_psi_mem_path.empty() && access("/sys/fs/cgroup/memory.pressure", R_OK) == 0) {
+        _psi_mem_path = "/sys/fs/cgroup/memory.pressure";
+    }
+    if (_psi_mem_path.empty() && access("/proc/pressure/memory", R_OK) == 0) {
+        _psi_mem_path = "/proc/pressure/memory";
+    }
+    if (_psi_mem_path.empty()) {
+        LOG(WARNING) << "memory PSI unavailable (no cgroup memory.pressure or "
+                        "/proc/pressure/memory); kernel < 4.20 or CONFIG_PSI disabled";
+    } else {
+        LOG(INFO) << "memory PSI source: " << _psi_mem_path;
+    }
+    return _psi_mem_path;
+#endif
+}
+
+void PlatformMetrics::_update_psi_mem_metrics() {
+    const std::string& path = _psi_mem_source_path();
+    if (path.empty()) {
+        return; // no PSI source on this kernel; nothing to update
+    }
+    FILE* fp = fopen(path.c_str(), "r");
+    if (fp == nullptr) {
+        PLOG(WARNING) << "open memory PSI file failed: " << path;
+        return;
+    }
+
+    // Each line: `<some|full> avg10=<f> avg60=<f> avg300=<f> total=<u64-microseconds>`
+    while (getline(&_line_ptr, &_line_buf_size, fp) > 0) {
+        char tag[16];
+        double a10 = 0, a60 = 0, a300 = 0;
+        uint64_t total = 0;
+        int num = sscanf(_line_ptr, "%15s avg10=%lf avg60=%lf avg300=%lf total=%" SCNu64, tag, &a10, &a60, &a300,
+                         &total);
+        if (num != 5) {
+            continue;
+        }
+        if (strcmp(tag, "some") == 0) {
+            _psi_mem_metrics->mem_psi_some_avg10.set_value(a10);
+            _psi_mem_metrics->mem_psi_some_avg60.set_value(a60);
+            _psi_mem_metrics->mem_psi_some_avg300.set_value(a300);
+            _psi_mem_metrics->mem_psi_some_total_us.set_value(static_cast<int64_t>(total));
+        } else if (strcmp(tag, "full") == 0) {
+            _psi_mem_metrics->mem_psi_full_avg10.set_value(a10);
+            _psi_mem_metrics->mem_psi_full_avg60.set_value(a60);
+            _psi_mem_metrics->mem_psi_full_avg300.set_value(a300);
+            _psi_mem_metrics->mem_psi_full_total_us.set_value(static_cast<int64_t>(total));
+        }
+    }
+
+    if (ferror(fp) != 0) {
+        PLOG(WARNING) << "getline failed on " << path;
     }
     fclose(fp);
 }

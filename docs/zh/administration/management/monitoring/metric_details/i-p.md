@@ -329,6 +329,46 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：通过网络发送的总字节数（所有网络接口中的最大值）。
 
+## `mem_psi_full_avg10`
+
+- 单位：-
+- 描述：Linux 内存 PSI（Pressure Stall Information，压力停顿信息）最近 10 秒的 `full` 百分比，即所有非 idle 任务同时因等待内存而停顿的时间占比。该值持续偏高表示整机（或 BE 所在 cgroup）卡在内存回收上。优先从 BE 进程所在的 cgroup v2 `memory.pressure` 读取，读不到时回退到 `/proc/pressure/memory`。内核不支持 PSI 时上报 0。
+
+## `mem_psi_full_avg300`
+
+- 单位：-
+- 描述：最近 300 秒的内存 PSI `full` 百分比。参见 `mem_psi_full_avg10`。
+
+## `mem_psi_full_avg60`
+
+- 单位：-
+- 描述：最近 60 秒的内存 PSI `full` 百分比。参见 `mem_psi_full_avg10`。
+
+## `mem_psi_full_total_us`
+
+- 单位：微秒
+- 描述：所有非 idle 任务同时因等待内存而停顿的累计时间（微秒，单调递增）。可用 `rate()` 精确计算停顿占比。
+
+## `mem_psi_some_avg10`
+
+- 单位：-
+- 描述：最近 10 秒的内存 PSI `some` 百分比,即至少有一个任务因等待内存而停顿的时间占比。可在演变为整机停顿之前反映内存压力。
+
+## `mem_psi_some_avg300`
+
+- 单位：-
+- 描述：最近 300 秒的内存 PSI `some` 百分比。参见 `mem_psi_some_avg10`。
+
+## `mem_psi_some_avg60`
+
+- 单位：-
+- 描述：最近 60 秒的内存 PSI `some` 百分比。参见 `mem_psi_some_avg10`。
+
+## `mem_psi_some_total_us`
+
+- 单位：微秒
+- 描述：至少有一个任务因等待内存而停顿的累计时间（微秒，单调递增）。
+
 ## `memory_pool_bytes_total`
 
 - 单位：字节
