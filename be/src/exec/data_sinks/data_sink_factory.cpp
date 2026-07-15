@@ -16,12 +16,12 @@
 #include <sstream>
 
 #include "common/logging.h"
+#include "data_sink/dictionary_cache/dictionary_cache_sink.h"
 #include "data_sink/exchange/data_stream_sender.h"
 #include "data_sink/external/blackhole_table_sink.h"
 #include "data_sink/external/export_sink.h"
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
-#include "exec/data_sinks/dictionary_cache_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec_primitive/data_sink.h"
 #include "gen_cpp/DataSinks_types.h"

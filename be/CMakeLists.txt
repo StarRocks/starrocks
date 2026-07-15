@@ -585,6 +585,7 @@ set(STARROCKS_LINK_LIBS
     DataSinkResult
     DataSinkExchange
     DataSinkExternal
+    DataSinkDictionaryCache
     DataSinkTablet
     DataSinkFile
     Storage

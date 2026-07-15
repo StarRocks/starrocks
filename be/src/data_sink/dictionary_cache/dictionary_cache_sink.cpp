@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/dictionary_cache_sink.h"
+#include "data_sink/dictionary_cache/dictionary_cache_sink.h"
 
 #include "runtime/runtime_state.h"
 

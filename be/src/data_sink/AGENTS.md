@@ -35,6 +35,14 @@ Export, MySQL, schema, blackhole, and no-op sinks over reusable file builders, f
 - Allowed target deps: `DataSinkFile`, `StoragePrimitive`, `ExecPrimitive`, `FormatCore`, `FormatCsv`, `Expr`, `Runtime`, `Platform`, `FileSystem`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep non-tablet external and administrative sinks in DataSinkExternal over file, format, filesystem, and lower contracts; keep concrete storage, full Exec composition, and service/bootstrap behavior outside this module.
 
+### DataSinkDictionaryCache (`datasinkdictionarycache`)
+Pipeline-only dictionary-cache sink lifecycle over execution contracts and runtime without concrete Exec operator or writer coupling.
+- Targets: `DataSinkDictionaryCache`
+- Allowed internal include prefixes: `data_sink/dictionary_cache/`, `exec_primitive/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `data_sink_dictionary_cache_test`
+- Remediation: Keep dictionary-cache sink lifecycle independent of its Exec-owned pipeline operator and writer; pipeline composition remains in Exec.
+
 ### DataSinkTablet (`datasinktablet`)
 OLAP tablet routing, validation, channel management, and RPC sending over explicit Storage, ComputeEnv, execution-contract, expression, and runtime dependencies without full Exec or service coupling.
 - Targets: `DataSinkTablet`
