@@ -75,6 +75,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
+import static org.apache.fluss.flink.utils.CatalogExceptionUtils.isDatabaseNotExist;
 import static org.apache.fluss.flink.utils.CatalogExceptionUtils.isTableNotExist;
 import static org.apache.fluss.flink.utils.CatalogExceptionUtils.isTableNotPartitioned;
 import static org.apache.fluss.flink.utils.LakeSourceUtils.createLakeSource;
@@ -183,13 +184,21 @@ public class FlussMetadata implements ConnectorMetadata {
             return this.databases.get(dbName);
         }
         try {
-            this.admin.getDatabaseInfo(dbName);
+            this.admin.getDatabaseInfo(dbName).get();
             Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
             this.databases.put(dbName, db);
             return db;
         } catch (Exception e) {
-            LOG.error("Failed to get Fluss database {}.{}.", catalogName, dbName, e);
-            throw new StarRocksConnectorException(e.getMessage());
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            Throwable t = ExceptionUtils.stripExecutionException(e);
+            if (isDatabaseNotExist(t)) {
+                LOG.error("Fluss database {}.{} does not exist.", catalogName, dbName);
+                return null;
+            }
+            LOG.error("Failed to get Fluss database {}.{}.", catalogName, dbName, t);
+            throw new StarRocksConnectorException(t.getMessage(), t);
         }
     }
 
