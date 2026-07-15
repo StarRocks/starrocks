@@ -100,6 +100,7 @@ ADD_BE_LIB(DataSinkExternal
     external/mysql_table_sink.cpp
     external/mysql_table_writer.cpp
     external/schema_table_sink.cpp
+    external/table_function_table_sink.cpp
 )
 
 target_link_libraries(DataSinkExternal PUBLIC

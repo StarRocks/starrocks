@@ -16,7 +16,7 @@
 
 #include "connector/connector_registry.h"
 #include "connector/file/file_chunk_sink.h"
-#include "exec/data_sinks/table_function_table_sink.h"
+#include "data_sink/external/table_function_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"

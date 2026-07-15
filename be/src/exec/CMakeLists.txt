@@ -294,7 +294,6 @@ set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/hive_table_sink_pipeline_builder.cpp
     data_sinks/table_function_table_sink_pipeline_builder.cpp
     data_sinks/iceberg_table_sink.cpp
-    data_sinks/table_function_table_sink.cpp
 )
 
 set(EXEC_RUNTIME_COMPAT_FILES
