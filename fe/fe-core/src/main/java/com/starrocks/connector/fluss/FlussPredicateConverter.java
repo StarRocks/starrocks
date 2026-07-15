@@ -204,7 +204,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
                 }
                 String literal = ((BinaryString) objectLiteral).toString();
                 if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1
-                        && literal.charAt(0) != '%') {
+                        && literal.charAt(0) != '%' && literal.indexOf('_') < 0 && literal.indexOf('\\') < 0) {
                     return builder.startsWith(idx,
                             BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }

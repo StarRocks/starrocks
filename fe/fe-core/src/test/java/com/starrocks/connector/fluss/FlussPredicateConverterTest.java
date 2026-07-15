@@ -165,6 +165,12 @@ public class FlussPredicateConverterTest {
                 LikePredicateOperator.LikeType.LIKE, NAME, ConstantOperator.createVarchar("%abc"))));
         Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
                 LikePredicateOperator.LikeType.LIKE, NAME, ConstantOperator.createVarchar("a%c%"))));
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, NAME, ConstantOperator.createVarchar("ab_%"))));
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, NAME, ConstantOperator.createVarchar("abc\\%"))));
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, NAME, ConstantOperator.createVarchar("ab\\_%"))));
     }
 
     @Test
