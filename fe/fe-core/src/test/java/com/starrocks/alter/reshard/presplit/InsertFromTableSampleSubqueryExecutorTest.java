@@ -24,7 +24,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
@@ -191,6 +193,102 @@ class InsertFromTableSampleSubqueryExecutorTest {
     }
 
     // ---------------------------------------------------------------------------
+    // Source-name remap tests (base + rollup)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void baseSortKeyProjectedBySourceNameFromMap() throws Exception {
+        // target column "k" maps to source column "src_k"; projection must use the source name.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(tableRequest(sourceTable, "`db`.`src`", List.of("src_k"), List.of(), /*where=*/ null,
+                List.of(bigintColumn("k")), List.of()));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `src_k` FROM"),
+                "base sort key must be projected by its mapped source name: " + capturedSql);
+    }
+
+    @Test
+    void rollupSortKeyProjectedBySourceNameByName() throws Exception {
+        // by-name identity map: base (k1,k2) + rollup (k2) all project by their own source names.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(rollupRequest(sourceTable, Map.of("k1", "k1", "k2", "k2"),
+                List.of(bigintColumn("k1"), bigintColumn("k2")),
+                List.of(new SecondaryIndexSpec(101L, List.of(bigintColumn("k2"))))));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `k1`, `k2`, `k2` FROM"),
+                "base (k1,k2) then rollup (k2), all by source name: " + capturedSql);
+    }
+
+    @Test
+    void rollupSortKeyProjectedBySourceNameByPositionRenamed() throws Exception {
+        // by-position renamed map: target k1->s1, k2->s2; rollup ORDER BY(k2) projects `s2`.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(rollupRequest(sourceTable, Map.of("k1", "s1", "k2", "s2"),
+                List.of(bigintColumn("k1"), bigintColumn("k2")),
+                List.of(new SecondaryIndexSpec(101L, List.of(bigintColumn("k2"))))));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `s1`, `s2`, `s2` FROM"),
+                "rollup sort key must remap to source names: " + capturedSql);
+    }
+
+    @Test
+    void rollupReorderingSubsetOfBaseStillMapped() throws Exception {
+        // rollup sort key reorders/subsets the base: base (k1,k2,k3) + rollup (k3,k1).
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(rollupRequest(sourceTable, Map.of("k1", "s1", "k2", "s2", "k3", "s3"),
+                List.of(bigintColumn("k1"), bigintColumn("k2"), bigintColumn("k3")),
+                List.of(new SecondaryIndexSpec(101L, List.of(bigintColumn("k3"), bigintColumn("k1"))))));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `s1`, `s2`, `s3`, `s3`, `s1` FROM"),
+                "rollup (k3,k1) must project `s3`,`s1` after the base slice: " + capturedSql);
+    }
+
+    @Test
+    void unmappedRollupColumnThrowsFailSafe() {
+        // A rollup sort-key column absent from the map must fail the sample (-> load proceeds).
+        OlapTable sourceTable = mockOlapTable(0L);
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> List.of());
+
+        SampleRequest request = rollupRequest(sourceTable, Map.of("k1", "s1"),
+                List.of(bigintColumn("k1")),
+                List.of(new SecondaryIndexSpec(101L, List.of(bigintColumn("missing")))));
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(request));
+        Assertions.assertTrue(thrown.getMessage().contains("no source-table column mapping"),
+                "fail-safe throw must report an unmapped sort-key column: " + thrown.getMessage());
+    }
+
+    // ---------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------
 
@@ -209,11 +307,37 @@ class InsertFromTableSampleSubqueryExecutorTest {
             List<Column> sortKeyColumns,
             List<Column> partitionSourceColumns) {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        // Build the target->source map from the paired lists (both sort-key and partition columns):
+        // sortKeyColumns[i].name -> sortKeySourceColumnNames[i], partitionSourceColumns[i].name -> ...[i].
+        Map<String, String> targetToSource = new HashMap<>();
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            targetToSource.put(sortKeyColumns.get(i).getName().toLowerCase(), sortKeySourceColumnNames.get(i));
+        }
+        for (int i = 0; i < partitionSourceColumns.size(); i++) {
+            targetToSource.put(partitionSourceColumns.get(i).getName().toLowerCase(), partitionSourceColumnNames.get(i));
+        }
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, sourceFromSql, sortKeySourceColumnNames, partitionSourceColumnNames,
-                wherePredicateSql, computeResource);
+                sourceTable, sourceFromSql, targetToSource, wherePredicateSql, computeResource);
         return new SampleRequest(
                 scanContext, sortKeyColumns, partitionSourceColumns,
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+    }
+
+    /**
+     * Builds a request whose context map covers every (lower-cased target -> source) pair
+     * in {@code targetToSource}, with the given base sort key and rollup specs. Base sort-key
+     * columns and each rollup spec carry TARGET columns; the executor remaps to source names.
+     */
+    private static SampleRequest rollupRequest(
+            OlapTable sourceTable,
+            Map<String, String> targetToSource,
+            List<Column> baseSortKeyColumns,
+            List<SecondaryIndexSpec> rollups) {
+        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", targetToSource, /*where=*/ null, computeResource);
+        return new SampleRequest(
+                scanContext, baseSortKeyColumns, rollups, List.of(),
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
     }
 }

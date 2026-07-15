@@ -18,12 +18,10 @@ import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
@@ -182,43 +180,34 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void dispatchInsertFromTableWithRollupSkipsBeforeSampling() {
-        // INSERT-from-table cannot remap a divergent rollup sort key to source columns, so a
-        // target with more than one visible index (base + rollup) must skip before sampling /
-        // grouping / pre-create -- regardless of partition shape. The gate is the FIRST line of
-        // dispatch, so none of the multi-partition scaffolding below (sampler, grouper) ever runs.
+    public void dispatchInsertFromTableWithRollupRoutesToMultiPartitionFlow() {
+        // INSERT-from-table with a rollup is no longer descoped: an automatic-partition target
+        // routes to the multi-partition flow, which constructs the data-tier sampler and groups.
         Database database = mock(Database.class);
         when(database.getId()).thenReturn(7L);
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
-        when(table.getVisibleIndexMetas()).thenReturn(
-                List.of(mock(MaterializedIndexMeta.class), mock(MaterializedIndexMeta.class)));
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        boolean savedHasInit = MetricRepo.hasInit;
-        MetricRepo.hasInit = true;
-        try (MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> sampler = Mockito.mockConstruction(ReservoirSampler.class)) {
-            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
-            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+                MockedConstruction<ReservoirSampler> sampler = Mockito.mockConstruction(ReservoirSampler.class,
+                        (mock, ctx) -> when(mock.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong(), any()))
+                    .thenReturn(List.of());
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
                     () -> false, mock(ConnectContext.class));
 
-            Assertions.assertTrue(sampler.constructed().isEmpty(), "the data-tier sampler must never be constructed");
+            Assertions.assertEquals(1, sampler.constructed().size(),
+                    "INSERT-from-table with a rollup must reach the data-tier sampler");
             grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class), anyLong(), anyLong(), any()),
-                    never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
-            Assertions.assertEquals(baseline + 1L,
-                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
-                    "INSERT-from-table with a rollup must bump the has_materialized_view_or_rollup bucket");
-        } finally {
-            MetricRepo.hasInit = savedHasInit;
+                    any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                    anyLong(), anyLong(), any()), times(1));
         }
     }
 
@@ -280,38 +269,30 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void singleFlowSkipsInsertFromTableWhenResolvedIndexTargetsHaveRollup() {
-        // Race regression: the dispatch-time descope gate reads target.getVisibleIndexMetas()
-        // before findEligibleTarget resolves the authoritative indexTargets. If a rollup becomes
-        // visible in between, the RESOLVED indexTargets can have 2 entries (base + rollup) even
-        // though the table had a single visible index at dispatch time. runSinglePartitionFlow
-        // must re-check the resolved set and skip -- not sample the rollup with the base-only
-        // INSERT-from-table source mapping.
+    public void singleFlowInsertFromTableWithRollupProceeds() {
+        // INSERT-from-table with a resolved base+rollup index set is no longer skipped:
+        // the single-partition flow builds the pipeline and submits.
         Database database = mock(Database.class);
         OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
 
-        boolean savedHasInit = MetricRepo.hasInit;
-        MetricRepo.hasInit = true;
-        try (MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
             stubEligibleTargetWithRollup(targets, database, table);
-            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
-            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+            stubPipelineFactory(pipelineStatic);
+            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
                     LoadKind.INSERT_FROM_TABLE, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
-                    any(), any(), any(), any(), any()), never());
-            Assertions.assertEquals(baseline + 1L,
-                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
-                    "resolved rollup on INSERT-from-table must bump the has_materialized_view_or_rollup bucket");
-        } finally {
-            MetricRepo.hasInit = savedHasInit;
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
         }
     }
 
@@ -441,7 +422,7 @@ public class PreSplitFlowTest {
     private static PreSplitFlow.Prepared preparedFor(ScanContext scanContext) {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         return new PreSplitFlow.Prepared(scanContext, sortKey, List.of(),
-                /*estimatedBytes*/ 0L, mock(ComputeResource.class));
+                /*estimatedBytes*/ 0L, mock(ComputeResource.class), List.of());
     }
 
     /** Stub PreSplitTargets.findEligibleTarget to resolve a single-partition target for {@code table}. */
