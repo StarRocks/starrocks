@@ -133,8 +133,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testAlterColumnMetricsExposure() {
         // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
         // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
@@ -151,8 +149,8 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("alter_duration_ms"), output);
         Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
     }
-  
->>>>>>> 3e048bef9f0... [Enhancement] Add FE metrics for ALTER TABLE column operations and duration (#76247)
+
+    @Test
     public void testPlanAdvisorMetricsExposure() {
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
         MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
