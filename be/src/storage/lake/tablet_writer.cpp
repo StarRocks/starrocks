@@ -92,11 +92,12 @@ Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
     // last segment. A delete therefore (a) wins over equal keys upserted by this or earlier batches and
     // (b) loses to a re-upsert in a later batch (higher segment index) -- preserving the in-transaction
     // upsert/delete order across the parallel/batched spill merge (publish interleaves by op_offset).
-    // _del_op_offsets must stay positionally aligned with _dels.
+    // _del_op_offsets and _del_num_rows must stay positionally aligned with _dels.
     const uint32_t del_op_offset = _segments.empty() ? 0 : static_cast<uint32_t>(_segments.size() - 1);
-    for (const auto& del : other_writer->_dels) {
-        _dels.push_back(del);
+    for (size_t i = 0; i < other_writer->_dels.size(); ++i) {
+        _dels.push_back(other_writer->_dels[i]);
         _del_op_offsets.push_back(del_op_offset);
+        _del_num_rows.push_back(i < other_writer->_del_num_rows.size() ? other_writer->_del_num_rows[i] : 0);
     }
     _ssts.insert(_ssts.end(), other_writer->_ssts.begin(), other_writer->_ssts.end());
     _sst_ranges.insert(_sst_ranges.end(), other_writer->_sst_ranges.begin(), other_writer->_sst_ranges.end());
