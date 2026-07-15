@@ -74,4 +74,15 @@ public class SessionVariableTest {
         sessionVariable.setEnableInsertPartialUpdate(false);
         Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
     }
+
+    @Test
+    public void testUseTantivyTokenizeDefaultsAndThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertTrue(sessionVariable.isUseTantivyTokenize());
+        Assertions.assertTrue(sessionVariable.toThrift().isUse_tantivy_tokenize());
+
+        sessionVariable.setUseTantivyTokenize(false);
+        Assertions.assertFalse(sessionVariable.isUseTantivyTokenize());
+        Assertions.assertFalse(sessionVariable.toThrift().isUse_tantivy_tokenize());
+    }
 }

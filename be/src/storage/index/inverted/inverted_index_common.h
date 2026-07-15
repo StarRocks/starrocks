@@ -13,6 +13,10 @@
 // limitations under the License.
 
 #pragma once
+
+#include <string>
+#include <vector>
+
 #include "common/global_types.h"
 #include "storage/olap_common.h"
 #include "util/slice.h"
@@ -22,6 +26,13 @@ namespace starrocks {
 struct PhraseQueryValue {
     Slice text;
     int slop = 0;
+};
+
+// A MATCH_ANY/MATCH_ALL query whose terms were produced explicitly by the
+// tokenize() SQL function. Readers must use these terms verbatim and must not
+// run the index's analyzer a second time.
+struct TokenizedQueryValue {
+    std::vector<std::string> terms;
 };
 
 enum class InvertedImplementType {
@@ -76,7 +87,9 @@ enum class InvertedIndexQueryType {
     MATCH_FUZZY_QUERY = 6,
     MATCH_ALL_QUERY = 7,
     MATCH_PHRASE_QUERY = 8,
-    MATCH_ANY_QUERY = 9
+    MATCH_ANY_QUERY = 9,
+    MATCH_ALL_TERMS_QUERY = 10,
+    MATCH_ANY_TERMS_QUERY = 11
 };
 
 } // namespace starrocks

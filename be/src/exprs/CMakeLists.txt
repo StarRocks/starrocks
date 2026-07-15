@@ -63,6 +63,7 @@ set(EXPR_FILES
   function_call_expr.cpp
   function_helper.cpp
   geo_functions.cpp
+  gin_functions.cpp
   grouping_sets_functions.cpp
   hyperloglog_functions.cpp
   in_const_predicate.cpp
@@ -115,3 +116,4 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 add_library(Exprs ${EXPR_FILES})
+add_dependencies(Exprs build_tantivy_binding)

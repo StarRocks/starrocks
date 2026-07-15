@@ -15,6 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -56,5 +58,26 @@ public class Bm25ScoreLimitPushdownTest extends PlanTestBase {
         String plan = getFragmentPlan("SELECT score() s FROM bm25_docs "
                 + "WHERE request MATCH 'fox' ORDER BY s ASC LIMIT 10");
         assertContains(plan, "BM25SCORE: ON, topk=0");
+    }
+
+    @Test
+    public void supportsPretokenizedMatchAnyAndMatchAll() throws Exception {
+        String anyPlan = getFragmentPlan("SELECT id FROM bm25_docs "
+                + "WHERE request MATCH_ANY tokenize('english', 'The quick fox')");
+        assertContains(anyPlan, "MATCH_ANY", "tokenize");
+
+        String allPlan = getFragmentPlan("SELECT id FROM bm25_docs "
+                + "WHERE request MATCH_ALL tokenize('chinese', '中华人民共和国')");
+        assertContains(allPlan, "MATCH_ALL", "tokenize");
+    }
+
+    @Test
+    public void rejectsPretokenizedPlainAndPhraseMatch() {
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("SELECT id FROM bm25_docs "
+                        + "WHERE request MATCH tokenize('english', 'quick fox')"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("SELECT id FROM bm25_docs "
+                        + "WHERE request MATCH_PHRASE tokenize('english', 'quick fox')"));
     }
 }

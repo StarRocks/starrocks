@@ -1,0 +1,37 @@
+-- name: test_tokenize_tantivy
+SET use_tantivy_tokenize = true;
+SELECT tokenize('english', 'The Quick Brown Foxes Running');
+SELECT tokenize('chinese', '中华人民');
+SELECT tokenize('cjk', '中华人民');
+SELECT array_contains(tokenize('jieba', '中华人民共和国成立了'), '人民');
+
+SET use_tantivy_tokenize = false;
+SELECT tokenize('english', 'Hello World');
+SELECT tokenize('standard', 'hello, world');
+SELECT tokenize('chinese', '中华人民');
+
+SET use_tantivy_tokenize = true;
+CREATE TABLE t_tokenize_match (
+    id INT NOT NULL,
+    content VARCHAR(255),
+    INDEX idx_content (content) USING GIN (
+        'imp_lib' = 'tantivy',
+        'parser' = 'chinese'
+    )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t_tokenize_match VALUES
+    (1, '中华人民'),
+    (2, '中华'),
+    (3, '人民'),
+    (4, '其他');
+
+SELECT count(*) FROM t_tokenize_match
+WHERE content MATCH_ANY tokenize('chinese', '中华人民');
+SELECT count(*) FROM t_tokenize_match
+WHERE content MATCH_ALL tokenize('cjk', '中华人民');
+
+DROP TABLE t_tokenize_match;

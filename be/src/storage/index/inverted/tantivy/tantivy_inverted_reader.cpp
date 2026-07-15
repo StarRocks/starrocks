@@ -214,6 +214,16 @@ StatusOr<TokenizedTerms> tokenize_query(const std::string& tokenizer_name, const
     return result;
 }
 
+TokenizedTerms use_tokenized_query(const TokenizedQueryValue& query) {
+    TokenizedTerms result;
+    result.strs = query.terms;
+    result.slices.reserve(result.strs.size());
+    for (const auto& term : result.strs) {
+        result.slices.push_back({reinterpret_cast<const uint8_t*>(term.data()), term.size()});
+    }
+    return result;
+}
+
 } // namespace
 
 Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query_value,
@@ -221,8 +231,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        tb::RustResult r = tb::tantivy_term_query_bitmap(reader_handle,
-                                                         reinterpret_cast<const uint8_t*>(slice->data),
+        tb::RustResult r = tb::tantivy_term_query_bitmap(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
                                                          slice->size, bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
@@ -238,12 +247,32 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
     }
+    case InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY: {
+        const auto* query = reinterpret_cast<const TokenizedQueryValue*>(query_value);
+        auto terms = use_tokenized_query(*query);
+        if (terms.slices.empty()) return Status::OK();
+        tb::RustResult r = tb::tantivy_match_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
+                                                          bit_map, sr_tantivy_append_rowids);
+        TantivyResultGuard rg(r);
+        RETURN_IF_ERROR(tantivy_status_from_error(r));
+        return Status::OK();
+    }
     case InvertedIndexQueryType::MATCH_ALL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(),
-                                                              terms.slices.size(),
+        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
+                                                              config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
+                                                              sr_tantivy_append_rowids);
+        TantivyResultGuard rg(r);
+        RETURN_IF_ERROR(tantivy_status_from_error(r));
+        return Status::OK();
+    }
+    case InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY: {
+        const auto* query = reinterpret_cast<const TokenizedQueryValue*>(query_value);
+        auto terms = use_tokenized_query(*query);
+        if (terms.slices.empty()) return Status::OK();
+        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
                                                               config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
                                                               sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
@@ -255,18 +284,17 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(pqv->text.data, pqv->text.size)));
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_phrase_match_query_bitmap(reader_handle, terms.slices.data(),
-                                                                 terms.slices.size(),
-                                                                 static_cast<uint32_t>(pqv->slop), bit_map,
-                                                                 sr_tantivy_append_rowids);
+                                                                 terms.slices.size(), static_cast<uint32_t>(pqv->slop),
+                                                                 bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
     }
     case InvertedIndexQueryType::MATCH_WILDCARD_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
-        tb::RustResult r = tb::tantivy_wildcard_query_bitmap(reader_handle,
-                                                             reinterpret_cast<const uint8_t*>(slice->data),
-                                                             slice->size, bit_map, sr_tantivy_append_rowids);
+        tb::RustResult r =
+                tb::tantivy_wildcard_query_bitmap(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
+                                                  slice->size, bit_map, sr_tantivy_append_rowids);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         *bit_map -= _null_bitmap;
@@ -281,8 +309,14 @@ Status TantivyInvertedReader::_query_impl_scored(void* reader_handle, const void
                                                  InvertedIndexQueryType query_type, int32_t limit, float min_score,
                                                  float max_score, roaring::Roaring* bit_map,
                                                  std::unordered_map<uint32_t, float>* row_to_score) {
-    const auto* slice = reinterpret_cast<const Slice*>(query_value);
-    ASSIGN_OR_RETURN(auto terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+    TokenizedTerms terms;
+    if (query_type == InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY ||
+        query_type == InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY) {
+        terms = use_tokenized_query(*reinterpret_cast<const TokenizedQueryValue*>(query_value));
+    } else {
+        const auto* slice = reinterpret_cast<const Slice*>(query_value);
+        ASSIGN_OR_RETURN(terms, tokenize_query(_tokenizer_name, std::string(slice->data, slice->size)));
+    }
     if (terms.slices.empty()) return Status::OK();
 
     // limit > 0 pushes the SQL LIMIT into tantivy's TopDocs (top-k pruning);
@@ -296,10 +330,12 @@ Status TantivyInvertedReader::_query_impl_scored(void* reader_handle, const void
     tb::RustResult r{};
     switch (query_type) {
     case InvertedIndexQueryType::MATCH_ANY_QUERY:
+    case InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY:
         r = tb::tantivy_match_query_scored(reader_handle, terms.slices.data(), terms.slices.size(), topk, min_score,
                                            max_score, &ids, &scores);
         break;
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
+    case InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY:
         r = tb::tantivy_match_all_query_scored(reader_handle, terms.slices.data(), terms.slices.size(), topk, min_score,
                                                max_score, &ids, &scores);
         break;

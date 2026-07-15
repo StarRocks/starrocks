@@ -51,12 +51,23 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
 Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
                                             const void* query_value, InvertedIndexQueryType query_type,
                                             roaring::Roaring* bit_map) {
-    const auto* search_query = reinterpret_cast<const Slice*>(query_value);
-    auto act_len = strnlen(search_query->data, search_query->size);
-    std::string search_str(search_query->data, act_len);
-    std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
+    std::string search_str;
+    std::wstring search_wstr;
     std::vector<std::wstring> tokens;
-    RETURN_IF_ERROR(starrocks::tokenize_text(_parser_type, search_str, tokens));
+    if (query_type == InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY ||
+        query_type == InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY) {
+        const auto* query = reinterpret_cast<const TokenizedQueryValue*>(query_value);
+        tokens.reserve(query->terms.size());
+        for (const auto& term : query->terms) {
+            tokens.emplace_back(boost::locale::conv::utf_to_utf<TCHAR>(term));
+        }
+    } else {
+        const auto* search_query = reinterpret_cast<const Slice*>(query_value);
+        auto act_len = strnlen(search_query->data, search_query->size);
+        search_str.assign(search_query->data, act_len);
+        search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
+        RETURN_IF_ERROR(starrocks::tokenize_text(_parser_type, search_str, tokens));
+    }
     VLOG(2) << "begin to query the inverted index from clucene"
             << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
@@ -80,9 +91,11 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
                 std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     case InvertedIndexQueryType::MATCH_ANY_QUERY:
+    case InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY:
         match_operator = std::make_unique<MatchAnyOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
+    case InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY:
         match_operator = std::make_unique<MatchAllOperator>(&index_searcher, nullptr, column_name_ws, tokens);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:

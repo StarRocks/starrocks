@@ -29,7 +29,9 @@ StatusOr<ColumnPtr> MatchExpr::evaluate_checked(ExprContext* context, Chunk* ptr
 }
 
 Status MatchExpr::prepare(RuntimeState* state, ExprContext* context) {
-    return Status::OK();
+    // Literal-only MATCH predicates did not need child preparation, but
+    // MATCH_ANY/MATCH_ALL tokenize(...) carries a real function-call child.
+    return Expr::prepare(state, context);
 }
 
 } // namespace starrocks
