@@ -18,6 +18,8 @@
 
 #include "common/logging.h"
 #include "data_workflows/load/rejected_record_sync_daemon.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 
 namespace starrocks {
@@ -33,6 +35,9 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     DCHECK(options.diagnose_daemon != nullptr);
     DCHECK(options.brpc_stub_cache != nullptr);
     DCHECK(options.load_mem_tracker != nullptr);
+
+    _stream_load_executor = std::make_unique<StreamLoadExecutor>();
+    _transaction_mgr = std::make_unique<TransactionMgr>(options.exec_env, _stream_load_executor.get());
 
     _load_channel_mgr =
             std::make_unique<LoadChannelMgr>(options.lake_tablet_manager, options.diagnose_daemon,
@@ -67,6 +72,8 @@ void DataWorkflowsEnv::destroy() {
     stop();
     _rejected_record_sync_daemon.reset();
     _load_channel_mgr.reset();
+    _transaction_mgr.reset();
+    _stream_load_executor.reset();
 }
 
 } // namespace starrocks

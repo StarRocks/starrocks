@@ -215,7 +215,8 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     CHECK(st.ok()) << st;
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
+                                 data_workflows_env->stream_load_executor());
     CHECK(st.ok()) << st;
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
