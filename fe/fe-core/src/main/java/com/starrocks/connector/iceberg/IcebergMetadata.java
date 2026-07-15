@@ -842,6 +842,42 @@ public class IcebergMetadata implements ConnectorMetadata {
         return snapshotId;
     }
 
+    // Schema bound to the given snapshot. Returns null when it cannot be resolved (e.g. legacy
+    // metadata without a per-snapshot schema id), in which case callers keep the current schema.
+    public static Schema getSnapshotSchema(org.apache.iceberg.Table table, long snapshotId) {
+        Snapshot snapshot = table.snapshot(snapshotId);
+        if (snapshot == null || snapshot.schemaId() == null) {
+            return null;
+        }
+        return table.schemas().get(snapshot.schemaId());
+    }
+
+    // Partition specs actually referenced by the snapshot's data manifests, keyed by spec id. This is
+    // the snapshot's partitioning view (Iceberg plans a snapshot from the specs attached to its
+    // manifests), which can differ from the current table spec after partition evolution. Returns null
+    // when the snapshot is unresolved. Reads only the manifest list, and only for time-travel reads.
+    public static Map<Integer, PartitionSpec> getSnapshotSpecs(org.apache.iceberg.Table table, long snapshotId) {
+        Snapshot snapshot = table.snapshot(snapshotId);
+        if (snapshot == null) {
+            return null;
+        }
+        // The spec never evolved: the only spec is the snapshot's spec; skip the manifest-list read.
+        if (table.specs().size() == 1) {
+            return table.specs();
+        }
+        Map<Integer, PartitionSpec> specsById = new HashMap<>();
+        for (ManifestFile manifest : snapshot.dataManifests(table.io())) {
+            PartitionSpec spec = table.specs().get(manifest.partitionSpecId());
+            if (spec == null) {
+                // A referenced spec is missing from the table metadata: treat the snapshot's
+                // partitioning as unknown (empty map reads as unpartitioned, the conservative view).
+                return Map.of();
+            }
+            specsById.put(manifest.partitionSpecId(), spec);
+        }
+        return specsById;
+    }
+
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
             if (version.getType() != DateType.DATETIME &&
@@ -1148,7 +1184,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Set<List<String>> scannedPartitions = new HashSet<>();
-        PartitionSpec spec = icebergTable.getNativeTable().spec();
+        // Use the read spec so the extracted values, the partition columns, and the evolution check
+        // below all derive from the same partitioning view (the snapshot's for time travel).
+        PartitionSpec spec = icebergTable.getReadSpec();
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         boolean existPartitionTransformedEvolution = ((IcebergTable) table).hasPartitionTransformedEvolution();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
@@ -1217,8 +1255,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         boolean enableCollectColumnStatistics = params.isEnableColumnStats();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
-        Types.StructType schema = nativeTbl.schema().asStruct();
-
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
         // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
         // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
@@ -1226,8 +1262,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1297,9 +1332,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
             PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                     scalarOperators, identityStringPartitionColumns(icebergTable));
-            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                    icebergTable.getNativeTable().schema().asStruct());
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+            Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
             if (residual.hasResidual()) {
                 baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
@@ -1507,13 +1540,30 @@ public class IcebergMetadata implements ConnectorMetadata {
         checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
+        // Force local planning for time-travel reads: the remote metadata-collection scanner
+        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
+        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
+        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
+        // metadata reader honors the snapshot schema/specs.
+        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode(connectContext), connectContext);
+                catalogName, dbName, tableName, planMode, connectContext);
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
+        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
+        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
+        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
+        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (icebergTable.isTimeTravelRead()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(nativeTbl.schema());
+        }
         Scan scan;
         IcebergMetricsReporter metricsReporter = icebergTable.getIcebergMetricsReporter();
         if (metricsReporter == null) {
@@ -1794,12 +1844,21 @@ public class IcebergMetadata implements ConnectorMetadata {
         // filter the returned delete files against their partition values StarRocks-side.
         PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
-                table.schema().asStruct());
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
+        Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
                 catalogName, dbName, tableName, PlanMode.LOCAL, ConnectContext.get());
+        // Bind the delete-file scan to the query's read schema, mirroring buildFileScanTaskIterator, so the
+        // pushed predicate (already converted against getReadSchema) and the file specs resolve against the
+        // same schema instead of the snapshot schema useSnapshot would otherwise fall back to:
+        //  - time-travel read: the targeted snapshot's schema;
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN is visible.
+        Snapshot currentSnapshot = table.currentSnapshot();
+        if (icebergTable.isTimeTravelRead()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(table.schema());
+        }
 
         TableScan scan = icebergCatalog.getTableScan(table, scanContext)
                 .useSnapshot(snapshotId)
@@ -1865,6 +1924,16 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.debug("failed to decode delete file partition values, keep file: {}", file.path(), e);
             return Collections.emptyMap();
         }
+    }
+
+    private Expression convertPredicate(IcebergTable icebergTable, ScalarOperator predicate) {
+        return convertPredicate(icebergTable, Utils.extractConjuncts(predicate));
+    }
+
+    private Expression convertPredicate(IcebergTable icebergTable, List<ScalarOperator> conjuncts) {
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
+                icebergTable.getReadSchema().asStruct());
+        return new ScalarOperatorToIcebergExpr().convert(conjuncts, icebergContext);
     }
 
     /**

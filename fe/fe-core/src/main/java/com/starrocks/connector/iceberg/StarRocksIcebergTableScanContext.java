@@ -20,6 +20,7 @@ import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.Schema;
 
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +40,10 @@ public class StarRocksIcebergTableScanContext {
     private boolean enableCacheDataFileIdentifierColumnMetrics;
     private long fileSplitSize;
     private ConnectContext connectContext;
+    // The schema the scan reads with: the targeted snapshot's schema for a time-travel read, or the
+    // current table schema for an ordinary read (so a metadata-only ADD COLUMN, which advances the
+    // schema without a new snapshot, is visible). Null means keep Iceberg's default per-snapshot schema.
+    private Schema readSchema;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
         this(catalogName, dbName, tableName, planMode, null);
@@ -142,5 +147,13 @@ public class StarRocksIcebergTableScanContext {
 
     public long getFileSplitSize() {
         return fileSplitSize;
+    }
+
+    public Schema getReadSchema() {
+        return readSchema;
+    }
+
+    public void setReadSchema(Schema readSchema) {
+        this.readSchema = readSchema;
     }
 }
