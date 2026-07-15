@@ -122,7 +122,7 @@ import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
 
 ### enable_gin_filter
 
-* **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Description**: Whether to utilize the [fulltext inverted index](../../table_design/indexes/inverted_index.md) during queries.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
@@ -166,7 +166,7 @@ import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
 
 ### enable_scan_datacache
 
-* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
 

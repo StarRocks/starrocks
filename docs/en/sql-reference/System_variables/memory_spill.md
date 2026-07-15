@@ -47,7 +47,7 @@ import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
 
 ### enable_spill_to_remote_storage
 
-* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: false
 * **Introduced in**: v3.3.0
 
@@ -195,7 +195,7 @@ This variable takes effect only when the variable `enable_spill` is set to `true
 
 ### spill_storage_volume
 
-* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
 * **Default**: Empty string
 * **Introduced in**: v3.3.0
 

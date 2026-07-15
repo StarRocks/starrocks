@@ -11,7 +11,7 @@ For how to view and set variables, see the [System variables overview](../System
 
 ### dynamic_overwrite
 
-* **Description**: Whether to enable the [Dynamic Overwrite](./sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) semantic for INSERT OVERWRITE with partitioned tables. Valid values:
+* **Description**: Whether to enable the [Dynamic Overwrite](../sql-statements/loading_unloading/INSERT.md#dynamic-overwrite) semantic for INSERT OVERWRITE with partitioned tables. Valid values:
   * `true`: Enables Dynamic Overwrite.
   * `false`: Disables Dynamic Overwrite and uses the default semantic.
 * **Default**: false
@@ -25,7 +25,7 @@ For how to view and set variables, see the [System variables overview](../System
 
 ### enable_insert_strict
 
-* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
 
 ### enable_load_profile
@@ -95,7 +95,7 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
   * `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved.
   * `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
 
-  For more information, see [UPDATE](sql-statements/table_bucket_part_index/UPDATE.md#partial-updates-in-column-mode-since-v31).
+  For more information, see [UPDATE](../sql-statements/table_bucket_part_index/UPDATE.md#partial-updates-in-column-mode-since-v31).
 * **Default**: auto
 * **Introduced in**: v3.1
 

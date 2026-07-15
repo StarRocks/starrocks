@@ -14,12 +14,12 @@ import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
 ### activate_all_roles_on_login (global)
 
 * **Description**: Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster.
-  * If enabled (`true`), all roles of the user are activated at user login. This takes precedence over the roles set by [SET DEFAULT ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md).
+  * If enabled (`true`), all roles of the user are activated at user login. This takes precedence over the roles set by [SET DEFAULT ROLE](../sql-statements/account-management/SET_DEFAULT_ROLE.md).
   * If disabled (`false`), the roles set by SET DEFAULT ROLE are activated.
 * **Default**: false
 * **Introduced in**: v3.0
 
-If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
+If you want to activate the roles assigned to you in a session, use the [SET ROLE](../sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
 ### allow_default_partition
 
@@ -474,7 +474,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_group_level_query_queue (global)
 
-* **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
+* **Description**: Whether to enable resource group-level [query queue](../../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
@@ -792,7 +792,7 @@ The commands affected by this variable are as follows:
 
 ### group_concat_max_len
 
-* **Description**: The maximum length of string returned by the [group_concat](sql-functions/string-functions/group_concat.md) function.
+* **Description**: The maximum length of string returned by the [group_concat](../sql-functions/string-functions/group_concat.md) function.
 * **Default**: 1024
 * **Min value**: 4
 * **Unit**: Characters

@@ -204,7 +204,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 ### enable_query_cache
 
-* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios).
+* **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../../using_starrocks/caching/query_cache.md#application-scenarios).
 * **Default**: false
 * **Introduced in**: v2.5
 
