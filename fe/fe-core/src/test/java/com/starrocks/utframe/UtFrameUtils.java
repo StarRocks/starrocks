@@ -134,6 +134,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
@@ -141,6 +142,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
@@ -165,6 +167,7 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -1016,6 +1019,16 @@ public class UtFrameUtils {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
                                 columnStatisticEntry.getValue());
+                Histogram histogram = columnStatisticEntry.getValue().getHistogram();
+                if (histogram != null) {
+                    String columnName = columnStatisticEntry.getKey();
+                    GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .addHistogramStatistics(replayTable, columnName, histogram);
+                    // register meta too, else CachedStatisticStorage.getHistogramStatistics gates the column out
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+                            0, replayTable.getId(), columnName, StatsConstants.AnalyzeType.HISTOGRAM,
+                            LocalDateTime.MIN, Maps.newHashMap()));
+                }
             }
         }
         return replaySql;

@@ -252,8 +252,9 @@ public class ColumnStatistic {
         }
 
         Builder builder = new Builder(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
-        if (!typeString.isEmpty()) {
-            builder.setType(StatisticType.valueOf(typeString));
+        StatisticType parsedType = parseTrailingStatisticType(typeString);
+        if (parsedType != null) {
+            builder.setType(parsedType);
         } else if (builder.build().isUnknownValue()) {
             builder.setType(StatisticType.UNKNOWN);
         }
@@ -264,6 +265,25 @@ public class ColumnStatistic {
         Preconditions.checkState(part.startsWith(label),
                 "Expected label %s but got: %s", label, part);
         return Double.parseDouble(part.substring(label.length()).trim());
+    }
+
+    // The tail may carry "COS: .."/"MCV: [..]" before the type token; take only the trailing enum
+    // so a dump with a histogram/collection-size no longer breaks StatisticType.valueOf on replay.
+    private static StatisticType parseTrailingStatisticType(String typeString) {
+        if (typeString == null) {
+            return null;
+        }
+        String trimmed = typeString.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        for (StatisticType statisticType : StatisticType.values()) {
+            String name = statisticType.name();
+            if (trimmed.equals(name) || trimmed.endsWith(" " + name)) {
+                return statisticType;
+            }
+        }
+        return null;
     }
 
     public static Builder builder() {
