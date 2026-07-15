@@ -1609,8 +1609,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());
         } finally {
-            // Do we really need that? because partition cache is associated with snapshotId
-            icebergCatalog.invalidatePartitionCache(dbName, tableName);
+            // Invalidate this FE's cached table after commit so a read-after-write sees the new snapshot.
+            tables.remove(TableIdentifier.of(dbName, tableName));
+            icebergCatalog.invalidateCache(dbName, tableName);
         }
     }
 
