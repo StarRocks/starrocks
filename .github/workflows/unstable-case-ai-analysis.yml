@@ -74,6 +74,15 @@ jobs:
             --limit "${{ inputs.limit || '10' }}" \
             --out "${WORK}/out"
 
+          # Surface the analysis directly on the run Summary page — this is the
+          # primary, always-visible output (no need to open OSS or download the
+          # artifact). analyze_unstable_cases.py writes analysis.md with each
+          # case in a <details> block (header stays visible collapsed), so it
+          # stays scannable and under GitHub's 1 MB step-summary cap.
+          if [ -f "${WORK}/out/analysis.md" ]; then
+            cat "${WORK}/out/analysis.md" >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
           # Publish to OSS (timestamped). Do NOT mask a failed upload with a
           # fake success URL — the report is this workflow's output. The report
           # dir is also attached as a run artifact (next step, always), so it is
@@ -82,12 +91,15 @@ jobs:
           TS=$(date -u +%Y%m%d-%H%M%S)
           OUT_OSS="oss://${bucket}/unstable-case-ai-analysis/${ch_branch}/${TS}/"
           if ${_oss} cp "${WORK}/out/analysis.html" "${OUT_OSS}analysis.html" -f \
-             && ${_oss} cp "${WORK}/out/analysis.json" "${OUT_OSS}analysis.json" -f; then
+             && ${_oss} cp "${WORK}/out/analysis.json" "${OUT_OSS}analysis.json" -f \
+             && ${_oss} cp "${WORK}/out/analysis.md"   "${OUT_OSS}analysis.md"   -f; then
             echo "AI analysis report: ${OUT_OSS}analysis.html"
-            echo "AI analysis report (OSS): ${OUT_OSS}analysis.html" >> "$GITHUB_STEP_SUMMARY" || true
+            echo "" >> "$GITHUB_STEP_SUMMARY" || true
+            echo "_Full report (html): ${OUT_OSS}analysis.html_" >> "$GITHUB_STEP_SUMMARY" || true
           else
             echo "::warning::OSS upload failed — report is attached as the 'ai-analysis-report' run artifact instead."
-            echo "OSS upload failed — download the 'ai-analysis-report' run artifact." >> "$GITHUB_STEP_SUMMARY" || true
+            echo "" >> "$GITHUB_STEP_SUMMARY" || true
+            echo "_OSS upload failed — download the 'ai-analysis-report' run artifact for the html report._" >> "$GITHUB_STEP_SUMMARY" || true
           fi
 
       - name: Upload report artifact (fallback, always)
