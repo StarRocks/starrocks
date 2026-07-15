@@ -23,6 +23,7 @@
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
+#include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -281,7 +282,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 #endif
     } else if (typeid(*this) == typeid(HiveTableSink)) {
         auto* hive_table_sink = down_cast<HiveTableSink*>(this);
-        RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(decompose_hive_table_sink_to_pipeline(*hive_table_sink, prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(TableFunctionTableSink)) {
         auto* table_function_table_sink = down_cast<TableFunctionTableSink*>(this);
         RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
