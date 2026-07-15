@@ -47,22 +47,33 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
      */
     class TracerContext implements AutoCloseable {
         private final ConnectContext savedConnectContext;
+        private final boolean connectContextSwapped;
 
         TracerContext(Tracers forkedTracers, ConnectContext connectContext) {
             Tracers.set(forkedTracers);
             if (connectContext != null) {
                 savedConnectContext = ConnectContext.get();
                 ConnectContext.set(connectContext);
+                connectContextSwapped = true;
             } else {
                 savedConnectContext = null;
+                connectContextSwapped = false;
             }
         }
 
         @Override
         public void close() {
             Tracers.close();
-            if (savedConnectContext != null) {
-                ConnectContext.set(savedConnectContext);
+            // Restore whenever a context was swapped in: on a pooled query-deploy worker the
+            // previous context is null, and skipping the restore would leave the query's
+            // ConnectContext (and every plan object it references) pinned in the worker's
+            // ThreadLocal indefinitely.
+            if (connectContextSwapped) {
+                if (savedConnectContext != null) {
+                    ConnectContext.set(savedConnectContext);
+                } else {
+                    ConnectContext.remove();
+                }
             }
         }
     }
