@@ -12,68 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/table_function_table_sink.h"
+#include "exec/data_sinks/table_function_table_sink_pipeline_builder.h"
 
-#include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
 #include "connector/file/file_chunk_sink.h"
+#include "data_sink/external/table_function_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
-#include "exec_primitive/data_sink.h"
 #include "exprs/expr.h"
-#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
-#include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks {
 
-TableFunctionTableSink::TableFunctionTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
-        : _pool(pool), _t_output_expr(t_exprs) {}
-
-TableFunctionTableSink::~TableFunctionTableSink() = default;
-
-Status TableFunctionTableSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::init(thrift_sink, state));
-    RETURN_IF_ERROR(prepare(state));
-    RETURN_IF_ERROR(open(state));
-    return Status::OK();
-}
-
-Status TableFunctionTableSink::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
-    std::stringstream title;
-    title << "TableFunctionTableSink (frag_id=" << state->fragment_instance_id() << ")";
-    _profile = _pool->add(new RuntimeProfile(title.str()));
-    return Status::OK();
-}
-
-Status TableFunctionTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
-    return Status::OK();
-}
-
-Status TableFunctionTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
-    return Status::OK();
-}
-
-Status TableFunctionTableSink::close(RuntimeState* state, const Status& exec_status) {
-    ExprExecutor::close(_output_expr_ctxs, state);
-    return Status::OK();
-}
-
-Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
-                                                     pipeline::PipelineBuilderContext* context) const {
+Status decompose_table_function_table_sink_to_pipeline(const TableFunctionTableSink& sink,
+                                                       pipeline::OpFactories prev_operators,
+                                                       const TDataSink& thrift_sink,
+                                                       pipeline::PipelineBuilderContext* context) {
     auto runtime_state = context->runtime_state();
     auto fragment_ctx = context->fragment_context();
-    auto output_exprs = this->get_output_expr();
+    auto output_exprs = sink.get_output_expr();
 
     DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
     DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
