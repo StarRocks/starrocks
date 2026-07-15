@@ -24,6 +24,7 @@
 #include "data_sink/tablet/multi_olap_table_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
 #include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
+#include "exec/data_sinks/table_function_table_sink_pipeline_builder.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -56,9 +57,9 @@
 #include "data_sink/exchange/multi_cast_data_stream_sink.h"
 #include "data_sink/external/mysql_table_sink.h"
 #include "data_sink/external/noop_sink.h"
+#include "data_sink/external/table_function_table_sink.h"
 #include "data_sink/result/memory_scratch_sink.h"
 #include "data_sink/result/result_sink.h"
-#include "exec/data_sinks/table_function_table_sink.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -285,7 +286,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         RETURN_IF_ERROR(decompose_hive_table_sink_to_pipeline(*hive_table_sink, prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(TableFunctionTableSink)) {
         auto* table_function_table_sink = down_cast<TableFunctionTableSink*>(this);
-        RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(decompose_table_function_table_sink_to_pipeline(*table_function_table_sink, prev_operators,
+                                                                        thrift_sink, context));
     } else if (typeid(*this) == typeid(DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);
