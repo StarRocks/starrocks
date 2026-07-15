@@ -293,32 +293,48 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                                     AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
                                     int64_t* garbage_data_size, const TabletRetainInfo& retain_info) {
     for (const auto& rowset : metadata.compaction_inputs()) {
-        if (retain_info.contains_rowset(rowset.id())) {
-            continue;
-        }
-
-        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-            const bool shared_file = is_shared_segment(rowset, i);
-            if (shared_file && shared_file_deleter != nullptr) {
-                RETURN_IF_ERROR(
-                        shared_file_deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
-            } else {
-                RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
+        // A rowset's segments share the rowset's creation version, so retain them together by
+        // rowset.version(). The one compaction path that would break this equality is lake
+        // partial-segment compaction, which carries OLDER segments forward into a higher-versioned
+        // output rowset, so rowset.version() overstates those carried segments' creation version. That
+        // path is config-gated (enable_lake_compaction_use_partial_segments, off by default), non-PK
+        // only, and being retired in favor of parallel compaction, so it is deliberately not
+        // special-cased here. CAUTION: if it is ever enabled, this can under-retain -- delete a carried
+        // segment that an older retained snapshot still needs -- and the fix is to give those carried
+        // segments their own persisted creation version to key on here instead of rowset.version().
+        if (!retain_info.retained_by_version(rowset.version(), metadata.version())) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment_meta = rowset.segment_metas(i);
+                const bool shared_file = is_shared_segment(rowset, i);
+                if (shared_file && shared_file_deleter != nullptr) {
+                    RETURN_IF_ERROR(shared_file_deleter->delete_file(join_path(base_dir, segment_meta.filename())));
+                } else {
+                    RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment_meta.filename())));
+                }
             }
+            // rowset.data_size() is the segment payload; count it toward reclaimed bytes only when the
+            // segments are actually deleted, so deleting only a del file (segments retained under a
+            // snapshot) does not inflate the metric. segment_metas may omit per-file size, so this
+            // stays a rowset-level estimate.
+            *garbage_data_size += rowset.data_size();
         }
 
+        // Del files can carry a version different from their rowset's: a cloud-native PK compaction
+        // transfers older del files onto a higher-versioned output rowset, so retain them per file.
         for (const auto& del_file : rowset.del_files()) {
+            if (retain_info.retained_by_version(del_file.version(), metadata.version())) {
+                continue;
+            }
             if (del_file.shared() && shared_file_deleter != nullptr) {
                 RETURN_IF_ERROR(shared_file_deleter->delete_file(join_path(base_dir, del_file.name())));
             } else {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, del_file.name())));
             }
         }
-        *garbage_data_size += rowset.data_size();
     }
 
     for (const auto& file : metadata.orphan_files()) {
-        if (retain_info.contains_file(file.name())) {
+        if (retain_info.retained_by_version(file.version(), metadata.version())) {
             continue;
         }
 
@@ -572,7 +588,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     int64_t max_vacuum_version = 0;
     for (auto& tablet_info : tablet_infos) {
         TabletRetainInfo tablet_retain_info;
-        RETURN_IF_ERROR(tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr));
+        tablet_retain_info.init(retain_versions);
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
