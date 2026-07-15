@@ -55,16 +55,13 @@ public class EditLogTest {
     }
 
     @Test
-    public void testWaitInfinityAbortsOnTerminalJournalFailure() {
-        // A journal task aborted with a terminal cause (writer sealed on demotion, not leader, or
-        // admission closed) can never succeed on retry. waitInfinity must unwind immediately with
-        // IllegalStateException instead of looping forever - regardless of leaderRoleState - so a stale
-        // committer cannot pin the locks it holds and stall the follower's journal replay. Before the
-        // fix this looped forever (retrying the permanently-failed task) whenever the node was not in
-        // the DEMOTING window.
+    public void testWaitForCommitThrowsOnAbort() {
+        // A journal task aborted before it committed can never succeed, so waitForCommit unwinds immediately
+        // with an (unchecked) EditLogException instead of retrying: a stale committer must not loop forever
+        // pinning the locks it holds and stalling the follower's journal replay.
         JournalTask task = new JournalTask(System.nanoTime(), new DataOutputBuffer(), -1);
         task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed"));
-        Assertions.assertThrows(IllegalStateException.class, () -> EditLog.waitInfinity(task));
+        Assertions.assertThrows(EditLogException.class, () -> EditLog.waitForCommit(task));
     }
 
     @Test

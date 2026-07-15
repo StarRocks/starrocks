@@ -28,15 +28,15 @@ import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Covers the EditLog leader WAL-apply fence: the write-admission gate (open/close, fixed-open by
- * construction), the count-all in-flight accounting, the WALApplier hook, and the demotion drain
- * (awaitWalDrained). The gate/fence lives entirely in EditLog, so these tests drive it directly via the
- * constructor gate state and openWalGate/closeWalGate, with no GlobalStateMgr state.
+ * construction), the count-all in-flight accounting, the WALApplier hook, the demotion drain
+ * (awaitWalDrained), and the single unchecked failure type EditLogException thrown by every write path.
+ * The gate/fence lives entirely in EditLog, so these tests drive it directly via the constructor gate state
+ * and openWalGate/closeWalGate, with no GlobalStateMgr state.
  */
 public class EditLogFailureVisibleTest {
 
@@ -45,9 +45,7 @@ public class EditLogFailureVisibleTest {
     @Test
     public void testGatedWriteRejectedWhenGateClosed() {
         EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), false);
-        JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
-        Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, e.getReason());
+        Assertions.assertThrows(EditLogException.class, () -> editLog.logJsonObject((short) 1, "x"));
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
@@ -55,9 +53,7 @@ public class EditLogFailureVisibleTest {
     public void testGatedWriteRejectedAfterCloseWalGate() {
         EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
         editLog.closeWalGate();
-        JournalWriteException e = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.logJsonObjectOrThrow((short) 1, "x", obj -> { }));
-        Assertions.assertEquals(JournalWriteException.Reason.ADMISSION_CLOSED, e.getReason());
+        Assertions.assertThrows(EditLogException.class, () -> editLog.logJsonObject((short) 1, "x"));
     }
 
     @Test
@@ -67,7 +63,7 @@ public class EditLogFailureVisibleTest {
         EditLog editLog = new EditLog(queue, true);
         AtomicBoolean applied = new AtomicBoolean(false);
         Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true));
+        editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true));
         consumer.join();
         Assertions.assertTrue(applied.get());
         Assertions.assertEquals(0, editLog.inFlightForTest());
@@ -117,7 +113,7 @@ public class EditLogFailureVisibleTest {
         AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread consumer = abortQueuedTaskAsync(queue);
-        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+        EditLogException exception = Assertions.assertThrows(EditLogException.class,
                 () -> editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true)));
         consumer.join();
 
@@ -127,32 +123,18 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testOrThrowAppliesOnSuccess() throws Exception {
+    public void testApplierFailurePropagatesAndReleasesFence() throws Exception {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue, true);
-        AtomicBoolean applied = new AtomicBoolean(false);
 
+        RuntimeException boom = new RuntimeException("apply boom");
         Thread consumer = succeedQueuedTaskAsync(queue);
-        editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true));
+        RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
+                () -> editLog.logJsonObject((short) 1, "payload", obj -> {
+                    throw boom;
+                }));
         consumer.join();
-
-        Assertions.assertTrue(applied.get());
-        Assertions.assertEquals(0, editLog.inFlightForTest());
-    }
-
-    @Test
-    public void testOrThrowDoesNotApplyOnAbort() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue, true);
-        AtomicBoolean applied = new AtomicBoolean(false);
-
-        Thread consumer = abortQueuedTaskAsync(queue);
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> editLog.logJsonObjectOrThrow((short) 1, "payload", obj -> applied.set(true)));
-        consumer.join();
-
-        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
-        Assertions.assertFalse(applied.get());
+        Assertions.assertSame(boom, thrown);
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
@@ -225,82 +207,41 @@ public class EditLogFailureVisibleTest {
         writer.join(5000);
     }
 
-    @Test
-    public void testApplierFailurePropagatesAndReleasesFence() throws Exception {
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
-        EditLog editLog = new EditLog(queue, true);
-
-        RuntimeException boom = new RuntimeException("apply boom");
-        Thread consumer = succeedQueuedTaskAsync(queue);
-        RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
-                () -> editLog.logJsonObject((short) 1, "payload", obj -> {
-                    throw boom;
-                }));
-        consumer.join();
-        Assertions.assertSame(boom, thrown);
-        Assertions.assertEquals(0, editLog.inFlightForTest());
-
-        // apply failures are not (yet) surfaced by the drain; the fence is released, so the drain returns.
-        editLog.awaitWalDrained(1000L);
-    }
-
-    // ---- static wait helpers (unchanged terminal/transient classification) ----
+    // ---- waitForCommit: responds to every failure with an unchecked EditLogException ----
 
     @Test
-    public void testWaitOrThrowPropagatesAbortReason() throws Exception {
+    public void testWaitForCommitReturnsOnSuccess() throws Exception {
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
-        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed"));
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task));
-        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
+        task.markSucceed();
+        EditLog.waitForCommit(task);
     }
 
     @Test
-    public void testWaitOrThrowWrapsUnknownAbortCause() throws Exception {
+    public void testWaitForCommitThrowsOnAbortReason() throws Exception {
+        JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
+        JournalWriteException cause =
+                new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer sealed");
+        task.markAbort(cause);
+
+        EditLogException e = Assertions.assertThrows(EditLogException.class, () -> EditLog.waitForCommit(task));
+        Assertions.assertSame(cause, e.getCause());
+    }
+
+    @Test
+    public void testWaitForCommitWrapsUnknownAbortCause() throws Exception {
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
         RuntimeException cause = new RuntimeException("boom");
         task.markAbort(cause);
 
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task));
-        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
-        Assertions.assertSame(cause, exception.getCause());
+        EditLogException e = Assertions.assertThrows(EditLogException.class, () -> EditLog.waitForCommit(task));
+        Assertions.assertSame(cause, e.getCause());
     }
 
     @Test
-    public void testWaitOrThrowRejectsAbortWithoutDetailedCause() throws Exception {
+    public void testWaitForCommitThrowsOnAbortWithoutCause() throws Exception {
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
         task.markAbort();
-
-        JournalWriteException exception = Assertions.assertThrows(JournalWriteException.class,
-                () -> EditLog.waitOrThrow(task));
-        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
-    }
-
-    @Test
-    public void testWaitInfinityStopsOnTerminalAbort() throws Exception {
-        JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
-        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                "journal commit failed while sealing"));
-
-        CountDownLatch finished = new CountDownLatch(1);
-        AtomicBoolean failedWithAbort = new AtomicBoolean(false);
-        Thread waiter = new Thread(() -> {
-            try {
-                EditLog.waitInfinity(task);
-            } catch (IllegalStateException e) {
-                failedWithAbort.set(e.getCause() instanceof JournalWriteException);
-            } finally {
-                finished.countDown();
-            }
-        });
-        waiter.setDaemon(true);
-        waiter.start();
-
-        Assertions.assertTrue(finished.await(1, TimeUnit.SECONDS),
-                "waitInfinity must stop after a terminal (WRITER_ABORTED) journal abort");
-        Assertions.assertTrue(failedWithAbort.get());
+        Assertions.assertThrows(EditLogException.class, () -> EditLog.waitForCommit(task));
     }
 
     private Thread abortQueuedTaskAsync(BlockingQueue<JournalTask> queue) {

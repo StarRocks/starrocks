@@ -34,7 +34,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
@@ -61,7 +60,6 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -1394,25 +1392,15 @@ public class EditLog {
     /**
      * Admit a leader write and count it in the fence; the caller MUST pair it with {@link #exitGate} in a
      * finally. The gate check and the inFlight increment are one atomic step under editLogFenceLock, mutually
-     * exclusive with closeWalGate, so demotion's drain is lossless. Throws ADMISSION_CLOSED when the gate is
-     * closed (this node is not the ACTIVE leader).
+     * exclusive with closeWalGate, so demotion's drain is lossless. Throws an (unchecked) EditLogException when
+     * the gate is closed (this node is not the ACTIVE leader).
      */
-    private void enterGate() throws JournalWriteException {
+    private void enterGate() {
         synchronized (editLogFenceLock) {
             if (!gateOpen) {
-                throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
-                        "leader WAL gate is closed, submit log is not allowed");
+                throw new EditLogException("leader WAL gate is closed, submit log is not allowed");
             }
             inFlight++;
-        }
-    }
-
-    /** enterGate for the legacy no-throw callers: a closed gate surfaces as an unchecked IllegalStateException. */
-    private void enterGateUnchecked() {
-        try {
-            enterGate();
-        } catch (JournalWriteException e) {
-            throw new IllegalStateException(e);
         }
     }
 
@@ -1503,7 +1491,7 @@ public class EditLog {
      * "submit here, wait elsewhere" pattern; the common case is logEdit / logJsonObject which wait inline.
      */
     public JournalTask submitLogNoWait(short op, Writable writable) {
-        enterGateUnchecked();
+        enterGate();
         boolean handedOff = false;
         try {
             JournalTask task = submitRawUninterruptibly(op, writable, -1);
@@ -1521,39 +1509,20 @@ public class EditLog {
      * submit log to queue, wait for JournalWriter
      */
     public void logEdit(short op, Writable writable) {
-        enterGateUnchecked();
+        enterGate();
         try {
-            waitInfinity(submitRawUninterruptibly(op, writable, -1));
+            waitForCommit(submitRawUninterruptibly(op, writable, -1));
         } finally {
             exitGate();
         }
     }
 
     private void logEdit(short op, Writable writable, WALApplier walApplier) {
-        enterGateUnchecked();
-        try {
-            waitWalCommitOrThrowUnchecked(submitRawUninterruptibly(op, writable, -1));
-            if (walApplier != null) {
-                walApplier.apply(writable);
-            }
-        } finally {
-            exitGate();
-        }
-    }
-
-    public void logJsonObjectOrThrow(short op, Object obj, WALApplier applier)
-            throws JournalWriteException, InterruptedException {
-        Writable writable = new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, GsonUtils.GSON.toJson(obj));
-            }
-        };
         enterGate();
         try {
-            waitOrThrow(submitRaw(op, writable, -1));
-            if (applier != null) {
-                applier.apply(obj);
+            waitForCommit(submitRawUninterruptibly(op, writable, -1));
+            if (walApplier != null) {
+                walApplier.apply(writable);
             }
         } finally {
             exitGate();
@@ -1579,9 +1548,9 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         };
-        enterGateUnchecked();
+        enterGate();
         try {
-            waitWalCommitOrThrowUnchecked(submitRawUninterruptibly(op, writable, -1));
+            waitForCommit(submitRawUninterruptibly(op, writable, -1));
             if (applier != null) {
                 applier.apply(obj);
             }
@@ -1590,120 +1559,30 @@ public class EditLog {
         }
     }
 
-    private static void waitWalCommitOrThrowUnchecked(JournalTask task) {
+    /**
+     * Wait for the JournalWriter to commit this task. Responds to every failure by throwing an (unchecked)
+     * {@link EditLogException}: an InterruptedException on this path only arrives once the node is already
+     * demoting/shutting down (BDB is no longer writable, so the write cannot commit), so we react to it rather
+     * than retrying a doomed write; a committed-then-aborted task and a false result likewise throw. The
+     * outcome therefore always matches what actually got committed, so an applier caller applies iff this
+     * returns normally.
+     */
+    public static void waitForCommit(JournalTask task) {
+        boolean result;
         try {
-            waitOrThrow(task);
-        } catch (JournalWriteException e) {
-            throw new IllegalStateException(e);
+            result = task.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while waiting for journal task", e);
-        }
-    }
-
-    /**
-     * wait for JournalWriter commit all logs
-     */
-    public static void waitInfinity(JournalTask task) {
-        long startTimeNano = task.getStartTimeNano();
-        boolean result;
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
-                }
-                // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such
-                // scenario JournalWriter will simply exit the whole process
-                result = task.get();
-                break;
-            } catch (InterruptedException e) {
-                if (shouldAbortWaitInfinity(e)) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException(
-                            "interrupted while waiting for journal task during leader demotion", e);
-                }
-                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
-                cnt++;
-            } catch (ExecutionException e) {
-                if (shouldAbortWaitInfinity(e)) {
-                    throw new IllegalStateException(
-                            "journal task aborted and cannot be retried (writer sealed on demotion, "
-                                    + "not leader, or admission closed)", getJournalWaitFailureCause(e));
-                }
-                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
-                cnt++;
-            }
-        }
-
-        // for now if journal writer fails, it will exit directly, so this property should always be true.
-        Preconditions.checkState(result);
-        if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
-        }
-    }
-
-    private static boolean shouldAbortWaitInfinity(Throwable throwable) {
-        // A journal task aborted with a terminal cause (writer sealed on demotion, node not leader,
-        // or admission closed) can never succeed on retry, so unwind immediately regardless of the
-        // current leader-role state. Otherwise a stale committer that observes the abort AFTER the
-        // demotion has completed (leaderRoleState flipped from DEMOTING back to INACTIVE, or the node
-        // was already re-elected) would retry the permanently-failed task forever, pinning any lock it
-        // holds (e.g. a table WRITE lock on the commit path) and stalling the follower's journal replay.
-        if (isTerminalJournalFailure(throwable)) {
-            return true;
-        }
-        // An interrupt raised while this node is demoting is a shutdown signal: stop retrying and unwind.
-        return GlobalStateMgr.getCurrentState().isLeaderDemoting()
-                && (throwable instanceof InterruptedException || throwable instanceof ExecutionException);
-    }
-
-    private static boolean isTerminalJournalFailure(Throwable throwable) {
-        Throwable cause = getJournalWaitFailureCause(throwable);
-        if (!(cause instanceof JournalWriteException)) {
-            return false;
-        }
-        JournalWriteException.Reason reason = ((JournalWriteException) cause).getReason();
-        return reason == JournalWriteException.Reason.WRITER_ABORTED
-                || reason == JournalWriteException.Reason.NOT_LEADER
-                || reason == JournalWriteException.Reason.ADMISSION_CLOSED;
-    }
-
-    private static Throwable getJournalWaitFailureCause(Throwable throwable) {
-        if (throwable instanceof ExecutionException && throwable.getCause() != null) {
-            return throwable.getCause();
-        }
-        return throwable;
-    }
-
-    public static void waitOrThrow(JournalTask task) throws JournalWriteException, InterruptedException {
-        long startTimeNano = task.getStartTimeNano();
-        boolean result;
-        try {
-            // Wait without a timeout: giving up early would not abort the underlying journal commit, so the
-            // write could still land while the caller skipped its WALApplier. The outcome must always match
-            // what actually got committed (success -> apply; abort -> throw), so we wait for the real result.
-            result = task.get();
+            throw new EditLogException("interrupted while waiting for journal task to commit", e);
         } catch (ExecutionException e) {
-            throw toJournalWriteException(e.getCause());
+            throw new EditLogException("journal task failed to commit", e.getCause());
         }
-
         if (!result) {
-            throw new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                    "journal task aborted without detailed cause");
+            throw new EditLogException("journal task aborted without a detailed cause");
         }
         if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - task.getStartTimeNano()) / 1000000);
         }
-    }
-
-    private static JournalWriteException toJournalWriteException(Throwable cause) {
-        if (cause instanceof JournalWriteException) {
-            return (JournalWriteException) cause;
-        }
-        return new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
-                "journal task aborted", cause);
     }
 
     public void logSaveNextId(long nextId, WALApplier walApplier) {
@@ -1835,7 +1714,7 @@ public class EditLog {
     }
 
     public JournalTask logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        // Submitted under a db lock but waited on outside it (EditLog.waitInfinity), so use the deferred-wait
+        // Submitted under a db lock but waited on outside it (EditLog.waitForCommit), so use the deferred-wait
         // submit that releases the WAL fence at durability rather than inline.
         return submitLogNoWait(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, new Writable() {
             @Override
