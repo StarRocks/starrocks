@@ -647,7 +647,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
 
             useAggregatePublish = table.isFileBundling();
-            Set<Long> publishedNormalIndexIds = Sets.newHashSet();
+            Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 computeResource = txnState.getComputeResource();
@@ -672,7 +672,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
                         normalTablets.addAll(index.getTablets());
-                        publishedNormalIndexIds.add(index.getId());
+                        // Key by metaId, not physical index id: a tablet reshard (split/merge)
+                        // replaces an index with a new physical id but the SAME metaId. Keying by
+                        // physical id would make carry-forward treat the reshard'd base index as
+                        // "untouched" and re-publish its child tablets as no-op normal tablets while
+                        // they are also cross-published from their parent -- the two tasks then
+                        // self-collide on the per-tablet publish lock and wedge the partition.
+                        publishedNormalIndexMetaIds.add(index.getMetaId());
                     }
                 }
             }
@@ -685,7 +691,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (useAggregatePublish) {
                 carryForwardTablets = collectFileBundlingCarryForwardTablets(
                         partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
-                        publishedNormalIndexIds);
+                        publishedNormalIndexMetaIds);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1112,7 +1118,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
             baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
-            Set<Long> publishedNormalIndexIds = Sets.newHashSet();
+            Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameByMetaId(index.getMetaId()), txnId);
@@ -1124,7 +1130,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } else {
                     normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
                     normalTablets.addAll(index.getTablets());
-                    publishedNormalIndexIds.add(index.getId());
+                    // Key by metaId (not physical index id) so a reshard'd index is still recognized
+                    // as touched -- see collectFileBundlingCarryForwardTablets and the sibling site above.
+                    publishedNormalIndexMetaIds.add(index.getMetaId());
                 }
             }
             // File bundling stores the metadata of ALL tablets of a partition version in a single bundle
@@ -1139,7 +1147,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (useAggregatePublish) {
                 carryForwardTablets = collectFileBundlingCarryForwardTablets(
                         partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
-                        publishedNormalIndexIds);
+                        publishedNormalIndexMetaIds);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1199,7 +1207,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     // For file bundling only: from the partition's currently-visible indexes, return the tablets of every
-    // NORMAL index that this transaction did not touch (i.e. whose index id is not in publishedNormalIndexIds).
+    // NORMAL index that this transaction did not touch (i.e. whose index metaId is not in publishedNormalIndexMetaIds).
     // These must be carried forward (empty version bump) into the new version's bundle so it stays a complete
     // whole-partition snapshot; otherwise a transaction with a stale index view (notably lake compaction
     // whose loaded-index set is snapshotted at txn begin, before a rollup/MV index became visible) would
@@ -1207,11 +1215,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // needs carrying forward (e.g. a normal load already covers every visible index). Caller must hold the
     // table read lock while obtaining visibleIndexes.
     static List<Tablet> collectFileBundlingCarryForwardTablets(List<MaterializedIndex> visibleIndexes,
-                                                               Set<Long> publishedNormalIndexIds) {
+                                                               Set<Long> publishedNormalIndexMetaIds) {
         List<Tablet> carryForwardTablets = null;
         for (MaterializedIndex index : visibleIndexes) {
             if (index.getState() == MaterializedIndex.IndexState.SHADOW
-                    || publishedNormalIndexIds.contains(index.getId())) {
+                    || publishedNormalIndexMetaIds.contains(index.getMetaId())) {
                 continue;
             }
             carryForwardTablets = (carryForwardTablets == null) ? Lists.newArrayList() : carryForwardTablets;
