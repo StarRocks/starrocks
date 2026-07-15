@@ -28,7 +28,9 @@
 #include "base/testutil/assert.h"
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
+#include "exprs/udf/python/callstub.h"
 #include "platform/python/env.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -123,10 +125,55 @@ TEST_F(PyWorkerManagerEnvTest, fork_py_worker_closes_inherited_descriptors) {
     ASSERT_GE(_leaked_fd, 100);
     ASSERT_NO_FATAL_FAILURE(create_fake_python_env());
 
-    std::unique_ptr<PyWorker> child_process;
+    std::unique_ptr<LocalPyWorker> child_process;
     ASSERT_OK(PyWorkerManager::getInstance()._fork_py_worker(&child_process));
     ASSERT_NE(nullptr, child_process);
     child_process->terminate_and_wait();
+}
+
+// A RemotePyWorker (external-worker/service_url mode) has no local process lifecycle: it must never
+// kill a process or unlink a socket file it does not own, and its lifecycle hooks must be safe no-ops.
+TEST_F(PyWorkerManagerEnvTest, remote_worker_has_no_process_lifecycle) {
+    auto sentinel = std::filesystem::path(config::local_library_dir) / "pyworker_-1";
+    {
+        std::ofstream f(sentinel);
+        f << "keep";
+    }
+    ASSERT_TRUE(std::filesystem::exists(sentinel));
+
+    auto worker = std::make_shared<RemotePyWorker>("grpc+tcp://example:8815");
+    ASSERT_EQ("grpc+tcp://example:8815", worker->url());
+    ASSERT_FALSE(worker->is_dead());
+    ASSERT_FALSE(worker->expired());
+    worker->touch();                 // no-op
+    worker->terminate_and_wait();    // must be a no-op, not crash / not signal any process
+    worker->mark_dead();
+    ASSERT_TRUE(worker->is_dead());
+    worker.reset();                  // destructor must not touch any process or socket
+
+    ASSERT_TRUE(std::filesystem::exists(sentinel)) << "a remote worker must never unlink a socket file";
+}
+
+// The Flight descriptor must carry the zip checksum (so an external worker can verify a package it
+// downloads itself), but must NOT carry service_url (that is BE-side routing only).
+TEST_F(PyWorkerManagerEnvTest, descriptor_serializes_checksum_not_service_url) {
+    PyFunctionDescriptor desc;
+    desc.driver_id = 0;
+    desc.symbol = "echo";
+    desc.location = "inline";
+    desc.input_type = "scalar";
+    desc.content = "def echo(x): return x";
+    desc.service_url = "grpc+tcp://example:8815";
+    desc.checksum = "deadbeefchecksum";
+    desc.return_type = TYPE_INT_DESC;
+
+    auto json = desc.to_json_string();
+    ASSERT_OK(json.status());
+    const std::string& s = json.value();
+    EXPECT_NE(std::string::npos, s.find("\"checksum\""));
+    EXPECT_NE(std::string::npos, s.find("deadbeefchecksum"));
+    EXPECT_NE(std::string::npos, s.find("\"content\""));
+    EXPECT_EQ(std::string::npos, s.find("service_url"));
 }
 
 } // namespace starrocks
