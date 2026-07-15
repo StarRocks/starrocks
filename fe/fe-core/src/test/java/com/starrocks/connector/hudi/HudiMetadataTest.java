@@ -17,6 +17,7 @@ package com.starrocks.connector.hudi;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -136,7 +137,7 @@ public class HudiMetadataTest {
                 () -> hudiMetadata.getTable(new ConnectContext(), "db1", "table1"));
         String expectedPrefix = "Failed to get hudi table hive_catalog.db1.table1";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 
     @Test

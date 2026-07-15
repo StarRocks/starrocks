@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class LogUtil {
@@ -227,13 +228,39 @@ public class LogUtil {
 
     public static String getUnwoundExceptionMessage(Throwable e) {
         final int maxDepth = 20;
-        List<Throwable> result = unwindException(e, maxDepth);
-        StringBuilder sb = new StringBuilder();
-        for (Throwable t : result) {
+        List<Throwable> unwound = unwindException(e, maxDepth);
+        // Some call sites re-wrap an exception into a different type purely for classification
+        // purposes (e.g. `new AnalysisException(semanticException.getMessage(), semanticException)`),
+        // carrying the same message forward unchanged. Collapse those adjacent duplicates so they
+        // don't show up twice, and so a message that was never really "unwound" doesn't get a
+        // class-name prefix it never had before.
+        List<Throwable> result = new ArrayList<>();
+        String prevMsg = null;
+        for (Throwable t : unwound) {
             String msg = t.getMessage();
-            sb.append(t.getClass().getSimpleName());
-            if (msg != null && !msg.isEmpty()) {
-                sb.append(": ").append(msg);
+            if (result.isEmpty() || !Objects.equals(msg, prevMsg)) {
+                result.add(t);
+            }
+            prevMsg = msg;
+        }
+        if (result.size() <= 1) {
+            return e.getMessage();
+        }
+        // The outermost layer is usually a generic internal wrapper (e.g. StarRocksConnectorException,
+        // AnalysisException) whose class name carries no value to the user; only deeper layers reveal
+        // which underlying system actually failed, so only those get a class-name prefix.
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < result.size(); i++) {
+            Throwable t = result.get(i);
+            String msg = t.getMessage();
+            if (i > 0) {
+                sb.append(t.getClass().getSimpleName());
+                if (msg != null && !msg.isEmpty()) {
+                    sb.append(": ");
+                }
+            }
+            if (msg != null) {
+                sb.append(msg);
             }
             sb.append("\n");
         }

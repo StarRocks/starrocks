@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
@@ -266,7 +267,7 @@ public class CachingIcebergCatalogTest {
                 () -> cachingIcebergCatalog.getTable(connectContext, "test", "table"));
         String expectedPrefix = "Failed to get iceberg table iceberg_catalog.test.table";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 
     private int getStaticIntField(String fieldName) {
