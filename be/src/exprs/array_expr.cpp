@@ -70,6 +70,13 @@ public:
         }
 
         auto ptr = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+        // Flattening all children into one element column may exceed the 4GB capacity of
+        // BinaryColumn's uint32 offsets within a single chunk, which would silently wrap
+        // and corrupt the data. Fail the query instead.
+        if (auto st = ptr->capacity_limit_reached(); !st.ok()) {
+            return Status::CapacityLimitExceed("array constructor result exceeds column capacity limit, " +
+                                               std::string(st.message()));
+        }
         if (all_const) {
             return ConstColumn::create(std::move(ptr), output_rows);
         }
