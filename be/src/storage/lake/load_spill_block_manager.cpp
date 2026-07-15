@@ -88,6 +88,16 @@ LoadSpillBlockManager::~LoadSpillBlockManager() {
 }
 
 Status LoadSpillBlockManager::clear_parent_path() {
+    // Skip cleanup if no remote block was ever acquired: a purely local spill never creates the
+    // remote parent directory, so acquiring a dir and issuing a remote delete would be wasted work.
+    if (!_used_remote_block.load(std::memory_order_relaxed)) {
+        return Status::OK();
+    }
+    // Release all spill blocks first. Their backing files are removed synchronously by
+    // ~FileBlockContainer() (which was created with skip_parent_path_deletion=true, so it only
+    // deletes the block file, not the parent dir). Without this, delete_dir() below runs while the
+    // block files still exist, sees a non-empty directory, and leaves an orphaned <load_id>/ dir marker.
+    _block_container.reset();
     // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
     Status status = Status::OK();
     if (_remote_dir_manager != nullptr) {
@@ -149,7 +159,13 @@ StatusOr<spill::BlockPtr> LoadSpillBlockManager::acquire_block(size_t block_size
     // Defer parent path deletion to LoadSpillBlockManager::~LoadSpillBlockManager(),
     // so the directory is only removed after all spill files have been cleaned up.
     opts.skip_parent_path_deletion = true;
-    return _block_manager->acquire_block(opts);
+    ASSIGN_OR_RETURN(auto block, _block_manager->acquire_block(opts));
+    if (block->is_remote()) {
+        // Remember that at least one remote block exists so clear_parent_path() knows the remote
+        // parent directory may need cleanup.
+        _used_remote_block.store(true, std::memory_order_relaxed);
+    }
+    return block;
 }
 
 // return Block to BlockManager
