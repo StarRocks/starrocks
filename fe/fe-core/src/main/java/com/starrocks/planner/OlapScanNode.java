@@ -1681,6 +1681,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
+
+        if (sample != null && sample.isUseSampling()) {
+            TTableSampleOptions sampleOptions = new TTableSampleOptions();
+            sample.toThrift(sampleOptions);
+            scanNode.setSample_options(sampleOptions);
+        }
+
         planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);

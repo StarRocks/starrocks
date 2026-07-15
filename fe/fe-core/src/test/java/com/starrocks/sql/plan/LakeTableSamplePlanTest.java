@@ -29,6 +29,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+
 public class LakeTableSamplePlanTest {
     private static ConnectContext connectContext;
 
@@ -43,6 +45,16 @@ public class LakeTableSamplePlanTest {
                 .withTable("CREATE TABLE lake_sample_test.t0 (c0 INT) " +
                         "DUPLICATE KEY(c0) " +
                         "DISTRIBUTED BY HASH(c0) BUCKETS 1");
+    }
+
+    private ByteBuffer getCacheDigest(String sql) throws Exception {
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+
+        return execPlan.getFragments().stream()
+                .filter(fragment -> fragment.getCacheParam() != null)
+                .map(fragment -> ByteBuffer.wrap(fragment.getCacheParam().getDigest()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("query cache was not enabled for: " + sql));
     }
 
     @Test
@@ -71,5 +83,36 @@ public class LakeTableSamplePlanTest {
         Assertions.assertTrue(sampleOptions.isSetProbability_percent_v2());
         Assertions.assertEquals(
                 0.5, sampleOptions.getProbability_percent_v2(), 0.000001);
+    }
+
+    @Test
+    public void testSampleOptionsAffectQueryCacheDigest() throws Exception {
+        String savedSessionVariables = connectContext.getSessionVariable().getJsonString();
+
+        try {
+            connectContext.getSessionVariable().setEnablePipelineEngine(true);
+            connectContext.getSessionVariable().setEnableQueryCache(true);
+            connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+
+            String baselineSql = "SELECT sum(c0) FROM t0 " +
+                    "SAMPLE('method'='by_block', 'seed'='7', 'percent'='0.5')";
+
+            ByteBuffer baseline = getCacheDigest(baselineSql);
+
+            Assertions.assertEquals(baseline, getCacheDigest(baselineSql));
+
+            Assertions.assertNotEquals(baseline, getCacheDigest(
+                    "SELECT sum(c0) FROM t0 " +
+                            "SAMPLE('method'='by_block', 'seed'='8', 'percent'='0.5')"));
+            Assertions.assertNotEquals(baseline, getCacheDigest(
+                    "SELECT sum(c0) FROM t0 " +
+                            "SAMPLE('method'='by_page', 'seed'='7', 'percent'='0.5')"));
+            Assertions.assertNotEquals(baseline, getCacheDigest(
+                    "SELECT sum(c0) FROM t0 " +
+                            "SAMPLE('method'='by_block', 'seed'='7', 'percent'='1')"));
+
+        } finally {
+            connectContext.getSessionVariable().replayFromJson(savedSessionVariables);
+        }
     }
 }
