@@ -189,13 +189,24 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ubuntu
           _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
-          _base="oss://starrocks-ci-release/${BRANCH}/Release/inspection/pr/ubuntu"
-          # Sort by modification time (line starts with date), take latest BE to get the commit SHA
-          LATEST_SHA=$(${_oss} ls "${_base}/" | grep "\-BE\.tar\.gz" | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
-          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package found for branch ${BRANCH}" && exit 1
-          SHORT_SHA=${LATEST_SHA:0:7}
-          BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/StarRocks-${SHORT_SHA}-BE.tar.gz"
-          FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/StarRocks-${SHORT_SHA}-FE.tar.gz"
+          # Deploy the LATEST per-PR build under Release/pr/ (NOT Release/inspection/).
+          # The per-PR CI publishes the real product build here for BOTH repos —
+          # starrocks-ci-release/.../StarRocks-*.tar.gz and
+          # celerdata-ci-release/.../CelerData-*.tar.gz. The old code hardcoded
+          # starrocks-ci-release + the inspection path; on CelerData that deployed
+          # a StarRocks COMMUNITY binary (inspection-pipeline never populates
+          # CelerData's inspection dir), so enterprise-only cases could never
+          # recover. Derive the bucket from the owner, pick the newest BE tar by
+          # upload time, and derive its FE sibling from the same path — product
+          # name and PR-dir are taken straight from the object key, so this is
+          # owner/product-agnostic.
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          _base="oss://${bucket}/${BRANCH}/Release/pr/ubuntu"
+          # ossutil ls lines start with the upload date, so `sort -r` = newest first.
+          BE_OUTPUT_TAR=$(${_oss} ls "${_base}/" | grep -E '/be/.*-BE\.tar\.gz' | sort -r | head -1 | awk '{print $NF}')
+          [[ -z "${BE_OUTPUT_TAR}" ]] && echo "::error::No package found under ${_base}/" && exit 1
+          FE_OUTPUT_TAR=$(echo "${BE_OUTPUT_TAR}" | sed -e 's#/be/#/fe/#' -e 's#-BE\.tar\.gz#-FE.tar.gz#')
           echo "Inspection commit: ${LATEST_SHA}"
           echo "BE: ${BE_OUTPUT_TAR}"
           echo "FE: ${FE_OUTPUT_TAR}"
