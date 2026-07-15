@@ -851,6 +851,12 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
+        // BM25 score() pushdown: topk=0 means every matched row is scored (no LIMIT
+        // pushdown, e.g. when a post-scan predicate follows the MATCH).
+        if (bm25ScoreSlotId >= 0) {
+            output.append(prefix).append("BM25SCORE: ON, topk=").append(bm25ScoreLimit).append("\n");
+        }
+
         if (detailLevel != TExplainLevel.VERBOSE) {
             if (isPreAggregation) {
                 output.append(prefix).append("PREAGGREGATION: ON").append("\n");
