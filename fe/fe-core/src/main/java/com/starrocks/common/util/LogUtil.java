@@ -27,9 +27,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 
 import java.lang.management.ThreadInfo;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class LogUtil {
@@ -196,5 +199,84 @@ public class LogUtil {
         } else if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ') {
             sb.append(" ");
         }
+    }
+
+    public static List<Throwable> unwindException(Throwable e, int maxDepth) {
+        List<Throwable> result = new ArrayList<>();
+        for (int i = 0; i < maxDepth; i++) {
+            if (e == null) {
+                break;
+            }
+            boolean skip = true;
+            Throwable parent = null;
+            if (e instanceof InvocationTargetException) {
+                parent = ((InvocationTargetException) e).getTargetException();
+            } else {
+                parent = e.getCause();
+                // A layer contributes nothing beyond its cause when either:
+                //  - it has no message of its own (e.g. `new Foo(null, cause)`), or
+                //  - its message is just the JDK default `Throwable(Throwable cause)` ctor's
+                //    `cause.toString()` (e.g. ErrorReport.wrapWithRuntimeException's bare
+                //    `new RuntimeException(ddlException)`, used purely to smuggle a checked
+                //    exception past a signature that can't declare one).
+                // Unpeel such layers instead of showing the same text twice.
+                skip = parent != null && (e.getMessage() == null || Objects.equals(e.getMessage(), parent.toString()));
+            }
+            if (!skip) {
+                result.add(e);
+            }
+            if (parent == e) {
+                break;
+            }
+            e = parent;
+        }
+        return result;
+    }
+
+    public static String getUnwoundExceptionMessage(Throwable e) {
+        final int maxDepth = 20;
+        List<Throwable> unwound = unwindException(e, maxDepth);
+        // Some call sites re-wrap an exception into a different type purely for classification
+        // purposes (e.g. `new AnalysisException(semanticException.getMessage(), semanticException)`),
+        // carrying the same message forward unchanged. Collapse those adjacent duplicates so they
+        // don't show up twice, and so a message that was never really "unwound" doesn't get a
+        // class-name prefix it never had before.
+        List<Throwable> result = new ArrayList<>();
+        String prevMsg = null;
+        for (Throwable t : unwound) {
+            String msg = t.getMessage();
+            if (result.isEmpty() || !Objects.equals(msg, prevMsg)) {
+                result.add(t);
+            }
+            prevMsg = msg;
+        }
+        if (result.isEmpty()) {
+            return e.getMessage();
+        }
+        if (result.size() == 1) {
+            // e itself may have been unpeeled away as a content-free wrapper; report the surviving
+            // layer's own message rather than the original (possibly now-irrelevant) top-level message.
+            return result.get(0).getMessage();
+        }
+        // The outermost layer is usually a generic internal wrapper (e.g. StarRocksConnectorException,
+        // AnalysisException) whose class name carries no value to the user; only deeper layers reveal
+        // which underlying system actually failed, so only those get a class-name prefix.
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < result.size(); i++) {
+            Throwable t = result.get(i);
+            String msg = t.getMessage();
+            if (i > 0) {
+                sb.append(t.getClass().getSimpleName());
+                if (msg != null && !msg.isEmpty()) {
+                    sb.append(": ");
+                }
+            }
+            if (msg != null) {
+                sb.append(msg);
+            }
+            sb.append("\n");
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        return sb.toString();
     }
 }

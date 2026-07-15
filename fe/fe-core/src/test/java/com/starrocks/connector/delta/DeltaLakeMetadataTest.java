@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -215,8 +216,7 @@ public class DeltaLakeMetadataTest {
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, null,
-                        new MetastoreTable("db1", "table1", "path/to/table",
-                        123));
+                        new MetastoreTable("db1", "table1", "path/to/table", 123));
             }
         };
         DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
@@ -241,7 +241,7 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_sem", "tbl_sem"));
-        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("semantic detail message"));
     }
 
     @Test
@@ -259,9 +259,9 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_io", "tbl_io"));
-        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        String expectedPrefix = "Failed to get Delta Lake table delta0.db_io.tbl_io";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 
     @Test
