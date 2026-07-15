@@ -29,7 +29,7 @@ Inter-backend exchange sink implementations over compute data-stream services, e
 - Remediation: Keep exchange sending in DataSinkExchange over compute data-stream and lower contracts; keep pipeline composition, storage, and service/bootstrap behavior outside this module.
 
 ### DataSinkExternal (`datasinkexternal`)
-Export, MySQL, schema, blackhole, and no-op sinks over reusable file builders, formats, filesystem, execution contracts, and runtime helpers without full Exec or concrete Storage coupling.
+Export, MySQL, Hive, schema, blackhole, and no-op sinks over reusable file builders, formats, filesystem, execution contracts, and runtime helpers without full Exec or concrete Storage coupling.
 - Targets: `DataSinkExternal`
 - Allowed internal include prefixes: `data_sink/external/`, `data_sink/file/`, `storage_primitive/`, `exec_primitive/`, `formats/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `DataSinkFile`, `StoragePrimitive`, `ExecPrimitive`, `FormatCore`, `FormatCsv`, `Expr`, `Runtime`, `Platform`, `FileSystem`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
