@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -357,6 +358,9 @@ public class LakeRangeRollupJobTest {
 
         // Configure a non-default compression level so the create task must carry it through, not level 0.
         table.setCompressionLevel(7);
+        // A flat-json config so the create task must carry it through (the per-tablet metadata replaces
+        // the shared base template that would otherwise have supplied it).
+        table.setFlatJsonConfig(new FlatJsonConfig(true, 0.5, 0.5, 100));
 
         List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         Column colK1 = baseSchema.get(0);
@@ -396,6 +400,12 @@ public class LakeRangeRollupJobTest {
             // carry the table's configured level (7), not the builder default (0).
             assertEquals(7, req.getCompression_level(),
                     "create task must carry the table's configured compression level, not the default");
+            // The per-tablet metadata replaces the shared base template, so it must carry the table's
+            // flat-json config; without it a flat-json-enabled table's shadow tablets lose the derivation.
+            assertTrue(req.isSetFlat_json_config(),
+                    "create task must carry the table's flat-json config");
+            assertTrue(req.getFlat_json_config().isFlat_json_enable(),
+                    "flat-json config must reflect the table's enabled setting");
         }
     }
 

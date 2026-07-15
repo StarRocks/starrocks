@@ -235,6 +235,36 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         plan.shadowIndex = shadowIndex;
     }
 
+    @Override
+    protected List<Column> getShadowSchema() {
+        return newSchema;
+    }
+
+    @Override
+    protected KeysType getShadowKeysType() {
+        return newKeysType;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyIdxes() {
+        return newSortKeyIdxes;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyUniqueIds() {
+        return newSortKeyUniqueIds;
+    }
+
+    @Override
+    protected short getShadowShortKeyColumnCount() {
+        return shadowShortKeyColumnCount;
+    }
+
+    @Override
+    protected String shadowKindLabel() {
+        return "range-rewrite";
+    }
+
     /**
      * Idempotently register the shadow index's {@link MaterializedIndexMeta} (schema, keysType,
      * sort-key indexes) on the table. Re-runnable on replay: {@code setIndexMeta} overwrites the

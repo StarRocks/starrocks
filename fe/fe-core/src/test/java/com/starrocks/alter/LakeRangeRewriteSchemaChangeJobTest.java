@@ -14,11 +14,13 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MvId;
@@ -32,14 +34,23 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
@@ -88,6 +99,25 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "t_range");
+
+        // createShadowTabletMetadata now writes each shadow tablet's version-1 metadata via a
+        // CreateReplicaTask, so the runPendingJob state-machine tests below must resolve a compute node and
+        // must not perform a real send/wait round-trip. Resolve every tablet to an alive node and no-op the
+        // send/wait; the dedicated createShadowTabletMetadata tests override these as needed.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                ComputeNode cn = new ComputeNode(1000L, "127.0.0.1", 9050);
+                cn.setAlive(true);
+                return cn;
+            }
+        };
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public static void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                    MarkedCountDownLatch<Long, Long> countDownLatch, long timeoutSeconds) {
+            }
+        };
     }
 
     @AfterEach
@@ -127,6 +157,128 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         return new Tuple(List.of(
                 Variant.of(IntegerType.INT, Integer.toString(k2)),
                 Variant.of(IntegerType.INT, Integer.toString(k1))));
+    }
+
+    /**
+     * Builds a job whose new sort key is the single column k2 (arity 1), narrower than the base
+     * (k1, k2) (arity 2) -- the arity-changing rewrite whose shadow tablets must persist the new arity.
+     */
+    private LakeRangeRewriteSchemaChangeJob newSingleColumnJob(Sampler sampler) {
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
+                jobId, db.getId(), table.getId(), table.getName(), 3600_000L);
+        // New schema = base schema (column set unchanged); new sort key = the single column k2.
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        job.setNewSchema(new ArrayList<>(baseSchema));
+        job.setNewKeysType(KeysType.DUP_KEYS);
+        // k2 is at index 1 in the unchanged schema (k1, k2, v1) -> new sort key idxes = [1], arity 1.
+        job.setNewSortKeyIdxes(List.of(1));
+        job.setNewSortKeyColumns(List.of(baseSchema.get(1)));
+        job.setShadowIndex(shadowIndexMetaId, table.getBaseIndexMetaId(),
+                SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName(), (short) 1);
+        job.setSampler(sampler);
+        return job;
+    }
+
+    /** Create a PendingPartitionPlan for the first physical partition of the test table. */
+    private PendingPartitionPlan newPendingPlan(PhysicalPartition physicalPartition) {
+        MaterializedIndex baseIndex = physicalPartition.getLatestIndex(table.getBaseIndexMetaId());
+        return new PendingPartitionPlan(
+                physicalPartition.getId(),
+                baseIndex,
+                baseIndex.getShardGroupId(),
+                table.getPartition(physicalPartition.getParentId()).getName(),
+                baseIndex.getDataSize(),
+                table.getName(),
+                physicalPartition);
+    }
+
+    @Test
+    public void testCreateShadowTabletMetadataEmitsRewriteSchema() throws Exception {
+        // A non-default compression level so the create task must carry it through, not level 0.
+        table.setCompressionLevel(7);
+        // A flat-json config so the create task must carry it through (the per-tablet metadata replaces
+        // the shared base template that would otherwise have supplied it).
+        table.setFlatJsonConfig(new FlatJsonConfig(true, 0.5, 0.5, 100));
+
+        // Rewrite to the single column k2 (arity 1), narrower than the base (k1, k2) (arity 2).
+        LakeRangeRewriteSchemaChangeJob job = newSingleColumnJob(stubSampler(List.of()));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        Assertions.assertNotNull(plan.shadowIndex);
+        Assertions.assertTrue(plan.shadowIndex.getTablets().size() >= 1);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AgentBatchTask batchTask = job.buildShadowTabletCreateTasks(table, List.of(plan), latch);
+
+        List<AgentTask> tasks = batchTask.getAllTasks();
+        Assertions.assertEquals(plan.shadowIndex.getTablets().size(), tasks.size(),
+                "one CreateReplicaTask per range-rewrite shadow tablet");
+        List<Integer> baseSortKeyIdxes = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSortKeyIdxes();
+        Assertions.assertEquals(2, baseSortKeyIdxes.size(), "base index sort key must be (k1, k2), arity 2");
+
+        for (AgentTask agentTask : tasks) {
+            Assertions.assertInstanceOf(CreateReplicaTask.class, agentTask);
+            TCreateTabletReq req = ((CreateReplicaTask) agentTask).toThrift();
+            // The emitted tablet schema is the new one: single-column sort key [1] (k2), NOT the base's
+            // (k1, k2) arity 2. Asserting [1] proves both the new arity and the correct column.
+            Assertions.assertEquals(List.of(1), req.getTablet_schema().getSort_key_idxes(),
+                    "shadow tablet must carry the new sort-key indexes (k2 -> [1]), not the base's (k1, k2)");
+            Assertions.assertEquals(job.getShadowIndexMetaId(), req.getTablet_schema().getId(),
+                    "tablet schema id must be the shadow index meta id");
+            // Per-tablet version-1 metadata (optimization off) so the base's shared template is not used.
+            Assertions.assertFalse(req.isEnable_tablet_creation_optimization(),
+                    "tablet-creation optimization must be off so per-tablet metadata is written");
+            // The compute node overwrites the schema's compression level with this request field, so it
+            // must carry the table's configured level (7), not the builder default (0).
+            Assertions.assertEquals(7, req.getCompression_level(),
+                    "create task must carry the table's configured compression level, not the default");
+            // The per-tablet metadata replaces the shared base template, so it must carry the table's
+            // flat-json config; without it a flat-json-enabled table's shadow tablets lose the derivation.
+            Assertions.assertTrue(req.isSetFlat_json_config(),
+                    "create task must carry the table's flat-json config");
+            Assertions.assertTrue(req.getFlat_json_config().isFlat_json_enable(),
+                    "flat-json config must reflect the table's enabled setting");
+        }
+    }
+
+    @Test
+    public void testCreateShadowTabletMetadataSkipsWhenNoShadowTablets() {
+        LakeRangeRewriteSchemaChangeJob job = newSingleColumnJob(stubSampler(List.of()));
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        // A plan whose shadow index was never built contributes no tablets, so the method returns early
+        // without acquiring the database lock or sending any create task.
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        Assertions.assertNull(plan.shadowIndex);
+        Assertions.assertDoesNotThrow(() -> job.createShadowTabletMetadata(List.of(plan)));
+    }
+
+    @Test
+    public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
+        // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
+            }
+        };
+
+        LakeRangeRewriteSchemaChangeJob job = newSingleColumnJob(stubSampler(List.of()));
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        Assertions.assertNotNull(plan.shadowIndex);
+
+        MarkedCountDownLatch<Long, Long> latch =
+                new MarkedCountDownLatch<>(plan.shadowIndex.getTablets().size());
+        AlterCancelException ex = Assertions.assertThrows(AlterCancelException.class,
+                () -> job.buildShadowTabletCreateTasks(table, List.of(plan), latch));
+        Assertions.assertTrue(ex.getMessage().contains("no alive compute node"),
+                "abort message must name the missing compute node, was: " + ex.getMessage());
     }
 
     @Test
@@ -1622,6 +1774,38 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         @Override
         protected void validateRewriteConfig() {
+        }
+
+        // This stub never builds shadow tablets (planPartitionShadow is a no-op), so createShadowTabletMetadata
+        // early-returns and the shadow-config getters below are never actually read.
+        @Override
+        protected List<Column> getShadowSchema() {
+            return List.of();
+        }
+
+        @Override
+        protected KeysType getShadowKeysType() {
+            return KeysType.DUP_KEYS;
+        }
+
+        @Override
+        protected List<Integer> getShadowSortKeyIdxes() {
+            return List.of();
+        }
+
+        @Override
+        protected List<Integer> getShadowSortKeyUniqueIds() {
+            return List.of();
+        }
+
+        @Override
+        protected short getShadowShortKeyColumnCount() {
+            return (short) 0;
+        }
+
+        @Override
+        protected String shadowKindLabel() {
+            return "optimize";
         }
     }
 
