@@ -1169,6 +1169,44 @@ TEST(TabletRangeHelperTest, validate_range_transition_accepts_multiple_trailing_
     ASSERT_OK(TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range));
 }
 
+TEST(TabletRangeHelperTest, validate_range_transition_accepts_reencoded_prefix) {
+    // Reshard-before-add: the FE reprojects an already-bounded (post-reshard) per-tablet range and the
+    // task path re-encodes the leading boundary Variants, so the new range's prefix can be byte-different
+    // from the BE's persisted old range even though the value and type are identical. The transition
+    // check must compare the prefix SEMANTICALLY, not by raw proto bytes, or the metadata-only publish
+    // wedges. Here the old range's leading values leave variant_type DEFAULTED while the new range sets
+    // it explicitly (add_int_val) -- same value, different bytes.
+    TabletMetadataPB old_meta;
+    auto old_schema = make_range_schema(1, /*schema_id=*/7);
+    old_schema->to_schema_pb(old_meta.mutable_schema());
+    auto* old_range = old_meta.mutable_range();
+    auto* lo = old_range->mutable_lower_bound()->add_values();
+    lo->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    lo->set_value("1"); // variant_type intentionally left unset (defaults to NORMAL_VALUE)
+    auto* hi = old_range->mutable_upper_bound()->add_values();
+    hi->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    hi->set_value("2");
+    old_range->set_lower_bound_included(true);
+    old_range->set_upper_bound_included(false);
+
+    auto new_schema = make_range_schema(2, /*schema_id=*/8);
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1); // variant_type SET -> different bytes, same value
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+    ASSERT_OK(TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range));
+
+    // Control: a genuinely different prefix value is still rejected.
+    TabletRangePB changed = new_range;
+    changed.mutable_lower_bound()->mutable_values(0)->set_value("999");
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, changed);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+}
+
 TEST(TabletRangeHelperTest, validate_range_transition_rejects_wrong_trailing_count_for_multi_add) {
     // old: 1 sort key; new: 3 sort keys, but the range appends only ONE trailing NULL (needs two).
     auto old_meta = make_old_meta(1, 1, 2);

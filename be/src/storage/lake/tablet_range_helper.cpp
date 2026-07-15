@@ -135,6 +135,41 @@ static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
     return DatumVariant(type_info, datum);
 }
 
+// Whether two range-bound values are the SAME sort-key value, comparing semantically (variant kind,
+// logical type, and decoded value) rather than by raw proto bytes. The FE re-encodes a reprojected
+// range's leading Variants -- and a reshard persists boundary Variants through a different path -- so
+// byte-identical protos are not guaranteed even when the value is unchanged (e.g. an optional type or
+// variant_type field present on one side and defaulted on the other). Used to check that a trailing ADD
+// preserves the existing range prefix without spuriously rejecting an equivalent re-encoding.
+static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const VariantPB& new_value) {
+    if (old_value.variant_type() != new_value.variant_type()) {
+        return false;
+    }
+    if (old_value.has_type() != new_value.has_type()) {
+        return false;
+    }
+    if (old_value.has_type()) {
+        const auto old_type = TypeDescriptor::from_protobuf(old_value.type());
+        const auto new_type = TypeDescriptor::from_protobuf(new_value.type());
+        if (old_type.type != new_type.type) {
+            return false;
+        }
+    }
+    // Only NORMAL_VALUE carries a payload to compare; NULL/MIN/MAX are fully described by variant_type.
+    if (old_value.variant_type() != VariantTypePB::NORMAL_VALUE) {
+        return true;
+    }
+    Datum old_datum;
+    Datum new_datum;
+    RETURN_IF_ERROR(DatumVariant::from_proto(old_value, &old_datum));
+    RETURN_IF_ERROR(DatumVariant::from_proto(new_value, &new_datum));
+    const auto type_info = get_type_info(TypeDescriptor::from_protobuf(old_value.type()));
+    if (type_info == nullptr) {
+        return false;
+    }
+    return type_info->cmp(old_datum, new_datum) == 0;
+}
+
 StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                               const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
                                                               const TabletSchemaCSPtr& current_schema) {
@@ -546,7 +581,8 @@ Status TabletRangeHelper::validate_range_transition(const TabletMetadataPB& old_
                     fmt::format("range {} bound must gain exactly {} trailing value(s)", which, num_added));
         }
         for (int i = 0; i < old_tuple.values_size(); ++i) {
-            if (!google::protobuf::util::MessageDifferencer::Equals(new_tuple.values(i), old_tuple.values(i))) {
+            ASSIGN_OR_RETURN(bool preserved, leading_value_preserved(old_tuple.values(i), new_tuple.values(i)));
+            if (!preserved) {
                 return Status::Corruption(fmt::format("range {} bound prefix changed across the trailing ADD", which));
             }
         }
