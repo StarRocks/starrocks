@@ -1,4 +1,4 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 -- result:
 -- !result
@@ -72,7 +72,7 @@ alter table t set('bucket_size'='2048');
 
 
 
--- name: test_automatic_bucket
+-- name: test_automatic_bucket @native
 create database kkk;
 -- result:
 -- !result
@@ -551,7 +551,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', `k`)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -583,7 +583,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', `k`)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",

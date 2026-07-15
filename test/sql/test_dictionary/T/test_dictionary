@@ -540,7 +540,7 @@ SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_ge
 DROP DICTIONARY test_dictionary_common_expression;
 DROP TABLE t_dictionary_common_expression;
 
--- name: test_dictionary_multiple_row
+-- name: test_dictionary_multiple_row @native
 CREATE TABLE `t_dictionary_multiple_row` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",
@@ -589,7 +589,7 @@ DROP TABLE t_dictionary_multiple_row_fact;
 DROP DICTIONARY test_dictionary_multiple_row_multi_value;
 DROP DICTIONARY test_dictionary_multiple_row_single_value;
 
--- name: test_dictionary_show_create_table_gen_col
+-- name: test_dictionary_show_create_table_gen_col @native
 CREATE TABLE `t_dictionary_show_create_table_gen_col_1` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -631,7 +631,7 @@ DROP TABLE t_dictionary_show_create_table_gen_col_1;
 DROP TABLE t_dictionary_show_create_table_gen_col_2;
 DROP DICTIONARY test_dictionary_show_create_table_gen_col;
 
--- name: test_dictionary_null_if_not_exist
+-- name: test_dictionary_null_if_not_exist @native
 CREATE TABLE `t_dictionary_null_if_not_exist` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""

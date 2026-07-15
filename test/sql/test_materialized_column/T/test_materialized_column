@@ -1,4 +1,4 @@
--- name: test_create_table
+-- name: test_create_table @native
 CREATE DATABASE test_create_table;
 USE test_create_table;
 
@@ -83,7 +83,7 @@ DROP TABLE t;
 
 DROP DATABASE test_materialized_column_schema_change;
 
--- name: test_normal_column_schema_change
+-- name: test_normal_column_schema_change @native
 CREATE DATABASE test_normal_column_schema_change;
 USE test_normal_column_schema_change;
 
@@ -166,7 +166,7 @@ DROP TABLE t;
 
 DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 
--- name: test_add_multiple_column
+-- name: test_add_multiple_column @native
 CREATE DATABASE test_add_multiple_column;
 USE test_add_multiple_column;
 
@@ -352,7 +352,7 @@ DROP TABLE t;
 
 DROP DATABASE test_schema_change_for_constant_expression;
 
--- name: test_schema_change_for_after
+-- name: test_schema_change_for_after @native
 CREATE DATABASE test_schema_change_for_after;
 USE test_schema_change_for_after;
 
@@ -379,7 +379,7 @@ SHOW CREATE TABLE t0;
 
 DROP DATABASE test_schema_change_for_after;
 
--- name: test_compaction_after_adding_generated_column
+-- name: test_compaction_after_adding_generated_column @native
 CREATE DATABASE test_compaction_after_adding_generated_column;
 USE test_compaction_after_adding_generated_column;
 
@@ -448,7 +448,7 @@ DROP TABLE t_information_schema_generated_column_2;
 select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
 select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
 
--- name: test_fix_adding_and_col_partial_update_conflict
+-- name: test_fix_adding_and_col_partial_update_conflict @native
 CREATE TABLE t_fix_adding_and_col_partial_update_conflict ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 insert into t_fix_adding_and_col_partial_update_conflict values (1,2,3),(2,3,4),(3,4,5);
 SET partial_update_mode = "column";
