@@ -31,6 +31,8 @@ public:
                                         int8_t join_mode);
     static RuntimeFilter* create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
                                              const Columns& columns, size_t column_offset, size_t row_count);
+    static RuntimeFilter* create_min_max_filter(ObjectPool* pool, LogicalType type, bool select_min,
+                                                bool close_interval, const ColumnPtr& value, int8_t join_mode);
     static RuntimeFilter* to_empty_filter(ObjectPool* pool, RuntimeFilter* rf);
 };
 

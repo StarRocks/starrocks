@@ -27,6 +27,7 @@ public:
                        bool eq_null, bool is_skew_join = false);
     static Status fill(RuntimeFilter* filter, LogicalType type, const Columns& columns, size_t column_offset,
                        bool eq_null, bool is_skew_join = false);
+    static ColumnPtr compute_min_max_boundary(LogicalType type, bool select_min, const Columns& columns);
 };
 
 } // namespace starrocks

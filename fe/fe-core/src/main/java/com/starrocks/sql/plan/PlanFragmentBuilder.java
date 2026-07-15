@@ -3106,6 +3106,18 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toList());
         }
 
+        private List<Expr> extractNestLoopJoinConjuncts(ScalarOperator predicate,
+                                                        ColumnRefSet leftColumns,
+                                                        ColumnRefSet rightColumns,
+                                                        ExecPlan context) {
+            return Utils.extractConjuncts(predicate).stream().sorted((l, r) ->
+                            Boolean.compare(r.isJoinDerived(), l.isJoinDerived()))
+                    .map(e -> JoinHelper.applyCommutativeToPredicates(e, leftColumns, rightColumns))
+                    .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+        }
+
         private void setNullableForJoin(JoinOperator joinOperator,
                                         PlanFragment leftFragment, PlanFragment rightFragment, ExecPlan context) {
             Set<TupleId> nullableTupleIds = new HashSet<>();
@@ -3139,7 +3151,10 @@ public class PlanFragmentBuilder {
 
             Map<SlotId, Expr> commonSubExprMap = buildCommonSubExprMap(node.getPredicateCommonOperators(), context);
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
-            List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            ColumnRefSet leftChildColumns = optExpr.inputAt(0).getOutputColumns();
+            ColumnRefSet rightChildColumns = optExpr.inputAt(1).getOutputColumns();
+            List<Expr> joinOnConjuncts = extractNestLoopJoinConjuncts(
+                    node.getOnPredicate(), leftChildColumns, rightChildColumns, context);
             List<Expr> probePartitionByExprs = Lists.newArrayList();
             DistributionSpec leftDistributionSpec =
                     optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
