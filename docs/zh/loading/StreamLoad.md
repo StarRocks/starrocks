@@ -379,7 +379,7 @@ Broker Load 是一种异步导入方法。在您提交导入作业后，StarRock
 ### 限制
 
 - 目前 Broker Load 仅支持通过单个 broker 从本地文件系统导入，broker 版本需为 v2.5 或更高。
-- 针对单个 broker 的高并发查询可能导致超时和 OOM 等问题。为减轻影响，您可以使用 `pipeline_dop` 变量（请参见 [系统变量](../sql-reference/System_variable.md#pipeline_dop)）设置 Broker Load 的查询并行度。对于单个 broker 的查询，我们建议将 `pipeline_dop` 设置为小于 `16` 的值。
+- 针对单个 broker 的高并发查询可能导致超时和 OOM 等问题。为减轻影响，您可以使用 `pipeline_dop` 变量（请参见 [系统变量](../sql-reference/System_variables/execution_parallelism.md#pipeline_dop)）设置 Broker Load 的查询并行度。对于单个 broker 的查询，我们建议将 `pipeline_dop` 设置为小于 `16` 的值。
 
 ### 典型示例
 

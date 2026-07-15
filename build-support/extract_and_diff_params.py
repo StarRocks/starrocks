@@ -76,7 +76,17 @@ BE_PARAM_DOCS = [
     REPO_ROOT / "docs/en/administration/management/BE_parameters/shared_lake_other.md",
 ]
 SESSION_VAR_DOCS = [
+    # System_variable.md is the landing page (intro + index only); the variable
+    # entries live in the System_variables/ category files below.
     REPO_ROOT / "docs/en/sql-reference/System_variable.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/optimizer_planning.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/joins_agg_mv.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/execution_parallelism.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/memory_spill.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/scan_io_datacache.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/external_catalog_lake.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/loading_insert_txn.md",
+    REPO_ROOT / "docs/en/sql-reference/System_variables/session_protocol_governance.md",
 ]
 
 ALL_SOURCE_PATHS = [FE_CONFIG_PATH, BE_CONFIG_PATH, SESSION_VAR_PATH, GLOBAL_VAR_PATH]

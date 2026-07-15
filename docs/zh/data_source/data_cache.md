@@ -138,7 +138,7 @@ mysql> EXPLAIN VERBOSE SELECT col1 FROM hudi_table;
 
 `dataCacheOptions={populate: false}` 表示缓存不会被填充，因为查询将扫描所有分区。
 
-您还可以通过会话变量 [`populate_datacache_mode`](../sql-reference/System_variable.md#populate_datacache_mode) 微调 Block Cache 的填充行为。
+您还可以通过会话变量 [`populate_datacache_mode`](../sql-reference/System_variables/scan_io_datacache.md#populate_datacache_mode) 微调 Block Cache 的填充行为。
 
 ### 填充模式
 
@@ -297,11 +297,11 @@ datacache_auto_adjust_enable=true
 
 ### 系统变量
 
-- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
-- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [populate_datacache_mode](../sql-reference/System_variables/scan_io_datacache.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variables/scan_io_datacache.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
-- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+- [enable_datacache_sharing](../sql-reference/System_variables/scan_io_datacache.md#enable_datacache_sharing)
 
 ### FE 配置
 

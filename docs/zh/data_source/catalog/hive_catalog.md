@@ -48,7 +48,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variables/external_catalog_lake.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
 
   在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
@@ -1122,7 +1122,7 @@ PARTITION BY (par_col1[, par_col2...])
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
+- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variables/external_catalog_lake.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
 
 :::
 

@@ -48,7 +48,7 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet and ORC files support the following compression formats: NO_COMPRESSION, SNAPPY, LZ4, ZSTD, and GZIP.
   - Textfile files support the NO_COMPRESSION compression format.
 
-  You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+  You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variables/external_catalog_lake.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
 
   When writing to a Hive table, if the table's properties include a compression codec, StarRocks will preferentially use that algorithm to compress the written data. Otherwise, it will use the compression algorithm set in the system variable `connector_sink_compression_codec`.
 
@@ -1113,7 +1113,7 @@ Note that sinking data to external tables is disabled by default. To sink data t
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the table property [`compression_codec`](#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
+- You can use the table property [`compression_codec`](#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variables/external_catalog_lake.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
 
 :::
 

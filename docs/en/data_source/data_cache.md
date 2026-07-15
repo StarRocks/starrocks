@@ -140,7 +140,7 @@ mysql> EXPLAIN VERBOSE SELECT col1 FROM hudi_table;
 
 `dataCacheOptions={populate: false}` indicates that the cache will not be populated because the query will scan all partitions.
 
-You can also fine-tune the population behavior of Block Cache via the session variable [`populate_datacache_mode`](../sql-reference/System_variable.md#populate_datacache_mode).
+You can also fine-tune the population behavior of Block Cache via the session variable [`populate_datacache_mode`](../sql-reference/System_variables/scan_io_datacache.md#populate_datacache_mode).
 
 ### Population mode
 
@@ -299,11 +299,11 @@ You can configure Data Cache using the following system variables and parameters
 
 ### System variables
 
-- [populate_datacache_mode](../sql-reference/System_variable.md#populate_datacache_mode)
-- [enable_datacache_io_adaptor](../sql-reference/System_variable.md#enable_datacache_io_adaptor)
+- [populate_datacache_mode](../sql-reference/System_variables/scan_io_datacache.md#populate_datacache_mode)
+- [enable_datacache_io_adaptor](../sql-reference/System_variables/scan_io_datacache.md#enable_datacache_io_adaptor)
 - [enable_file_metacache](../sql-reference/System_variable.md#enable_file_metacache)
 - [enable_datacache_async_populate_mode](../sql-reference/System_variable.md)
-- [enable_datacache_sharing](../sql-reference/System_variable.md#enable_datacache_sharing)
+- [enable_datacache_sharing](../sql-reference/System_variables/scan_io_datacache.md#enable_datacache_sharing)
 
 ### FE configurations
 

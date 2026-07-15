@@ -32,7 +32,7 @@ VARCHAR STRING_AGG([DISTINCT] expr, delimiter
 
 返回值的数据类型为 VARCHAR。如果没有非 NULL 值，则返回 NULL。
 
-您可以使用系统变量 [group_concat_max_len](../../System_variable.md#group_concat_max_len) 来控制可以返回的最大字符长度。默认值：1024。最小值：4。单位：字符。
+您可以使用系统变量 [group_concat_max_len](../../System_variables/session_protocol_governance.md#group_concat_max_len) 来控制可以返回的最大字符长度。默认值：1024。最小值：4。单位：字符。
 
 变量的设置方法：
 
