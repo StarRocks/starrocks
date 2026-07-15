@@ -9,6 +9,24 @@ description: "Session variables for the pipeline engine, parallelism, runtime fi
 
 For how to view and set variables, see the [System variables overview](../System_variable.md).
 
+import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
+
+### back_pressure_back_rounds
+
+* **Description**: Limits the maximum number of rounds for back-pressure throttling during top-N filter execution.
+* **Scope**: Session
+* **Default**: `3`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### back_pressure_throttle_time_upper_bound
+
+* **Description**: Specifies the maximum time in milliseconds that back pressure throttling can be applied during query execution.
+* **Scope**: Session
+* **Default**: `300`
+* **Data type**: `long`
+* **Mutable**: Yes
+
 ### blacklist_backup_routing
 
 * **Scope**: Session
@@ -17,6 +35,14 @@ For how to view and set variables, see the [System variables overview](../System
 * **Data type**: String
 * **Valid values**: `CIRCULAR`, `RANDOM`
 * **Introduced in**: -
+
+### cngroup_schedule_mode
+
+* **Description**: Specifies the scheduling strategy for distributing query execution tasks across compute node groups.
+* **Scope**: Global
+* **Default**: `"standard"`
+* **Data type**: `String`
+* **Mutable**: No
 
 ### computation_fragment_scheduling_policy
 
@@ -49,6 +75,34 @@ For how to view and set variables, see the [System variables overview](../System
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.4.0
+
+### enable_exchange_pass_through
+
+<Restricted />
+
+* **Description**: Enables optimization to pass through exchange nodes when data distribution allows direct transmission between operators.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_exchange_perf
+
+<Restricted />
+
+* **Description**: Enables performance optimizations for data exchange operations between query execution nodes.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_gather_fragment_locality_optimization
+
+* **Description**: used for test Determines whether to enable gather fragment locality optimization. When enabled, gather fragments will be assigned to the same node as other fragments if all other fragments' instances are on the same node.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
 
 ### enable_global_runtime_filter
 
@@ -97,6 +151,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v3.3
 
+### enable_parallel_prepare_metadata
+
+* **Description**: Enables parallel metadata preparation during the query optimization phase.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
 ### enable_per_bucket_optimize
 
 * **Description**: Whether to enable bucketed computation. When this feature is enabled, stage-one aggregation can be computed in bucketed order, reducing memory usage.
@@ -113,6 +175,32 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Description**: Specifies whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`.
 * **Default**: true
+
+### enable_pipeline_event_scheduler
+
+* **Description**: Enables the pipeline event scheduler for query execution.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_pipeline_level_multi_partitioned_rf
+
+* **Description**: Enables runtime filter optimization across multiple partitions at the pipeline execution level.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_pipeline_level_shuffle
+
+<Restricted />
+
+* **Description**: Enables shuffle operations at the pipeline level during query execution.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
 
 ### enable_query_cache
 
@@ -144,6 +232,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
 * **Default**: false
 * **Introduced in**: v3.2.3
+
+### enable_single_node_schedule
+
+* **Description**: Enables scheduling of query execution on a single node instead of distributing across the cluster.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
 
 ### enable_tablet_internal_parallel
 
@@ -185,6 +281,16 @@ The following variables tune the back-pressure behavior and only take effect whe
 * **Default**: false
 * **Introduced in**: v3.3
 
+### exchange_hash_function_version
+
+<Restricted />
+
+* **Description**: Hash function version for exchange shuffle 0: fnv_hash (reserved for backward compatibility) 1: xxh3_hash (default, faster)
+* **Scope**: Session
+* **Default**: `1`
+* **Data type**: `int`
+* **Mutable**: Yes
+
 ### force_schedule_local (Session)
 
 * **Scope**: Session
@@ -192,6 +298,84 @@ The following variables tune the back-pressure behavior and only take effect whe
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
+
+### global_runtime_filter_build_max_size
+
+<Restricted />
+
+* **Description**: Parameters to determine the usage of runtime filter Either the build_max or probe_min equal to 0 would force use the filter, otherwise would decide based on the cardinality
+* **Scope**: Session
+* **Default**: `64L * 1024L * 1024L`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### global_runtime_filter_build_min_size
+
+<Restricted />
+
+* **Description**: Specifies the minimum size of runtime filter build-side data to enable global runtime filters.
+* **Scope**: Session
+* **Default**: `128L * 1024L`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### global_runtime_filter_probe_min_selectivity
+
+<Restricted />
+
+* **Description**: Specifies the minimum selectivity threshold for applying runtime filters to probe-side table scans.
+* **Scope**: Session
+* **Default**: `0.5f`
+* **Data type**: `float`
+* **Mutable**: Yes
+
+### global_runtime_filter_probe_min_size
+
+<Restricted />
+
+* **Description**: Specifies the minimum size threshold for probe-side tables to participate in global runtime filtering.
+* **Scope**: Session
+* **Default**: `100L * 1024L`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### global_runtime_filter_rpc_http_min_size
+
+<Restricted />
+
+* **Description**: Specifies the minimum runtime filter size threshold for switching from RPC to HTTP transport protocol.
+* **Scope**: Session
+* **Default**: `64L * 1024 * 1024`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### global_runtime_filter_rpc_timeout
+
+<Restricted />
+
+* **Description**: Specifies the timeout duration in milliseconds for RPC communications related to global runtime filters.
+* **Scope**: Session
+* **Default**: `400`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### global_runtime_filter_wait_timeout
+
+<Restricted />
+
+* **Description**: Specifies the maximum time in milliseconds to wait for global runtime filters to be generated before proceeding with query execution.
+* **Scope**: Session
+* **Default**: `20`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### group_execution_group_scale
+
+* **Description**: Controls the number of rows per group when partitioning data for group execution in query processing.
+* **Scope**: Session
+* **Default**: `64`
+* **Data type**: `int`
+* **Mutable**: Yes
 
 ### group_execution_max_groups
 
@@ -300,6 +484,22 @@ The number of scan instances determines the number of other execution nodes in t
 * **Default**: 409600
 * **Introduced in**: v2.5
 
+### query_cache_force_populate
+
+* **Description**: Enables writing query results to the cache regardless of whether the query result is read from cache.
+* **Scope**: Session
+* **Default**: `false`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### query_cache_hot_partition_num
+
+* **Description**: Defines the number of most recently updated partitions to exclude from query caching due to frequent invalidation.
+* **Scope**: Session
+* **Default**: `3`
+* **Data type**: `int`
+* **Mutable**: Yes
+
 ### query_cache_size (global)
 
 Used for MySQL client compatibility. No practical use.
@@ -307,6 +507,36 @@ Used for MySQL client compatibility. No practical use.
 ### query_cache_type
 
 Used for compatibility with JDBC connection pool C3P0. No practical use.
+
+### runtime_adaptive_dop_max_block_rows_per_driver_seq
+
+<Restricted />
+
+* **Description**: Limits the maximum number of rows per data block processed by each driver thread in adaptive parallelism execution.
+* **Scope**: Session
+* **Default**: `4096L * 4`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### runtime_adaptive_dop_max_output_amplification_factor
+
+<Restricted />
+
+* **Description**: Effective when it is positive.
+* **Scope**: Session
+* **Default**: `0`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### runtime_filter_early_return_selectivity
+
+<Restricted />
+
+* **Description**: Specifies the selectivity threshold for early termination of runtime filter collection during query execution.
+* **Scope**: Session
+* **Default**: `0.05f`
+* **Data type**: `float`
+* **Mutable**: Yes
 
 ### runtime_filter_on_exchange_node
 
@@ -322,6 +552,36 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 1024000
 * **Data type**: Int
 
+### statistic_collect_parallel
+
+<Restricted />
+
+* **Description**: Specifies the number of parallel threads used when collecting table statistics.
+* **Scope**: Session
+* **Default**: `1`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### statistic_meta_collect_parallel
+
+<Restricted />
+
+* **Description**: Controls the number of parallel threads used for collecting table statistics metadata.
+* **Scope**: Session
+* **Default**: `10`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### tablet_internal_parallel_mode
+
+<Restricted />
+
+* **Description**: The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true. The optional values are "auto" and "force_split".
+* **Scope**: Session
+* **Default**: `"auto"`
+* **Data type**: `String`
+* **Mutable**: Yes
+
 ### transmission_compression_type
 
 * **Description**: Controls the compression algorithm used for transmitting query-related data (RPC/exchange payloads). Use `AUTO` to let the system pick a suitable algorithm based on environment (trade CPU for network bandwidth when beneficial). Other valid values are names recognized by `CompressionUtils.findTCompressionByName()` (for example, codec identifiers exposed by the runtime). For load-specific transmission you can use the separate `load_transmission_compression_type` session variable or supply transmission compression in stream-load parameters (HTTP header `HTTP_TRANSMISSION_COMPRESSION_TYPE` / thrift field `transmission_compression_type`).
@@ -329,4 +589,12 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: `AUTO`
 * **Data Type**: String
 * **Introduced in**: v3.2.0
+
+### transmission_encode_level
+
+* **Description**: encode integers/binary per column for exchange, controlled by transmission_encode_level if transmission_encode_level & 2, intergers are encode by streamvbyte, in order or not; if transmission_encode_level & 4, binary columns are compressed by lz4 if transmission_encode_level & 1, enable adaptive encoding. e.g. if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(&lt; 0.9); if transmission_encode_level = 6, SR will force encoding numbers and string columns. in short, for transmission_encode_level, 2 for encoding integers or types supported by integers, 4 for encoding string, json and object columns are left to be supported later.
+* **Scope**: Session
+* **Default**: `7`
+* **Data type**: `int`
+* **Mutable**: Yes
 

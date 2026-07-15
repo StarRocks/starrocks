@@ -76,6 +76,7 @@ const config = {
             keywords: [
               "experimental",
               "beta",
+              "restricted",
               "note",
               "tip",
               "info",

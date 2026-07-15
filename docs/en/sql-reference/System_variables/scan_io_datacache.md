@@ -9,6 +9,44 @@ description: "Session variables for scan concurrency, I/O tasks, data cache, and
 
 For how to view and set variables, see the [System variables overview](../System_variable.md).
 
+import Restricted from '../../_assets/commonMarkdown/_restricted.mdx'
+
+### big_query_log_scan_bytes_threshold
+
+* **Description**: the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query. Users need to set up according to their own scenario.
+* **Scope**: Session
+* **Default**: `1024L * 1024 * 1024 * 10`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### big_query_log_scan_rows_threshold
+
+* **Description**: the value is set for testing, if a query need to scan more than 1 billion rows of data, we treat it as a big query. Users need to set up according to their own scenario.
+* **Scope**: Session
+* **Default**: `1000000000L`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### chunk_size
+
+<Restricted />
+
+* **Description**: _Description pending._
+* **Scope**: Session
+* **Default**: `4096`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### datacache_evict_probability
+
+<Restricted />
+
+* **Description**: Specifies the probability percentage for evicting entries from the data cache.
+* **Scope**: Session
+* **Default**: `100`
+* **Data type**: `int`
+* **Mutable**: Yes
+
 ### datacache_sharing_work_period
 
 * **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
@@ -16,10 +54,42 @@ For how to view and set variables, see the [System variables overview](../System
 * **Unit**: Seconds
 * **Introduced in**: v3.5.1
 
+### enable_collect_table_level_scan_stats
+
+* **Description**: This variable is introduced to solve compatibility issues/ see more details: https://github.com/StarRocks/starrocks/pull/29678
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_connector_deploy_scan_ranges_background
+
+* **Description**: Enables background deployment of scan ranges for connector queries.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_connector_incremental_scan_ranges
+
+* **Description**: Enables incremental scanning of file ranges from external connectors to reduce memory overhead during query execution.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_connector_split_io_tasks
+
+* **Description**: Enables splitting of connector I/O tasks to improve query performance and parallelism.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
-* **Default**: false
+* **Default**: `true`
 * **Introduced in**: v3.2.7
 
 ### enable_datacache_io_adaptor
@@ -34,11 +104,35 @@ For how to view and set variables, see the [System variables overview](../System
 * **Default**: true
 * **Introduced in**: v3.5.1
 
+### enable_dynamic_prune_scan_range
+
+* **Description**: Enables dynamic pruning of scan ranges during query execution to reduce data scanned.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### enable_evaluate_schema_scan_rule
+
+* **Description**: Enables optimization of schema scan operations through rule-based evaluation during query planning.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_hyperscan_vec
+
+* **Description**: Enables vectorized pattern matching using the Hyperscan library for improved query performance.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
 
 ### enable_parquet_reader_bloom_filter
 
@@ -60,11 +154,31 @@ For how to view and set variables, see the [System variables overview](../System
   * `false`: Disable Page Index optimization when reading Parquet files.
 * **Introduced in**: v3.5.0
 
+### enable_populate_datacache
+
+<Restricted />
+
+* **Description**: Enables automatic population of the data cache during query execution.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
+
+### enable_scan_predicate_expr_reuse
+
+<Restricted />
+
+* **Description**: Enables reuse of predicate expressions during table scan operations to optimize query performance.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
 
 ### enable_shared_scan
 
@@ -101,11 +215,49 @@ For how to view and set variables, see the [System variables overview](../System
 * **Default**: auto
 * **Introduced in**: v3.3.2
 
+### runtime_filter_scan_wait_time
+
+<Restricted />
+
+* **Description**: Specifies the maximum time in milliseconds a scan operator waits to receive runtime filters before proceeding.
+* **Scope**: Session
+* **Default**: `20L`
+* **Data type**: `long`
+* **Mutable**: Yes
+
 ### scan_olap_partition_num_limit
 
 * **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
+
+### scan_or_to_union_limit
+
+<Restricted />
+
+* **Description**: Limits the maximum number of OR conditions in a scan that will be converted to a UNION operation.
+* **Scope**: Session
+* **Default**: `4`
+* **Data type**: `int`
+* **Mutable**: Yes
+
+### scan_or_to_union_threshold
+
+<Restricted />
+
+* **Description**: Specifies the threshold size for converting OR predicates in scan operations to UNION queries.
+* **Scope**: Session
+* **Default**: `50000000`
+* **Data type**: `long`
+* **Mutable**: Yes
+
+### scan_use_query_mem_ratio
+
+* **Description**: Specifies the ratio of total query memory that can be used for table scanning operations.
+* **Scope**: Session
+* **Default**: `0.3`
+* **Data type**: `double`
+* **Mutable**: Yes
 
 ### skip_local_disk_cache
 

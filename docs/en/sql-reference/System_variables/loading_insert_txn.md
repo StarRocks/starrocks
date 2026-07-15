@@ -36,6 +36,22 @@ For how to view and set variables, see the [System variables overview](../System
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_sql_transaction
+
+* **Description**: Enables SQL transaction capability for the current session.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
+### insert_local_shuffle_for_window_pre_agg
+
+* **Description**: Enables local data shuffling during window function pre-aggregation to optimize query performance.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: `boolean`
+* **Mutable**: Yes
+
 ### insert_max_filter_ratio
 
 * **Description**: The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Range: [0, 1].
@@ -55,6 +71,14 @@ Specifies the memory limit for the import operation. The default value is 0, mea
 This variable is only used for the `INSERT` operation which involves both query and import. If the user does not set this variable, the memory limit for both query and import will be set as `exec_mem_limit`. Otherwise, the memory limit for query will be set as `exec_mem_limit` and the memory limit for import will be as `load_mem_limit`.
 
 Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
+
+### load_transmission_compression_type
+
+* **Description**: Specifies the compression algorithm used for transmitting data during load operations.
+* **Scope**: Session
+* **Default**: `"NO_COMPRESSION"`
+* **Data type**: `String`
+* **Mutable**: Yes
 
 ### log_rejected_record_num (v3.1 and later)
 
