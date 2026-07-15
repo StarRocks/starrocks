@@ -538,19 +538,21 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
     auto timer = MonotonicStopWatch{};
     timer.start();
     if (tablet_meta_info.__isset.tablet_range) {
-        // A populated range carries raw user boundary values; do not log them. Log the other fields
-        // as before, and describe the range only by tablet id and per-bound arity.
-        TTabletMetaInfo redacted = tablet_meta_info;
-        redacted.__isset.tablet_range = false;
+        // A populated range carries raw user boundary values; do not log them, and do not copy the whole
+        // message just to redact them (that would duplicate a possibly-oversized range before the caps in
+        // convert_t_range_to_pb_range run). Log the tablet id, the accompanying schema, and the per-bound
+        // arity only.
         const int lower_arity = tablet_meta_info.tablet_range.__isset.lower_bound
-                                        ? tablet_meta_info.tablet_range.lower_bound.values.size()
+                                        ? static_cast<int>(tablet_meta_info.tablet_range.lower_bound.values.size())
                                         : -1;
         const int upper_arity = tablet_meta_info.tablet_range.__isset.upper_bound
-                                        ? tablet_meta_info.tablet_range.upper_bound.values.size()
+                                        ? static_cast<int>(tablet_meta_info.tablet_range.upper_bound.values.size())
                                         : -1;
-        LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(redacted)
-                  << " tablet_id: " << tablet_meta_info.tablet_id << " range lower arity: " << lower_arity
-                  << " range upper arity: " << upper_arity;
+        LOG(INFO) << "Updating tablet metadata (with range): tablet_id: " << tablet_meta_info.tablet_id
+                  << ", tablet_schema: "
+                  << (tablet_meta_info.__isset.tablet_schema ? ThriftDebugString(tablet_meta_info.tablet_schema)
+                                                             : "<none>")
+                  << ", range lower arity: " << lower_arity << ", range upper arity: " << upper_arity;
     } else {
         LOG(INFO) << "Updating tablet metadata: " << ThriftDebugString(tablet_meta_info);
     }

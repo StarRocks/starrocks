@@ -139,9 +139,6 @@ Rowset::~Rowset() {
 
 StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
     const TabletRangePB* range_pb = nullptr;
-    // _tablet_schema is this rowset's own schema, which for an old rowset may be an archived
-    // historical schema with fewer sort-key columns than the current tablet schema.
-    TabletSchemaPtr range_schema = _tablet_schema;
     if (_metadata->has_range()) {
         range_pb = &_metadata->range();
     } else if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
@@ -152,29 +149,23 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
         return std::optional<SeekRange>{};
     }
 
-    // A tablet range is expressed in whatever tablet sort key was current when the range was written,
-    // which can differ from this rowset's own (possibly archived) schema after a metadata-only trailing
-    // sort-key add (N -> N+1): the tablet-level fallback range is always in the current sort key, and a
-    // reshard that runs AFTER the add stamps a per-rowset range in the current sort key onto an old
-    // rowset that still carries its archived (N) schema. When the range's bound arity does not match
-    // this rowset's schema, decode with the current tablet schema instead -- its arity matches, and the
-    // current sort key is a prefix-preserving superset of the archived one, so the leading column types
-    // agree. A same-arity range decodes identically under either schema.
-    if (_tablet_metadata != nullptr) {
-        const int range_arity = range_pb->has_lower_bound()
-                                        ? range_pb->lower_bound().values_size()
-                                        : range_pb->has_upper_bound() ? range_pb->upper_bound().values_size() : 0;
-        if (range_arity > 0 && static_cast<int>(range_schema->sort_key_idxes().size()) != range_arity) {
-            auto current_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
-            if (static_cast<int>(current_schema->sort_key_idxes().size()) == range_arity) {
-                range_schema = current_schema;
-            }
-        }
-    }
+    // The SeekRange is used to seek into THIS rowset's segments, which are laid out per _tablet_schema
+    // (for an old rowset, an archived historical schema with fewer sort-key columns than the current
+    // tablet). The SeekRange's field ids are positional in the schema it is decoded with, so we MUST
+    // decode with _tablet_schema for the positions to align with the segments. A range can be written at
+    // a larger (later) sort-key arity than _tablet_schema -- a tablet-level fallback range is in the
+    // current sort key, and a reshard that runs after a metadata-only trailing key add can stamp a
+    // per-rowset range at a later arity onto an old rowset. create_seek_range_from projects such a wider
+    // bound onto _tablet_schema's sort key, comparing the added columns' defaults (what old rows in this
+    // rowset read) -- taken from the current tablet schema -- against the dropped trailing bound values.
+    TabletSchemaCSPtr current_schema =
+            _tablet_metadata != nullptr ? GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first
+                                        : nullptr;
 
     // Do not use mem_pool here. SeekRange will reference the data owned by protobuf metadata,
     // and metadata lifetime is guaranteed to outlive rowset iterators.
-    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, range_schema, nullptr));
+    ASSIGN_OR_RETURN(auto range,
+                     TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr, current_schema));
     return std::optional<SeekRange>(std::move(range));
 }
 

@@ -1185,6 +1185,47 @@ TEST(TabletRangeHelperTest, validate_range_transition_rejects_wrong_trailing_cou
     ASSERT_TRUE(s.is_corruption()) << s;
 }
 
+TEST(TabletRangeHelperTest, validate_range_transition_rejects_promoting_existing_column) {
+    // old: 1 sort key k0(uid 100) + value v(uid 200), range [(1),(2)). make_range_schema(1) gives
+    // exactly this shape (v has uid 200).
+    auto old_meta = make_old_meta(1, 1, 2);
+    // new: sort key [k0(uid 100), v(uid 200)] -- v is an EXISTING column promoted to a sort key, not a
+    // brand-new column. Must be rejected even though the prefix is unchanged and the arity grows by one.
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(9);
+    pb.set_num_short_key_columns(1);
+    auto* c0 = pb.add_column();
+    c0->set_unique_id(100);
+    c0->set_name("k0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_aggregation("NONE");
+    auto* c1 = pb.add_column();
+    c1->set_unique_id(200);
+    c1->set_name("v");
+    c1->set_type("INT");
+    c1->set_is_key(true);
+    c1->set_is_nullable(true);
+    c1->set_aggregation("NONE");
+    pb.add_sort_key_idxes(0);
+    pb.add_sort_key_idxes(1);
+    auto new_schema = TabletSchema::create(pb);
+
+    TabletRangePB new_range;
+    add_int_val(new_range.mutable_lower_bound(), 1);
+    add_null_val(new_range.mutable_lower_bound());
+    add_int_val(new_range.mutable_upper_bound(), 2);
+    add_null_val(new_range.mutable_upper_bound());
+    new_range.set_lower_bound_included(true);
+    new_range.set_upper_bound_included(false);
+
+    auto s = TabletRangeHelper::validate_range_transition(old_meta, *new_schema, new_range);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_corruption()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("brand-new"));
+}
+
 TEST(TabletRangeHelperTest, validate_range_transition_accepts_range_all_stays_all) {
     auto old_meta = make_old_meta(1, std::nullopt, std::nullopt); // Range.all()
     auto new_schema = make_range_schema(2, /*schema_id=*/8);
@@ -1302,6 +1343,140 @@ TEST(TabletRangeHelperTest, validate_range_transition_rejects_trailing_not_null)
     ASSERT_FALSE(s.ok());
     ASSERT_TRUE(s.is_corruption()) << s;
     ASSERT_THAT(s.to_string(), testing::HasSubstr("NULL"));
+}
+
+namespace {
+
+// A DUP-key schema with `num_keys` INT sort-key columns (k0..k{num_keys-1}). The trailing key column takes
+// the given nullability/default so read-time-default resolution can be exercised.
+static TabletSchemaCSPtr make_dup_key_schema(int schema_id, int num_keys, bool last_nullable, bool last_has_default,
+                                             const std::string& last_default) {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(schema_id);
+    pb.set_num_short_key_columns(1);
+    pb.set_num_rows_per_row_block(65535);
+    for (int i = 0; i < num_keys; i++) {
+        auto* c = pb.add_column();
+        c->set_unique_id(i + 1);
+        c->set_name(std::string("k") + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_key(true);
+        const bool is_last = (i == num_keys - 1);
+        c->set_is_nullable(is_last ? last_nullable : false);
+        if (is_last && last_has_default) {
+            c->set_default_value(last_default);
+        }
+        pb.add_sort_key_idxes(i);
+    }
+    return TabletSchema::create(pb);
+}
+
+static void append_int(TuplePB* t, int32_t v) {
+    DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(v)).to_proto(t->add_values());
+}
+
+static void append_null_int(TuplePB* t) {
+    Datum d;
+    d.set_null();
+    DatumVariant(get_type_info(LogicalType::TYPE_INT), d).to_proto(t->add_values());
+}
+
+} // namespace
+
+// A range written under a wider sort key than the target segment (a reshard stamps a current-arity
+// per-rowset range after a metadata-only trailing key add, onto an old rowset that still carries its
+// archived schema) is projected onto the segment's sort key by comparing the added column's read-time
+// default D against the dropped trailing bound values. This makes a boundary-prefix old row route exactly
+// as under the full-arity range -- the correctness core of the reshard-after-add read/merge path.
+TEST(TabletRangeHelperTest, test_create_seek_range_projects_wider_bound_with_default) {
+    // Segment sort key: [k0] (archived, arity 1). Current sort key: [k0, k1], k1 INT DEFAULT '0'.
+    auto seg = make_dup_key_schema(100, 1, /*last_nullable=*/false, /*last_has_default=*/false, "");
+    auto cur = make_dup_key_schema(200, 2, /*last_nullable=*/false, /*last_has_default=*/true, "0"); // D(k1)=0
+
+    // [ (lo0, lo1), (hi0, hi1) ), lower inclusive / upper exclusive.
+    auto project = [&](int lo0, int lo1, int hi0, int hi1) {
+        TabletRangePB r;
+        r.set_lower_bound_included(true);
+        r.set_upper_bound_included(false);
+        append_int(r.mutable_lower_bound(), lo0);
+        append_int(r.mutable_lower_bound(), lo1);
+        append_int(r.mutable_upper_bound(), hi0);
+        append_int(r.mutable_upper_bound(), hi1);
+        return TabletRangeHelper::create_seek_range_from(r, seg, nullptr, cur);
+    };
+
+    // Trailing > default (D=0 < 5): an old row (p, 0) sorts BELOW (p, 5), so it is excluded from
+    // [ (10,5), .. ) (lower drops to exclusive at 10) and included in [ .., (20,5) ) (upper becomes
+    // inclusive at 20). Both bounds also project down to a single (leading) column.
+    {
+        ASSIGN_OR_ABORT(auto sr, project(10, 5, 20, 5));
+        EXPECT_EQ(1u, sr.lower().columns());
+        EXPECT_EQ(1u, sr.upper().columns());
+        EXPECT_FALSE(sr.inclusive_lower());
+        EXPECT_TRUE(sr.inclusive_upper());
+    }
+    // Trailing < default (D=0 > -5): symmetric -- lower stays inclusive, upper drops to exclusive.
+    {
+        ASSIGN_OR_ABORT(auto sr, project(10, -5, 20, -5));
+        EXPECT_TRUE(sr.inclusive_lower());
+        EXPECT_FALSE(sr.inclusive_upper());
+    }
+    // Trailing == default (boundary sampled from an old row): standard prefix truncation.
+    {
+        ASSIGN_OR_ABORT(auto sr, project(10, 0, 20, 0));
+        EXPECT_TRUE(sr.inclusive_lower());
+        EXPECT_FALSE(sr.inclusive_upper());
+    }
+    // Trailing == NULL sentinel (the add-time reprojected range): NULL is the minimum, so D=0 > NULL --
+    // same shape as the exact prefix range (lower inclusive, upper exclusive).
+    {
+        TabletRangePB r;
+        r.set_lower_bound_included(true);
+        r.set_upper_bound_included(false);
+        append_int(r.mutable_lower_bound(), 10);
+        append_null_int(r.mutable_lower_bound());
+        append_int(r.mutable_upper_bound(), 20);
+        append_null_int(r.mutable_upper_bound());
+        ASSIGN_OR_ABORT(auto sr, TabletRangeHelper::create_seek_range_from(r, seg, nullptr, cur));
+        EXPECT_TRUE(sr.inclusive_lower());
+        EXPECT_FALSE(sr.inclusive_upper());
+    }
+}
+
+// When the added trailing key is nullable with no default, old rows read it as NULL (the minimum), so a
+// non-NULL boundary trailing value sorts ABOVE every old row at that prefix.
+TEST(TabletRangeHelperTest, test_create_seek_range_projection_null_default) {
+    auto seg = make_dup_key_schema(101, 1, false, false, "");
+    auto cur = make_dup_key_schema(201, 2, /*last_nullable=*/true, /*last_has_default=*/false, ""); // D(k1)=NULL
+
+    TabletRangePB r;
+    r.set_lower_bound_included(true);
+    r.set_upper_bound_included(false);
+    append_int(r.mutable_lower_bound(), 10);
+    append_int(r.mutable_lower_bound(), 5);
+    append_int(r.mutable_upper_bound(), 20);
+    append_int(r.mutable_upper_bound(), 5);
+    ASSIGN_OR_ABORT(auto sr, TabletRangeHelper::create_seek_range_from(r, seg, nullptr, cur));
+    // D=NULL < 5: an old row (p, NULL) is excluded from the lower bound and included under the upper.
+    EXPECT_FALSE(sr.inclusive_lower());
+    EXPECT_TRUE(sr.inclusive_upper());
+}
+
+// Projecting a wider bound requires the current schema; without it the helper must fail loudly rather than
+// silently drop the trailing values (which would misroute boundary-prefix rows).
+TEST(TabletRangeHelperTest, test_create_seek_range_wider_bound_requires_current_schema) {
+    auto seg = make_dup_key_schema(102, 1, false, false, "");
+    TabletRangePB r;
+    r.set_lower_bound_included(true);
+    r.set_upper_bound_included(false);
+    append_int(r.mutable_lower_bound(), 10);
+    append_int(r.mutable_lower_bound(), 5);
+    append_int(r.mutable_upper_bound(), 20);
+    append_int(r.mutable_upper_bound(), 5);
+    auto st = TabletRangeHelper::create_seek_range_from(r, seg, nullptr, /*current_schema=*/nullptr);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_corruption()) << st.status();
 }
 
 } // namespace starrocks::lake

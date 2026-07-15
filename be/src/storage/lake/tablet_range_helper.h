@@ -45,8 +45,24 @@ public:
      * @return StatusOr<SeekRange> A SeekRange referencing data owned either by
      *         `tablet_range_pb` or `mem_pool`, depending on `mem_pool`.
      */
+    // Decode a persisted tablet range into a SeekRange under `tablet_schema`'s sort key. `tablet_schema`
+    // must be the schema the TARGET SEGMENT is read with (for an old rowset, its archived schema): the
+    // SeekRange's field ids are positional in `tablet_schema`, so callers pass the segment's own schema so
+    // the seek positions align with it.
+    //
+    // A range's bound arity normally equals `tablet_schema`'s sort-key arity (exact decode). It can be
+    // LARGER when the range was written under a wider (later) sort key than this segment -- e.g. a reshard
+    // stamps a per-rowset range in the current sort key after a metadata-only trailing key add, onto an old
+    // rowset that still carries its archived schema. In that case the segment's rows all read the added
+    // columns' constant default `D`, so the bound is projected onto `tablet_schema`'s sort key: keep the
+    // leading (segment-arity) values, and derive the bound's inclusivity by comparing `D` against the
+    // dropped trailing bound values (via `current_schema`, which must contain the added columns). This makes
+    // a boundary-prefix row route exactly as it would under the full-arity range. `current_schema` is
+    // required whenever a bound arity exceeds `tablet_schema`'s sort-key arity; it is unused for exact
+    // decodes.
     static StatusOr<SeekRange> create_seek_range_from(const TabletRangePB& tablet_range_pb,
-                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool);
+                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
+                                                      const TabletSchemaCSPtr& current_schema = nullptr);
 
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
