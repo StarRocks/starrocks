@@ -58,6 +58,36 @@ target_link_libraries(data_sink_file_test ${DATA_SINK_FILE_TEST_LINK_LIBS} gtest
 set(DATA_SINK_INTEGRATION_TEST_LINK_LIBS ${TEST_LINK_LIBS})
 list(REMOVE_ITEM DATA_SINK_INTEGRATION_TEST_LINK_LIBS arrow_testing)
 
+set(DATA_SINK_DICTIONARY_CACHE_TEST_LINK_LIBS
+    DataSinkDictionaryCache
+    ExecPrimitive
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${DATA_SINK_FILE_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_data_sink_dictionary_cache_test_objs OBJECT
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    dictionary_cache/dictionary_cache_sink_test.cpp
+)
+target_link_libraries(starrocks_data_sink_dictionary_cache_test_objs PRIVATE StarRocksPCH)
+
+add_executable(data_sink_dictionary_cache_test $<TARGET_OBJECTS:starrocks_data_sink_dictionary_cache_test_objs>)
+target_link_libraries(data_sink_dictionary_cache_test ${DATA_SINK_DICTIONARY_CACHE_TEST_LINK_LIBS} gtest_main)
+
 set(DATA_SINK_RESULT_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     result/arrow_result_writer_test.cpp

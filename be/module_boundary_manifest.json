@@ -484,6 +484,31 @@
       "remediation": "Keep non-tablet external and administrative sinks in DataSinkExternal over file, format, filesystem, and lower contracts; keep concrete storage, full Exec composition, and service/bootstrap behavior outside this module."
     },
     {
+      "id": "datasinkdictionarycache",
+      "doc_label": "DataSinkDictionaryCache",
+      "summary": "Pipeline-only dictionary-cache sink lifecycle over execution contracts and runtime without concrete Exec operator or writer coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkDictionaryCache"],
+      "owned_roots": ["be/src/data_sink/dictionary_cache"],
+      "allowed_include_prefixes": [
+        "data_sink/dictionary_cache/",
+        "exec_primitive/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "compute_env/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["ExecPrimitive", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_dictionary_cache_test"],
+      "allowed_test_link_deps": ["DataSinkDictionaryCache", "ExecPrimitive", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep dictionary-cache sink lifecycle independent of its Exec-owned pipeline operator and writer; pipeline composition remains in Exec."
+    },
+    {
       "id": "datasinktablet",
       "doc_label": "DataSinkTablet",
       "summary": "OLAP tablet routing, validation, channel management, and RPC sending over explicit Storage, ComputeEnv, execution-contract, expression, and runtime dependencies without full Exec or service coupling.",
