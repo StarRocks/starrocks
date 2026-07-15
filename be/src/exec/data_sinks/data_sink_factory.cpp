@@ -28,7 +28,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/InternalService_types.h"
 #ifndef __APPLE__
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
 #endif
 #include "data_sink/exchange/multi_cast_data_stream_sink.h"
 #include "data_sink/external/mysql_table_sink.h"

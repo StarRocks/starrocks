@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink_pipeline_builder.h"
 
 #include <unordered_map>
 
 #include "common/config_exec_fwd.h"
-#include "common/runtime_profile.h"
 #include "connector/iceberg/iceberg_connector.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "connector/iceberg/iceberg_utils.h"
+#include "data_sink/external/iceberg_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
-#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/column_evaluator.h"
 #include "formats/reserved_columns.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
@@ -82,43 +83,42 @@ Status append_iceberg_sink_column(const SlotDescriptor* slot,
 
 } // namespace
 
-IcebergTableSink::IcebergTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
-        : _pool(pool), _t_output_expr(t_exprs) {}
+namespace {
 
-IcebergTableSink::~IcebergTableSink() = default;
+class IcebergTableSinkPipelineBuilder {
+public:
+    explicit IcebergTableSinkPipelineBuilder(const IcebergTableSink& sink) : _sink(sink) {}
 
-Status IcebergTableSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::init(thrift_sink, state));
-    RETURN_IF_ERROR(prepare(state));
-    RETURN_IF_ERROR(open(state));
-    return Status::OK();
-}
+    Status decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
+                                 pipeline::PipelineBuilderContext* context);
 
-Status IcebergTableSink::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
-    std::stringstream title;
-    title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
-    _profile = _pool->add(new RuntimeProfile(title.str()));
-    return Status::OK();
-}
+private:
+    Status create_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                      pipeline::PipelineBuilderContext* context,
+                                      IcebergTableDescriptor* iceberg_table_desc,
+                                      std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+                                      std::vector<TExpr>& partition_expr);
 
-Status IcebergTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
-    return Status::OK();
-}
+    Status create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                    pipeline::PipelineBuilderContext* context,
+                                    IcebergTableDescriptor* iceberg_table_desc,
+                                    std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+                                    std::vector<TExpr>& partition_expr);
 
-Status IcebergTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
-    return Status::OK();
-}
+    Status create_row_delta_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                         pipeline::PipelineBuilderContext* context,
+                                         IcebergTableDescriptor* iceberg_table_desc,
+                                         std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+                                         std::vector<TExpr>& partition_expr);
 
-Status IcebergTableSink::close(RuntimeState* state, const Status& exec_status) {
-    ExprExecutor::close(_output_expr_ctxs, state);
-    return Status::OK();
-}
+    const IcebergTableSink& _sink;
+};
 
-Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
-                                               pipeline::PipelineBuilderContext* context) const {
+} // namespace
+
+Status IcebergTableSinkPipelineBuilder::decompose_to_pipeline(pipeline::OpFactories prev_operators,
+                                                              const TDataSink& thrift_sink,
+                                                              pipeline::PipelineBuilderContext* context) {
     auto* runtime_state = context->runtime_state();
     auto* fragment_ctx = context->fragment_context();
     TableDescriptor* table_desc =
@@ -177,11 +177,10 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     return Status::OK();
 }
 
-Status IcebergTableSink::create_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                                    pipeline::PipelineBuilderContext* /*context*/,
-                                                    IcebergTableDescriptor* iceberg_table_desc,
-                                                    std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                                    std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
+        IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+        std::vector<TExpr>& partition_expr) {
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     // Create merge sink context for delete files
@@ -203,7 +202,7 @@ Status IcebergTableSink::create_delete_sink_context(const TDataSink& thrift_sink
     delete_sink_ctx->runtime_state = runtime_state;
 
     // Delete files have columns: file_path and pos (row_position)
-    const auto& output_exprs = this->get_output_expr();
+    const auto& output_exprs = _sink.get_output_expr();
     delete_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
     delete_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
     delete_sink_ctx->output_exprs = output_exprs;
@@ -241,8 +240,8 @@ Status IcebergTableSink::create_delete_sink_context(const TDataSink& thrift_sink
         partition_expr = iceberg_table_desc->get_partition_exprs();
         const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
 
-        RETURN_IF_ERROR(update_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
-                                                               partition_source_column_names));
+        RETURN_IF_ERROR(update_iceberg_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
+                                                                       partition_source_column_names));
         delete_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
 
@@ -254,11 +253,10 @@ Status IcebergTableSink::create_delete_sink_context(const TDataSink& thrift_sink
     return Status::OK();
 }
 
-Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                                  pipeline::PipelineBuilderContext* /*context*/,
-                                                  IcebergTableDescriptor* iceberg_table_desc,
-                                                  std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                                  std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
+        IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+        std::vector<TExpr>& partition_expr) {
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     auto data_sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
@@ -274,7 +272,7 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
-    data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(this->get_output_expr(), runtime_state);
+    data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(_sink.get_output_expr(), runtime_state);
 
     size_t num_evaluators = data_sink_ctx->column_evaluators.size();
     TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
@@ -332,10 +330,10 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
         //do nothing
     } else if (t_iceberg_sink.is_static_partition_sink) {
         for (const auto& index : iceberg_table_desc->partition_source_index_in_schema()) {
-            if (index < 0 || index >= this->get_output_expr().size()) {
+            if (index < 0 || index >= _sink.get_output_expr().size()) {
                 return Status::InternalError(fmt::format("Invalid partition index: {}", index));
             }
-            partition_expr.push_back(this->get_output_expr()[index]);
+            partition_expr.push_back(_sink.get_output_expr()[index]);
         }
         data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     } else {
@@ -344,9 +342,9 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
 
         //for 3.5 fe -> 4.0 be compact, try to set this.
         if (partition_expr.empty()) {
-            auto output_expr = this->get_output_expr();
+            auto output_expr = _sink.get_output_expr();
             for (const auto& index : source_column_index) {
-                if (index < 0 || index >= this->get_output_expr().size()) {
+                if (index < 0 || index >= _sink.get_output_expr().size()) {
                     return Status::InternalError(fmt::format("Invalid partition index: {}", index));
                 }
                 partition_expr.push_back(output_expr[index]);
@@ -357,10 +355,10 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
         for (auto& part_expr : partition_expr) {
             int index = source_column_index[idx];
             //check index is valid for output_expr
-            if (index < 0 || index >= this->get_output_expr().size()) {
+            if (index < 0 || index >= _sink.get_output_expr().size()) {
                 return Status::InternalError(fmt::format("Invalid partition index: {}", index));
             }
-            auto slot_ref = this->get_output_expr()[index];
+            auto slot_ref = _sink.get_output_expr()[index];
             for (auto& node : part_expr.nodes) {
                 if (node.node_type == TExprNodeType::SLOT_REF) {
                     node = slot_ref.nodes[0];
@@ -375,11 +373,10 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     return Status::OK();
 }
 
-Status IcebergTableSink::create_row_delta_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
-                                                       pipeline::PipelineBuilderContext* /*context*/,
-                                                       IcebergTableDescriptor* iceberg_table_desc,
-                                                       std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
-                                                       std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
+        IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+        std::vector<TExpr>& partition_expr) {
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     // Resolve tuple descriptor
@@ -390,7 +387,7 @@ Status IcebergTableSink::create_row_delta_sink_context(const TDataSink& thrift_s
     }
 
     const auto& slots = tuple_desc->slots();
-    const auto& output_exprs = this->get_output_expr();
+    const auto& output_exprs = _sink.get_output_expr();
     if (slots.size() != output_exprs.size()) {
         return Status::InternalError(fmt::format("Mismatched slot and output expression counts: {} vs {}", slots.size(),
                                                  output_exprs.size()));
@@ -576,8 +573,8 @@ Status IcebergTableSink::create_row_delta_sink_context(const TDataSink& thrift_s
         const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
 
         // Update partition expressions using column slot map (same approach as delete sink)
-        RETURN_IF_ERROR(update_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
-                                                               partition_source_column_names));
+        RETURN_IF_ERROR(update_iceberg_partition_expr_slot_refs_by_map(partition_expr, delete_sink_ctx->column_slot_map,
+                                                                       partition_source_column_names));
         delete_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
         data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
@@ -606,9 +603,9 @@ Status IcebergTableSink::create_row_delta_sink_context(const TDataSink& thrift_s
 //   partition_source_column_names - Names of source columns for partitioning
 //
 // Returns Status::OK() on success, or an error if a required slot reference is missing.
-Status IcebergTableSink::update_partition_expr_slot_refs_by_map(
-        std::vector<TExpr>& partition_expr, const std::unordered_map<std::string, TExprNode>& column_slot_map,
-        const std::vector<std::string>& partition_source_column_names) const {
+Status update_iceberg_partition_expr_slot_refs_by_map(std::vector<TExpr>& partition_expr,
+                                                      const std::unordered_map<std::string, TExprNode>& column_slot_map,
+                                                      const std::vector<std::string>& partition_source_column_names) {
     // Validate input sizes match
     if (partition_expr.size() != partition_source_column_names.size()) {
         return Status::InternalError(fmt::format("Mismatched partition expression and column name counts: {} vs {}",
@@ -645,6 +642,12 @@ Status IcebergTableSink::update_partition_expr_slot_refs_by_map(
     }
 
     return Status::OK();
+}
+
+Status decompose_iceberg_table_sink_to_pipeline(const IcebergTableSink& sink, pipeline::OpFactories prev_operators,
+                                                const TDataSink& thrift_sink,
+                                                pipeline::PipelineBuilderContext* context) {
+    return IcebergTableSinkPipelineBuilder(sink).decompose_to_pipeline(std::move(prev_operators), thrift_sink, context);
 }
 
 } // namespace starrocks
