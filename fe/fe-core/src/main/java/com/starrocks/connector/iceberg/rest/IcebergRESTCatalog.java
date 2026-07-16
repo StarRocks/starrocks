@@ -90,8 +90,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private String catalogName = null;
     private final Configuration conf;
     private volatile RESTSessionCatalog delegate;
-    // replaced delegate kept for one recovery generation so requests in flight on it finish before close
-    private RESTSessionCatalog retiredDelegate;
     private Map<String, String> restCatalogProperties;
     private final boolean nestedNamespaceEnabled;
     private final boolean viewEndpointsEnabled;
@@ -495,37 +493,26 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         if (!authRecoveryEnabled) {
             return false;
         }
-        long now = System.currentTimeMillis();
-        if (now - lastAuthRecoveryMillis < AUTH_RECOVERY_MIN_INTERVAL_MS) {
-            // a recovery just ran (or just failed); retry on the current delegate instead of rebuilding again
+        if (System.currentTimeMillis() - lastAuthRecoveryMillis < AUTH_RECOVERY_MIN_INTERVAL_MS) {
+            // a rebuild ran or failed within the cooldown; retry on the current delegate rather than rebuild again
             return true;
         }
-        lastAuthRecoveryMillis = now;
         LOG.warn("REST catalog {} rejected the current OAuth2 token; rebuilding the catalog client to re-authenticate",
                 catalogName, cause);
         try {
             RESTSessionCatalog rebuilt = new RESTSessionCatalog();
             configureHadoopConf(rebuilt, conf);
             rebuilt.initialize(catalogName, restCatalogProperties);
-            RESTSessionCatalog stale = delegate;
+            // don't close the old delegate: tables it produced may still be cached upstream
+            // (CachingIcebergCatalog holds them up to its table-cache TTL) and use its FileIO; leave it for GC
             delegate = rebuilt;
-            closeQuietly(retiredDelegate);
-            retiredDelegate = stale;
             return true;
         } catch (Exception rebuildError) {
             LOG.warn("Failed to rebuild REST catalog {} to re-authenticate", catalogName, rebuildError);
             return false;
-        }
-    }
-
-    private static void closeQuietly(RESTSessionCatalog catalog) {
-        if (catalog == null) {
-            return;
-        }
-        try {
-            catalog.close();
-        } catch (Exception e) {
-            LOG.warn("Failed to close a replaced REST session catalog", e);
+        } finally {
+            // start the cooldown from completion so a slow rebuild doesn't immediately admit another
+            lastAuthRecoveryMillis = System.currentTimeMillis();
         }
     }
 

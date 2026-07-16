@@ -75,7 +75,7 @@ public class IcebergRESTCatalogAuthRecoveryTest {
     }
 
     @Test
-    public void testNotAuthorizedTriggersRebuildAndRetry() {
+    public void testNotAuthorizedTriggersRebuildAndRetry() throws Exception {
         new Expectations() {
             {
                 restCatalog.loadNamespaceMetadata((SessionCatalog.SessionContext) any, (Namespace) any);
@@ -91,6 +91,9 @@ public class IcebergRESTCatalogAuthRecoveryTest {
             {
                 restCatalog.initialize(anyString, (Map<String, String>) any);
                 times = 2; // constructor + one auth-recovery rebuild
+                // the replaced delegate is left for GC, never closed: its tables may still be cached upstream
+                restCatalog.close();
+                times = 0;
             }
         };
     }
