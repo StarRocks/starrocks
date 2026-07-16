@@ -98,6 +98,7 @@ set(EXEC_FILES
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
         ./formats/parquet/metadata_test.cpp
+        ./formats/parquet/meta_helper_test.cpp
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/complex_column_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp

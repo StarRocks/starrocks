@@ -204,6 +204,11 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
 
     if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
         for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
+            // Never index past the end of any of the three vectors -- a mismatch means we cannot
+            // validate this nested type, so stop and report it as invalid.
+            if (idx >= field_schema->children.size() || idx >= type_descriptor->children.size()) {
+                break;
+            }
             if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
                                &type_descriptor->children[idx])) {
                 has_valid_child = true;
