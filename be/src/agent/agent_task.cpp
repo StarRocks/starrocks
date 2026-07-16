@@ -28,11 +28,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
-<<<<<<< HEAD
-#include "storage/lake/external_cluster_snapshot_task.h"
-=======
 #include "storage/flat_json_config.h"
->>>>>>> e5c22e89d0d... [Enhancement] Propagate flat_json config ALTER to BE via versioned task (backport #74747) (#76229)
+#include "storage/lake/external_cluster_snapshot_task.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
