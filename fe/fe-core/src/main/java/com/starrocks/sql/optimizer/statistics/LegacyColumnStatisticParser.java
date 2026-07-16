@@ -31,7 +31,7 @@ public final class LegacyColumnStatisticParser {
         String valueString = columnStatistic.substring(1, endIndex);
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
 
-        // Check if this is the labeled format (contains "MIN:")
+        // Check if this is the new labeled format (contains "MIN:")
         boolean isLabeledFormat = valueString.contains("MIN:");
 
         double minValue;
@@ -73,18 +73,34 @@ public final class LegacyColumnStatisticParser {
             distinctValues = 1;
         }
 
-        ColumnStatistic.Builder builder = ColumnStatistic.builder()
-                .setMinValue(minValue)
-                .setMaxValue(maxValue)
-                .setNullsFraction(nullsFraction)
-                .setAverageRowSize(averageRowSize)
-                .setDistinctValuesCount(distinctValues);
-        if (!typeString.isEmpty()) {
-            builder.setType(ColumnStatistic.StatisticType.valueOf(typeString));
+        ColumnStatistic.Builder
+                builder = new ColumnStatistic.Builder(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
+        ColumnStatistic.StatisticType parsedType = parseTrailingStatisticType(typeString);
+        if (parsedType != null) {
+            builder.setType(parsedType);
         } else if (builder.build().isUnknownValue()) {
             builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
         }
         return builder;
+    }
+
+    // The tail may carry "COS: .."/"MCV: [..]" before the type token; take only the trailing enum
+    // so a dump with a histogram/collection-size no longer breaks StatisticType.valueOf on replay.
+    private static ColumnStatistic.StatisticType parseTrailingStatisticType(String typeString) {
+        if (typeString == null) {
+            return null;
+        }
+        String trimmed = typeString.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        for (ColumnStatistic.StatisticType statisticType : ColumnStatistic.StatisticType.values()) {
+            String name = statisticType.name();
+            if (trimmed.equals(name) || trimmed.endsWith(" " + name)) {
+                return statisticType;
+            }
+        }
+        return null;
     }
 
     private static double parseLabeledValue(String part, String label) {

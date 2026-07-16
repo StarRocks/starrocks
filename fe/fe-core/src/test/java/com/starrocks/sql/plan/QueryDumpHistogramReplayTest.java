@@ -133,10 +133,10 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testDesensitizedDumpDoesNotLeakHistogramMcv() throws Exception {
-        // A histogram's MCV holds raw column values. On the desensitized dump path the histogram must not
-        // reach the output at all: column_histogram is skipped, and column_statistics must render the base
-        // statistic only (ColumnStatistic.toString() would otherwise emit the MCV preview).
+    public void testDesensitizedDumpDoesNotLeakRawStatisticValues() throws Exception {
+        // A histogram's MCV and string min/max fields hold raw column values. On the desensitized dump path
+        // they must not reach the output: column_histogram is skipped, and column_statistics strips those
+        // raw-value fields before writing the dump DTO.
         connectContext.setThreadLocalInfo();
         starRocksAssert.withDatabase("hist_leak_db").useDatabase("hist_leak_db");
         starRocksAssert.withTable("CREATE TABLE t_hist (k1 int, k2 date) DUPLICATE KEY(k1) "
@@ -147,7 +147,10 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 ImmutableMap.of("SENSITIVE_MCV_VALUE", 50L));
         ColumnStatistic stat = ColumnStatistic.builder()
                 .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4)
-                .setDistinctValuesCount(10).setHistogram(histogram).build();
+                .setDistinctValuesCount(10).setHistogram(histogram)
+                .setMinString("SENSITIVE_MIN_STRING")
+                .setMaxString("SENSITIVE_MAX_STRING")
+                .build();
 
         QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
         dumpInfo.addTable("hist_leak_db", table);
@@ -166,6 +169,10 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 "non-desensitized dump should carry column_histogram");
         Assertions.assertTrue(normalDump.contains("SENSITIVE_MCV_VALUE"),
                 "non-desensitized dump carries the real MCV value");
+        Assertions.assertTrue(normalDump.contains("SENSITIVE_MIN_STRING"),
+                "non-desensitized dump preserves raw minString values for replay");
+        Assertions.assertTrue(normalDump.contains("SENSITIVE_MAX_STRING"),
+                "non-desensitized dump preserves raw maxString values for replay");
 
         // Desensitized dump: no histogram section, and the raw MCV value must not leak via column_statistics.
         dumpInfo.setDesensitizedInfo(true);
@@ -176,5 +183,9 @@ public class QueryDumpHistogramReplayTest extends ReplayFromDumpTestBase {
                 "desensitized dump must not carry the histogram MCV preview");
         Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MCV_VALUE"),
                 "desensitized dump must not leak raw MCV values");
+        Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MIN_STRING"),
+                "desensitized dump must not leak raw minString values");
+        Assertions.assertFalse(desensitizedDump.contains("SENSITIVE_MAX_STRING"),
+                "desensitized dump must not leak raw maxString values");
     }
 }
