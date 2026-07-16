@@ -918,6 +918,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         return incrementalScanRangeDelivery && !reachLimit && incrementalDeliveryCursor < result.size();
     }
 
+    /**
+     * Number of scan ranges not yet handed to the scheduler; 0 unless incremental delivery is armed.
+     */
+    public int numRemainingScanRanges() {
+        return hasMoreScanRanges() ? result.size() - incrementalDeliveryCursor : 0;
+    }
+
     @Override
     public void setReachLimit() {
         this.reachLimit = true;
