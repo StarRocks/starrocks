@@ -54,6 +54,13 @@
         </dependency>
 
         <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.fluss</groupId>
             <artifactId>fluss-client</artifactId>
             <version>${fluss.version}</version>
