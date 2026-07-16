@@ -203,7 +203,7 @@ public class FlussSplitScanner extends ConnectorScanner {
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             int numRows = 0;
-            while (delegateScanner.hasNext() && numRows < fetchSize) {
+            while (numRows < fetchSize && delegateScanner.hasNext()) {
                 InternalRow row = delegateScanner.getNext();
                 if (row == null) {
                     break;

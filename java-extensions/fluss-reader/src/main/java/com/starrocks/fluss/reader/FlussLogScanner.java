@@ -66,20 +66,22 @@ public class FlussLogScanner extends ConnectorScannerProxy {
 
     @Override
     boolean hasNext() throws IOException {
-        if (currentBatch != null && currentBatch.hasNext()) {
-            return true;
+        while (true) {
+            if (currentBatch != null && currentBatch.hasNext()) {
+                return true;
+            }
+            if (finished) {
+                return false;
+            }
+
+            ScanRecords records = logScanner.poll(POLL_TIMEOUT);
+            List<ScanRecord> bucketRecords = records.records(tableBucket);
+            if (bucketRecords.isEmpty()) {
+                // An empty poll may be a timeout; keep polling until the stopping offset is reached.
+                continue;
+            }
+            currentBatch = trimToStoppingOffset(bucketRecords).iterator();
         }
-        if (finished) {
-            return false;
-        }
-        ScanRecords records = logScanner.poll(POLL_TIMEOUT);
-        List<ScanRecord> bucketRecords = records.records(tableBucket);
-        if (bucketRecords.isEmpty()) {
-            finished = true;
-            return false;
-        }
-        currentBatch = trimToStoppingOffset(bucketRecords).iterator();
-        return currentBatch.hasNext();
     }
 
     @Override
