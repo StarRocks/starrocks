@@ -2963,9 +2963,8 @@ TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_is_explicit_noop) {
     SchemaChangeHandler handler(_tablet_manager.get());
     ASSERT_OK(handler.process_alter_tablet(request));
 
-    ASSIGN_OR_ABORT(auto txn_log,
-                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(5002, 800002),
-                                                  /*fill_cache=*/false));
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(5002, 800002),
+                                                                /*fill_cache=*/false));
     ASSERT_TRUE(txn_log->has_op_add_index());
     EXPECT_EQ(0, txn_log->op_add_index().new_indexes_size());
     EXPECT_EQ(0, txn_log->op_add_index().segment_entries_size());
