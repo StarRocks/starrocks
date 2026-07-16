@@ -18,10 +18,10 @@
 
 #include "common/logging.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 

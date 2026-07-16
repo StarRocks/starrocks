@@ -237,7 +237,6 @@ public class FileListRepoTest {
                 return tablePresentInMetastore.get();
             }
         };
-        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         RepoCreator creator = RepoCreator.getInstance();
 
         // failed for the first time
@@ -502,7 +501,6 @@ public class FileListRepoTest {
     public void testDMLException() throws Exception {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
-        RepoAccessor accessor = RepoAccessor.getInstance();
         SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         new Expectations(executor) {

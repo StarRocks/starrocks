@@ -484,6 +484,58 @@ TEST_F(NoOpPublishTest, multi_txn_first_missing_txnlog_no_force_publish_errors) 
     ASSERT_FALSE(result.ok());
 }
 
+// Regression test: a txn already published in single mode (meta@2 written,
+// txnlog gone) gets re-sent as the first element of a batch publish, hitting
+// the base_version skip branch. Confirms publish_version succeeds without
+// tripping the log_applier-init DCHECK.
+TEST_F(NoOpPublishTest, single_to_batch_conversion_keeps_base_version_in_sync) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id_1 = next_id(); // already published in single mode; its txnlog is gone
+    const int64_t txn_id_2 = next_id();
+    const int64_t txn_id_3 = next_id();
+
+    // txn_id_1 already published: meta@2 exists, its txnlog is gone.
+    auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
+    meta_v2->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(meta_v2));
+
+    // Real txnlogs for txn_id_2/3 so the batch can proceed past the skip.
+    for (auto txn_id : {txn_id_2, txn_id_3}) {
+        auto txn_log = std::make_shared<TxnLogPB>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(txn_id);
+        auto log_path = _tablet_mgr->txn_log_location(tablet_id, txn_id);
+        CHECK_OK(_tablet_mgr->put_txn_log(txn_log, log_path));
+    }
+
+    TxnInfoPB t1;
+    t1.set_txn_id(txn_id_1);
+    t1.set_txn_type(TXN_NORMAL);
+    t1.set_combined_txn_log(false);
+    t1.set_commit_time(time(nullptr));
+
+    TxnInfoPB t2;
+    t2.set_txn_id(txn_id_2);
+    t2.set_txn_type(TXN_NORMAL);
+    t2.set_combined_txn_log(false);
+    t2.set_commit_time(time(nullptr));
+
+    TxnInfoPB t3;
+    t3.set_txn_id(txn_id_3);
+    t3.set_txn_type(TXN_NORMAL);
+    t3.set_combined_txn_log(false);
+    t3.set_commit_time(time(nullptr));
+
+    // Re-sent as one batch with the stale base_version=1.
+    std::vector<TxnInfoPB> txns{t1, t2, t3};
+    auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 4, txns,
+                                  /*skip_write_tablet_metadata=*/false);
+    ASSERT_OK(result.status());
+
+    auto new_metadata = result.value();
+    ASSERT_EQ(4, new_metadata->version());
+}
+
 // Coverage test for the i>0 + missing-txnlog + !force_publish branch (legacy
 // hard-error path). When a non-first txn in a batch is missing its log and is
 // not flagged for force_publish, the publish loop must abort rather than

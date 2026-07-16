@@ -101,7 +101,6 @@ public class CompactionJob {
 
     public CompactionTask.TaskResult getResult() {
         int allSuccess = 0;
-        int partialSuccess = 0;
         int noneSuccess = 0;
         for (CompactionTask task : tasks) {
             CompactionTask.TaskResult subTaskResult = task.getResult();
@@ -109,7 +108,6 @@ public class CompactionJob {
                 case NOT_FINISHED:
                     return subTaskResult; // early return
                 case PARTIAL_SUCCESS:
-                    partialSuccess++;
                     break;
                 case NONE_SUCCESS:
                     noneSuccess++;

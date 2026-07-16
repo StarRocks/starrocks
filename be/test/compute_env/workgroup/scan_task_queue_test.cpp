@@ -29,8 +29,8 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_scan_task_queue.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 
 namespace starrocks::workgroup {
 

@@ -20,7 +20,7 @@
 
 #include "column/global_dict/types_fwd_decl.h"
 #include "common/status.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class SlotDescriptor;

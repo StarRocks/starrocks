@@ -14,23 +14,38 @@
 
 #pragma once
 
+#include <atomic>
 #include <boost/algorithm/string.hpp>
 #include <cstdint>
+#include <limits>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "column/column.h"
+#include "column/column_access_path.h"
+#include "column/global_dict/types.h"
+#include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "compute_env/query/file_scan_split_context.h"
 #include "formats/deletion_bitmap.h"
+#include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 
 class ExprContext;
+class PredicateTree;
+class RuntimeScanRangePruner;
 struct FileScanSplitContext;
+class TIcebergSchema;
 
 struct SkipRowsContext {
     DeletionBitmapPtr deletion_bitmap;
@@ -163,12 +178,6 @@ struct FormatScannerOptions {
     int64_t connector_max_split_size = 0;
 };
 
-struct FormatScanContext {
-    FormatScannerOptions options;
-    FormatScannerStats* stats = nullptr;
-    const FileScanSplitContext* split_context = nullptr;
-};
-
 // All conjunct contexts and slot metadata derived from the scan plan node.
 struct FormatScannerConjuncts {
     // Clone of min_max_ctxs plus scan conjuncts, used to build the
@@ -208,6 +217,138 @@ struct FormatColumnInfo {
     std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
     const SlotId slot_id() const { return slot_desc->id(); }
     const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+};
+
+struct FormatScanContext {
+    FormatScannerOptions options;
+    FormatScannerStats* stats = nullptr;
+    const FileScanSplitContext* split_context = nullptr;
+
+    // All conjunct contexts and slot metadata derived from the scan plan node.
+    FormatScannerConjuncts conjuncts;
+
+    // Mutable per-reader shallow copy of conjuncts.by_slot.  Missing-column
+    // discovery erases entries for columns absent from the file.
+    std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
+
+    // Conjuncts whose referenced slots are missing from the data file.
+    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
+
+    // Materialized columns read from the data file.
+    std::vector<FormatColumnInfo> materialized_columns;
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
+
+    // Partition column metadata and pre-evaluated constant values.
+    std::vector<FormatColumnInfo> partition_columns;
+    Columns partition_values;
+
+    // Extended column metadata (iceberg data_seq_num, etc.).
+    std::vector<FormatColumnInfo> extended_columns;
+
+    // Evaluated extended column values.
+    Columns extended_values;
+
+    // Columns requested by the query but absent from the data file.
+    std::vector<SlotDescriptor*> not_existed_slots;
+
+    // Reserved/system fields such as Iceberg row lineage columns.
+    std::vector<SlotDescriptor*> reserved_field_slots;
+
+    // Table column access paths for complex/variant projection.
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+
+    // FE-provided global dictionary maps, if any.
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    std::string timezone;
+
+    // Scan-range data needed by format readers without depending on
+    // THdfsScanRange.
+    int64_t scan_range_offset = 0;
+    int64_t scan_range_length = std::numeric_limits<int64_t>::max();
+    int32_t scan_range_id = -1;
+    std::map<int32_t, TExprMinMaxValue> min_max_values;
+    std::map<int32_t, TExpr> extended_column_exprs;
+    std::optional<int64_t> first_row_id;
+    int64_t file_record_count = 0;
+    bool has_file_record_count = false;
+    bool is_first_split = false;
+
+    // Table/lake schema used by Parquet schema evolution matching.
+    const TIcebergSchema* lake_schema = nullptr;
+
+    // Non-owning predicate state built by upper scan orchestration.
+    const PredicateTree* predicate_tree = nullptr;
+    RuntimeScanRangePruner* runtime_filter_scan_range_pruner = nullptr;
+
+    // TODO: probably should be removed in later version.
+    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
+
+    struct SplitState {
+        std::vector<FileScanSplitContextPtr> split_tasks;
+        bool has_split_tasks = false;
+        size_t estimated_mem_usage_per_split_task = 0;
+    } split;
+
+    bool is_lazy_materialization_slot(SlotId slot_id) const;
+    bool can_use_count_optimization() const;
+    bool has_count_column() const { return _count_slot.has_value(); }
+    bool can_use_min_max_optimization() const;
+
+    void update_with_none_existed_slot(SlotDescriptor* slot);
+    void update_return_count_columns();
+    void update_min_max_columns();
+
+    // update materialized column against data file.
+    // and to update not_existed slots and conjuncts.
+    // and to update `conjunct_ctxs_by_slot` field.
+    Status update_materialized_columns(const std::unordered_set<std::string>& names);
+
+    // "not existed columns" are materialized columns not found in file
+    // this usually happens when use changes schema. for example
+    // user create table with 3 fields A, B, C, and there is one file F1
+    // but user change schema and add one field like D.
+    // when user select(A, B, C, D), then D is the non-existed column in file F1.
+    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk, append partition column to chunk,
+    // otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // Emit `output_rows` rows of `value` for the ___count___ column.
+    // Idempotent: if the chunk already has a ___count___ column, this is a no-op.
+    // Used by both the count-opt aggregated path (output_rows=1, value=row_count)
+    // and the per-row fallback (output_rows=row_count, value=1).
+    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value);
+    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot_desc, const TExprMinMaxValue& value,
+                                                 size_t row_count);
+    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // Append all side columns (not-existed, partition, extended, count) at once.
+    // Safe when any category is empty — each sub-function is a no-op in that case.
+    Status append_side_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
+                                          const std::vector<FormatColumnInfo>& columns, const Columns& values);
+
+    // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
+    StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
+
+    // other helper functions.
+    bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
+    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+    // Evaluate both single-slot conjuncts (conjunct_ctxs_by_slot) and multi-slot
+    // conjuncts (conjuncts.scanner_ctxs) on the chunk in place.  Safe to call
+    // when either category is empty — each sub-step is a no-op.
+    Status evaluate_all_predicates(ChunkPtr* chunk);
+
+    void merge_split_tasks();
+
+private:
+    // ___count___ column for COUNT(*) optimization.
+    // Separated from not_existed_slots because it is an execution marker,
+    // not a schema-evolution missing column.
+    std::optional<SlotDescriptor*> _count_slot;
 };
 
 } // namespace starrocks

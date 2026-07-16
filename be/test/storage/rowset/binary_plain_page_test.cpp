@@ -48,9 +48,9 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 

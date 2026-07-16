@@ -60,6 +60,14 @@ public class AggStateUtils {
                     .add(FunctionSet.SUM)
                     .add(FunctionSet.AVG)
                     .build();
+    // bitmap_union/hll_union/percentile_union take a metric-typed argument whose combinator state
+    // is that same type, so they are exempt from the metric-type argument rejection below.
+    public static final Set<String> METRIC_STATE_UNION_FUNCTIONS =
+            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    .add(FunctionSet.BITMAP_UNION)
+                    .add(FunctionSet.HLL_UNION)
+                    .add(FunctionSet.PERCENTILE_UNION)
+                    .build();
 
     /**
      * TODO: Refactor this function to unify the same check policy with FunctionAnalyzer#analyze
@@ -77,12 +85,14 @@ public class AggStateUtils {
                 FunctionSet.onlyAnalyticUsedFunctions.contains(aggFunc.functionName())) {
             return false;
         }
+        String fnName = aggFunc.functionName();
+        boolean isMetricStateUnion = METRIC_STATE_UNION_FUNCTIONS.contains(fnName);
         // unsupported argument types
         if (Stream.of(aggFunc.getArgs()).anyMatch(t -> t.isUnknown() || t.isTime() ||
-                t.isBitmapType() || t.isHllType() || t.isPercentile() || t.isNull() || t.isDecimalV2())) {
+                (!isMetricStateUnion && (t.isBitmapType() || t.isHllType() || t.isPercentile())) ||
+                t.isNull() || t.isDecimalV2())) {
             return false;
         }
-        String fnName = aggFunc.functionName();
         if (ONLY_NUMERIC_ARGUMENT_FUNCTIONS_L1.contains(fnName) &&
                 Stream.of(aggFunc.getArgs()).anyMatch(t -> !t.canApplyToNumeric())) {
             return false;
@@ -145,6 +155,15 @@ public class AggStateUtils {
         } else {
             return fnName;
         }
+    }
+
+    /**
+     * Base aggregate name from a resolved function, keyed on TYPE not name: a genuine combinator
+     * (avg_union) is stripped to its base (avg), but a plain aggregate whose name merely ends in
+     * "_union" (bitmap_union/hll_union/percentile_union) is kept whole, not mis-stripped to "bitmap".
+     */
+    public static String getBaseAggFuncName(Function fn) {
+        return isAggStateCombinator(fn) ? getAggFuncNameOfCombinator(fn.functionName()) : fn.functionName();
     }
 
     /**

@@ -362,6 +362,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
+### `push_down_non_grouped_aggregate_below_union`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to push down non-grouped aggregations below Union in the physical plan.
+- Introduced in: -
+
 ### `enable_query_queue_v2`
 
 - Default: true

@@ -27,17 +27,17 @@
 #include "base/uid_util.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/execution_group_lifecycle.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "exec/runtime/adaptive/adaptive_dop_param.h"
-#include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/execution_group_lifecycle.h"
+#include "exec_primitive/pipeline/primitives/fragment_lifecycle.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -45,7 +45,7 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/predicate_tree_params.h"
+#include "storage_primitive/predicate_tree_params.h"
 
 namespace starrocks {
 
@@ -165,10 +165,6 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
-    void init_jit_profile(bool jit_enabled);
-
-    void update_jit_profile(int64_t time_ns);
-
     void iterate_pipeline(const std::function<void(Pipeline*)>& call);
     Status iterate_pipeline(const std::function<Status(Pipeline*)>& call);
 
@@ -210,6 +206,13 @@ private:
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    // MorselQueueFactory must outlive the pipelines/operators declared below: a
+    // scan operator's ConnectorChunkSource::close() is invoked from ~ScanOperator
+    // during _pipelines teardown and calls back into the MorselQueueFactory via
+    // ScanOperatorFactory::morsel_queue_factory(). Declaring _morsel_queue_factories
+    // before _pipelines makes it destroyed after them, avoiding a use-after-free on
+    // non-EOF (cancel/error/limit) teardown paths.
+    MorselQueueFactoryMap _morsel_queue_factories;
     // Must outlive PipelineDriver observers owned by _pipelines.
     std::unique_ptr<EventScheduler> _event_scheduler;
     Pipelines _pipelines;
@@ -221,7 +224,6 @@ private:
     std::shared_ptr<PipelineTimerTask> _timeout_task = nullptr;
     std::shared_ptr<PipelineTimerTask> _report_state_task = nullptr;
 
-    MorselQueueFactoryMap _morsel_queue_factories;
     DriverLimiter::TokenPtr _driver_token = nullptr;
 
     std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
@@ -232,9 +234,6 @@ private:
     AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
-
-    RuntimeProfile::Counter* _jit_counter = nullptr;
-    RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
 };

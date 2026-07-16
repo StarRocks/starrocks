@@ -44,14 +44,15 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "exec/query_scan_metrics.h"
+#include "exec/exec_env.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "platform/http/http_metrics.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/service_metrics.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks {
@@ -79,7 +80,6 @@ void init_backend_metrics_for_test() {
         options.storage_paths.emplace_back(kTestDiskPath);
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
-        options.init_jvm_metrics = false;
         BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
     });
 }
@@ -161,6 +161,7 @@ TEST_F(BackendMetricsTest, Normal) {
     auto runtime_metrics = RuntimeMetrics::instance();
     auto service_metrics = ServiceMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
+    auto vector_index_cache_metrics = VectorIndexCacheMetrics::instance();
     auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
     // check metric
@@ -217,6 +218,13 @@ TEST_F(BackendMetricsTest, Normal) {
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("106", metric->to_string().c_str());
+    }
+    {
+        vector_index_cache_metrics->update(/*capacity=*/1024, /*usage=*/256, /*lookup_count=*/2, /*hit_count=*/1);
+        metrics->trigger_hook();
+        auto metric = metrics->get_metric("vector_index_cache_capacity");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("1024", metric->to_string().c_str());
     }
     {
         storage_metrics->push_requests_fail_total.increment(107);

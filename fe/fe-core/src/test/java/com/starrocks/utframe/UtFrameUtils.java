@@ -102,9 +102,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -134,6 +136,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
@@ -141,6 +144,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
@@ -165,6 +169,7 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -460,7 +465,6 @@ public class UtFrameUtils {
         Collection<Pair<String, Integer>> addresses = new ArrayList<>();
         Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8080);
         addresses.add(pair);
-        String location = "bos://backup-cmy";
         GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers(brokerName, addresses);
     }
 
@@ -997,6 +1001,36 @@ public class UtFrameUtils {
             backendResourceStat.setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, replayDumpInfo.getCachedAvgNumCores());
         }
 
+        // recreate partitions for automatically/expression-partitioned tables. Their CREATE TABLE omits
+        // partition definitions, so the table above was created empty; rebuild the concrete partitions from
+        // the captured representative values (via the same path load uses to auto-create partitions), so the
+        // per-partition row counts below can be matched by partition name.
+        for (Map.Entry<String, List<List<String>>> entry :
+                replayDumpInfo.getAutomaticPartitionValuesMap().entrySet()) {
+            String[] nameParts = entry.getKey().split("\\.");
+            if (nameParts.length != 2 || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nameParts[0]);
+            if (db == null) {
+                continue;
+            }
+            Table table = db.getTable(nameParts[1]);
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            try {
+                AddPartitionClause addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                        (OlapTable) table, entry.getValue(), false, null);
+                // resolve the clause (populates resolvedPartitionDescList) before adding, mirroring the load path.
+                new AlterTableClauseAnalyzer(table).analyze(connectContext, addPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addPartitions(connectContext, db, nameParts[1], addPartitionClause);
+            } catch (Exception e) {
+                System.out.println("failed to replay automatic partitions for " + entry.getKey() + ": "
+                        + e.getMessage());
+            }
+        }
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
@@ -1017,6 +1051,16 @@ public class UtFrameUtils {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
                                 columnStatisticEntry.getValue());
+                Histogram histogram = columnStatisticEntry.getValue().getHistogram();
+                if (histogram != null) {
+                    String columnName = columnStatisticEntry.getKey();
+                    GlobalStateMgr.getCurrentState().getStatisticStorage()
+                            .addHistogramStatistics(replayTable, columnName, histogram);
+                    // register meta too, else CachedStatisticStorage.getHistogramStatistics gates the column out
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+                            0, replayTable.getId(), columnName, StatsConstants.AnalyzeType.HISTOGRAM,
+                            LocalDateTime.MIN, Maps.newHashMap()));
+                }
             }
         }
         return replaySql;

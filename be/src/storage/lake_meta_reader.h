@@ -64,6 +64,9 @@ public:
                              std::vector<SegmentMetaCollectOptions>* options_list) {
         return _get_segments(tablet, segments, options_list);
     }
+    Status TEST_init_seg_meta_collecters(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& params) {
+        return _init_seg_meta_collecters(tablet, params);
+    }
 #endif
 
 private:

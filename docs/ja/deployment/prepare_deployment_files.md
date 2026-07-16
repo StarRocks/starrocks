@@ -63,6 +63,8 @@ v3.1.14、v3.2.10、および v3.3.3 から、StarRocks は `starrocks/{Componen
 
 v3.1.14、v3.2.10、および v3.3.3 より前のバージョンでは、StarRocks は `starrocks/artifacts-ubuntu` および `starrocks/artifacts-centos7` リポジトリで Docker イメージを提供しています。
 
+v4.2 以降、CentOS 7 ビルドディストリビューションは廃止され、Rocky Linux 9 に置き換えられます。v4.2 以降は `starrocks/artifacts-rocky9` を使用してください。`starrocks/artifacts-centos7` は v4.1 以前のバージョンでのみ利用可能です。
+
 :::
 
 1. [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags) から StarRocks Docker イメージをダウンロードします。イメージのタグに基づいて特定のバージョンを選択できます。

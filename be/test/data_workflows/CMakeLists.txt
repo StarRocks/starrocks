@@ -34,5 +34,5 @@ add_library(starrocks_data_workflows_test_objs OBJECT ${DATA_WORKFLOWS_TEST_FILE
 target_link_libraries(starrocks_data_workflows_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_data_workflows_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(data_workflows_test ${CMAKE_SOURCE_DIR}/test/test_main.cpp $<TARGET_OBJECTS:starrocks_data_workflows_test_objs>)
-target_link_libraries(data_workflows_test ${TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(data_workflows_test Exprs ExprCore)
+target_link_libraries(data_workflows_test SchemaScannerBuiltin ${TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(data_workflows_test ${EXPR_FORCE_LOAD_LIBS})

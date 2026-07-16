@@ -25,10 +25,11 @@
 #include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/disjunctive_predicates.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
-#include "storage/runtime_filter_predicate.h"
 #include "storage/seek_range.h"
+#include "storage_primitive/disjunctive_predicates.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/range.h"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class ColumnAccessPath;
@@ -48,6 +49,16 @@ struct VectorSearchOption;
 
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+
+struct SegmentReadStateCache {
+    // Optional prepared scan state owned by the caller. SegmentIterator only borrows
+    // these ranges while it is initialized, so the owner must outlive the iterator.
+    // The prepared scan_range already has every page filter (zonemap, bloom filter) folded in at
+    // the seed, so a reusing child just applies it and never re-runs a page filter on its sub-range.
+    SparseRangePtr scan_range = nullptr;
+    const std::vector<std::optional<Range<rowid_t>>>* seek_range_rowid_ranges = nullptr;
+    const std::optional<Range<rowid_t>>* tablet_rowid_range = nullptr;
+};
 
 class SegmentReadOptions {
 public:
@@ -69,6 +80,10 @@ public:
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // Per-segment vector index uid for this segment's .vi path (see SegmentMetadataPB.segment_vector_index_uid);
+    // filled by lake Rowset::read() for vector-indexed segments. -1 = unset (non-lake or no vector
+    // index); the cloud-native ANN read path requires it set.
+    int64_t segment_vector_index_uid = -1;
     // rowset base segment id
     uint32_t rowset_id = 0;
     uint32_t dynamic_rss_id_base = 0;
@@ -101,6 +116,7 @@ public:
     /// A segment may be divided into multiple split to scan concurrently.
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
+    SegmentReadStateCache read_state_cache;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     RuntimeScanRangePruner runtime_range_pruner;

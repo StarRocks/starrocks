@@ -151,7 +151,7 @@ public class StorageVolumeMgrEditLogTest {
     public void testSetDefaultStorageVolumeEditLogException() throws Exception {
         // 1. Prepare test data
         String svName = "exception_sv";
-        StorageVolume sv = createTestStorageVolume(svName);
+        createTestStorageVolume(svName);
 
         // 2. Create a separate StorageVolumeMgr for exception testing
         StorageVolumeMgr exceptionStorageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();

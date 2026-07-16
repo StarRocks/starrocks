@@ -31,6 +31,7 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
@@ -38,7 +39,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -56,13 +56,13 @@ import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -217,14 +217,20 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         Set<String> partitionColumns = metadata.getPartitionColNames();
 
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(operator);
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are unwrapped by
+        // ScalarOperationToDeltaLakeExpr into a string-domain comparison, which never equals a 'yyyy-MM-dd'
+        // partition value and would prune every file (wrong empty result / under-estimated cardinality). Keep them
+        // out of the pushed predicate and evaluate them StarRocks-side against each file's partition values below.
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                scalarOperators, identityStringPartitionColumns(deltaLakeTable, partitionColumns));
         ScalarOperationToDeltaLakeExpr.DeltaLakeContext deltaLakeContext =
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
-        Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(scalarOperators, deltaLakeContext);
+        Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(residual.pushable, deltaLakeContext);
 
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
-        return new CloseableIterator<>() {
+        CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> baseIterator = new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
             boolean hasMore = true;
@@ -290,6 +296,75 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 }
             }
         };
+
+        if (residual.residual.isEmpty()) {
+            return baseIterator;
+        }
+        // Evaluate the cast-on-string-partition residual StarRocks-side: keep a file unless its partition value
+        // provably cannot satisfy the residual (partitionMayMatch drops only on a definitive false), consistent
+        // with the backend filter and never dropping a possibly-matching file.
+        return new CloseableIterator<>() {
+            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> nextMatch = null;
+            boolean finished = false;
+
+            @Override
+            public boolean hasNext() {
+                advance();
+                return nextMatch != null;
+            }
+
+            @Override
+            public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
+                advance();
+                if (nextMatch == null) {
+                    throw new java.util.NoSuchElementException();
+                }
+                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> result = nextMatch;
+                nextMatch = null;
+                return result;
+            }
+
+            private void advance() {
+                if (nextMatch != null || finished) {
+                    return;
+                }
+                while (baseIterator.hasNext()) {
+                    Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> candidate = baseIterator.next();
+                    if (PartitionCastPredicatePruner.partitionMayMatch(
+                            residual.residual, candidate.first.getPartitionValues())) {
+                        nextMatch = candidate;
+                        return;
+                    }
+                }
+                finished = true;
+            }
+
+            @Override
+            public void close() {
+                try {
+                    baseIterator.close();
+                } catch (IOException e) {
+                    LOG.error("Failed to close delta lake scan file iterator", e);
+                }
+            }
+        };
+    }
+
+    // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
+    // an identity string partition column for PartitionCastPredicatePruner.split. Package-private for testing.
+    static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
+        Set<String> lowerPartitionColumns = new HashSet<>();
+        for (String name : partitionColumns) {
+            lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));
+        }
+        Set<String> result = new HashSet<>();
+        for (Column column : table.getColumns()) {
+            if (lowerPartitionColumns.contains(column.getName().toLowerCase(Locale.ROOT))
+                    && column.getType().isStringType()) {
+                result.add(column.getName().toLowerCase(Locale.ROOT));
+            }
+        }
+        return result;
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
@@ -384,15 +459,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get deltalake table {}.{}.{}", catalogName, dbName, tblName, e);
-            String errMsg = e.getMessage();
-            Throwable ce = ExceptionUtils.getRootCause(e);
-            if (ce instanceof SemanticException se) {
-                errMsg = se.getDetailMsg();
-            } else if (ce != null) {
-                errMsg = String.format("Failed to get deltalake table %s.%s.%s. %s", catalogName, dbName, tblName,
-                        ce.getMessage());
-            }
-            throw new StarRocksConnectorException(errMsg, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get Delta Lake table %s.%s.%s", catalogName, dbName, tblName), e);
         }
     }
 

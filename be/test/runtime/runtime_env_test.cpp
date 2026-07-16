@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/runtime_env.h"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -25,36 +27,35 @@
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "platform/platform_env.h"
-#include "runtime/env/diagnose_daemon.h"
-#include "runtime/env/global_env.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
 
-TEST(GlobalEnvTest, CalcQueryMemLimit) {
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(-1, 80), -1);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, -2), 900000000);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 102), 900000000);
-    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 70), 700000000);
+TEST(RuntimeEnvTest, CalcQueryMemLimit) {
+    ASSERT_EQ(RuntimeEnv::calc_max_query_memory(-1, 80), -1);
+    ASSERT_EQ(RuntimeEnv::calc_max_query_memory(1000000000, -2), 900000000);
+    ASSERT_EQ(RuntimeEnv::calc_max_query_memory(1000000000, 102), 900000000);
+    ASSERT_EQ(RuntimeEnv::calc_max_query_memory(1000000000, 70), 700000000);
 }
 
-TEST(GlobalEnvTest, GetInstanceReturnsStableSingleton) {
-    ASSERT_NE(GlobalEnv::GetInstance(), nullptr);
-    ASSERT_EQ(GlobalEnv::GetInstance(), GlobalEnv::GetInstance());
+TEST(RuntimeEnvTest, GetInstanceReturnsStableSingleton) {
+    ASSERT_NE(RuntimeEnv::GetInstance(), nullptr);
+    ASSERT_EQ(RuntimeEnv::GetInstance(), RuntimeEnv::GetInstance());
 }
 
-TEST(GlobalEnvTest, OwnsHeartbeatFlags) {
-    auto* env = GlobalEnv::GetInstance();
+TEST(RuntimeEnvTest, OwnsHeartbeatFlags) {
+    auto* env = RuntimeEnv::GetInstance();
     auto* heartbeat_flags = env->heartbeat_flags();
     ASSERT_NE(heartbeat_flags, nullptr);
     ASSERT_EQ(heartbeat_flags, env->heartbeat_flags());
 }
 
-TEST(GlobalEnvTest, OwnsDiagnoseDaemonLifecycle) {
+TEST(RuntimeEnvTest, OwnsDiagnoseDaemonLifecycle) {
     CpuInfo::init();
     MemInfo::init();
 
-    auto* env = GlobalEnv::GetInstance();
+    auto* env = RuntimeEnv::GetInstance();
     auto* platform_env = PlatformEnv::GetInstance();
     env->stop();
     platform_env->destroy();
@@ -89,11 +90,11 @@ TEST(GlobalEnvTest, OwnsDiagnoseDaemonLifecycle) {
     std::filesystem::remove_all(small_file_dir, ec);
 }
 
-TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
+TEST(RuntimeEnvTest, OwnsExecutionThreadPools) {
     CpuInfo::init();
     runtime_env_test::set_small_thread_pool_configs();
 
-    auto* env = GlobalEnv::GetInstance();
+    auto* env = RuntimeEnv::GetInstance();
     env->destroy_thread_pools();
 
     MetricRegistry metrics("runtime_env_test");
@@ -105,7 +106,9 @@ TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     ASSERT_NE(env->load_rowset_thread_pool(), nullptr);
     ASSERT_NE(env->load_segment_thread_pool(), nullptr);
     ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
-    ASSERT_NE(env->jvm_call_pool(), nullptr);
+    ASSERT_NE(env->java_env(), nullptr);
+    ASSERT_NE(env->java_env()->jvm_call_pool(), nullptr);
+    ASSERT_NE(env->java_env()->udf_call_pool(), nullptr);
     ASSERT_NE(env->pipeline_prepare_pool(), nullptr);
     ASSERT_NE(env->pipeline_sink_io_pool(), nullptr);
     ASSERT_NE(env->query_rpc_pool(), nullptr);
@@ -119,15 +122,16 @@ TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
     env->shutdown_thread_pools();
     env->destroy_thread_pools();
     ASSERT_EQ(env->thread_pool(), nullptr);
-    ASSERT_EQ(env->jvm_call_pool(), nullptr);
+    ASSERT_EQ(env->java_env()->jvm_call_pool(), nullptr);
+    ASSERT_EQ(env->java_env()->udf_call_pool(), nullptr);
     ASSERT_EQ(env->load_rpc_pool(), nullptr);
 }
 
-TEST(GlobalEnvTest, OwnsLakeThreadPools) {
+TEST(RuntimeEnvTest, OwnsLakeThreadPools) {
     CpuInfo::init();
     runtime_env_test::set_small_thread_pool_configs();
 
-    auto* env = GlobalEnv::GetInstance();
+    auto* env = RuntimeEnv::GetInstance();
     env->destroy_thread_pools();
 
     MetricRegistry metrics("runtime_env_lake_test");

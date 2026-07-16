@@ -107,7 +107,7 @@ class OrcMetaTierIntegrationTest {
         Mockito.when(sourceTable.getProperties()).thenReturn(new HashMap<>());
         Mockito.when(sourceTable.loadFileList()).thenReturn(new ArrayList<>(files));
         return new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);

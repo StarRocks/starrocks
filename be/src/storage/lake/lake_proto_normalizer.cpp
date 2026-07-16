@@ -297,6 +297,18 @@ Status normalize_op_write_before_save(TxnLogPB::OpWrite* op_write) {
 
 // ---- Top-level walkers --------------------------------------------------------------------------
 
+void force_cloud_native_pk_persistent_index(TabletMetadataPB* tablet_metadata) {
+    // Shared-data primary-key tablets support only the cloud-native persistent index; the
+    // in-memory index and the LOCAL persistent index are deprecated. Auto-upgrade legacy
+    // metadata here so every downstream consumer takes the cloud-native path uniformly.
+    if (tablet_metadata->schema().keys_type() == KeysType::PRIMARY_KEYS &&
+        (!tablet_metadata->enable_persistent_index() ||
+         tablet_metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE)) {
+        tablet_metadata->set_enable_persistent_index(true);
+        tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    }
+}
+
 void normalize_tablet_metadata_after_load(TabletMetadataPB* tablet_metadata) {
     for (auto& rowset_metadata : *tablet_metadata->mutable_rowsets()) {
         normalize_rowset_after_load(&rowset_metadata);
@@ -304,6 +316,10 @@ void normalize_tablet_metadata_after_load(TabletMetadataPB* tablet_metadata) {
     for (auto& rowset_metadata : *tablet_metadata->mutable_compaction_inputs()) {
         normalize_rowset_after_load(&rowset_metadata);
     }
+    // NOTE: the bundle-metadata path clears each tablet's schema before saving and only
+    // restores it AFTER this hook runs, so keys_type() would read as DUP_KEYS here. That
+    // path calls force_cloud_native_pk_persistent_index() again once the schema is back.
+    force_cloud_native_pk_persistent_index(tablet_metadata);
 }
 
 Status normalize_tablet_metadata_before_save(TabletMetadataPB* tablet_metadata) {

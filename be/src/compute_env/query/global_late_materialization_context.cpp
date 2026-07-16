@@ -19,17 +19,29 @@
 namespace starrocks {
 
 GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_ctx(int64_t scan_node_id) const {
-    DCHECK(_ctx_map.contains(scan_node_id));
-    return _ctx_map.at(scan_node_id);
+    // Read the value inside the map's read lock. Returning `_ctx_map.at()` would deref a slot
+    // reference after the lock is released, racing with a concurrent lazy_emplace()/resize()
+    // that frees the slot array (heap-use-after-free).
+    GlobalLateMaterilizationContext* ctx = nullptr;
+    [[maybe_unused]] bool found = _ctx_map.if_contains(scan_node_id, [&](const auto& value) { ctx = value; });
+    DCHECK(found);
+    return ctx;
 }
 
 GlobalLateMaterilizationContext* GlobalLateMaterilizationContextMgr::get_or_create_ctx(
         int64_t scan_node_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func) {
-    _ctx_map.lazy_emplace(scan_node_id, [&](const auto& ctor) {
-        auto ctx = ctor_func();
-        ctor(scan_node_id, ctx);
-    });
-    return _ctx_map.at(scan_node_id);
+    // Get-or-create and read the value entirely inside the map's write lock via lazy_emplace_l.
+    // Do not fall back to _ctx_map.at(): its returned reference outlives the lock and would be
+    // dereferenced concurrently with another thread's resize().
+    GlobalLateMaterilizationContext* ctx = nullptr;
+    _ctx_map.lazy_emplace_l(
+            scan_node_id, [&](GlobalLateMaterilizationContext*& value) { ctx = value; },
+            [&](const auto& ctor) {
+                auto* new_ctx = ctor_func();
+                ctx = new_ctx;
+                ctor(scan_node_id, new_ctx);
+            });
+    return ctx;
 }
 
 } // namespace starrocks

@@ -45,7 +45,6 @@
 #include "storage/compaction_manager.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/metadata_cache.h"
@@ -60,6 +59,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/txn_manager.h"
+#include "storage_primitive/chunk_iterator.h"
 
 #ifndef BE_TEST
 #define BE_TEST

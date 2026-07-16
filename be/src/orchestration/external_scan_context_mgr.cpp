@@ -43,13 +43,13 @@
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
 #include "compute_env/result/result_queue_mgr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_context_manager.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/fragment_mgr.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 
 namespace starrocks::orchestration {

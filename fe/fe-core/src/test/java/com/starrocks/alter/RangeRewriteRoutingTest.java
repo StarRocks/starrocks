@@ -107,6 +107,35 @@ public class RangeRewriteRoutingTest {
         assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class, job);
     }
 
+    // (a') A FULL-column ORDER BY that permutes the key columns of a key-derived range table is rejected:
+    // it reorders the schema (shifting the key-derived range sort key) but the plain schema-change job
+    // copies tablet ranges verbatim, leaving stale boundaries. The subset form (a) is the supported way
+    // to re-sort (it re-samples via the rewrite job).
+    @Test
+    public void testFullReorderPermutingKeyColumnsRejectedForKeyDerivedRangeTable() throws Exception {
+        // No explicit ORDER BY at creation -> the range sort key is key-derived from KEY(k1, k2).
+        starRocksAssert.withTable("create table t_route_fullreorder (k1 int, k2 int, v1 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        DdlException e = assertThrowsDdlException(() ->
+                createJob("t_route_fullreorder", "alter table t_route_fullreorder order by (k2, k1, v1)"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                e.getMessage().contains("reorders the key columns of a range-distribution table"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    // (a'') A full-column ORDER BY that keeps the key order (reorders only value columns) does NOT shift
+    // the key-derived range sort key, so it is allowed (no reject).
+    @Test
+    public void testFullReorderKeepingKeyOrderAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_route_fullreorder_vals (k1 int, k2 int, v1 int, v2 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        AlterJobV2 job = createJob("t_route_fullreorder_vals",
+                "alter table t_route_fullreorder_vals order by (k1, k2, v2, v1)");
+        org.junit.jupiter.api.Assertions.assertNotNull(job, "value-only full reorder must not be rejected");
+    }
+
     // (b) Lake range DUP table: MODIFY COLUMN keyness flip that shifts the (key-derived) sort key
     // routes to the rewrite job. DUP is used because all DUP columns carry the same (NONE)
     // aggregation type, so promoting a value column to a key is a valid schema change (an AGG
@@ -134,17 +163,18 @@ public class RangeRewriteRoutingTest {
         }
     }
 
-    // (c) ADD COLUMN ... KEY on a range table stays rejected (column-set change, out of scope).
+    // (c) ADD COLUMN ... KEY on a range table whose sort key is key-derived (here KEY(k1,k2) ==
+    // ORDER BY(k1,k2)) now routes to the range rewrite job (see RangeKeyColumnRoutingTest for the full
+    // DUP/AGG/UNIQUE/PK routing matrix).
     @Test
-    public void testAddKeyColumnStillRejected() throws Exception {
+    public void testAddKeyColumnRoutesToRangeRewriteJob() throws Exception {
         starRocksAssert.withTable("create table t_route_addkey (k1 int, k2 int, v1 int)\n"
                 + "duplicate key(k1, k2)\n"
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        DdlException e = assertThrowsDdlException(() ->
-                createJob("t_route_addkey", "alter table t_route_addkey add column k_new int key default '0'"));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                e.getMessage().toLowerCase().contains("range distribution"), e.getMessage());
+        AlterJobV2 job =
+                createJob("t_route_addkey", "alter table t_route_addkey add column k_new int key default '0'");
+        assertInstanceOf(LakeRangeRewriteSchemaChangeJob.class, job);
     }
 
     // (d) OPTIMIZE on a range table stays rejected.

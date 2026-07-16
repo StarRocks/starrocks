@@ -541,7 +541,7 @@ public class AnalyzeStmtTest {
                 StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(),
                         table.getId(), Lists.newArrayList("v1", "v2")));
 
-        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table,
+        new FullStatisticsCollectJob(database, table,
                 Lists.newArrayList(partition.getId()),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE,
@@ -618,7 +618,7 @@ public class AnalyzeStmtTest {
     @Test
     public void testKillAnalyze() {
         String sql = "kill analyze 1";
-        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
+        analyzeSuccess(sql);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(1, getConnectContext());
         Assertions.assertThrows(SemanticException.class,

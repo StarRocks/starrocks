@@ -36,8 +36,8 @@
 
 #include <mutex>
 
+#include "common/storage_define.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

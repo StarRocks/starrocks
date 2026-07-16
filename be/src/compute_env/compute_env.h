@@ -28,8 +28,9 @@ namespace starrocks {
 class BaseLoadPathMgr;
 class DataStreamMgr;
 class DictionaryCacheManager;
-class GlobalEnv;
+class RuntimeEnv;
 class LoadStreamMgr;
+class LoadSpillBlockMergeExecutor;
 class MetricRegistry;
 class ProfileReportWorker;
 class ResultBufferMgr;
@@ -53,7 +54,7 @@ using CacheManagerRawPtr = CacheManager*;
 } // namespace query_cache
 
 struct ComputeEnvOptions {
-    GlobalEnv* global_env = nullptr;
+    RuntimeEnv* runtime_env = nullptr;
     MetricRegistry* metrics = nullptr;
     std::vector<std::string> store_paths;
     bool as_cn = false;
@@ -91,12 +92,16 @@ public:
     ProfileReportWorker* profile_report_worker() const { return _profile_report_worker.get(); }
     BaseLoadPathMgr* load_path_mgr() const { return _load_path_mgr.get(); }
     DictionaryCacheManager* dictionary_cache_manager() const { return _dictionary_cache_manager.get(); }
+    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() const {
+        return _load_spill_block_merge_executor.get();
+    }
 
 private:
     Status _init_workgroup(const ComputeEnvOptions& options, int64_t max_executor_threads);
     Status _init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr);
     Status _init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
-    Status _init_query_cache(size_t capacity);
+    Status _init_load_spill_executor(MetricRegistry* metrics);
+    Status _init_query_cache(size_t capacity, MetricRegistry* metrics);
     Status _start_result_mgr();
     void _stop_stream_load_pipes();
     void _stop_workgroup();
@@ -118,6 +123,7 @@ private:
     std::unique_ptr<query_cache::CacheManager> _cache_mgr;
     std::unique_ptr<ProfileReportWorker> _profile_report_worker;
     std::unique_ptr<BaseLoadPathMgr> _load_path_mgr;
+    std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
 };
 
 } // namespace starrocks

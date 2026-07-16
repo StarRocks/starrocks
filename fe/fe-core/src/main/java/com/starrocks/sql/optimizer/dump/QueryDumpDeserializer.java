@@ -27,6 +27,8 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatisticDump;
 import com.starrocks.sql.optimizer.statistics.LegacyColumnStatisticParser;
 import org.apache.logging.log4j.LogManager;
@@ -35,6 +37,9 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
@@ -129,6 +134,44 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                     columnStatistic = LegacyColumnStatisticParser.parse(columnStatisticElement.getAsString()).build();
                 }
                 dumpInfo.addTableStatistics(tableKey, columnKey, columnStatistic);
+            }
+        }
+        // column histogram: merge the round-tripped histogram back onto the column statistic parsed above.
+        // Optional section (older dumps don't have it), guarded by has().
+        if (dumpJsonObject.has("column_histogram")) {
+            JsonObject tableColumnHistogram = dumpJsonObject.getAsJsonObject("column_histogram");
+            for (String tableKey : tableColumnHistogram.keySet()) {
+                JsonObject columnHistograms = tableColumnHistogram.get(tableKey).getAsJsonObject();
+                Map<String, ColumnStatistic> tableStats =
+                        dumpInfo.getTableStatisticsMap().getOrDefault(tableKey, Collections.emptyMap());
+                for (String columnKey : columnHistograms.keySet()) {
+                    ColumnStatistic base = tableStats.get(columnKey);
+                    if (base == null) {
+                        continue;
+                    }
+                    String histogramStr = columnHistograms.get(columnKey).getAsString();
+                    Histogram histogram = HistogramUtils.deserializeHistogram(histogramStr);
+                    dumpInfo.addTableStatistics(tableKey, columnKey,
+                            ColumnStatistic.buildFrom(base).setHistogram(histogram).build());
+                }
+            }
+        }
+        // automatic/expression partition values: one representative value tuple per concrete partition, used
+        // to recreate partitions on replay for tables whose CREATE TABLE omits partition definitions.
+        // Optional section (older dumps and tables with explicit partitions don't have it), guarded by has().
+        if (dumpJsonObject.has("partition_values")) {
+            JsonObject tablePartitionValues = dumpJsonObject.getAsJsonObject("partition_values");
+            for (String tableKey : tablePartitionValues.keySet()) {
+                JsonArray valuesArray = tablePartitionValues.get(tableKey).getAsJsonArray();
+                List<List<String>> partitionValues = new ArrayList<>();
+                for (JsonElement tupleElement : valuesArray) {
+                    List<String> tuple = new ArrayList<>();
+                    for (JsonElement valueElement : tupleElement.getAsJsonArray()) {
+                        tuple.add(valueElement.getAsString());
+                    }
+                    partitionValues.add(tuple);
+                }
+                dumpInfo.addAutomaticPartitionValues(tableKey, partitionValues);
             }
         }
         // BE number

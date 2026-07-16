@@ -60,11 +60,16 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/http_load_params.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "exec/batch_write/batch_write_mgr.h"
+#include "exec/batch_write/batch_write_util.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -75,13 +80,8 @@
 #include "platform/http/http_request.h"
 #include "platform/http/http_response.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/batch_write/batch_write_util.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
 #include "simdjson.h"
 
 namespace starrocks {
@@ -105,6 +105,8 @@ static TFileFormatType::type parse_format(const std::string& format_str) {
         return TFileFormatType::FORMAT_CSV_DEFLATE;
     } else if (boost::iequals(format_str, "zstd")) {
         return TFileFormatType::FORMAT_CSV_ZSTD;
+    } else if (boost::iequals(format_str, "arrow")) {
+        return TFileFormatType::FORMAT_ARROW;
     }
     return TFileFormatType::FORMAT_UNKNOWN;
 }
@@ -118,6 +120,7 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     case TFileFormatType::FORMAT_CSV_DEFLATE:
     case TFileFormatType::FORMAT_CSV_ZSTD:
     case TFileFormatType::FORMAT_JSON:
+    case TFileFormatType::FORMAT_ARROW:
         return true;
     default:
         return false;
@@ -128,8 +131,11 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
-                                   ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _http_concurrent_limiter(limiter) {
+                                   StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter)
+        : _exec_env(exec_env),
+          _stream_load_orchestrator(stream_load_orchestrator),
+          _stream_load_executor(stream_load_executor),
+          _http_concurrent_limiter(limiter) {
     DCHECK(_stream_load_orchestrator != nullptr);
 }
 
@@ -160,7 +166,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
         if (ctx->need_rollback()) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+            (void)_stream_load_executor->rollback_txn(ctx);
             ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
@@ -204,7 +210,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 
     // If put file succeess we need commit this load
     int64_t commit_and_publish_start_time = MonotonicNanos();
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->commit_txn(ctx));
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
     return Status::OK();
 }
@@ -266,7 +272,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback()) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+            (void)_stream_load_executor->rollback_txn(ctx);
             ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
@@ -371,7 +377,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     // begin transaction
     int64_t begin_txn_start_time = MonotonicNanos();
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_txn_start_time;
     // process put file
     return _process_put(http_req, ctx);

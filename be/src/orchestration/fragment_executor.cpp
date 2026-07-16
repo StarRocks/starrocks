@@ -34,15 +34,16 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/data_source_provider.h"
+#include "connector_primitive/data_source_provider.h"
+#include "data_sink/exchange/data_stream_sender.h"
+#include "data_sink/result/result_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
+#include "exec/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
-#include "exec/data_sinks/data_stream_sender.h"
-#include "exec/data_sinks/result_sink.h"
-#include "exec/data_sinks/tablet_sink.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_env.h"
 #include "exec/exec_factory.h"
-#include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
@@ -51,11 +52,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/runtime/fragment_context_manager.h"
@@ -63,15 +61,17 @@
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/query_context_manager.h"
 #include "exec/runtime/schedule/common.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/scan_node.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::orchestration {
 
@@ -310,7 +310,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 
@@ -931,7 +930,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_runtime_state_time = 0;
         int64_t prepare_pipeline_driver_time = 0;
 
-        int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
+        int64_t process_mem_bytes = RuntimeEnv::GetInstance()->process_mem_tracker()->consumption();
         size_t num_process_drivers = 0;
     } profiler;
     profiler.num_process_drivers = exec_env->compute_env()->driver_limiter()->num_total_drivers();
@@ -980,7 +979,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     SCOPED_RAW_TIMER(&profiler.prepare_time);
     RETURN_IF_ERROR(
-            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+            RuntimeEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
     {
         SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
         RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));

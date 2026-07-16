@@ -6,6 +6,8 @@ keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snaps
 
 # Iceberg Procedures
 
+import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
+
 StarRocks Iceberg catalog は、スナップショット管理、ブランチ管理、データメンテナンス、メタデータ管理、およびテーブル管理を含む、Iceberg テーブルを管理するためのさまざまなプロシージャをサポートしています。
 
 プロシージャを実行するには、適切な権限が必要です。権限の詳細については、[権限](../../../administration/user_privs/authorization/privilege_item.md) を参照してください。
@@ -253,6 +255,8 @@ EXECUTE rewrite_manifests()
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
+
+<AutoMetaMaintenance />
 
 ## テーブル管理
 

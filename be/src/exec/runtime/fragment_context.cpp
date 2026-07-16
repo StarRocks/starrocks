@@ -31,17 +31,17 @@
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/profile_report_worker.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "exec/data_sink.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
-#include "exec/runtime/query_runtime_state.h"
 #include "exec/runtime/schedule/event_scheduler.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "platform/query_timeout_hook.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/fragment_attachment.h"
@@ -399,22 +399,6 @@ TQueryType::type FragmentContext::query_type() const {
     return _runtime_state->query_options().query_type;
 }
 
-void FragmentContext::init_jit_profile(bool jit_enabled) {
-    if (runtime_state() && jit_enabled && runtime_state()->runtime_profile()) {
-        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
-        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
-    }
-}
-
-void FragmentContext::update_jit_profile(int64_t time_ns) {
-    if (_jit_counter != nullptr) {
-        COUNTER_UPDATE(_jit_counter, 1);
-    }
-
-    if (_jit_timer != nullptr) {
-        COUNTER_UPDATE(_jit_timer, time_ns);
-    }
-}
 void FragmentContext::iterate_pipeline(const std::function<void(Pipeline*)>& call) {
     for (auto& group : _execution_groups) {
         group->for_each_pipeline(call);

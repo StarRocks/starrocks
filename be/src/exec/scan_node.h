@@ -43,8 +43,8 @@
 
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -164,7 +164,7 @@ public:
     // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
     // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
     // routes to the exact brute-force path -- a segment-level k-limit would otherwise under-return.
-    void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
+    virtual void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
     bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
 
 protected:

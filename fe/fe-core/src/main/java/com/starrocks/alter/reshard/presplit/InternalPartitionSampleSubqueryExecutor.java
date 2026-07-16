@@ -61,12 +61,19 @@ final class InternalPartitionSampleSubqueryExecutor extends AbstractSqlSampleSub
                 + " PARTITION (" + SqlUtils.getIdentSql(context.partitionName()) + ")";
         List<Column> sortKeyColumns = request.getSortKey();
         List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
+        // A caller that pre-builds the sort-key projection itself (e.g. a raw CAST(...) AS <alias>
+        // literal for a sort-key column absent from the source) opts out of the per-entry
+        // backtick-quoting below; identsOf would otherwise wrap the whole raw expression as a single
+        // (invalid) quoted identifier.
+        List<String> sortKeyProjectionIdents = context.sortKeyProjectionIsVerbatim()
+                ? context.sortKeySourceColumnNames()
+                : identsOf(context.sortKeySourceColumnNames());
         return new SampleSpec(
                 fromClauseSql,
                 /*whereClauseSqlOrNull=*/ null,
                 context.partitionSizeBytes(),
                 context.computeResource(),
-                identsOf(context.sortKeySourceColumnNames()),
+                sortKeyProjectionIdents,
                 identsOf(context.partitionSourceColumnNames()),
                 sortKeyColumns,
                 partitionSourceColumns);

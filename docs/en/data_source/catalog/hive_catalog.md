@@ -32,7 +32,16 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
   - Textfile files support the LZO compression format from v3.1.5 onwards.
 
-- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for Textfile-formatted Hive tables.
+- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the STRUCT data type for Textfile-formatted Hive tables. The MAP data type for Textfile-formatted Hive tables is supported from v4.2 onwards.
+
+- From v4.2 onwards, StarRocks parses Textfile-formatted Hive tables in the same way as Hive:
+
+  - For tables that use OpenCSVSerde, StarRocks honors the `quoteChar` and `escapeChar` properties (including their default values `"` and `\`), and follows the parsing rules of the opencsv 2.3 library bundled with Hive 0.14 through 4.0.
+  - For tables that use LazySimpleSerDe, StarRocks honors the escape character defined by `ESCAPED BY`.
+  - Rows are split at physical line boundaries, and the `\N` NULL marker is recognized before unescaping, both matching Hive.
+  - MAP columns are parsed in the Hive text format, that is, entries separated by the collection delimiter, and keys and values separated by the map key delimiter.
+
+  These rules apply only to queries against Hive tables. Broker Load, Stream Load, and the FILES() function are not affected. In earlier StarRocks versions, quote and escape characters were ignored, so rows and fields could be split differently from Hive.
 
 - StarRocks supports sinking data to Parquet-formatted (supported from v3.2 onwards) and ORC- or Textfile-formatted (supported from v3.3 onwards) Hive tables:
 
@@ -196,6 +205,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | hive.metastore.glue.catalogid | No       | The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access). |
+| aws.glue.resource_share_type  | No       | Controls which databases `SHOW DATABASES` lists, by setting the `ResourceShareType` sent to the AWS Glue `GetDatabases` API. Case-insensitive. Valid values: `FOREIGN` (databases shared with your account from another account through AWS Resource Access Manager), `FEDERATED` (databases that reference an external data source such as a JDBC connection), and `ALL` (local databases plus both of the above). When unset, only local databases are listed. This parameter affects listing only. StarRocks still queries a database using the single account set by `hive.metastore.glue.catalogid`, so a listed `FOREIGN` database remains unqueryable unless you also set `hive.metastore.glue.catalogid` to the owner account or create a [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html) for it in your own Data Catalog; a `FEDERATED` database is not a Hive-compatible database and cannot be queried through this catalog. |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
