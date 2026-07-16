@@ -144,7 +144,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 if ("varchar".equalsIgnoreCase(typeName)) {
                     return TypeFactory.createVarcharType(columnSize);
                 } else if ("text".equalsIgnoreCase(typeName)) {
-                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -197,7 +197,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                return TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
             }
             return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }

@@ -348,10 +348,10 @@ public class StatisticUtils {
         ScalarType tableUUIDType = TypeFactory.createVarcharType(65530);
         ScalarType partitionNameType = TypeFactory.createVarcharType(65530);
         ScalarType dbNameType = TypeFactory.createVarcharType(65530);
-        ScalarType maxType = TypeFactory.createVarcharType(Config.max_varchar_length);
-        ScalarType minType = TypeFactory.createVarcharType(Config.max_varchar_length);
-        ScalarType bucketsType = TypeFactory.createVarcharType(Config.max_varchar_length);
-        ScalarType mostCommonValueType = TypeFactory.createVarcharType(Config.max_varchar_length);
+        ScalarType maxType = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
+        ScalarType minType = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
+        ScalarType bucketsType = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
+        ScalarType mostCommonValueType = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
         ScalarType catalogNameType = TypeFactory.createVarcharType(65530);
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {

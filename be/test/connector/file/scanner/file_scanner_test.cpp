@@ -119,7 +119,7 @@ TEST_F(FileScannerTest, sample_schema) {
         // result: col1,BIGINT; col2,VARCHAR; col3,BIGINT; col4,DOUBLE
         const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
                 {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                {"col2", TypeDescriptor::create_varchar_type(TypeDescriptor::VARCHAR_INFERENCE_LENGTH)},
                 {"col3", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
                 {"col4", TypeDescriptor::from_logical_type(TYPE_DOUBLE)}};
 

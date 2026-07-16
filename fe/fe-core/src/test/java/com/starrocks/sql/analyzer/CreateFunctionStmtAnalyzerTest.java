@@ -15,11 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UDFInternalClassLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -690,8 +693,10 @@ public class CreateFunctionStmtAnalyzerTest {
 
     @Test
     public void testVarargsUDAF() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
         try {
             Config.enable_udf = true;
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
             new MockUp<CreateFunctionAnalyzer>() {
                 @Mock
                 public String computeMd5(CreateFunctionStmt stmt) {
@@ -722,8 +727,13 @@ public class CreateFunctionStmtAnalyzerTest {
             new CreateFunctionAnalyzer().analyze(stmt, connectContext);
             Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
             Assertions.assertTrue(stmt.getFunction().hasVarArgs());
+
+            AggregateFunction function = (AggregateFunction) stmt.getFunction();
+            ScalarType intermediateType = (ScalarType) function.getIntermediateType();
+            Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), intermediateType.getLength());
         } finally {
             Config.enable_udf = false;
+            Config.max_varchar_length = savedMaxVarcharLength;
         }
     }
 

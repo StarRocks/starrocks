@@ -17,8 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RangeDistributionDesc;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -162,6 +165,36 @@ public class CreateTableAnalyzerTest {
                 "DISTRIBUTED BY HASH(`id`)\n" +
                 "PROPERTIES(\"replication_num\" = \"1\")";
         analyzeSuccess(keyPartitionExprSourceSql);
+    }
+
+    @Test
+    public void testGeneratedPartitionVarcharUsesInferenceLength() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+            String sql = "CREATE TABLE test_create_table_db.t_generated_partition_varchar (\n" +
+                    "  `id` bigint NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`id`)\n" +
+                    "PARTITION BY from_unixtime(id)\n" +
+                    "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                    "PROPERTIES(\"replication_num\" = \"1\")";
+
+            CreateTableStmt stmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyze(stmt, connectContext);
+
+            ColumnDef generatedColumn = stmt.getColumnDefs().stream()
+                    .filter(column -> column.getName().startsWith(
+                            FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                    .findFirst()
+                    .orElseThrow();
+            Assertions.assertTrue(generatedColumn.getType().isVarchar());
+            Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(),
+                    ((ScalarType) generatedColumn.getType()).getLength());
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
     private void testValidComplexDefault(String columnDef) {

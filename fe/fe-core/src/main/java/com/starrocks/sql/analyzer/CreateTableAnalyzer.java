@@ -602,9 +602,9 @@ public class CreateTableAnalyzer {
                 if (type.isScalarType()) {
                     ScalarType scalarType = (ScalarType) type;
                     if (scalarType.isWildcardChar()) {
-                        type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
+                        type = TypeFactory.createCharType(TypeFactory.getOlapVarcharInferenceLength());
                     } else if (scalarType.isWildcardVarchar()) {
-                        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                        type = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
                     }
                 }
                 TypeDef typeDef = new TypeDef(type);

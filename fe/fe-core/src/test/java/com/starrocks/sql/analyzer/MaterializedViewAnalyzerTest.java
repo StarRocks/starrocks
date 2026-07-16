@@ -29,12 +29,20 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Deencapsulation;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -88,6 +96,32 @@ public class MaterializedViewAnalyzerTest {
     @AfterAll
     public static void afterClass() {
         ConnectorPlanTestBase.dropAllCatalogs();
+    }
+
+    @Test
+    public void testGeneratedListPartitionVarcharUsesInferenceLength(
+            @Mocked CreateMaterializedViewStatement statement) {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+            new Expectations() {
+                {
+                    statement.getKeysType();
+                    result = KeysType.DUP_KEYS;
+                }
+            };
+
+            FunctionCallExpr partitionExpr = new FunctionCallExpr("mock_partition", List.of());
+            partitionExpr.setType(VarcharType.VARCHAR);
+            Column generatedColumn = Deencapsulation.invoke(MaterializedViewAnalyzer.class,
+                    "getGeneratedPartitionColumn", statement, partitionExpr, 0);
+
+            Assertions.assertTrue(generatedColumn.getType().isVarchar());
+            Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(),
+                    ((ScalarType) generatedColumn.getType()).getLength());
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
     @Test

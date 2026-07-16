@@ -45,6 +45,19 @@
 
 namespace starrocks {
 
+namespace {
+
+void limit_inferred_varlen(TypeDescriptor* type) {
+    if (type->type == TYPE_VARCHAR || type->type == TYPE_VARBINARY) {
+        type->len = std::min(type->len, TypeDescriptor::VARCHAR_INFERENCE_LENGTH);
+    }
+    for (auto& child : type->children) {
+        limit_inferred_varlen(&child);
+    }
+}
+
+} // namespace
+
 FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
                          const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter,
                          bool schema_only)
@@ -561,6 +574,10 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
     if (schemas.empty()) return Status::InvalidArgument("get an empty schema");
 
     merge_schema(schemas, schema);
+    // Normalize variable-length fields before returning the inferred schema to FE.
+    for (auto& slot : *schema) {
+        limit_inferred_varlen(&slot.type());
+    }
 
     return Status::OK();
 }

@@ -40,6 +40,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
@@ -352,6 +353,29 @@ public class ColumnDefTest {
                     DefaultValueDef.NOT_SET, "");
             ColumnDefAnalyzer.analyze(column, true);
         });
+    }
+
+    @Test
+    public void testExplicitVarcharStillUsesConfiguredOlapMax() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        int configuredMax = TypeFactory.getOlapVarcharInferenceLength() + 128;
+        try {
+            Config.max_varchar_length = configuredMax;
+
+            ColumnDef aboveInference = new ColumnDef("above_inference",
+                    new TypeDef(TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength() + 1)));
+            Assertions.assertDoesNotThrow(() -> ColumnDefAnalyzer.analyze(aboveInference, true));
+
+            ColumnDef atConfiguredMax = new ColumnDef("at_configured_max",
+                    new TypeDef(TypeFactory.createVarcharType(configuredMax)));
+            Assertions.assertDoesNotThrow(() -> ColumnDefAnalyzer.analyze(atConfiguredMax, true));
+
+            ColumnDef aboveConfiguredMax = new ColumnDef("above_configured_max",
+                    new TypeDef(TypeFactory.createVarcharType(configuredMax + 1)));
+            assertThrows(SemanticException.class, () -> ColumnDefAnalyzer.analyze(aboveConfiguredMax, true));
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
     @Test

@@ -27,6 +27,7 @@ import com.starrocks.qe.SessionVariableConstants;
  * across Type and ScalarType classes, following the Factory pattern.
  */
 public class TypeFactory {
+    private static final int OLAP_VARCHAR_INFERENCE_LENGTH = 1024 * 1024;
 
     private TypeFactory() {
         // Private constructor to prevent instantiation
@@ -57,15 +58,24 @@ public class TypeFactory {
     }
 
     /**
-     * Get the maximum varchar length for OLAP tables.
+     * Get the maximum VARCHAR length supported by OLAP tables.
      *
-     * @return the maximum varchar length
+     * @return the maximum supported VARCHAR length
      */
     public static int getOlapMaxVarcharLength() {
         return Config.max_varchar_length;
     }
 
-    // 1GB for each line, it's enough
+    /**
+     * Get the default length used when materializing an inferred OLAP VARCHAR type.
+     *
+     * @return the default inferred VARCHAR length
+     */
+    public static int getOlapVarcharInferenceLength() {
+        return OLAP_VARCHAR_INFERENCE_LENGTH;
+    }
+
+    // Compatibility length used for unbounded strings in external catalogs.
     public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
 
     /**
@@ -342,9 +352,5 @@ public class TypeFactory {
         ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
-    }
-
-    static {
-        StringType.STRING = new StringType(Config.max_varchar_length);
     }
 }

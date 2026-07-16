@@ -20,7 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -238,6 +241,38 @@ public class SqlServerSchemaResolverTest {
         Assertions.assertEquals(1, partitions.size());
         Assertions.assertEquals("tbl1", partitions.get(0).getPartitionName());
         Assertions.assertTrue(partitions.get(0).getModifiedTime() > 0);
+    }
+
+    @Test
+    public void testUnboundedStringFallbackUsesInferenceLength() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        int inferenceLength = TypeFactory.getOlapVarcharInferenceLength();
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+            SqlServerSchemaResolver resolver = new SqlServerSchemaResolver();
+
+            ScalarType declaredVarchar = (ScalarType) resolver.convertColumnType(
+                    Types.VARCHAR, "varchar", inferenceLength + 1, 0);
+            Assertions.assertEquals(inferenceLength + 1, declaredVarchar.getLength());
+
+            ScalarType zeroLengthVarchar = (ScalarType) resolver.convertColumnType(
+                    Types.VARCHAR, "varchar", 0, 0);
+            Assertions.assertEquals(inferenceLength, zeroLengthVarchar.getLength());
+
+            ScalarType negativeLengthNvarchar = (ScalarType) resolver.convertColumnType(
+                    Types.NVARCHAR, "nvarchar", -1, 0);
+            Assertions.assertEquals(inferenceLength, negativeLengthNvarchar.getLength());
+
+            int[] unboundedTypes = {Types.LONGVARCHAR, Types.LONGNVARCHAR, Types.LONGNVARCHAR};
+            String[] unboundedTypeNames = {"text", "ntext", "xml"};
+            for (int i = 0; i < unboundedTypes.length; i++) {
+                ScalarType type = (ScalarType) resolver.convertColumnType(
+                        unboundedTypes[i], unboundedTypeNames[i], Integer.MAX_VALUE, 0);
+                Assertions.assertEquals(inferenceLength, type.getLength(), unboundedTypeNames[i]);
+            }
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
 }

@@ -31,7 +31,13 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -112,10 +118,10 @@ public class AnalyzerUtilsTest {
     }
 
     @Test
-    public void testConvertCatalogMaxStringToOlapMaxString() {
+    public void testConvertCatalogStringToInferenceLength() {
         ScalarType catalogString = TypeFactory.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), convertedString.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), convertedString.getLength());
     }
 
     @Test
@@ -126,19 +132,75 @@ public class AnalyzerUtilsTest {
     }
 
     @Test
-    public void testTransformVarcharPreferStringTrueWidensToMax() {
+    public void testTransformDeclaredStringLengthBoundariesIgnoreOlapMax() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        int inferenceLength = TypeFactory.getOlapVarcharInferenceLength();
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+
+            int[] declaredLengths = {1, inferenceLength - 1, inferenceLength,
+                    inferenceLength + 1, Integer.MAX_VALUE - 1};
+            for (int declaredLength : declaredLengths) {
+                ScalarType varchar = TypeFactory.createVarcharType(declaredLength);
+                ScalarType preserved = (ScalarType) AnalyzerUtils.transformTableColumnType(varchar, true, false);
+                Assertions.assertEquals(Math.min(declaredLength, inferenceLength), preserved.getLength(),
+                        "declared VARCHAR length " + declaredLength);
+
+                ScalarType preferred = (ScalarType) AnalyzerUtils.transformTableColumnType(varchar, true, true);
+                Assertions.assertEquals(inferenceLength, preferred.getLength(),
+                        "preferred VARCHAR length " + declaredLength);
+            }
+
+            ScalarType wideChar = TypeFactory.createCharType(inferenceLength + 1);
+            ScalarType convertedChar = (ScalarType) AnalyzerUtils.transformTableColumnType(wideChar, true, false);
+            Assertions.assertTrue(convertedChar.isVarchar());
+            Assertions.assertEquals(inferenceLength, convertedChar.getLength());
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
+    }
+
+    @Test
+    public void testTransformVarcharPreferStringTrueUsesInferenceLength() {
         ScalarType narrow = TypeFactory.createVarcharType(64);
         ScalarType result = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true, true);
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), result.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), result.getLength());
     }
 
     @Test
     public void testTransformUnboundedVarcharWidensRegardlessOfPreferString() {
         ScalarType unbounded = TypeFactory.createVarcharType(-1);
         ScalarType keepLen = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, false);
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), keepLen.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), keepLen.getLength());
         ScalarType preferStr = (ScalarType) AnalyzerUtils.transformTableColumnType(unbounded, true, true);
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), preferStr.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), preferStr.getLength());
+
+        ScalarType wildcardChar = TypeFactory.createCharType(-1);
+        ScalarType convertedChar = (ScalarType) AnalyzerUtils.transformTableColumnType(wildcardChar, true, false);
+        Assertions.assertTrue(convertedChar.isVarchar());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), convertedChar.getLength());
+
+        ScalarType convertedNull = (ScalarType) AnalyzerUtils.transformTableColumnType(NullType.NULL, true, false);
+        Assertions.assertTrue(convertedNull.isVarchar());
+        Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), convertedNull.getLength());
+    }
+
+    @Test
+    public void testTransformNestedStringTypesRecursively() {
+        int inferenceLength = TypeFactory.getOlapVarcharInferenceLength();
+        Type nested = new StructType(List.of(
+                new StructField("array_field",
+                        new ArrayType(TypeFactory.createVarcharType(inferenceLength + 1))),
+                new StructField("map_field",
+                        new MapType(TypeFactory.createVarcharType(8), TypeFactory.createVarcharType(-1)))), true);
+
+        StructType transformed = (StructType) AnalyzerUtils.transformTableColumnType(nested, true, false);
+        ArrayType array = (ArrayType) transformed.getField("array_field").getType();
+        Assertions.assertEquals(inferenceLength, ((ScalarType) array.getItemType()).getLength());
+
+        MapType map = (MapType) transformed.getField("map_field").getType();
+        Assertions.assertEquals(8, ((ScalarType) map.getKeyType()).getLength());
+        Assertions.assertEquals(inferenceLength, ((ScalarType) map.getValueType()).getLength());
     }
 
     @Test
@@ -148,7 +210,7 @@ public class AnalyzerUtilsTest {
         try {
             Config.transform_type_prefer_string_for_varchar = true;
             ScalarType widened = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);
-            Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), widened.getLength());
+            Assertions.assertEquals(TypeFactory.getOlapVarcharInferenceLength(), widened.getLength());
 
             Config.transform_type_prefer_string_for_varchar = false;
             ScalarType preserved = (ScalarType) AnalyzerUtils.transformTableColumnType(narrow, true);

@@ -1486,9 +1486,9 @@ public class AnalyzerUtils {
         return transformTableColumnType(srcType, convertDouble, Config.transform_type_prefer_string_for_varchar);
     }
 
-    // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise (include null type) use the longest varchar value. When preferStringForVarchar
-    // is true, every fixed-length varchar/char is widened to the OLAP max varchar length instead.
+    // For char and varchar types, preserve an explicit length up to the default inference length.
+    // Use the default for wildcard/null types. When preferStringForVarchar is true, every
+    // fixed-length varchar/char uses the default inference length instead.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
     public static Type transformTableColumnType(Type srcType, boolean convertDouble, boolean preferStringForVarchar) {
@@ -1497,17 +1497,11 @@ public class AnalyzerUtils {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = TypeFactory.getOlapMaxVarcharLength();
+                int len = TypeFactory.getOlapVarcharInferenceLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (preferStringForVarchar) {
-                        // always use max varchar length for char/varchar types if preferStringForVarchar is set.
-                        len = TypeFactory.getOlapMaxVarcharLength();
-                    } else {
-                        if (scalarType.getLength() > 0) {
-                            // Catalog's varchar length may larger than olap's max varchar length
-                            len = Integer.min(scalarType.getLength(), TypeFactory.getOlapMaxVarcharLength());
-                        }
+                    if (!preferStringForVarchar && scalarType.getLength() > 0) {
+                        len = Integer.min(TypeFactory.getOlapVarcharInferenceLength(), scalarType.getLength());
                     }
                 }
                 newType = TypeFactory.createVarcharType(len);

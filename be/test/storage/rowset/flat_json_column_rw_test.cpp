@@ -30,6 +30,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
@@ -51,6 +52,7 @@
 #include "storage_primitive/flat_json_config.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -100,12 +102,14 @@ public:
 
 protected:
     void SetUp() override {
+        _saved_olap_string_max_length = config::olap_string_max_length;
         config::enable_json_flat_complex_type = true;
         _meta = std::make_shared<ColumnMetaPB>();
         config::json_flat_sparsity_factor = 0.9;
     }
 
     void TearDown() override {
+        config::olap_string_max_length = _saved_olap_string_max_length;
         config::enable_json_flat_complex_type = false;
         config::json_flat_null_factor = 0.3;
     }
@@ -199,7 +203,39 @@ protected:
 protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
+    int _saved_olap_string_max_length = 0;
 };
+
+TEST_F(FlatJsonColumnRWTest, testInferredStringLengthDoesNotFollowOlapMax) {
+    config::olap_string_max_length = TypeDescriptor::VARCHAR_INFERENCE_LENGTH * 2;
+
+    MutableColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    const std::vector<std::string> jsons = {
+            R"({"message": "a"})", R"({"message": "b"})", R"({"message": "c"})"};
+    for (const std::string& json : jsons) {
+        ASSIGN_OR_ABORT(auto value, JsonValue::parse(json));
+        json_col->append(value);
+    }
+
+    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ASSIGN_OR_ABORT(auto message_path,
+                    ColumnAccessPath::create(TAccessPathType::FIELD, "root.message", 0));
+    root_path->children().emplace_back(std::move(message_path));
+
+    MutableColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_inference_length.data", write_col, read_col, root_path.get());
+
+    ASSERT_TRUE(writer_opts.meta->json_meta().is_flat());
+    ASSERT_EQ(1, writer_opts.meta->children_columns_size());
+    const ColumnMetaPB& message_meta = writer_opts.meta->children_columns(0);
+    EXPECT_EQ("message", message_meta.name());
+    EXPECT_EQ(TYPE_VARCHAR, message_meta.type());
+    EXPECT_EQ(TypeDescriptor::VARCHAR_INFERENCE_LENGTH, message_meta.length());
+    EXPECT_NE(config::olap_string_max_length, message_meta.length());
+}
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
     MutableColumnPtr write_col = JsonColumn::create();

@@ -15,7 +15,7 @@
 package com.starrocks.type;
 
 public class StringType extends ScalarType {
-    // Longest supported VARCHAR and CHAR, chosen to match Hive.
+    // Generic STRING uses a fixed compatibility length.
     public static final int DEFAULT_STRING_LENGTH = 65533;
     public static final int MAX_STRING_LENGTH = 1048576;
 

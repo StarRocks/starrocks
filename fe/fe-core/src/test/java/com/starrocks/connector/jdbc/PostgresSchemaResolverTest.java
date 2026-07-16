@@ -20,7 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -221,6 +224,31 @@ public class PostgresSchemaResolverTest {
                 postgresSchemaResolver.convertColumnType(Types.OTHER, "timestamp with time zone", 0, 0).isDatetime());
         Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "json", 0, 0).isJsonType());
         Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "jsonb", 0, 0).isJsonType());
+    }
+
+    @Test
+    public void testUnboundedStringFallbackUsesInferenceLength() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        int inferenceLength = TypeFactory.getOlapVarcharInferenceLength();
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+            PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+
+            ScalarType declaredVarchar = (ScalarType) resolver.convertColumnType(
+                    Types.VARCHAR, "varchar", inferenceLength + 1, 0);
+            Assertions.assertEquals(inferenceLength + 1, declaredVarchar.getLength());
+
+            ScalarType text = (ScalarType) resolver.convertColumnType(
+                    Types.VARCHAR, "text", Integer.MAX_VALUE, 0);
+            Assertions.assertEquals(inferenceLength, text.getLength());
+
+            ScalarType unboundedNumeric = (ScalarType) resolver.convertColumnType(
+                    Types.NUMERIC, "numeric", 0, 0);
+            Assertions.assertTrue(unboundedNumeric.isVarchar());
+            Assertions.assertEquals(inferenceLength, unboundedNumeric.getLength());
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
     @Test

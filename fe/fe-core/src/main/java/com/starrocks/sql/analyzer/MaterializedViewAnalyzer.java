@@ -1660,9 +1660,9 @@ public class MaterializedViewAnalyzer {
         if (type.isScalarType()) {
             ScalarType scalarType = (ScalarType) type;
             if (scalarType.isWildcardChar()) {
-                type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
+                type = TypeFactory.createCharType(TypeFactory.getOlapVarcharInferenceLength());
             } else if (scalarType.isWildcardVarchar()) {
-                type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                type = TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
             }
         }
         String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;

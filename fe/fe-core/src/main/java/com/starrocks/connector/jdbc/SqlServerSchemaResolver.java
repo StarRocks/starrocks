@@ -116,7 +116,7 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return TypeFactory.createVarcharType(columnSize);
                 } else {
-                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
                 }
             // DATETIMEOFFSET
             case -155:
@@ -126,7 +126,7 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             case Types.LONGNVARCHAR:
                 if (typeName.equalsIgnoreCase("text") || typeName.equalsIgnoreCase("ntext") ||
                         typeName.equalsIgnoreCase("xml")) {
-                    return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                    return TypeFactory.createVarcharType(TypeFactory.getOlapVarcharInferenceLength());
                 } else if (typeName.equalsIgnoreCase("datetimeoffset")) {
                     return TypeFactory.createVarcharType(columnSize);
                 }

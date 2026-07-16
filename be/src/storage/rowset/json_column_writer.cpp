@@ -38,7 +38,6 @@
 #include "common/bloom_filter.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
@@ -185,7 +184,7 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         opts.meta->set_unique_id(i);
         opts.meta->set_type(_flat_types[i]);
         if (_flat_types[i] == TYPE_VARCHAR) {
-            opts.meta->set_length(config::olap_string_max_length);
+            opts.meta->set_length(TypeDescriptor::VARCHAR_INFERENCE_LENGTH);
         } else {
             DCHECK_NE(_flat_types[i], TYPE_CHAR);
             // set length for non-string type (e.g. int, double, date, etc.

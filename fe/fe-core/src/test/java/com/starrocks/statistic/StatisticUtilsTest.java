@@ -17,14 +17,20 @@ package com.starrocks.statistic;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 class StatisticUtilsTest extends PlanTestBase {
 
@@ -78,6 +84,44 @@ class StatisticUtilsTest extends PlanTestBase {
         Assertions.assertEquals("1",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
+    }
+
+    @Test
+    void buildStatsColumnDefUsesInferenceLength() {
+        int savedMaxVarcharLength = Config.max_varchar_length;
+        int inferenceLength = TypeFactory.getOlapVarcharInferenceLength();
+        try {
+            Config.max_varchar_length = Integer.MAX_VALUE - 1;
+
+            Map<String, List<String>> inferredColumns = Map.of(
+                    StatsConstants.SAMPLE_STATISTICS_TABLE_NAME, List.of("max", "min"),
+                    StatsConstants.FULL_STATISTICS_TABLE_NAME, List.of("max", "min"),
+                    StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME, List.of("max", "min"),
+                    StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME, List.of("buckets", "mcv"),
+                    StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME, List.of("buckets", "mcv"));
+
+            inferredColumns.forEach((tableName, columnNames) -> {
+                List<ColumnDef> columns = StatisticUtils.buildStatsColumnDef(tableName);
+                for (String columnName : columnNames) {
+                    ColumnDef column = columns.stream()
+                            .filter(candidate -> candidate.getName().equals(columnName))
+                            .findFirst()
+                            .orElseThrow();
+                    Assertions.assertEquals(inferenceLength,
+                            ((ScalarType) column.getType()).getLength(), tableName + "." + columnName);
+                }
+            });
+
+            List<ColumnDef> sampleColumns = StatisticUtils.buildStatsColumnDef(
+                    StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            ColumnDef columnName = sampleColumns.stream()
+                    .filter(column -> column.getName().equals("column_name"))
+                    .findFirst()
+                    .orElseThrow();
+            Assertions.assertEquals(65530, ((ScalarType) columnName.getType()).getLength());
+        } finally {
+            Config.max_varchar_length = savedMaxVarcharLength;
+        }
     }
 
     @Test

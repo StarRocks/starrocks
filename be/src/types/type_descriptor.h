@@ -36,6 +36,8 @@ struct TypeDescriptor {
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
     static constexpr int MAX_VARCHAR_LENGTH = 1048576;
+    // Default length used for VARCHAR/VARBINARY fields in inferred schemas.
+    static constexpr int VARCHAR_INFERENCE_LENGTH = 1024 * 1024;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
     static constexpr int DEFAULT_BITMAP_LENGTH = 128;
