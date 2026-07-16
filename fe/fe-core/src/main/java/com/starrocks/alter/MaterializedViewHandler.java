@@ -339,13 +339,14 @@ public class MaterializedViewHandler extends AlterHandler {
      * synchronous materialized view, which carries a query statement.)
      */
     static boolean isRangeRollupRoutable(OlapTable olapTable) {
-        // Only the base index may exist. The additive range-rollup path promotes its shadow to NORMAL
-        // directly (bypassing the multi-job ROLLUP-state coordination the existing path relies on), so a
-        // table that already carries a secondary index/rollup is not routable; it falls through to the
-        // existing range rejection in createMaterializedViewJob.
+        // A cloud-native, non-colocate, non-auto-increment, non-primary-key range-distribution table
+        // admits an additive rollup. A table that already carries one or more rollups is still routable:
+        // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
+        // table to be NORMAL) and operates only on its own shadow index meta id, so a completed rollup
+        // does not interfere. (The caller is processBatchAddRollup, so this is always a plain rollup,
+        // never a synchronous materialized view, which carries a query statement.)
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
-                && olapTable.getIndexMetaIdToMeta().size() == 1
                 && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
                 && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
