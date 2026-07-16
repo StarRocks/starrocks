@@ -46,18 +46,21 @@ public class FlussSnapshotScanner extends ConnectorScannerProxy {
 
     @Override
     boolean hasNext() throws IOException {
-        if (finished) {
-            return false;
+        while (true) {
+            if (currentBatch != null && currentBatch.hasNext()) {
+                return true;
+            }
+            if (finished) {
+                return false;
+            }
+
+            // An empty batch is transient; only null marks the end of input.
+            currentBatch = batchScanner.pollBatch(POLL_TIMEOUT);
+            if (currentBatch == null) {
+                finished = true;
+                return false;
+            }
         }
-        if (currentBatch != null && currentBatch.hasNext()) {
-            return true;
-        }
-        currentBatch = batchScanner.pollBatch(POLL_TIMEOUT);
-        if (currentBatch == null) {
-            finished = true;
-            return false;
-        }
-        return currentBatch.hasNext();
     }
 
     @Override
