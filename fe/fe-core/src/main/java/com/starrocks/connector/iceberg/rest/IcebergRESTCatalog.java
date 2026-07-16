@@ -15,11 +15,13 @@
 package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -372,6 +374,19 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         return delegate.buildView(buildContext(context), identifier);
     }
 
+    // the view DDL default methods run ViewBuilder.create()/createOrReplace() outside this class, so recovery
+    // must wrap the whole flow: the retry re-runs getViewBuilder and gets a builder on the rebuilt delegate
+    @Override
+    public boolean createView(ConnectContext context, String catalogName, ConnectorViewDefinition definition,
+                              boolean replace) {
+        return withAuthRecovery(() -> IcebergCatalog.super.createView(context, catalogName, definition, replace));
+    }
+
+    @Override
+    public boolean alterView(ConnectContext context, View currentView, ConnectorViewDefinition definition) {
+        return withAuthRecovery(() -> IcebergCatalog.super.alterView(context, currentView, definition));
+    }
+
     @Override
     public View getView(ConnectContext context, String dbName, String viewName) {
         if (!viewEndpointsEnabled) {
@@ -456,12 +471,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private <T> T withAuthRecovery(Supplier<T> action) {
         try {
             return action.get();
-        } catch (NotAuthorizedException e) {
-            if (!tryRecoverAuthSession(e)) {
+        } catch (RuntimeException e) {
+            if (!causedByNotAuthorized(e) || !tryRecoverAuthSession(e)) {
                 throw e;
             }
             return action.get();
         }
+    }
+
+    // the view DDL default methods wrap the 401 in StarRocksConnectorException, so walk the cause chain
+    private static boolean causedByNotAuthorized(RuntimeException failure) {
+        return Throwables.getCausalChain(failure).stream().anyMatch(NotAuthorizedException.class::isInstance);
     }
 
     private void runWithAuthRecovery(Runnable action) {
@@ -471,7 +491,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         });
     }
 
-    private synchronized boolean tryRecoverAuthSession(NotAuthorizedException cause) {
+    private synchronized boolean tryRecoverAuthSession(RuntimeException cause) {
         if (!authRecoveryEnabled) {
             return false;
         }

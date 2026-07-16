@@ -14,14 +14,18 @@
 
 package com.starrocks.connector.iceberg.rest;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -32,6 +36,9 @@ import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
+import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewBuilder;
+import org.apache.iceberg.view.ViewVersion;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -196,6 +203,116 @@ public class IcebergRESTCatalogAuthRecoveryTest {
             {
                 restCatalog.initialize(anyString, (Map<String, String>) any);
                 times = 1; // no NotAuthorized -> no rebuild
+            }
+        };
+    }
+
+    @Test
+    public void testCreateViewRecoversFromNotAuthorized(@Mocked ViewBuilder viewBuilder,
+                                                        @Injectable ConnectorViewDefinition definition) {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
+        new Expectations() {
+            {
+                definition.getColumns();
+                result = ImmutableList.of();
+                minTimes = 0;
+                definition.getDatabaseName();
+                result = "db1";
+                minTimes = 0;
+                definition.getViewName();
+                result = "v1";
+                minTimes = 0;
+                viewBuilder.create();
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                result = null;
+            }
+        };
+
+        IcebergRESTCatalog catalog = newOAuth2CredentialCatalog();
+        Assertions.assertTrue(catalog.createView(connectContext, "iceberg_catalog", definition, false));
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 2;
+            }
+        };
+    }
+
+    @Test
+    public void testCreateOrReplaceViewRecoversFromWrappedNotAuthorized(@Mocked ViewBuilder viewBuilder,
+                                                                        @Injectable ConnectorViewDefinition definition) {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
+        new Expectations() {
+            {
+                definition.getColumns();
+                result = ImmutableList.of();
+                minTimes = 0;
+                definition.getDatabaseName();
+                result = "db1";
+                minTimes = 0;
+                definition.getViewName();
+                result = "v1";
+                minTimes = 0;
+                // createViewDefault wraps this failure into StarRocksConnectorException(RuntimeException(cause)),
+                // so recovery must detect NotAuthorizedException through the cause chain
+                viewBuilder.createOrReplace();
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                result = null;
+            }
+        };
+
+        IcebergRESTCatalog catalog = newOAuth2CredentialCatalog();
+        Assertions.assertTrue(catalog.createView(connectContext, "iceberg_catalog", definition, true));
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 2;
+            }
+        };
+    }
+
+    @Test
+    public void testAlterViewRecoversFromNotAuthorized(@Mocked ViewBuilder viewBuilder,
+                                                       @Injectable ConnectorViewDefinition definition,
+                                                       @Injectable View currentView,
+                                                       @Injectable ViewVersion viewVersion) {
+        new Expectations() {
+            {
+                definition.getDatabaseName();
+                result = "db1";
+                minTimes = 0;
+                definition.getViewName();
+                result = "v1";
+                minTimes = 0;
+                definition.getColumns();
+                result = ImmutableList.of();
+                minTimes = 0;
+                currentView.properties();
+                result = ImmutableMap.of();
+                minTimes = 0;
+                currentView.currentVersion();
+                result = viewVersion;
+                minTimes = 0;
+                viewVersion.defaultNamespace();
+                result = Namespace.of("db1");
+                minTimes = 0;
+                viewVersion.representations();
+                result = ImmutableList.of();
+                minTimes = 0;
+                viewBuilder.createOrReplace();
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                result = null;
+            }
+        };
+
+        IcebergRESTCatalog catalog = newOAuth2CredentialCatalog();
+        Assertions.assertTrue(catalog.alterView(connectContext, currentView, definition));
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 2;
             }
         };
     }
