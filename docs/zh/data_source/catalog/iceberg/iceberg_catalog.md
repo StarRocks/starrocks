@@ -792,6 +792,10 @@ Microsoft Azure 的 `StorageCredentialParams`：
 
 - 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
 
+  :::note
+  使用 Vended Credential 时，StarRocks 会直接使用 REST Catalog 下发的 Token 访问 GCS。此时 Catalog 上配置的 `gcp.gcs.impersonation_service_account` 将被忽略。
+  :::
+
 Google GCS 的 `StorageCredentialParams`：
 
 ###### gcp.gcs.service_account_email
