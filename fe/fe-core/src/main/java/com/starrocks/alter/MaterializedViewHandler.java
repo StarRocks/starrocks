@@ -250,7 +250,8 @@ public class MaterializedViewHandler extends AlterHandler {
         // A routable range rollup promotes its shadow to NORMAL directly, so it cannot share the
         // multi-job ROLLUP-state batch the existing rollup path uses; reject more than one in one
         // statement before any job is built.
-        if (isRangeRollupRoutable(olapTable)) {
+        boolean rangeRoutable = isRangeRollupRoutable(olapTable);
+        if (rangeRoutable) {
             long rollupClauseCount = alterClauses.stream()
                     .filter(clause -> clause instanceof AddRollupClause)
                     .count();
@@ -282,13 +283,22 @@ public class MaterializedViewHandler extends AlterHandler {
                 // step 2.1 check whether base index already exists in globalStateMgr
                 long baseIndexMetaId = checkAndGetBaseIndex(baseIndexName, olapTable);
 
+                // A range-distribution rollup is always derived from the base index (the K-tablet
+                // sampling and the version-pinned rewrite read the base). ADD ROLLUP ... FROM <rollup>
+                // is not supported. Checked here, before schema validation, so a FROM whose columns
+                // differ from the base reports this precise error rather than "column does not exist".
+                if (rangeRoutable && baseIndexMetaId != olapTable.getBaseIndexMetaId()) {
+                    throw new DdlException("A range-distribution rollup must be derived from the base index; "
+                            + "FROM <rollup> is not supported");
+                }
+
                 // step 2.2  check rollup schema
                 List<Column> rollupSchema =
                         checkAndPrepareMaterializedView(addRollupClause, olapTable, baseIndexMetaId);
 
                 // step 3 create rollup job
                 AlterJobV2 alterJobV2;
-                if (isRangeRollupRoutable(olapTable)) {
+                if (rangeRoutable) {
                     // Shared-data range table: build the additive K-tablet range-rollup job directly.
                     // Any range table that is NOT routable (sync MV, shared-nothing, colocate,
                     // auto-increment, primary-key) keeps the existing rejection in createMaterializedViewJob.

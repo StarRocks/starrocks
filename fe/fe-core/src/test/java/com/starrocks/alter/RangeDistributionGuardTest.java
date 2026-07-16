@@ -785,4 +785,31 @@ public class RangeDistributionGuardTest {
         assertTrue(job instanceof LakeRangeRollupJob,
                 "Expected a LakeRangeRollupJob for a UNIQUE range table, got: " + job);
     }
+
+    /**
+     * {@code ADD ROLLUP ... FROM <non-base index>} is rejected on a range table: a range-distribution
+     * rollup is always derived from the base index. The selected column {@code v1} is absent from the
+     * FROM source {@code r_src} on purpose — the FROM check must fire BEFORE column-schema validation,
+     * so the error is the base-index/FROM message, not "Column[v1] does not exist".
+     */
+    @Test
+    public void testRangeRollupFromNonBaseRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_from"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_from");
+        // Fully inject a finished rollup "r_src" whose schema is [k1, k2] (omits v1).
+        injectFinishedRollup(table, "r_src",
+                new java.util.ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+
+        // Explicit "duplicate key" is required here: without it, the pre-fix schema-validation branch's
+        // "does not exist in base index" wording coincidentally contains "base index" too, which would
+        // make this assertion pass for the wrong reason and mask the ordering bug being tested.
+        DdlException exception = assertThrowsDdlException(() ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_from add rollup r2(k1, k2, v1) duplicate key(k1, k2) "
+                                + "order by (k2, k1) from r_src"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("base index"),
+                "Expected 'base index' in: " + exception.getMessage());
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
 }
