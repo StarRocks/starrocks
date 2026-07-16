@@ -1,0 +1,40 @@
+-- name: test_ivm_bootstrap_concurrent_no_double_count @cloud
+-- Regression for the IVM bootstrap double-count: an incremental MV's first (PCT bootstrap)
+-- refresh must read the base AS-OF the frozen checkpoint, else rows a concurrent load commits
+-- during the refresh are counted twice. Concurrent inserts race the bootstrap, so detection is
+-- probabilistic; the exactly-once assertion (excess == 0) is deterministic once fixed.
+CREATE TABLE base_cc (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 40000));
+CREATE MATERIALIZED VIEW mv_cc
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, COUNT(*) AS c, SUM(v) AS s FROM base_cc GROUP BY k;
+
+CONCURRENCY {
+
+-- inserter(3):
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+
+-- refresher:
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+
+} END CONCURRENCY
+
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+-- Exactly-once: the MV's total count must equal the base row count. A positive excess
+-- means the bootstrap double-counted rows committed during the refresh.
+SELECT (SELECT COUNT(*) FROM base_cc) AS base_total;
+SELECT (SELECT IFNULL(SUM(c), 0) FROM mv_cc) AS mv_total;
+SELECT (SELECT IFNULL(SUM(c), 0) FROM mv_cc) - (SELECT COUNT(*) FROM base_cc) AS excess;
+DROP MATERIALIZED VIEW mv_cc;
+DROP TABLE base_cc;

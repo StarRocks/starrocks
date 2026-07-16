@@ -1,0 +1,68 @@
+-- name: test_ivm_bootstrap_concurrent_no_double_count @cloud
+CREATE TABLE base_cc (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 40000));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cc
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, COUNT(*) AS c, SUM(v) AS s FROM base_cc GROUP BY k;
+-- result:
+-- !result
+
+CONCURRENCY {
+-- inserter(3):
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+INSERT INTO base_cc SELECT generate_series % 20, 1 FROM TABLE(generate_series(1, 2500));
+-- result:
+-- !result
+
+-- refresher:
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+
+} END CONCURRENCY
+
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_cc WITH SYNC MODE;
+SELECT (SELECT COUNT(*) FROM base_cc) AS base_total;
+-- result:
+100000
+-- !result
+SELECT (SELECT IFNULL(SUM(c), 0) FROM mv_cc) AS mv_total;
+-- result:
+100000
+-- !result
+SELECT (SELECT IFNULL(SUM(c), 0) FROM mv_cc) - (SELECT COUNT(*) FROM base_cc) AS excess;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_cc;
+-- result:
+-- !result
+DROP TABLE base_cc;
+-- result:
+-- !result

@@ -1,0 +1,54 @@
+-- name: test_ivm_bootstrap_same_name_cross_db @cloud
+CREATE DATABASE db_sn_a_${uuid0};
+-- result:
+-- !result
+CREATE DATABASE db_sn_b_${uuid0};
+-- result:
+-- !result
+CREATE TABLE db_sn_a_${uuid0}.tj (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE db_sn_b_${uuid0}.tj (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO db_sn_a_${uuid0}.tj SELECT generate_series, 1 FROM TABLE(generate_series(1, 5000));
+-- result:
+-- !result
+INSERT INTO db_sn_b_${uuid0}.tj SELECT generate_series, 10 FROM TABLE(generate_series(1, 5000));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW db_sn_a_${uuid0}.mv_sn
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.k AS k, COUNT(*) AS c, SUM(a.v) AS sa, SUM(b.v) AS sb
+   FROM db_sn_a_${uuid0}.tj a JOIN db_sn_b_${uuid0}.tj b ON a.k = b.k GROUP BY a.k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW db_sn_a_${uuid0}.mv_sn WITH SYNC MODE;
+SELECT COUNT(*) FROM (
+  SELECT a.k, COUNT(*) c, SUM(a.v) sa, SUM(b.v) sb
+  FROM db_sn_a_${uuid0}.tj a JOIN db_sn_b_${uuid0}.tj b ON a.k = b.k GROUP BY a.k
+  EXCEPT SELECT k, c, sa, sb FROM db_sn_a_${uuid0}.mv_sn) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM (
+  SELECT k, c, sa, sb FROM db_sn_a_${uuid0}.mv_sn
+  EXCEPT SELECT a.k, COUNT(*) c, SUM(a.v) sa, SUM(b.v) sb
+  FROM db_sn_a_${uuid0}.tj a JOIN db_sn_b_${uuid0}.tj b ON a.k = b.k GROUP BY a.k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_rows FROM db_sn_a_${uuid0}.mv_sn;
+-- result:
+5000
+-- !result
+DROP DATABASE db_sn_a_${uuid0} FORCE;
+-- result:
+-- !result
+DROP DATABASE db_sn_b_${uuid0} FORCE;
+-- result:
+-- !result

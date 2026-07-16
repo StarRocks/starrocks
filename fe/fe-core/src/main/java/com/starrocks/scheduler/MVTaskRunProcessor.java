@@ -171,13 +171,17 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // get exec plan
         mvTaskRunContext.getRefreshRuntimeState().reset();
         mvTaskRunContext.setIsExplain(true);
-        MVRefreshProcessor.ProcessExecPlan processExecPlan =
-                mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
-        if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
-            logger.info("No need to refresh mv: {}, because the materialized view is up to date.", mv.getName());
-            return null;
+        try {
+            MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                    mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
+            if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
+                logger.info("No need to refresh mv: {}, because the materialized view is up to date.", mv.getName());
+                return null;
+            }
+            return processExecPlan.execPlan();
+        } finally {
+            clearStagedPinnedBookmarks();
         }
-        return processExecPlan.execPlan();
     }
 
     @Override
@@ -340,17 +344,30 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                                                    MVRefreshExecutor executor) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
         mvTaskRunContext.getRefreshRuntimeState().reset();
-        final MVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
-        if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
-            logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
-            return Constants.TaskRunState.SKIPPED;
-        }
+        try {
+            final MVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
+            if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
+                logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
+                return Constants.TaskRunState.SKIPPED;
+            }
 
-        // refresh materialized view
-        Constants.TaskRunState result = mvRefreshProcessor.execProcessExecPlan(taskRunContext, processExecPlan, executor);
-        long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
-        logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(elapsed));
-        return result;
+            // refresh materialized view
+            Constants.TaskRunState result = mvRefreshProcessor.execProcessExecPlan(taskRunContext, processExecPlan, executor);
+            long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+            logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(elapsed));
+            return result;
+        } finally {
+            clearStagedPinnedBookmarks();
+        }
+    }
+
+    // Staged by MVPCTRefreshProcessor#prepareRefreshPlan for the pinned bootstrap; RelationTransformer
+    // reads them for every OLAP scan. Clear only once this task-run's planning AND its execution
+    // re-plan (executor.executePlan re-plans the InsertStmt) are done: clearing earlier un-pins the
+    // re-planned base scan (double-count), leaving them set leaks into later queries on the reused
+    // ConnectContext. Both the refresh and EXPLAIN/plan-only entry points clear through here.
+    private void clearStagedPinnedBookmarks() {
+        mvTaskRunContext.getCtx().setMvPinnedBookmarkIds(null);
     }
 
     @Override

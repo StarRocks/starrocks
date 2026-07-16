@@ -693,6 +693,13 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 if (node.getBookmarkId().isPresent()) {
                     scanTable = BookmarkScopedTableResolver.resolveById(
                             scanTable, node.getBookmarkId().getAsLong());
+                } else if (session.getMvPinnedBookmarkIds() != null) {
+                    // Pinned MV refresh: read the base table AS-OF the frozen snapshot the refresh
+                    // planner staged on the context (no [_BOOKMARK_] hint on the relation).
+                    Long pinned = session.getMvPinnedBookmarkIds().get(scanTable.getUUID());
+                    if (pinned != null) {
+                        scanTable = BookmarkScopedTableResolver.resolveById(scanTable, pinned);
+                    }
                 }
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setTable(scanTable)

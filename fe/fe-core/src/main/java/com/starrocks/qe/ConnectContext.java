@@ -307,6 +307,19 @@ public class ConnectContext {
         return scanVersionOverride;
     }
 
+    // Base-table bookmark to read AS-OF during a pinned MV refresh, keyed by
+    // Table#getUUID(). Carries the frozen snapshot from the refresh
+    // planner to RelationTransformer without mutating the (immutable) query AST.
+    private Map<String, Long> mvPinnedBookmarkIds = null;
+
+    public void setMvPinnedBookmarkIds(Map<String, Long> mvPinnedBookmarkIds) {
+        this.mvPinnedBookmarkIds = mvPinnedBookmarkIds;
+    }
+
+    public Map<String, Long> getMvPinnedBookmarkIds() {
+        return mvPinnedBookmarkIds;
+    }
+
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }

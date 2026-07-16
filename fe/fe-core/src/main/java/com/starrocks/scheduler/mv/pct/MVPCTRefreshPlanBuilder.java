@@ -63,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class MVPCTRefreshPlanBuilder {
@@ -139,6 +140,7 @@ public class MVPCTRefreshPlanBuilder {
         // the analyzer's getTable() may see a fresher instance than snapshotBaseTables if the
         // connector cache refreshed between sync and analyze.
         Map<String, TvrVersionRange> pinnedMap = mvContext.getRefreshRuntimeState().getPinnedTvrMap();
+        Map<String, Long> pinnedBookmarkIds = Maps.newHashMap();
         for (Map.Entry<String, TableRelation> entry : tableRelations.entries()) {
             TableRelation relation = entry.getValue();
             Table table = relation.getTable();
@@ -148,12 +150,23 @@ public class MVPCTRefreshPlanBuilder {
                 continue;
             }
             TvrVersionRange pinned = pinnedMap.get(table.getUUID());
-            if (pinned != null) {
+            if (pinned == null) {
+                continue;
+            }
+            Optional<Long> pinnedSnapshot = pinned.end();
+            if (table.isCloudNativeTableOrMaterializedView() && pinnedSnapshot.isPresent()) {
+                // Native OLAP scans ignore an injected TvrVersionRange (only Iceberg/Paimon honor
+                // it); bookmark scoping is the sole AS-OF pin for cloud-native OlapTables. Stage the
+                // frozen bookmark on the context — RelationTransformer reads it without mutating the AST.
+                pinnedBookmarkIds.put(table.getUUID(), pinnedSnapshot.get());
+            } else {
                 relation.setTvrVersionRange(pinned);
                 logger.info("Inject pinned TVR {} into table relation {} for scan",
                         pinned, table.getName());
             }
         }
+        // Always overwrite (null when empty) so a previous batch's pins never leak into this one.
+        mvContext.getCtx().setMvPinnedBookmarkIds(pinnedBookmarkIds.isEmpty() ? null : pinnedBookmarkIds);
 
         // if the refTableRefreshPartitions is empty(not partitioned mv), no need to generate partition predicate
         if (refTableRefreshPartitions.isEmpty() || mvToRefreshedPartitions.isEmpty()) {
