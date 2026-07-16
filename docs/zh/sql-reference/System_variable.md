@@ -645,6 +645,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：Boolean
 * 引入版本：v4.2
 
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* 描述：数据倾斜阈值。在 prepared physical split scan 下，即使 scan range 数量已达到 pipeline DOP，仍可据此将单个超大 lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 默认值：1.5
+* 类型：Double
+* 引入版本：v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.

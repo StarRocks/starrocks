@@ -498,6 +498,7 @@
         "use_default_dop_when_shared_scan",
         "tablet_internal_parallel_min_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_rows",
+        "lake_prepared_split_max_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_bytes",
         "tablet_internal_parallel_min_scan_dop",
         "max_hdfs_file_handle",
