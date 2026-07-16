@@ -144,7 +144,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
     public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
@@ -329,47 +329,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     @Override
-    public int getBucketNums() {
-        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
-        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-            return getRangeDistributionBucketNums(distInfo);
-        }
-        // HASH path.
-        int bucketNum = distInfo.getBucketNum();
-        if (getSelectedPartitionIds().size() <= 1) {
-            for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
-            }
-        }
-        return bucketNum;
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeq2locations;
     }
 
-    private int getRangeDistributionBucketNums(DistributionInfo distInfo) {
-        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
-        if (dispatch != null) {
-            // getBucketNums() is invoked from ExecutionFragment.getOrCreateColocatedAssignment
-            // only when BackendSelectorFactory has chosen a colocate-dispatch path. Verify
-            // alignment HERE, after the dispatch decision: a misaligned ColocateRangeMgr
-            // would silently produce wrong join results under colocate dispatch.
-            // Non-colocate scans go through NormalBackendSelector and never reach this point.
-            //
-            // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
-            // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
-            // The second check closes the fill-vs-dispatch TOCTOU: the bucketSeq fill falls back to a
-            // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
-            // still works); if the group then re-aligns before this guard runs, comparing the built
-            // assignment against the aligned mapping catches the stale position pairing that would
-            // otherwise reach the colocate join and silently return wrong results.
-            //
-            // Invariant: the bucketSeq fill (getScanRangeLocations, optimizer or legacy path) always runs
-            // before backend selection reaches this guard, so tabletId2BucketSeq holds the whole scan's
-            // built assignment here — an empty map would itself be a not-built/stale state and fails closed.
-            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId, tabletId2BucketSeq);
-            return dispatch.bucketCount();
-        }
-        // Range distribution without a colocate group: RangeDistributionInfo always
-        // reports 1 (one tablet per partition by design).
-        return distInfo.getBucketNum();
+    @Override
+    public int getBucketNums() {
+        return computeBucketNums(olapTable, index.indexMetaId, getSelectedPartitionIds(),
+                getSelectedPhysicalPartitions(), tabletId2BucketSeq);
     }
 
     /**
@@ -888,40 +855,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 selectedTabletsNum += tablets.size();
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
-        }
-    }
-
-    /**
-     * Fills {@code target} with the tablet-id → bucket-sequence assignment for {@code selectedIndex},
-     * applying the position-fallback policy shared by both scan-time producers of
-     * {@link #tabletId2BucketSeq} — this class's {@link #computeTabletInfo} and
-     * {@link com.starrocks.sql.plan.PlanFragmentBuilder}:
-     *
-     * <ul>
-     *   <li>range colocate and aligned — {@code dispatch != null} and
-     *       {@link RangeColocateScanDispatch#computeBucketSeq} returns a mapping — uses that mapping;</li>
-     *   <li>everything else (HASH, range non-colocate, or a transiently unaligned range colocate group
-     *       where {@code computeBucketSeq} returns {@code null}) falls back to position-based bucketSeq.</li>
-     * </ul>
-     *
-     * <p>Entries are added to {@code target} without clearing it, so a caller can accumulate the
-     * whole-scan assignment across sub-partitions. The dispatch-time alignment guard in
-     * {@link #getBucketNums()} fails closed on the colocate-dispatch path when the built assignment is a
-     * stale position fallback, so no unaligned observation needs to be recorded here.
-     */
-    public static void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
-                                              MaterializedIndex selectedIndex,
-                                              List<Long> allTabletIds,
-                                              Map<Long, Integer> target) {
-        if (dispatch != null) {
-            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
-            if (rangeColocateMap != null) {
-                target.putAll(rangeColocateMap);
-                return;
-            }
-        }
-        for (int i = 0; i < allTabletIds.size(); i++) {
-            target.put(allTabletIds.get(i), i);
         }
     }
 
