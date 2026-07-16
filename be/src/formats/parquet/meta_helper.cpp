@@ -206,8 +206,7 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
         // ARRAY always has one child (element) and MAP always has two (key, value). The downstream
         // reader (ColumnReaderFactory::create) reads those children by fixed index.
         const size_t required_children = parquet_field->type == ColumnType::MAP ? 2 : 1;
-        if (parquet_field->children.size() < required_children ||
-            field_schema->children.size() < required_children ||
+        if (parquet_field->children.size() < required_children || field_schema->children.size() < required_children ||
             type_descriptor->children.size() < required_children) {
             return false;
         }
