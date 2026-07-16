@@ -714,13 +714,32 @@ public class ExecutionDAG {
      * <p>Must be called on the schedule thread, serialized with scan-range assignment.
      */
     public FragmentInstance registerLateInstance(ExecutionFragment fragment, ComputeNode worker) {
-        Preconditions.checkState(nextIndexInJob > 0, "registerLateInstance requires a finalized DAG");
+        return registerLateInstance(fragment, worker, reserveLateIndexInJob());
+    }
+
+    /**
+     * Variant taking an indexInJob previously obtained from {@link #reserveLateIndexInJob()},
+     * for callers that must announce the sender identity (be_number) to downstream exchanges
+     * before the instance exists anywhere.
+     */
+    public FragmentInstance registerLateInstance(ExecutionFragment fragment, ComputeNode worker,
+                                                 int reservedIndexInJob) {
         FragmentInstance instance = new FragmentInstance(worker, fragment);
         setInstanceId(instance);
-        instance.setIndexInJob(nextIndexInJob++);
+        instance.setIndexInJob(reservedIndexInJob);
         fragment.addInstanceLate(instance);
         workerIdToNumInstances.merge(instance.getWorkerId(), 1, Integer::sum);
         return instance;
+    }
+
+    /**
+     * Reserves the next dense indexInJob without creating an instance yet. An aborted late add
+     * simply burns the reserved index — gaps are harmless because report routing looks indices
+     * up by exact key, never by density.
+     */
+    public int reserveLateIndexInJob() {
+        Preconditions.checkState(nextIndexInJob > 0, "reserveLateIndexInJob requires a finalized DAG");
+        return nextIndexInJob++;
     }
 
     private void setInstanceId(FragmentInstance instance) {

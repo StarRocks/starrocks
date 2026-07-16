@@ -66,6 +66,12 @@ public class RegisterLateInstanceTest extends SchedulerTestBase {
         Assertions.assertEquals(totalInstances + 1, late2.getIndexInJob());
         Assertions.assertEquals(fragmentInstances + 1, late2.getIndexInFragment());
         Assertions.assertNotEquals(late.getInstanceId(), late2.getInstanceId());
+
+        // A reserved index that is never used just leaves a gap in the sequence.
+        int reserved = dag.reserveLateIndexInJob();
+        Assertions.assertEquals(totalInstances + 2, reserved);
+        FragmentInstance late3 = dag.registerLateInstance(scanFragment, backend2);
+        Assertions.assertEquals(totalInstances + 3, late3.getIndexInJob());
     }
 
     @Test
