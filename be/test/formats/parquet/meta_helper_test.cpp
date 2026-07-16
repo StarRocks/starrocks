@@ -71,6 +71,31 @@ protected:
         return TypeDescriptor::create_array_type(struct_type);
     }
 
+    // Build the parquet-file view of MAP<VARCHAR, VARCHAR>: two children (key, value).
+    static ParquetField make_map_parquet_field() {
+        ParquetField key;
+        key.name = "key";
+        key.type = ColumnType::SCALAR;
+        key.field_id = 101;
+
+        ParquetField value;
+        value.name = "value";
+        value.type = ColumnType::SCALAR;
+        value.field_id = 102;
+
+        ParquetField map;
+        map.name = "col";
+        map.type = ColumnType::MAP;
+        map.field_id = 1;
+        map.children = {key, value};
+        return map;
+    }
+
+    static TypeDescriptor make_map_type() {
+        TypeDescriptor varchar = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TypeDescriptor::create_map_type(varchar, varchar);
+    }
+
     // Helper to call the private method under test on a minimally-constructed helper.
     static bool is_valid_type(const TIcebergSchema& schema, const ParquetField& field,
                               const TIcebergSchemaField& top_field, const TypeDescriptor& type) {
@@ -126,6 +151,53 @@ TEST_F(LakeMetaHelperTest, CompleteNestedSchemaIsValid) {
 
     ParquetField parquet_field = make_array_of_struct_parquet_field();
     TypeDescriptor type = make_array_of_struct_type();
+
+    EXPECT_TRUE(is_valid_type(schema, parquet_field, top_field, type));
+}
+
+// Regression: a partial MAP lake schema carrying only the key child must be rejected.
+// The downstream reader reads lake_schema_field->children[1] (the value) unconditionally,
+// so accepting a one-child MAP would still crash even though the key alone validates.
+TEST_F(LakeMetaHelperTest, PartialMapSchemaWithOnlyKeyIsRejected) {
+    TIcebergSchemaField key;
+    key.__set_field_id(101);
+    key.__set_name("key");
+
+    // Only the key child is present -- the value child is missing.
+    TIcebergSchemaField top_field;
+    top_field.__set_field_id(1);
+    top_field.__set_name("col");
+    top_field.__set_children({key});
+
+    TIcebergSchema schema;
+    schema.__set_fields({top_field});
+
+    ParquetField parquet_field = make_map_parquet_field();
+    TypeDescriptor type = make_map_type();
+
+    EXPECT_FALSE(is_valid_type(schema, parquet_field, top_field, type));
+}
+
+// A complete MAP lake schema (both key and value children) validates.
+TEST_F(LakeMetaHelperTest, CompleteMapSchemaIsValid) {
+    TIcebergSchemaField key;
+    key.__set_field_id(101);
+    key.__set_name("key");
+
+    TIcebergSchemaField value;
+    value.__set_field_id(102);
+    value.__set_name("value");
+
+    TIcebergSchemaField top_field;
+    top_field.__set_field_id(1);
+    top_field.__set_name("col");
+    top_field.__set_children({key, value});
+
+    TIcebergSchema schema;
+    schema.__set_fields({top_field});
+
+    ParquetField parquet_field = make_map_parquet_field();
+    TypeDescriptor type = make_map_type();
 
     EXPECT_TRUE(is_valid_type(schema, parquet_field, top_field, type));
 }
