@@ -37,6 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -120,6 +121,7 @@ import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.SetUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1483,13 +1485,10 @@ public class MvUtils {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
-            // For hive catalog, when meets NoSuchObjectException, we should return empty
-            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
-            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
-            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
-            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+            // For hive catalog, the metastore client always throws (wrapping NoSuchObjectException as the
+            // cause) instead of returning null when the table doesn't exist, so we must unwrap the cause
+            // chain to tell "table not found" apart from other failures.
+            if (LogUtil.isCausedBy(e, NoSuchObjectException.class)) {
                 return Optional.empty();
             }
             throw e;
@@ -1501,14 +1500,11 @@ public class MvUtils {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTableWithIdentifier(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
-            // For hive catalog, when meets NoSuchObjectException, we should return empty
-            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
-            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
-            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            // For hive catalog, the metastore client always throws (wrapping NoSuchObjectException as the
+            // cause) instead of returning null when the table doesn't exist, so we must unwrap the cause
+            // chain to tell "table not found" apart from other failures.
             LOG.warn("Failed to get table with baseTableInfo: {}, error: {}", baseTableInfo, e.getMessage());
-            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+            if (LogUtil.isCausedBy(e, NoSuchObjectException.class)) {
                 return Optional.empty();
             }
             throw e;

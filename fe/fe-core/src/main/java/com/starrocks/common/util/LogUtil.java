@@ -15,6 +15,7 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
@@ -199,6 +200,14 @@ public class LogUtil {
         } else if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ') {
             sb.append(" ");
         }
+    }
+
+    // Some connectors (e.g. Hive metastore) only ever throw when a table is missing rather than
+    // returning null/empty, wrapping the real signal (e.g. NoSuchObjectException) as a cause several
+    // layers deep. Callers that need to special-case "not found" must check the whole cause chain by
+    // type instead of matching on the outer exception's message, which is not a stable contract.
+    public static boolean isCausedBy(Throwable e, Class<? extends Throwable> exceptionType) {
+        return Throwables.getCausalChain(e).stream().anyMatch(exceptionType::isInstance);
     }
 
     public static List<Throwable> unwindException(Throwable e, int maxDepth) {
