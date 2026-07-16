@@ -539,6 +539,12 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void addHistogramStatistics(Table table, String column, Histogram histogram) {
+        this.histogramCache.synchronous()
+                .put(new ColumnStatsCacheKey(table.getId(), column), Optional.of(histogram));
+    }
+
+    @Override
     public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
 

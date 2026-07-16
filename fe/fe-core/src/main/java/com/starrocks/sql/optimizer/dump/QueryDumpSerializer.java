@@ -32,6 +32,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -167,6 +169,26 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        // column histogram: the full histogram (buckets + mcv) round-trips here, keyed the same way as
+        // column_statistics, because column_statistics only keeps the truncated MCV preview from toString().
+        // Only emitted when a column actually carries a histogram, so older/histogram-free dumps are unaffected.
+        // Intentionally not emitted on the desensitized path: raw bucket bounds and MCV values would leak data.
+        JsonObject tableColumnHistogram = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
+            JsonObject columnHistograms = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                Histogram histogram = columnEntry.getValue().getHistogram();
+                if (histogram != null) {
+                    columnHistograms.addProperty(columnEntry.getKey(), HistogramUtils.serializeHistogram(histogram));
+                }
+            }
+            if (columnHistograms.size() > 0) {
+                tableColumnHistogram.add(entry.getKey(), columnHistograms);
+            }
+        }
+        if (tableColumnHistogram.size() > 0) {
+            dumpJson.add("column_histogram", tableColumnHistogram);
+        }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         }
@@ -262,9 +284,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                // Strip the histogram before rendering: ColumnStatistic.toString() would otherwise emit
+                // histogram.getMcvString(), leaking the raw top-MCV column values into the desensitized dump.
+                // The histogram is intentionally not serialized at all on the desensitized path.
                 columnStatistics.addProperty(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        columnEntry.getValue().toString()
+                        stripHistogram(columnEntry.getValue()).toString()
                 );
             }
             String[] splits = entry.getKey().split("\\.");
@@ -278,6 +303,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
         }
 
+    }
+
+    // Returns the statistic without its histogram, so ColumnStatistic.toString() renders the base stat only.
+    // Used on the desensitized path so histogram MCV values (raw column data) never reach the dump.
+    private static ColumnStatistic stripHistogram(ColumnStatistic columnStatistic) {
+        if (columnStatistic.getHistogram() == null) {
+            return columnStatistic;
+        }
+        return ColumnStatistic.buildFrom(columnStatistic).setHistogram(null).build();
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
