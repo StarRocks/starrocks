@@ -71,6 +71,11 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on:
+// min(tablet_internal_parallel_max_splitted_scan_rows, this) cuts big tablets into finer prepared-split
+// morsels, never coarser. Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
+
 // The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
 

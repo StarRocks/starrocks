@@ -418,6 +418,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
 
+    public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
+            "lake_tablet_internal_parallel_skew_split_ratio";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -1335,6 +1338,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
+
+    // A lake tablet whose row count exceeds this ratio times the per-driver ideal share is treated as a
+    // skewed straggler and split under the prepared-physical-split scan even when the scan-range count
+    // already reaches pipeline_dop. Only affects enable_lake_prepared_physical_split_scan.
+    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
+    private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -4773,6 +4782,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
     }
 
+    public double getLakeTabletInternalParallelSkewSplitRatio() {
+        return lakeTabletInternalParallelSkewSplitRatio;
+    }
+
+    public void setLakeTabletInternalParallelSkewSplitRatio(double ratio) {
+        // The BE multiplies the per-driver ideal share by this ratio to decide has_skewed_big_tablet;
+        // a non-positive value would flag every sufficiently large tablet as skewed (over-splitting),
+        // while NaN/Infinity would silently disable the skew override. Require a positive finite number.
+        if (!Double.isFinite(ratio) || ratio <= 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO, ratio, "a positive finite number");
+        }
+        this.lakeTabletInternalParallelSkewSplitRatio = ratio;
+    }
+
     public boolean isEnableResourceGroup() {
         return true;
     }
@@ -6623,6 +6647,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+        tResult.setLake_tablet_internal_parallel_skew_split_ratio(lakeTabletInternalParallelSkewSplitRatio);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));

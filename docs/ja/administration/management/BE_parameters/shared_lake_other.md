@@ -176,6 +176,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: prepared-physical-split lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない segment 範囲をカバーする追加の coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（coarse 範囲は常にリファイン範囲が差し引く対象のスーパーセットです）。早期の並列性を、冗長な coarse スキャンの削減と引き換えにするだけです。
 - 導入バージョン: v4.2
 
+### lake_prepared_split_max_splitted_scan_rows
+
+- デフォルト: 262144
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: prepared-physical-split lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（split morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、split morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
+- 導入バージョン: v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - デフォルト: -1

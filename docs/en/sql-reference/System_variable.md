@@ -737,6 +737,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data type**: Boolean
 * **Introduced in**: v4.2
 
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **Description**: The skew threshold that lets a single oversized lake tablet be split under the prepared-physical-split scan even when the scan-range count already reaches the pipeline DOP. A tablet is treated as a skewed straggler and split when its row count exceeds this ratio times the per-driver ideal share (total rows divided by the effective DOP). A larger value requires more extreme skew before splitting; a smaller value splits more eagerly. Must be a positive, finite number. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: 1.5
+* **Data type**: Double
+* **Introduced in**: v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
