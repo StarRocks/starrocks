@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/batch_write/isomorphic_batch_write.h"
+#include "data_workflows/load/batch_write/isomorphic_batch_write.h"
 
 #include <brpc/controller.h>
 #include <bthread/bthread.h>
@@ -23,13 +23,13 @@
 
 #include "base/testutil/sync_point.h"
 #include "common/config_merge_commit_fwd.h"
+#include "common/system/backend_options.h"
 #include "common/system/master_info.h"
 #include "common/util/bthreads/executor.h"
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/load/http_load_params.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
-#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "platform/thrift_rpc_helper.h"
@@ -154,6 +154,10 @@ public:
 IsomorphicBatchWrite::IsomorphicBatchWrite(BatchWriteId batch_write_id, bthreads::ThreadPoolExecutor* executor,
                                            TxnStateCache* txn_state_cache)
         : _batch_write_id(std::move(batch_write_id)), _executor(executor), _txn_state_cache(txn_state_cache) {}
+
+IsomorphicBatchWrite::~IsomorphicBatchWrite() {
+    stop();
+}
 
 Status IsomorphicBatchWrite::init() {
     TEST_ERROR_POINT("IsomorphicBatchWrite::init::error");

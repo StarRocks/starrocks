@@ -38,7 +38,7 @@
 #include "data_sink/exchange/data_stream_sender.h"
 #include "data_sink/result/result_sink.h"
 #include "data_sink/tablet/olap_table_sink.h"
-#include "exec/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
@@ -84,7 +84,7 @@ using WorkGroupPtr = workgroup::WorkGroupPtr;
 using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
 
 /// FragmentExecutor.
-FragmentExecutor::FragmentExecutor() {
+FragmentExecutor::FragmentExecutor(BatchWriteMgr* batch_write_mgr) : _batch_write_mgr(batch_write_mgr) {
     _fragment_start_time = MonotonicNanos();
 }
 
@@ -703,13 +703,14 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                         broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
                 if (is_batch_write) {
-                    auto* batch_write_mgr = exec_env->batch_write_mgr();
-                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
-                                                  exec_env, batch_write_mgr, db_name, table_name,
-                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
-                                                  broker_scan_range.batch_write_interval_ms));
+                    if (_batch_write_mgr == nullptr) {
+                        return Status::ServiceUnavailable("Batch write manager is unavailable");
+                    }
+                    ASSIGN_OR_RETURN(ctx, _batch_write_mgr->create_and_register_pipe(
+                                                  db_name, table_name, broker_scan_range.batch_write_parameters, label,
+                                                  txn_id, load_id, broker_scan_range.batch_write_interval_ms));
                     fragment_attachments.emplace_back(std::make_unique<StreamLoadContextHandle>(
-                            ctx, [batch_write_mgr](StreamLoadContext* context) {
+                            ctx, [batch_write_mgr = _batch_write_mgr](StreamLoadContext* context) {
                                 batch_write_mgr->unregister_stream_load_pipe(context);
                             }));
                 } else {

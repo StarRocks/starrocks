@@ -211,6 +211,7 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     data_workflows_env_options.metrics = process_metrics_registry->root_registry();
     data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     data_workflows_env_options.load_mem_tracker = runtime_env->load_mem_tracker();
+    data_workflows_env_options.load_stream_mgr = exec_env->load_stream_mgr();
     st = data_workflows_env->init(data_workflows_env_options);
     CHECK(st.ok()) << st;
 
@@ -250,6 +251,8 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
 #endif
     orchestration_env->destroy();
     orchestration_env.reset();
+    // Query contexts and orchestration callbacks must release their non-owning
+    // BatchWriteMgr references before DataWorkflows is destroyed.
     data_workflows_env->destroy();
     data_workflows_env.reset();
     delete engine;

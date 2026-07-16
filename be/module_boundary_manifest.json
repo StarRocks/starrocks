@@ -707,6 +707,7 @@
       "owned_roots": ["be/src/data_workflows"],
       "allowed_include_prefixes": [
         "data_workflows/",
+        "cache/",
         "connector/file/",
         "storage/",
         "storage_primitive/",
@@ -735,6 +736,7 @@
       "allowed_target_deps": [
         "Storage",
         "Exec",
+        "Cache",
         "ConnectorFile",
         "Runtime",
         "StorageBase",
@@ -761,6 +763,7 @@
         "SchemaScannerBuiltin",
         "Storage",
         "Exec",
+        "Cache",
         "ConnectorFile",
         "Runtime",
         "StorageBase",
@@ -1507,7 +1510,7 @@
     {
       "id": "service",
       "doc_label": "Service",
-      "summary": "Shared service-layer target above Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.",
+      "summary": "Shared service-layer target above DataWorkflows, Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.",
       "owned_targets": ["Service"],
       "allowed_include_prefixes": [
         "service/",
@@ -1519,6 +1522,7 @@
         "common/",
         "connector/",
         "compute_env/",
+        "data_workflows/",
         "exec/",
         "exec_primitive/",
         "exprs/",
@@ -1539,6 +1543,7 @@
       "allowed_target_deps": [
         "Script",
         "Runtime",
+        "DataWorkflows",
         "Orchestration",
         "Runtime",
         "Runtime",

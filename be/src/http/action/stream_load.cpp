@@ -66,9 +66,9 @@
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_util.h"
 #include "data_workflows/load/stream_load/stream_load_executor.h"
-#include "exec/batch_write/batch_write_mgr.h"
-#include "exec/batch_write/batch_write_util.h"
 #include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -131,10 +131,12 @@ static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int
                                        TStreamLoadPutResult* result);
 
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
-                                   StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter)
+                                   StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter,
+                                   BatchWriteMgr* batch_write_mgr)
         : _exec_env(exec_env),
           _stream_load_orchestrator(stream_load_orchestrator),
           _stream_load_executor(stream_load_executor),
+          _batch_write_mgr(batch_write_mgr),
           _http_concurrent_limiter(limiter) {
     DCHECK(_stream_load_orchestrator != nullptr);
 }
@@ -216,10 +218,13 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
+    if (_batch_write_mgr == nullptr) {
+        return Status::ServiceUnavailable("Batch write manager is unavailable");
+    }
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
     ctx->buffer->flip_to_read();
-    return _exec_env->batch_write_mgr()->append_data(ctx);
+    return _batch_write_mgr->append_data(ctx);
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {

@@ -22,8 +22,8 @@
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "common/statusor.h"
 #include "common/util/bthreads/executor.h"
-#include "exec/batch_write/isomorphic_batch_write.h"
-#include "exec/batch_write/txn_state_cache.h"
+#include "data_workflows/load/batch_write/isomorphic_batch_write.h"
+#include "data_workflows/load/batch_write/txn_state_cache.h"
 
 namespace brpc {
 class Controller;
@@ -31,7 +31,7 @@ class Controller;
 
 namespace starrocks {
 
-class ExecEnv;
+class LoadStreamMgr;
 class PStreamLoadRequest;
 class PStreamLoadResponse;
 class StreamLoadContext;
@@ -42,7 +42,8 @@ class MetricRegistry;
 
 class BatchWriteMgr {
 public:
-    BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor);
+    BatchWriteMgr(LoadStreamMgr* load_stream_mgr, std::unique_ptr<bthreads::ThreadPoolExecutor> executor);
+    ~BatchWriteMgr();
     Status init(MetricRegistry* metrics = nullptr);
 
     Status register_stream_load_pipe(StreamLoadContext* pipe_ctx);
@@ -54,14 +55,15 @@ public:
     void stop();
 
     bthreads::ThreadPoolExecutor* executor() { return _executor.get(); }
-    TxnStateCache* txn_state_cache() { return _txn_state_cache.get(); }
+    TxnStateCache* TEST_txn_state_cache() { return _txn_state_cache.get(); }
+    void set_txn_state_cache_capacity(size_t capacity);
 
-    static StatusOr<StreamLoadContext*> create_and_register_pipe(
-            ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const std::string& db, const std::string& table,
-            const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
-            const TUniqueId& load_id, int32_t batch_write_interval_ms);
+    StatusOr<StreamLoadContext*> create_and_register_pipe(const std::string& db, const std::string& table,
+                                                          const std::map<std::string, std::string>& load_parameters,
+                                                          const std::string& label, long txn_id,
+                                                          const TUniqueId& load_id, int32_t batch_write_interval_ms);
 
-    void receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl, const PStreamLoadRequest* request,
+    void receive_stream_load_rpc(brpc::Controller* cntl, const PStreamLoadRequest* request,
                                  PStreamLoadResponse* response);
 
     void update_transaction_state(const PUpdateTransactionStateRequest* request,
@@ -71,6 +73,7 @@ private:
     StatusOr<IsomorphicBatchWriteSharedPtr> _get_batch_write(const BatchWriteId& batch_write_id,
                                                              bool create_if_missing);
 
+    LoadStreamMgr* _load_stream_mgr;
     std::unique_ptr<bthreads::ThreadPoolExecutor> _executor;
     std::unique_ptr<TxnStateCache> _txn_state_cache;
     bthreads::BThreadSharedMutex _rw_mutex;
