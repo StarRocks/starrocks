@@ -63,52 +63,52 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Void> {
+public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, FlussPredicateContext> {
     private final PredicateBuilder builder;
     private final List<String> fieldNames;
     private final List<DataType> fieldTypes;
-    private final ZoneId sessionZoneId;
+    private final FlussPredicateContext predicateContext;
 
     public FlussPredicateConverter(RowType rowType, ZoneId sessionZoneId) {
         this.builder = new PredicateBuilder(rowType);
         this.fieldTypes = rowType.getFields().stream().map(DataField::getType).collect(Collectors.toList());
         this.fieldNames = rowType.getFields().stream().map(DataField::getName).collect(Collectors.toList());
-        this.sessionZoneId = sessionZoneId == null ? ZoneOffset.UTC : sessionZoneId;
+        this.predicateContext = new FlussPredicateContext(sessionZoneId);
     }
 
     public Predicate convert(ScalarOperator operator) {
         if (operator == null) {
             return null;
         }
-        return operator.accept(this, null);
+        return operator.accept(this, predicateContext);
     }
 
     @Override
-    public Predicate visit(ScalarOperator scalarOperator, Void context) {
+    public Predicate visit(ScalarOperator scalarOperator, FlussPredicateContext context) {
         return null;
     }
 
     @Override
-    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, FlussPredicateContext context) {
         CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
         if (op == CompoundPredicateOperator.CompoundType.NOT) {
             if (operator.getChild(0) instanceof LikePredicateOperator) {
                 return null;
             }
-            Predicate expression = operator.getChild(0).accept(this, null);
+            Predicate expression = operator.getChild(0).accept(this, context.withInsideNot());
 
             if (expression != null) {
                 return expression.negate().orElse(null);
             }
         } else {
-            Predicate left = operator.getChild(0).accept(this, null);
-            Predicate right = operator.getChild(1).accept(this, null);
+            Predicate left = operator.getChild(0).accept(this, context);
+            Predicate right = operator.getChild(1).accept(this, context);
             if (left != null && right != null) {
                 return (op == CompoundPredicateOperator.CompoundType.OR) ? PredicateBuilder.or(left, right) :
                         PredicateBuilder.and(left, right);
-            } else if (left != null && op == CompoundPredicateOperator.CompoundType.AND) {
+            } else if (!context.isInsideNot() && left != null && op == CompoundPredicateOperator.CompoundType.AND) {
                 return left;
-            } else if (right != null && op == CompoundPredicateOperator.CompoundType.AND) {
+            } else if (!context.isInsideNot() && right != null && op == CompoundPredicateOperator.CompoundType.AND) {
                 return right;
             }
         }
@@ -116,7 +116,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
     }
 
     @Override
-    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, FlussPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -130,13 +130,13 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
     }
 
     @Override
-    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, FlussPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
         }
         int idx = fieldNames.indexOf(columnName);
-        Object literal = getLiteral(operator.getChild(1), fieldTypes.get(idx));
+        Object literal = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
         if (literal == null) {
             return null;
         }
@@ -162,7 +162,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
     }
 
     @Override
-    public Predicate visitInPredicate(InPredicateOperator operator, Void context) {
+    public Predicate visitInPredicate(InPredicateOperator operator, FlussPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -171,7 +171,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
         List<ScalarOperator> valuesOperatorList = operator.getListChildren();
         List<Object> literalValues = new ArrayList<>(valuesOperatorList.size());
         for (ScalarOperator valueOperator : valuesOperatorList) {
-            Object value = getLiteral(valueOperator, fieldTypes.get(idx));
+            Object value = getLiteral(valueOperator, fieldTypes.get(idx), context);
             if (value == null) {
                 return null;
             }
@@ -189,7 +189,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
     }
 
     @Override
-    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, Void context) {
+    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, FlussPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -198,7 +198,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
         int idx = fieldNames.indexOf(columnName);
         if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
             if (operator.getChild(1).getType().isStringType()) {
-                Object objectLiteral = getLiteral(operator.getChild(1), fieldTypes.get(idx));
+                Object objectLiteral = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
                 if (objectLiteral == null) {
                     return null;
                 }
@@ -213,14 +213,20 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
         return null;
     }
 
-    private Object getLiteral(ScalarOperator operator, DataType dataType) {
+    private Object getLiteral(ScalarOperator operator, DataType dataType, FlussPredicateContext context) {
         if (operator == null) {
             return null;
         }
-        return operator.accept(new ExtractLiteralValue(), dataType);
+        return operator.accept(new ExtractLiteralValue(context.getSessionZoneId()), dataType);
     }
 
-    private class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
+        private final ZoneId sessionZoneId;
+
+        private ExtractLiteralValue(ZoneId sessionZoneId) {
+            this.sessionZoneId = sessionZoneId;
+        }
+
         @Override
         public Object visit(ScalarOperator scalarOperator, DataType dataType) {
             return null;
