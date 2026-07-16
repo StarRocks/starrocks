@@ -16,6 +16,7 @@ package com.starrocks.connector.fluss;
 
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.fluss.predicate.CompoundPredicate;
 import org.apache.fluss.predicate.Equal;
@@ -42,6 +44,7 @@ import org.apache.fluss.row.Decimal;
 import org.apache.fluss.row.TimestampLtz;
 import org.apache.fluss.row.TimestampNtz;
 import org.apache.fluss.types.DataField;
+import org.apache.fluss.types.DataType;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.types.RowType;
 import org.junit.jupiter.api.Assertions;
@@ -89,6 +92,7 @@ public class FlussPredicateConverterTest {
     @Test
     public void testNullAndUnsupportedPredicate() {
         Assertions.assertNull(CONVERTER.convert(null));
+        Assertions.assertNull(CONVERTER.convert(ConstantOperator.createInt(1)));
 
         ScalarOperator noColumnPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, ConstantOperator.createInt(1), ConstantOperator.createInt(1));
@@ -185,6 +189,11 @@ public class FlussPredicateConverterTest {
         LeafPredicate pushedLeaf = assertLeaf(andPredicate, Equal.class, 0, "id");
         Assertions.assertEquals(11, pushedLeaf.literals().get(0));
 
+        Predicate rightOnly = CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, unsupported, pushable));
+        Assertions.assertEquals(11,
+                assertLeaf(rightOnly, Equal.class, 0, "id").literals().get(0));
+
         // Partial OR pushdown is unsafe because the unsupported side may still match rows rejected by the pushed side.
         Predicate orPredicate = CONVERTER.convert(new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR, pushable, unsupported));
@@ -210,6 +219,115 @@ public class FlussPredicateConverterTest {
         TimestampLtz timestampLtz = (TimestampLtz) leafPredicate.literals().get(0);
         Instant expectedInstant = literal.atZone(sessionZoneId).toInstant();
         Assertions.assertEquals(expectedInstant, timestampLtz.toInstant());
+    }
+
+    @Test
+    public void testNotPredicate() {
+        ScalarOperator pushable = new BinaryPredicateOperator(BinaryType.EQ, ID, ConstantOperator.createInt(11));
+        ScalarOperator unsupported = new BinaryPredicateOperator(
+                BinaryType.EQ, ConstantOperator.createInt(1), ConstantOperator.createInt(1));
+
+        LeafPredicate negated = assertLeaf(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, pushable)), NotEqual.class, 0, "id");
+        Assertions.assertEquals(11, negated.literals().get(0));
+        Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT,
+                new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
+                        NAME, ConstantOperator.createVarchar("abc%")))));
+        Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, unsupported)));
+    }
+
+    @Test
+    public void testUnsupportedOperands() {
+        Assertions.assertNull(CONVERTER.convert(new IsNullPredicateOperator(
+                false, ConstantOperator.createVarchar("not-a-column"))));
+        Assertions.assertNull(CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, ID, NAME)));
+        Assertions.assertNull(CONVERTER.convert(new InPredicateOperator(
+                false, Arrays.asList(NAME, ConstantOperator.createVarchar("alice"), ID))));
+        Assertions.assertNull(CONVERTER.convert(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.REGEXP, NAME, ConstantOperator.createVarchar("abc.*"))));
+    }
+
+    @Test
+    public void testNotInPredicate() {
+        Predicate notInPredicate = CONVERTER.convert(new InPredicateOperator(
+                true, Arrays.asList(FLAG, ConstantOperator.createBoolean(true),
+                        ConstantOperator.createBoolean(false))));
+        List<Predicate> conjuncts = PredicateBuilder.splitAnd(notInPredicate);
+        Assertions.assertEquals(2, conjuncts.size());
+        Assertions.assertEquals(true,
+                assertLeaf(conjuncts.get(0), NotEqual.class, 2, "flag").literals().get(0));
+        Assertions.assertEquals(false,
+                assertLeaf(conjuncts.get(1), NotEqual.class, 2, "flag").literals().get(0));
+    }
+
+    @Test
+    public void testCastOperands() {
+        CastOperator castId = new CastOperator(com.starrocks.type.IntegerType.BIGINT, ID);
+        LeafPredicate castColumnPredicate = assertLeaf(CONVERTER.convert(new BinaryPredicateOperator(
+                BinaryType.GE, castId, ConstantOperator.createInt(10))), GreaterOrEqual.class, 0, "id");
+        Assertions.assertEquals(10, castColumnPredicate.literals().get(0));
+
+        CastOperator castLiteral = new CastOperator(
+                com.starrocks.type.IntegerType.BIGINT, ConstantOperator.createInt(12));
+        LeafPredicate castLiteralPredicate = assertLeaf(CONVERTER.convert(new BinaryPredicateOperator(
+                BinaryType.EQ, ID, castLiteral)), Equal.class, 0, "id");
+        Assertions.assertEquals(12, castLiteralPredicate.literals().get(0));
+    }
+
+    @Test
+    public void testNumericAndCharacterLiteralTypes() {
+        assertSingleColumnLiteral(DataTypes.TINYINT(), com.starrocks.type.IntegerType.TINYINT,
+                ConstantOperator.createTinyInt((byte) 1), (byte) 1);
+        assertSingleColumnLiteral(DataTypes.SMALLINT(), com.starrocks.type.IntegerType.SMALLINT,
+                ConstantOperator.createSmallInt((short) 2), (short) 2);
+        assertSingleColumnLiteral(DataTypes.BIGINT(), com.starrocks.type.IntegerType.BIGINT,
+                ConstantOperator.createBigint(3L), 3L);
+        assertSingleColumnLiteral(DataTypes.FLOAT(), com.starrocks.type.FloatType.FLOAT,
+                ConstantOperator.createFloat(4.5), 4.5F);
+        assertSingleColumnLiteral(DataTypes.DOUBLE(), com.starrocks.type.FloatType.DOUBLE,
+                ConstantOperator.createDouble(5.5), 5.5D);
+        assertSingleColumnLiteral(DataTypes.CHAR(8), TypeFactory.createCharType(8),
+                ConstantOperator.createChar("char"), BinaryString.fromString("char"));
+    }
+
+    @Test
+    public void testLiteralCastsToFlussFieldTypes() {
+        Assertions.assertEquals(true, literal(CONVERTER, FLAG, ConstantOperator.createVarchar("true")));
+        Assertions.assertEquals((int) LocalDate.of(2026, 7, 8).toEpochDay(),
+                literal(CONVERTER, DT, ConstantOperator.createVarchar("2026-07-08")));
+        Assertions.assertEquals(LocalDateTime.of(2026, 7, 8, 12, 13, 14),
+                ((TimestampNtz) literal(CONVERTER, TS,
+                        ConstantOperator.createVarchar("2026-07-08 12:13:14"))).toLocalDateTime());
+        Assertions.assertEquals(BinaryString.fromString("7"),
+                literal(CONVERTER, NAME, ConstantOperator.createInt(7)));
+        Decimal decimal = (Decimal) literal(CONVERTER, PRICE, ConstantOperator.createVarchar("12.34"));
+        Assertions.assertEquals(0, new BigDecimal("12.34").compareTo(decimal.toBigDecimal()));
+
+        Assertions.assertNull(convertSingleColumnLiteral(DataTypes.BINARY(8),
+                com.starrocks.type.VarbinaryType.VARBINARY, ConstantOperator.createVarchar("binary")));
+    }
+
+    private static void assertSingleColumnLiteral(DataType dataType, Type columnType,
+                                                  ConstantOperator literal, Object expected) {
+        LeafPredicate predicate = assertLeaf(
+                convertSingleColumnLiteral(dataType, columnType, literal), Equal.class, 0, "value");
+        Assertions.assertEquals(expected, predicate.literals().get(0));
+    }
+
+    private static Predicate convertSingleColumnLiteral(DataType dataType, Type columnType,
+                                                        ConstantOperator literal) {
+        RowType rowType = new RowType(List.of(new DataField("value", dataType)));
+        ColumnRefOperator column = new ColumnRefOperator(0, columnType, "value", true, false);
+        FlussPredicateConverter converter = new FlussPredicateConverter(rowType, ZoneOffset.UTC);
+        return converter.convert(new BinaryPredicateOperator(BinaryType.EQ, column, literal));
+    }
+
+    private static Object literal(FlussPredicateConverter converter, ColumnRefOperator column,
+                                  ConstantOperator literal) {
+        return assertLeaf(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, column, literal)),
+                Equal.class, column.getId(), column.getName()).literals().get(0);
     }
 
     private static void assertBinaryPredicate(BinaryType binaryType, Class<?> functionClass, Object expectedLiteral) {

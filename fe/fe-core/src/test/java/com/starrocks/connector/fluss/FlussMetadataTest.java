@@ -34,7 +34,9 @@ import mockit.Verifications;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.config.Configuration;
+import org.apache.fluss.exception.DatabaseNotExistException;
 import org.apache.fluss.exception.LakeTableSnapshotNotExistException;
+import org.apache.fluss.exception.TableNotPartitionedException;
 import org.apache.fluss.flink.source.split.SourceSplitBase;
 import org.apache.fluss.flink.utils.LakeSourceUtils;
 import org.apache.fluss.lake.source.LakeSource;
@@ -77,6 +79,22 @@ public class FlussMetadataTest {
     }
 
     @Test
+    public void testGetDb() {
+        new Expectations() {
+            {
+                admin.getDatabaseInfo(DB);
+                result = CompletableFuture.completedFuture(null);
+                admin.getDatabaseInfo("missing");
+                result = CompletableFuture.failedFuture(
+                        new DatabaseNotExistException("database does not exist"));
+            }
+        };
+
+        Assertions.assertEquals(DB, metadata.getDb(new ConnectContext(), DB).getFullName());
+        Assertions.assertNull(metadata.getDb(new ConnectContext(), "missing"));
+    }
+
+    @Test
     public void testGetTable() {
         TableInfo tableInfo = tableInfo(true);
         org.apache.fluss.client.table.Table nativeTable = nativeTable(tableInfo);
@@ -98,6 +116,20 @@ public class FlussMetadataTest {
         Assertions.assertEquals(IntegerType.INT, table.getBaseSchema().get(0).getType());
         Assertions.assertEquals(TypeFactory.createDefaultCatalogString(), table.getBaseSchema().get(1).getType());
         Assertions.assertEquals("test fluss table", table.getComment());
+    }
+
+    @Test
+    public void testGetPrimaryKeyTableWithReadModeSuffix() {
+        TableInfo tableInfo = tableInfo(false, true);
+        new Expectations() {
+            {
+                admin.getTableInfo(TablePath.of(DB, TABLE));
+                result = CompletableFuture.completedFuture(tableInfo);
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(new ConnectContext(), DB, TABLE + "$lake"));
     }
 
     @Test
@@ -159,6 +191,30 @@ public class FlussMetadataTest {
                 metadata.listPartitionNames(DB, TABLE, ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(Lists.newArrayList("dt=2026-07-01/region=cn", "dt=2026-07-02/region=us"),
                 partitionNames);
+
+        List<com.starrocks.connector.PartitionInfo> partitions = metadata.getPartitions(
+                flussTable(tableInfo(true), ""), Lists.newArrayList(partitionNames.get(0), "dt=missing/region=missing"));
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals(partitionNames.get(0), ((Partition) partitions.get(0)).getPartitionName());
+    }
+
+    @Test
+    public void testUnpartitionedTablePartitions() {
+        new Expectations() {
+            {
+                admin.listPartitionInfos(TablePath.of(DB, TABLE));
+                result = CompletableFuture.<List<PartitionInfo>>failedFuture(
+                        new TableNotPartitionedException("table is not partitioned"));
+            }
+        };
+
+        Assertions.assertTrue(metadata.listPartitionNames(
+                DB, TABLE, ConnectorMetadataRequestContext.DEFAULT).isEmpty());
+
+        List<com.starrocks.connector.PartitionInfo> partitions = metadata.getPartitions(
+                flussTable(tableInfo(false), ""), Collections.emptyList());
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals(TABLE, ((Partition) partitions.get(0)).getPartitionName());
     }
 
     @Test
@@ -254,12 +310,19 @@ public class FlussMetadataTest {
     }
 
     private static TableInfo tableInfo(boolean partitioned) {
-        Schema schema = Schema.newBuilder()
+        return tableInfo(partitioned, false);
+    }
+
+    private static TableInfo tableInfo(boolean partitioned, boolean primaryKey) {
+        Schema.Builder schemaBuilder = Schema.newBuilder()
                 .column("id", DataTypes.INT())
                 .column("name", DataTypes.STRING())
                 .column("dt", DataTypes.STRING())
-                .column("region", DataTypes.STRING())
-                .build();
+                .column("region", DataTypes.STRING());
+        if (primaryKey) {
+            schemaBuilder.primaryKey("id");
+        }
+        Schema schema = schemaBuilder.build();
         TableDescriptor.Builder descriptorBuilder = TableDescriptor.builder()
                 .schema(schema)
                 .distributedBy(3, "id")

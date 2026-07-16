@@ -32,6 +32,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
 import com.starrocks.connector.fluss.FlussSplitsInfo;
+import com.starrocks.planner.FlussScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,14 +41,21 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.config.Configuration;
+import org.apache.fluss.flink.source.split.SourceSplitBase;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TableInfo;
@@ -108,16 +116,44 @@ public class FlussScanTest extends PlanTestBase {
     }
 
     @Test
-    public void testFlussScan() throws Exception {
-        String plan = getFragmentPlan("select id from fluss0.fluss_db.log_events where id = 1");
+    public void testFlussScan(@Mocked SourceSplitBase split) throws Exception {
+        new MockUp<FlussScanNode>() {
+            @Mock
+            public static String encodeSplitToString(SourceSplitBase ignored) {
+                return "encoded-split";
+            }
+        };
+        mockedFlussMetadata.setSplits(ImmutableList.of(split));
+
+        ExecPlan execPlan = getExecPlan(
+                "select id from fluss0.fluss_db.log_events where id = 1 limit 10");
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
 
         assertContains(plan, "FlussScanNode", "TABLE: log_events",
                 "NON-PARTITION PREDICATES: 1: id = 1");
         GetRemoteFilesParams params = mockedFlussMetadata.getLastParams();
         Assertions.assertEquals(ImmutableList.of("id"), params.getFieldNames());
-        Assertions.assertNotNull(params.getPredicate());
         Assertions.assertEquals("1: id = 1", params.getPredicate().toString());
         Assertions.assertNull(params.getPartitionKeys());
+        Assertions.assertEquals(10, params.getLimit());
+
+        FlussScanNode scanNode = Assertions.assertInstanceOf(
+                FlussScanNode.class, execPlan.getScanNodes().get(0));
+        Assertions.assertEquals(1, scanNode.getScanRangeLocations(0).size());
+        THdfsScanRange hdfsScanRange = scanNode.getScanRangeLocations(0).get(0)
+                .getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(hdfsScanRange.isUse_fluss_jni_reader());
+        Assertions.assertEquals("encoded-split", hdfsScanRange.getFluss_split_info());
+        Assertions.assertNotNull(hdfsScanRange.getJni_predicate_info());
+
+        TPlanNode thriftNode = scanNode.treeToThrift().getNodes().get(0);
+        Assertions.assertEquals(TPlanNodeType.HDFS_SCAN_NODE, thriftNode.getNode_type());
+        Assertions.assertEquals("fluss0.fluss_db.log_events", thriftNode.getHdfs_scan_node().getTable_name());
+        Assertions.assertEquals("1: id = 1", thriftNode.getHdfs_scan_node().getSql_predicates());
+        Assertions.assertTrue(thriftNode.getHdfs_scan_node().isSetCloud_configuration());
+
+        assertContains(execPlan.getExplainString(TExplainLevel.VERBOSE), "partitions=1/1");
+        assertContains(UtFrameUtils.printPlan(execPlan), "- Fluss-SCAN [log_events]");
     }
 
     @Test
@@ -154,6 +190,7 @@ public class FlussScanTest extends PlanTestBase {
         private final AtomicLong idGen = new AtomicLong(0);
         private final Map<String, FlussTable> tables;
         private GetRemoteFilesParams lastParams;
+        private List<SourceSplitBase> splits = Collections.emptyList();
 
         private MockedFlussMetadata() {
             tables = ImmutableMap.of(
@@ -163,6 +200,11 @@ public class FlussScanTest extends PlanTestBase {
 
         private void reset() {
             lastParams = null;
+            splits = Collections.emptyList();
+        }
+
+        private void setSplits(List<SourceSplitBase> splits) {
+            this.splits = splits;
         }
 
         private GetRemoteFilesParams getLastParams() {
@@ -208,8 +250,7 @@ public class FlussScanTest extends PlanTestBase {
         public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
             lastParams = params;
 
-            FlussSplitsInfo flussSplitsInfo =
-                    new FlussSplitsInfo(Collections.emptyList(), Collections.emptyList());
+            FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(Collections.emptyList(), splits);
             RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
             remoteFileInfo.setFiles(ImmutableList.of(
                     FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo)));
