@@ -1,0 +1,6 @@
+-- name: test_cast_char_truncate
+select cast(1775580223839 as char(10));
+select cast(cast(1775580223839 as char(10)) as decimal);
+select cast('hello world' as char(5));
+select cast(1775580223839 as varchar(10));
+select cast('hello world' as char);
