@@ -290,6 +290,18 @@ jobs:
           fetch-tags: true
       - name: fetch release branches
         run: git fetch origin '+refs/heads/branch-*:refs/remotes/origin/branch-*' || true
+      - name: validate budget input [FAIL-LOUD]
+        # A free-form dispatch input flows into a `--dangerously-skip-permissions` `claude -p` prompt as
+        # $ARGUMENTS. It is not a shell-injection vector (double-quoted env expansion), but an arbitrary
+        # string would be PROMPT injection, and a plain typo would be silently masked to a green no-op by
+        # the best-effort `|| true` below. So validate FIRST, in its own step WITHOUT continue-on-error:
+        # empty (= low default) is fine; otherwise it MUST be digits only. A bad value fails the job (red),
+        # and the best-effort step below is then skipped.
+        run: |
+          if [ -n "${RUN_BUDGET}" ] && ! [[ "${RUN_BUDGET}" =~ ^[0-9]+$ ]]; then
+            echo "::error::budget must be empty or a non-negative integer (got '${RUN_BUDGET}'); the skill clamps it to 50"
+            exit 1
+          fi
       - name: affected-versions migrate-enrichment (rich-schema backfill) [best-effort]
         continue-on-error: true
         run: |
