@@ -275,10 +275,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                          Map<String, String> mostCommonValues, String columnName, Type columnType,
                                          boolean withSampleNdv) {
-        if (shouldSkipHistogramBuckets(columnType)) {
-            return buildCollectMcvOnly(database, table, mostCommonValues, columnName);
-        }
-
         VelocityContext context = buildBaseContext(database, table, columnName);
         addMcvToContext(context, mostCommonValues);
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
@@ -299,13 +295,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
-    }
-
-    // Histogram buckets of String/char-family columns are not used in the optimizer currently, so skip the
-    // expensive bucket aggregate for them (regardless of the bucket-ndv mode) and store only MCVs.
-    private static boolean shouldSkipHistogramBuckets(Type columnType) {
-        return Config.enable_skip_histogram_buckets_for_string_columns
-                && columnType.getPrimitiveType().isCharFamily();
     }
 
     private String buildCollectMcvOnly(Database database, Table table, Map<String, String> mostCommonValues,

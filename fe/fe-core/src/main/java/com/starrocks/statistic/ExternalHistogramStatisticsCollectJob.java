@@ -143,11 +143,6 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
-        // Histogram buckets of String/char-family columns are not used in the optimizer currently,
-        // so skip histogram() bucket aggregate for them and store only MCVs.
-        boolean skipBuckets = Config.enable_skip_histogram_buckets_for_string_columns
-                && columnType.getPrimitiveType().isCharFamily();
-
         VelocityContext context = new VelocityContext();
         context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
         context.put("columnName", quoteColumName);
@@ -167,7 +162,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
 
-        if (skipBuckets) {
+        if (shouldSkipHistogramBuckets(columnType)) {
             builder.append(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
             return builder.toString();
         }

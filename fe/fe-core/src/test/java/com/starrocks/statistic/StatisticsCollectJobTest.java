@@ -588,33 +588,27 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        // String/char-family columns: skip bucket computation but keep MCVs.
+        // buildCollectMcvOnly produces MCV-only SQL (no bucket aggregate). This is the SQL collect() substitutes
+        // for char-family columns (see the testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode
+        // end-to-end test).
         Map<String, String> stringMcv = new HashMap<>();
         stringMcv.put("1", "10");
         stringMcv.put("2", "20");
-        boolean originalSkip = Config.enable_skip_histogram_buckets_for_string_columns;
+        String mcvOnlySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMcvOnly",
+                db, olapTable, stringMcv, "v2");
+        String mcvOnlyNormalized = normalize.apply(mcvOnlySql);
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                        "'test.t0_stats', NULL, '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW()",
+                t0StatsTableId, dbid)), mcvOnlyNormalized);
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram("));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("order by"));
+
+        // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
+        // so it emits histogram() even for a char-family column.
         boolean originalSample = Config.enable_use_table_sample_collect_statistics;
         try {
-            Config.enable_skip_histogram_buckets_for_string_columns = true;
-            sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, olapTable, 0.1, 64L, stringMcv, "v2", VarcharType.VARCHAR, false);
-            String normalized = normalize.apply(sql);
-            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
-                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                            "'test.t0_stats', NULL, '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW()",
-                    t0StatsTableId, dbid)), normalized);
-            Assertions.assertFalse(normalized.contains("histogram("));
-            Assertions.assertFalse(normalized.contains("order by"));
-
-            String mcvOnlySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMcvOnly",
-                    db, olapTable, stringMcv, "v2");
-            String mcvOnlyNormalized = normalize.apply(mcvOnlySql);
-            Assertions.assertEquals(normalized, mcvOnlyNormalized);
-            Assertions.assertFalse(mcvOnlyNormalized.contains("histogram_hll_ndv"));
-            Assertions.assertFalse(mcvOnlyNormalized.contains("histogram("));
-
-            // Flag off: the old full-histogram SQL (with buckets) is produced even for a string column.
-            Config.enable_skip_histogram_buckets_for_string_columns = false;
             Config.enable_use_table_sample_collect_statistics = false;
             sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                     db, olapTable, 0.1, 64L, stringMcv, "v2", VarcharType.VARCHAR, false);
@@ -626,7 +620,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                             "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
                     normalize.apply(sql));
         } finally {
-            Config.enable_skip_histogram_buckets_for_string_columns = originalSkip;
             Config.enable_use_table_sample_collect_statistics = originalSample;
         }
     }
@@ -673,28 +666,22 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        boolean originalSkip = Config.enable_skip_histogram_buckets_for_string_columns;
-        try {
-            Config.enable_skip_histogram_buckets_for_string_columns = true;
-            collectedSql.clear();
-            bucketQueryCalls.set(0);
-            job.collect(connectContext, new NativeAnalyzeStatus());
-            Assertions.assertEquals(0, bucketQueryCalls.get());
-            Assertions.assertEquals(1, collectedSql.size());
-            String skipSql = collectedSql.get(0).toLowerCase();
-            Assertions.assertFalse(skipSql.contains("histogram_hll_ndv"));
-            Assertions.assertFalse(skipSql.contains("histogram("));
+        job.collect(connectContext, new NativeAnalyzeStatus());
+        Assertions.assertEquals(0, bucketQueryCalls.get());
+        Assertions.assertEquals(1, collectedSql.size());
+        String skipSql = collectedSql.get(0).toLowerCase();
+        Assertions.assertFalse(skipSql.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(skipSql.contains("histogram("));
 
-            Config.enable_skip_histogram_buckets_for_string_columns = false;
-            collectedSql.clear();
-            bucketQueryCalls.set(0);
-            job.collect(connectContext, new NativeAnalyzeStatus());
-            Assertions.assertEquals(1, bucketQueryCalls.get());
-            Assertions.assertEquals(1, collectedSql.size());
-            Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
-        } finally {
-            Config.enable_skip_histogram_buckets_for_string_columns = originalSkip;
-        }
+        HistogramStatisticsCollectJob intJob = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
+                StatsConstants.ScheduleType.ONCE, properties);
+        collectedSql.clear();
+        bucketQueryCalls.set(0);
+        intJob.collect(connectContext, new NativeAnalyzeStatus());
+        Assertions.assertEquals(1, bucketQueryCalls.get());
+        Assertions.assertEquals(1, collectedSql.size());
+        Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
     }
 
     @Test
