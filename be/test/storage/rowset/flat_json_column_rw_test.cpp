@@ -211,16 +211,14 @@ TEST_F(FlatJsonColumnRWTest, testInferredStringLengthDoesNotFollowOlapMax) {
 
     MutableColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
-    const std::vector<std::string> jsons = {
-            R"({"message": "a"})", R"({"message": "b"})", R"({"message": "c"})"};
+    const std::vector<std::string> jsons = {R"({"message": "a"})", R"({"message": "b"})", R"({"message": "c"})"};
     for (const std::string& json : jsons) {
         ASSIGN_OR_ABORT(auto value, JsonValue::parse(json));
         json_col->append(value);
     }
 
     ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
-    ASSIGN_OR_ABORT(auto message_path,
-                    ColumnAccessPath::create(TAccessPathType::FIELD, "root.message", 0));
+    ASSIGN_OR_ABORT(auto message_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root.message", 0));
     root_path->children().emplace_back(std::move(message_path));
 
     MutableColumnPtr read_col = JsonColumn::create();
