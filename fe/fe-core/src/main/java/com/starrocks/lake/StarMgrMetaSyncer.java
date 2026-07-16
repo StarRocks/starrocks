@@ -83,13 +83,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     // make sure the metrics are registered only once
     private static final AtomicBoolean IS_METRIC_REGISTERED = new AtomicBoolean(false);
 
-    // Wall-clock time (ms) at which each shard group was first observed as orphaned (present in
-    // StarMgr but no longer in the FE live set). Used to enforce
-    // Config.shard_group_clean_retention_grace_seconds before physical deletion. Only touched
-    // from the daemon thread in deleteUnusedShardAndShardGroup(); pruned there to the current orphan
-    // set, so it stays bounded and a non-persisted restart merely restarts the grace (safe).
-    private final Map<Long, Long> orphanShardGroupFirstSeenMs = new HashMap<>();
-
     public StarMgrMetaSyncer() {
         super("star-mgr-meta-syncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
@@ -357,14 +350,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
 
         // Take this timestamp as reference, all ShardGroups created after this timestamp will be safe for sure.
-        long now = System.currentTimeMillis();
-        long creationExpireTime = now - Config.shard_group_clean_threshold_sec * 1000L;
-        // Orphan-time retention grace (issue #75993 / split-read race): keep a superseded shard group's
-        // tablet metadata for a while AFTER it leaves the FE live set, so an in-flight query planned
-        // against it can still read its .meta. Covers tablet split (parent), merge (child) and
-        // schema-change / rollup (origin) uniformly, since all funnel through this GC path.
-        long orphanGraceMs = Config.shard_group_clean_retention_grace_seconds * 1000L;
-        Set<Long> orphansThisRun = new HashSet<>();
+        long creationExpireTime = System.currentTimeMillis() - Config.shard_group_clean_threshold_sec * 1000L;
 
         // Keep in mind that the collected shardGroupId may not be complete, all the subsequent operations
         // should tolerate inaccuracies in the list.
@@ -378,10 +364,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
 
         long nextShardGroupId = 0;
-        // Whether we listed every page this run. If listing aborts partway, orphansThisRun is
-        // incomplete, so the trailing retainAll must be skipped -- otherwise it would drop the
-        // grace clocks of orphaned groups on the un-listed pages and restart their grace next run.
-        boolean listedCompletely = true;
         do {
             StarOSAgent.ListShardGroupResult result;
             try {
@@ -389,7 +371,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 nextShardGroupId = result.nextShardGroupId();
             } catch (DdlException exception) {
                 LOG.info("Fail to list shardgroup from starmgr: {}. Abort the clean up", exception.getMessage());
-                listedCompletely = false;
                 break;
             }
 
@@ -402,11 +383,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             for (Map.Entry<Long, ShardGroupInfo> entry : diffGroupInfoMap.entrySet()) {
                 long shardGroupId = entry.getKey();
                 ShardGroupInfo shardGroupInfo = entry.getValue();
-                // Record the first time this group is seen as orphaned; the retention grace below is
-                // measured from here (not from shard-group create time).
-                orphansThisRun.add(shardGroupId);
-                long firstSeenOrphanMs = orphanShardGroupFirstSeenMs.computeIfAbsent(shardGroupId, k -> now);
-
                 if (!isSafeToDelete(shardGroupId, shardGroupInfo)) {
                     continue;
                 }
@@ -414,12 +390,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 long createTimeTs = Long.parseLong(shardGroupInfo.getPropertiesOrDefault("createTime", "0"));
                 if (createTimeTs == 0) {
                     LOG.debug("Can't parse createTime from shardGroup:{} properties, ignore it for now.", shardGroupId);
-                    continue;
-                }
-
-                // Retain a just-orphaned group until it has been orphaned for at least the grace, so
-                // in-flight queries planned against its (now-superseded) tablets can finish reading.
-                if (orphanGraceMs > 0 && now - firstSeenOrphanMs < orphanGraceMs) {
                     continue;
                 }
 
@@ -437,19 +407,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         // clear the empty shard group immediately
                         starOSAgent.deleteShardGroup(Collections.singletonList(shardGroupId));
                         SHARD_GROUP_DELETE_COUNTER.increase(1L);
-                        orphanShardGroupFirstSeenMs.remove(shardGroupId);
                     }
                 }
             }
         } while (nextShardGroupId != 0);
-
-        // Drop clocks for groups that are no longer orphaned (came back into the FE live set) so a
-        // group orphaned again later restarts its grace, and keep the map bounded. Skip this when the
-        // listing was incomplete: orphansThisRun would be missing groups on the un-listed pages, and
-        // pruning to it would wrongly reset their grace.
-        if (listedCompletely) {
-            orphanShardGroupFirstSeenMs.keySet().retainAll(orphansThisRun);
-        }
     }
 
     /**

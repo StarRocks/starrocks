@@ -756,7 +756,6 @@ public class SplitTabletJob extends TabletReshardJob {
     }
 
     private void removeOldMaterializedIndexes() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
@@ -773,10 +772,18 @@ public class SplitTabletJob extends TabletReshardJob {
                     if (oldIndex == null) {
                         continue;
                     }
-                    // Remove old tablets from inverted index
-                    for (Tablet tablet : oldIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
+                    // Instead of dropping the superseded index's tablets right away, park it in the
+                    // recycle bin so an in-flight split-parent read can finish (issue #75993). Allocate
+                    // the virtual-partition ids once on the leader; reuse the persisted ids on replay so
+                    // both build an identical recycle-bin entry (never re-allocate under replay).
+                    if (reshardingIndex.getRecycledVirtualPartitionId() == -1L) {
+                        reshardingIndex.setRecycledVirtualPartitionIds(
+                                GlobalStateMgr.getCurrentState().getNextId(),
+                                GlobalStateMgr.getCurrentState().getNextId());
                     }
+                    recycleSupersededMaterializedIndex(dbId, olapTable, oldIndex,
+                            reshardingIndex.getRecycledVirtualPartitionId(),
+                            reshardingIndex.getRecycledVirtualPhysicalPartitionId());
                 }
             }
         }

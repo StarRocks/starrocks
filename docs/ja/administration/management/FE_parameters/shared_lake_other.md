@@ -540,7 +540,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：共有データクラスターで、シャードグループが最初にオーファン化した(FE の live set から外れた)時点から、その tablet メタデータがオブジェクトストレージから物理的に削除されるまでの保持猶予期間。`shard_group_clean_threshold_sec`(シャードグループの作成時刻を基準とするため、長命な index では取り替えられた瞬間にすでに期限切れとなる)とは異なり、この猶予期間は、取り替え済みの index(tablet split の親 index、tablet merge の子 index、または schema change/rollup の元 index)に対して計画された実行中のクエリが、その index のシャードが回収される際に失敗するのを防ぎます。`0` に設定すると無効になります。この値は想定される最大クエリ時間を超えるべきです。
+- 説明：共有データクラスターで、tablet reshard(split または merge)中に取り替えられた materialized index の保持猶予期間。tablet split または merge が index を取り替えると、古い index は回復不可能なパーティションとして recycle bin に退避され、その tablet メタデータはオブジェクトストレージから物理的に削除されるまでこの期間だけ保持されます。これにより、古い index(tablet split の親 index または tablet merge の子 index)に対して計画された実行中のクエリが、その index のシャードが回収される際に失敗するのを防ぎます。`0` に設定した場合は、代わりに recycle bin のグローバルパラメータ `catalog_trash_expire_second` が適用されます。この値は想定される最大クエリ時間を超えるべきです。
 - 導入時期：v4.1
 
 ### `shard_group_clean_threshold_sec`

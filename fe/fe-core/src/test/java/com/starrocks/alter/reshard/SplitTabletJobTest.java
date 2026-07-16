@@ -19,6 +19,7 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -62,8 +63,10 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -143,9 +146,33 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+
+        // The superseded (old) split-parent index is parked in the recycle bin as a non-recoverable
+        // virtual partition rather than deleted immediately (issue #75993), so an in-flight query
+        // planned against it can finish reading. Its tablets are therefore retained (still in the
+        // inverted index) and its shard group stays reachable through the recycle bin until the
+        // retention expires.
         for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
+        List<Partition> recycledPartitions =
+                GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId());
+        Assertions.assertFalse(recycledPartitions.isEmpty());
+        Set<Long> recycledTabletIds = new HashSet<>();
+        Set<Long> recycledShardGroupIds = new HashSet<>();
+        for (Partition recycled : recycledPartitions) {
+            for (PhysicalPartition sub : recycled.getSubPartitions()) {
+                recycledShardGroupIds.addAll(sub.getShardGroupIds());
+                for (MaterializedIndex index : sub.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        recycledTabletIds.add(tablet.getId());
+                    }
+                }
+            }
+        }
+        Assertions.assertTrue(recycledTabletIds.containsAll(oldTabletIds));
+        Assertions.assertTrue(recycledShardGroupIds.contains(materializedIndex.getShardGroupId()));
+
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
@@ -448,7 +475,9 @@ public class SplitTabletJobTest {
         MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
                 newMaterializedIndex.getTablets().size());
-        Assertions.assertNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
+        // The old tablet is retained (parked in the recycle bin with the superseded index), not deleted
+        // immediately, so an in-flight split-parent read can finish (issue #75993).
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
 
         // TabletRangePB (generated jprotobuf class) has no equals override;
         // compare the underlying Range<Tuple> which does. The values must

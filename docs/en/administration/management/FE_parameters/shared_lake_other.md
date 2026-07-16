@@ -540,7 +540,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The retention grace period, measured from when a shard group first becomes orphaned (leaves the FE live set), before its tablet metadata is physically deleted from object storage in a shared-data cluster. Unlike `shard_group_clean_threshold_sec` (which is keyed on the shard group's create time and is therefore already expired for a long-lived index the moment it is superseded), this grace protects in-flight queries planned against a now-superseded index (a tablet-split parent, a tablet-merge child, or a schema-change/rollup origin index) from failing when that index's shards are reclaimed. Set to `0` to disable. This value should exceed the maximum expected query time.
+- Description: The retention grace period for a superseded materialized index during a tablet reshard (split or merge) in a shared-data cluster. When a tablet split or merge replaces an index, the old index is parked in the recycle bin as a non-recoverable partition, and its tablet metadata is retained for this period before being physically deleted from object storage. This protects an in-flight query planned against the old (tablet-split parent or tablet-merge child) index from failing when that index's shards are reclaimed. If set to `0`, the recycle bin's global `catalog_trash_expire_second` applies instead. This value should exceed the maximum expected query time.
 - Introduced in: v4.1
 
 ### `shard_group_clean_threshold_sec`

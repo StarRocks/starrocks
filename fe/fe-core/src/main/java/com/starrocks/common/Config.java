@@ -3267,19 +3267,19 @@ public class Config extends ConfigBase {
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**
-     * Retention grace, measured from when a shard group first becomes orphaned (leaves the FE live
-     * set), before its tablets' metadata is physically deleted from object storage. Unlike
-     * shard_group_clean_threshold_sec (keyed on shard-group create time, hence already expired for a
-     * long-lived index the moment it is superseded), this protects an in-flight query planned against
-     * a now-superseded index -- a tablet-split parent, a tablet-merge child, or a schema-change /
-     * rollup origin index -- from failing (404 on a &lt;tablet&gt;_&lt;version&gt;.meta) when that index's
-     * shards are reclaimed out from under it. Set to 0 to disable. Default 1800s (30 min), aligned
-     * with lake_autovacuum_grace_period_minutes; both should exceed the maximum expected query time.
+     * Retention grace (seconds) for a superseded materialized index during a tablet reshard. When a
+     * tablet split / merge replaces an index, the old index is parked in the CatalogRecycleBin as a
+     * non-recoverable "virtual" partition and its tablet metadata is kept for this long before being
+     * physically deleted, so an in-flight query planned against the old (split-parent / merge-child)
+     * index can finish reading instead of failing (404 on a &lt;tablet&gt;_&lt;version&gt;.meta). This is the
+     * per-index retention passed to RecyclePartitionInfo.setRetentionPeriod; 0 falls back to the
+     * recycle bin's global catalog_trash_expire_second. Default 1800s (30 min), aligned with
+     * lake_autovacuum_grace_period_minutes; it should exceed the maximum expected query time.
      */
-    @ConfField(mutable = true, comment = "Grace period in seconds, measured from when a shard group becomes " +
-            "orphaned, before its tablet metadata is physically deleted in shared-data mode. Protects in-flight " +
-            "queries planned against a superseded index (tablet-split parent / merge child / schema-change " +
-            "origin). 0 disables. Default 1800 (30 min).")
+    @ConfField(mutable = true, comment = "Retention grace in seconds for a superseded materialized index during a " +
+            "tablet reshard (split/merge) in shared-data mode. The old index is parked in the recycle bin for this " +
+            "long before its tablet metadata is physically deleted, protecting an in-flight query planned against it. " +
+            "0 falls back to catalog_trash_expire_second. Default 1800 (30 min).")
     public static long shard_group_clean_retention_grace_seconds = 1800L;
 
     /**

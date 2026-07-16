@@ -15,6 +15,12 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.RecyclePartitionInfo;
+import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -289,4 +295,38 @@ public abstract class TabletReshardJob implements Writable {
     protected abstract void registerReshardingTabletsOnRestart();
 
     public abstract TTabletReshardJobsItem getInfo();
+
+    /**
+     * Park a superseded (old) materialized index in the {@code CatalogRecycleBin} instead of dropping
+     * its tablets immediately at reshard-cleanup time, so an in-flight query planned against it can
+     * keep reading its tablets' metadata until the retention expires (issue #75993 / split-read race).
+     *
+     * <p>The old index is wrapped in a synthetic, non-recoverable "virtual" partition tagged with the
+     * real db/table id, which makes the shared lake GC behave correctly with no changes on its side:
+     * <ul>
+     *   <li>while retained, {@code StarMgrMetaSyncer.getAllPartitionShardGroupId()} sees this shard
+     *       group (via {@code getPartitions(tableId)}) and keeps it in the FE live set, so it is not
+     *       reaped;</li>
+     *   <li>on erase, {@code onErasePartition()} removes its tablets from the inverted index and the
+     *       shard group leaves the live set, so {@code StarMgrMetaSyncer} reclaims it on its next
+     *       cycle -- still gated by {@code isSafeToDelete()} / cluster-snapshot safety.</li>
+     * </ul>
+     *
+     * <p>The virtual-partition ids are allocated once on the leader and persisted on the reshard job
+     * (see {@link ReshardingMaterializedIndex}), so the replay path passes the same ids and rebuilds an
+     * identical recycle-bin entry rather than re-allocating.
+     */
+    protected static void recycleSupersededMaterializedIndex(long dbId, OlapTable table,
+            MaterializedIndex oldIndex, long virtualPartitionId, long virtualPhysicalPartitionId) {
+        Partition virtualPartition = new Partition(virtualPartitionId, virtualPhysicalPartitionId,
+                "reshard_recycle_" + oldIndex.getId(), oldIndex, table.getDefaultDistributionInfo());
+        RecyclePartitionInfo recyclePartitionInfo = new RecycleUnPartitionInfo(dbId, table.getId(),
+                virtualPartition, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, null);
+        // Never user-recoverable: an internal artifact of a completed reshard, not a user DROP.
+        recyclePartitionInfo.setRecoverable(false);
+        // Retain for the configured grace so in-flight reads finish; 0 falls back to the recycle bin's
+        // global catalog_trash_expire_second.
+        recyclePartitionInfo.setRetentionPeriod(Config.shard_group_clean_retention_grace_seconds);
+        GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+    }
 }
