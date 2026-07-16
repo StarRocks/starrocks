@@ -33,11 +33,15 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Optional;
 
 public class QueryPeriodResolver {
+    private static final Logger LOG = LogManager.getLogger(QueryPeriodResolver.class);
+
     private QueryPeriodResolver() {
     }
 
@@ -94,13 +98,26 @@ public class QueryPeriodResolver {
 
         QueryPeriod queryPeriod = tableRelation.getQueryPeriod();
         QueryPeriod.PeriodType periodType = queryPeriod.getPeriodType();
-        Optional<ConnectorTableVersion> startVersion = resolve(queryPeriod.getStart(), periodType, session);
-        Optional<ConnectorTableVersion> endVersion = resolve(queryPeriod.getEnd(), periodType, session);
-        TvrVersionRange versionRange = metadataMgr.getTableVersionRange(
-                tableRelation.getName().getDb(), table, startVersion, endVersion);
+        TvrVersionRange versionRange;
+        try {
+            Optional<ConnectorTableVersion> startVersion = resolve(queryPeriod.getStart(), periodType, session);
+            Optional<ConnectorTableVersion> endVersion = resolve(queryPeriod.getEnd(), periodType, session);
+            versionRange = metadataMgr.getTableVersionRange(
+                    tableRelation.getName().getDb(), table, startVersion, endVersion);
+        } catch (Exception e) {
+            // Best-effort version resolution: on failure keep the current table and leave the range unpinned.
+            // Time-travel-prohibited DDL (CREATE VIEW/MV, ALTER VIEW) then rejects the clause right after
+            // analysis; a genuine query re-resolves at transform time and surfaces the real error there.
+            // Binding stays outside this catch so its own failures are not swallowed.
+            LOG.debug("Deferring Iceberg time-travel version resolution for table {}: {}",
+                    tableRelation.getName(), e.getMessage());
+            return table;
+        }
+        // Pin only after a successful bind, so a failed (or retried) bind never leaves the relation
+        // pinned-but-unbound, which the guard above would later mistake for "already resolved".
+        Table boundTable = bindIcebergSnapshotReadView((IcebergTable) table, versionRange);
         tableRelation.setTvrVersionRange(versionRange);
-
-        return bindIcebergSnapshotReadView((IcebergTable) table, versionRange);
+        return boundTable;
     }
 
     // Rebind the Iceberg table to the resolved snapshot's read metadata (schema + partition specs),
