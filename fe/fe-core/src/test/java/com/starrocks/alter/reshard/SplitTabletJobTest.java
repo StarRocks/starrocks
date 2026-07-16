@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -30,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
@@ -175,6 +177,59 @@ public class SplitTabletJobTest {
 
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
+        }
+    }
+
+    @Test
+    public void testSupersededIndexErasedWhenGraceDisabled() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+
+        // Grace disabled (<= 0): the parked index gets retentionPeriod 0, so for a non-recoverable
+        // partition getAdjustedRecycleTimestamp() returns 0 and it becomes eligible for erase on the
+        // next recycle-bin pass -- i.e. the pre-fix "clean up promptly" behavior.
+        long savedGrace = Config.shard_group_clean_retention_grace_seconds;
+        Config.shard_group_clean_retention_grace_seconds = 0;
+        try {
+            PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+            MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+            List<Long> oldTabletIds = new ArrayList<>();
+            for (Tablet tablet : materializedIndex.getTablets()) {
+                oldTabletIds.add(tablet.getId());
+            }
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+            TabletReshardJob tabletReshardJob = createTabletReshardJob();
+            tabletReshardJob.init();
+            tabletReshardJob.run();
+            tabletReshardJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+
+            // Drive recycle-bin erase passes. RecyclePartitionInfo.delete() -> onErasePartition() is an
+            // in-memory inverted-index removal, so it converges within a couple of passes. onErasePartition
+            // must drop the old (superseded) index's tablets; StarMgr shard reclamation then follows on the
+            // StarMgrMetaSyncer cycle (covered separately / on-cluster).
+            CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+            long now = System.currentTimeMillis();
+            for (int i = 0; i < 100; i++) {
+                boolean anyRetained = false;
+                for (Long tabletId : oldTabletIds) {
+                    if (invertedIndex.getTabletMeta(tabletId) != null) {
+                        anyRetained = true;
+                        break;
+                    }
+                }
+                if (!anyRetained) {
+                    break;
+                }
+                Deencapsulation.invoke(recycleBin, "erasePartition", now);
+                Thread.sleep(50);
+            }
+
+            for (Long tabletId : oldTabletIds) {
+                Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            }
+        } finally {
+            Config.shard_group_clean_retention_grace_seconds = savedGrace;
         }
     }
 

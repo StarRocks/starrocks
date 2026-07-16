@@ -600,6 +600,10 @@ public class MergeTabletJob extends TabletReshardJob {
                         .getReshardingIndexes().values()) {
                     MaterializedIndex oldIndex = physicalPartition
                             .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
+                    // Idempotency guard: on a re-run/replay of this step the old index is already gone,
+                    // so deleteMaterializedIndexByIndexId returns null and we skip. This ensures the
+                    // (non-idempotent) recyclePartition below runs at most once per index -- its
+                    // checkState forbids a duplicate partition id.
                     if (oldIndex == null) {
                         continue;
                     }

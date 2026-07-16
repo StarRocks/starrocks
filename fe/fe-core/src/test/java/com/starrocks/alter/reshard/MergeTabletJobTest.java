@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -69,8 +70,10 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -219,6 +222,27 @@ public class MergeTabletJobTest {
         for (Tablet tablet : afterMergeIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+
+        // Symmetric to SplitTabletJobTest: the superseded index is parked in the recycle bin as a
+        // partition of the table carrying the old shard group and tablets, via the shared
+        // TabletReshardJob.recycleSupersededMaterializedIndex helper.
+        List<Partition> recycledPartitions =
+                GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId());
+        Assertions.assertFalse(recycledPartitions.isEmpty());
+        Set<Long> recycledTabletIds = new HashSet<>();
+        Set<Long> recycledShardGroupIds = new HashSet<>();
+        for (Partition recycled : recycledPartitions) {
+            for (PhysicalPartition sub : recycled.getSubPartitions()) {
+                recycledShardGroupIds.addAll(sub.getShardGroupIds());
+                for (MaterializedIndex index : sub.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        recycledTabletIds.add(tablet.getId());
+                    }
+                }
+            }
+        }
+        Assertions.assertTrue(recycledTabletIds.containsAll(oldTabletIds));
+        Assertions.assertTrue(recycledShardGroupIds.contains(beforeMergeIndex.getShardGroupId()));
     }
 
     @Test
