@@ -346,8 +346,8 @@ public class FlussMetadata implements ConnectorMetadata {
                     catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e.getMessage());
         }
         if (splits == null) {
-            // Fluss returns null when no readable lake snapshot exists. Do not turn that into an empty result:
-            // empty splits are reserved for predicates pruned to zero partitions.
+            // Fluss returns null when no readable lake snapshot exists.
+            // TODO: Generate bounded LogSplits directly for $rt reads so they do not require a lake snapshot.
             throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s",
                     catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
         }
