@@ -21,9 +21,15 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -87,5 +93,14 @@ public class LanceConfigTest {
 
         sessionVariable.setLanceForceNativeReader(true);
         Assertions.assertFalse(LanceScanNode.useNativeReader(sessionVariable));
+    }
+
+    @Test
+    public void testDetectNestedJsonType() {
+        Assertions.assertTrue(LanceScanNode.containsJsonType(JsonType.JSON));
+        Assertions.assertTrue(LanceScanNode.containsJsonType(new ArrayType(JsonType.JSON)));
+        Assertions.assertTrue(LanceScanNode.containsJsonType(
+                new StructType(new ArrayList<>(List.of(new StructField("payload", JsonType.JSON))))));
+        Assertions.assertFalse(LanceScanNode.containsJsonType(VarcharType.VARCHAR));
     }
 }

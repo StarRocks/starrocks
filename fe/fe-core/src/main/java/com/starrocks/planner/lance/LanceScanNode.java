@@ -20,6 +20,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -33,6 +34,11 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.lance.Dataset;
@@ -81,6 +87,8 @@ public class LanceScanNode extends ScanNode {
     public void setupScanRangeLocations() {
         String datasetUri = lanceTable.getDatasetURI();
         Map<String, String> storageOptions = LanceConfig.buildStorageOptions(lanceTable.getProperties());
+        SessionVariable sessionVariable = ConnectContext.getSessionVariableOrDefault();
+        validateJsonColumnsWithReader(sessionVariable);
         ReadOptions.Builder builder = new ReadOptions.Builder();
         if (!storageOptions.isEmpty()) {
             builder.setStorageOptions(storageOptions);
@@ -93,7 +101,7 @@ public class LanceScanNode extends ScanNode {
                 return;
             }
             for (Fragment fragment : dataset.getFragments()) {
-                scanRangeLocationsList.add(toScanRangeLocations(datasetUri, fragment, storageOptions));
+                scanRangeLocationsList.add(toScanRangeLocations(datasetUri, fragment, storageOptions, sessionVariable));
             }
         } catch (Exception e) {
             throw new StarRocksConnectorException("Failed to plan lance scan ranges for %s: %s",
@@ -186,10 +194,11 @@ public class LanceScanNode extends ScanNode {
     }
 
     private TScanRangeLocations toScanRangeLocations(String datasetUri, Fragment fragment,
-                                                     Map<String, String> storageOptions) {
+                                                     Map<String, String> storageOptions,
+                                                     SessionVariable sessionVariable) {
         int rowCount = Math.max(fragment.countRows(), 1);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        boolean useNativeReader = useNativeReader(ConnectContext.getSessionVariableOrDefault());
+        boolean useNativeReader = useNativeReader(sessionVariable);
         hdfsScanRange.setUse_lance_native_reader(useNativeReader);
         hdfsScanRange.setDataset_uri(datasetUri);
         hdfsScanRange.setFragment_id(fragment.getId());
@@ -209,6 +218,45 @@ public class LanceScanNode extends ScanNode {
         scanRangeLocations.setScan_range(scanRange);
         scanRangeLocations.setLocations(new ArrayList<TScanRangeLocation>());
         return scanRangeLocations;
+    }
+
+    private void validateJsonColumnsWithReader(SessionVariable sessionVariable) {
+        if (useNativeReader(sessionVariable)) {
+            return;
+        }
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (!slot.isMaterialized() || !containsJsonType(slot.getType())) {
+                continue;
+            }
+            String columnName = slot.getColumn() == null ? slot.getId().toString() : slot.getColumn().getName();
+            throw new StarRocksConnectorException(
+                    "Lance JSON columns are supported only by the native Lance reader. " +
+                            "Disable lance_force_jni_reader to query column %s", columnName);
+        }
+    }
+
+    static boolean containsJsonType(Type type) {
+        if (type == null) {
+            return false;
+        }
+        if (type.isJsonType()) {
+            return true;
+        }
+        if (type.isArrayType()) {
+            return containsJsonType(((ArrayType) type).getItemType());
+        }
+        if (type.isMapType()) {
+            MapType mapType = (MapType) type;
+            return containsJsonType(mapType.getKeyType()) || containsJsonType(mapType.getValueType());
+        }
+        if (type.isStructType()) {
+            for (StructField field : ((StructType) type).getFields()) {
+                if (containsJsonType(field.getType())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private TScanRangeLocations toVectorScanRangeLocations(String datasetUri, Index segment,

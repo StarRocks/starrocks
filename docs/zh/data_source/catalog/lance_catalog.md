@@ -16,6 +16,7 @@ StarRocks 支持 Lance catalog 作为 external catalog。您可以通过 Lance c
 - 当前实现支持只读表扫描。
 - 当前支持的 catalog 类型为 `directory`。StarRocks 从一个 warehouse 目录中发现 Lance 数据集。
 - Lance 向量索引搜索仅支持 native reader。
+- Lance JSON 列仅支持 native reader。如果将 `lance_force_jni_reader` 设置为 `true`，读取 JSON 列的查询会失败。
 - Lance 数据集目录名必须以 `.lance` 结尾。
 - 如果 Lance 数据集存放在本地文件系统上，FE 和所有参与扫描的 BE/CN 都必须能访问相同路径。
 - 如果 Lance 数据集存放在对象存储上，建议使用 S3 兼容路径 `s3://<bucket>/<prefix>`，并通过 `lance.option.*` 传递 Lance SDK 需要的 object store 选项。
@@ -51,6 +52,9 @@ StarRocks 会将 warehouse 路径下的 Lance 数据集映射为数据库和表�
 | `List`, `LargeList`, `FixedSizeList` | `ARRAY<element_type>` |
 | `Map` | `MAP<key_type, value_type>` |
 | `Struct` | `STRUCT<field1:type1, ...>` |
+| Lance JSON extension（`arrow.json` 或 `lance.json`） | `JSON` |
+
+StarRocks 根据字段元数据中的 `ARROW:extension:name` 自动识别 Lance JSON 字段，无需配置 catalog 属性。没有 JSON extension 的普通 `Utf8` 和 `LargeUtf8` 字段仍映射为 `STRING`。嵌套字段上的 JSON extension 也会保留在对应的 StarRocks 嵌套类型中。
 
 ## 创建 Lance catalog
 

@@ -16,6 +16,7 @@ StarRocks supports Lance catalogs as external catalogs. You can use a Lance cata
 - The current implementation supports read-only table scans.
 - The supported catalog type is `directory`. StarRocks discovers Lance datasets from a warehouse directory.
 - Lance vector index search is supported only by the native reader.
+- Lance JSON columns are supported only by the native reader. Queries that read JSON columns fail if `lance_force_jni_reader` is set to `true`.
 - Each Lance dataset directory must end with `.lance`.
 - If Lance datasets are stored on a local file system, the FE and all BE/CN nodes that may run the scan must be able to access the same path.
 - If Lance datasets are stored on object storage, we recommend using an S3-compatible path in the format `s3://<bucket>/<prefix>` and passing the object store options required by the Lance SDK through `lance.option.*`.
@@ -51,6 +52,9 @@ The `default` database always exists. Other databases are subdirectories under t
 | `List`, `LargeList`, `FixedSizeList` | `ARRAY<element_type>` |
 | `Map` | `MAP<key_type, value_type>` |
 | `Struct` | `STRUCT<field1:type1, ...>` |
+| Lance JSON extension (`arrow.json` or `lance.json`) | `JSON` |
+
+StarRocks identifies Lance JSON fields from the `ARROW:extension:name` field metadata. No catalog property is required. Regular `Utf8` and `LargeUtf8` fields without the JSON extension remain `STRING`. JSON extensions on nested fields are also preserved in the corresponding StarRocks nested type.
 
 ## Create a Lance catalog
 
