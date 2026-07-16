@@ -324,8 +324,10 @@ public abstract class TabletReshardJob implements Writable {
                 virtualPartition, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, null);
         // Never user-recoverable: an internal artifact of a completed reshard, not a user DROP.
         recyclePartitionInfo.setRecoverable(false);
-        // Retain for the configured grace so in-flight reads finish; 0 falls back to the recycle bin's
-        // global catalog_trash_expire_second.
+        // Retain for the configured grace so in-flight reads finish. A value <= 0 disables the grace:
+        // for a non-recoverable partition getAdjustedRecycleTimestamp() then returns 0, so the entry is
+        // eligible for erase on the next recycle-bin cycle (reverting to the pre-fix immediate cleanup,
+        // still gated by shard_group_clean_threshold_sec and cluster-snapshot safety).
         recyclePartitionInfo.setRetentionPeriod(Config.shard_group_clean_retention_grace_seconds);
         GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
     }

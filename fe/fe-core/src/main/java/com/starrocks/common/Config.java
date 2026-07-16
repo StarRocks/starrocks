@@ -3272,14 +3272,16 @@ public class Config extends ConfigBase {
      * non-recoverable "virtual" partition and its tablet metadata is kept for this long before being
      * physically deleted, so an in-flight query planned against the old (split-parent / merge-child)
      * index can finish reading instead of failing (404 on a &lt;tablet&gt;_&lt;version&gt;.meta). This is the
-     * per-index retention passed to RecyclePartitionInfo.setRetentionPeriod; 0 falls back to the
-     * recycle bin's global catalog_trash_expire_second. Default 1800s (30 min), aligned with
-     * lake_autovacuum_grace_period_minutes; it should exceed the maximum expected query time.
+     * per-index retention passed to RecyclePartitionInfo.setRetentionPeriod; a value &lt;= 0 disables the
+     * grace, i.e. the old index becomes eligible for cleanup on the next recycle-bin cycle (reverting to
+     * the pre-fix behavior, still gated by shard_group_clean_threshold_sec and cluster-snapshot safety).
+     * Default 1800s (30 min), aligned with lake_autovacuum_grace_period_minutes; it should exceed the
+     * maximum expected query time.
      */
     @ConfField(mutable = true, comment = "Retention grace in seconds for a superseded materialized index during a " +
             "tablet reshard (split/merge) in shared-data mode. The old index is parked in the recycle bin for this " +
             "long before its tablet metadata is physically deleted, protecting an in-flight query planned against it. " +
-            "0 falls back to catalog_trash_expire_second. Default 1800 (30 min).")
+            "A value <= 0 disables the grace (the old index is cleaned up on the next GC cycle). Default 1800 (30 min).")
     public static long shard_group_clean_retention_grace_seconds = 1800L;
 
     /**

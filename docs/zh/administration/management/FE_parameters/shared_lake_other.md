@@ -540,7 +540,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 在存算分离集群中,tablet reshard(split 或 merge)过程中被取代的 materialized index 的保留宽限期。当 tablet split 或 merge 取代某个 index 时,旧 index 会以不可恢复分区的形式暂存到回收站,其 tablet 元数据在被从对象存储中物理删除之前会保留该时长。这用于保护针对旧 index(tablet split 的父 index 或 tablet merge 的子 index)规划的在途查询,避免在该 index 的 shard 被回收时查询失败。若设置为 `0`,则改为使用回收站的全局参数 `catalog_trash_expire_second`。该值应大于预期的最大查询时间。
+- 描述: 在存算分离集群中,tablet reshard(split 或 merge)过程中被取代的 materialized index 的保留宽限期。当 tablet split 或 merge 取代某个 index 时,旧 index 会以不可恢复分区的形式暂存到回收站,其 tablet 元数据在被从对象存储中物理删除之前会保留该时长。这用于保护针对旧 index(tablet split 的父 index 或 tablet merge 的子 index)规划的在途查询,避免在该 index 的 shard 被回收时查询失败。取值 `<= 0` 表示禁用该宽限期,此时旧 index 会在下一个 GC 周期变为可清理(回退到此前的行为,仍受 `shard_group_clean_threshold_sec` 与集群快照安全约束)。该值应大于预期的最大查询时间。
 - 引入版本: v4.1
 
 ### `shard_group_clean_threshold_sec`
