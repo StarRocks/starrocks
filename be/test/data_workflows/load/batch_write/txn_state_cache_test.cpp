@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/batch_write/txn_state_cache.h"
+#include "data_workflows/load/batch_write/txn_state_cache.h"
 
 #include <gtest/gtest.h>
 
@@ -694,6 +694,19 @@ TEST_F(TxnStateCacheTest, cache_stop) {
     ASSERT_EQ(expected_status.to_string(), cache->push_state(3, TTransactionStatus::VISIBLE, "").to_string(false));
     ASSERT_EQ(expected_status.to_string(), cache->subscribe_state(3, "s4", _db, _tbl, _auth).status().to_string(false));
     ASSERT_FALSE(cache->txn_state_poller()->TEST_is_scheduling());
+}
+
+TEST_F(TxnStateCacheTest, subscriber_outlives_cache) {
+    auto cache = create_cache(2048);
+    auto subscriber_or = cache->subscribe_state(1, "subscriber", _db, _tbl, _auth);
+    ASSERT_OK(subscriber_or.status());
+    TxnStateSubscriberPtr subscriber = std::move(subscriber_or.value());
+
+    cache->stop();
+    cache.reset();
+
+    ASSERT_EQ(TTransactionStatus::PREPARE, subscriber->current_state().txn_status);
+    subscriber.reset();
 }
 
 } // namespace starrocks

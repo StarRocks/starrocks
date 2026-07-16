@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
@@ -49,7 +49,7 @@ public:
                           .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                           .build(&thread_pool));
         auto executor = std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-        _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(executor));
+        _batch_write_mgr = std::make_unique<BatchWriteMgr>(_exec_env->load_stream_mgr(), std::move(executor));
         ASSERT_OK(_batch_write_mgr->init());
     }
 
@@ -96,8 +96,8 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
         long txn_id = i;
         TUniqueId load_id = generate_uuid();
 
-        auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), db, table,
-                                                                     load_params, label, txn_id, load_id, 1000);
+        auto status_or_ctx =
+                _batch_write_mgr->create_and_register_pipe(db, table, load_params, label, txn_id, load_id, 1000);
         ASSERT_OK(status_or_ctx.status());
         StreamLoadContext* ctx = status_or_ctx.value();
         ASSERT_NE(ctx, nullptr);
@@ -134,9 +134,8 @@ TEST_F(BatchWriteMgrTest, register_and_unregister_pipe) {
 
 TEST_F(BatchWriteMgrTest, stream_load_context_handle_cancel_and_close_batch_write_pipe) {
     BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{"k", "v"}}};
-    auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
-                                                                 batch_write_id.table, batch_write_id.load_params,
-                                                                 "label", 1, generate_uuid(), 10000);
+    auto status_or_ctx = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id.db, batch_write_id.table, batch_write_id.load_params, "label", 1, generate_uuid(), 10000);
     ASSERT_OK(status_or_ctx.status());
     StreamLoadContext* ctx = status_or_ctx.value();
 
@@ -157,12 +156,31 @@ TEST_F(BatchWriteMgrTest, stream_load_context_handle_cancel_and_close_batch_writ
     ASSERT_FALSE(batch_write->contain_pipe(ctx));
 }
 
+TEST_F(BatchWriteMgrTest, stream_load_context_handle_outlives_manager_stop) {
+    BatchWriteId batch_write_id{.db = "db", .table = "table", .load_params = {{"k", "v"}}};
+    auto status_or_ctx = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id.db, batch_write_id.table, batch_write_id.load_params, "label", 1, generate_uuid(), 10000);
+    ASSERT_OK(status_or_ctx.status());
+    StreamLoadContext* ctx = status_or_ctx.value();
+
+    auto status_or_batch_write = _batch_write_mgr->get_batch_write(batch_write_id);
+    ASSERT_OK(status_or_batch_write.status());
+    auto batch_write = status_or_batch_write.value();
+
+    StreamLoadContextHandle handle(
+            ctx, [this](StreamLoadContext* context) { _batch_write_mgr->unregister_stream_load_pipe(context); });
+    _batch_write_mgr->stop();
+
+    ASSERT_TRUE(batch_write->is_stopped());
+    ASSERT_NE(nullptr, ctx->body_sink);
+    handle.close(Status::Cancelled("close after manager stop"));
+}
+
 TEST_F(BatchWriteMgrTest, append_data) {
     BatchWriteId batch_write_id = {
             "db1", "table1", {{HTTP_ENABLE_MERGE_COMMIT, "true"}, {HTTP_MERGE_COMMIT_ASYNC, "true"}}};
-    auto status_or_ctx = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
-                                                                 batch_write_id.table, batch_write_id.load_params,
-                                                                 "label1", 1, generate_uuid(), 1000);
+    auto status_or_ctx = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id.db, batch_write_id.table, batch_write_id.load_params, "label1", 1, generate_uuid(), 1000);
     ASSERT_OK(status_or_ctx.status());
     StreamLoadContext* ctx = status_or_ctx.value();
     ASSERT_NE(ctx, nullptr);
@@ -183,9 +201,8 @@ TEST_F(BatchWriteMgrTest, create_batch_write_fail) {
 
     TEST_ENABLE_ERROR_POINT("IsomorphicBatchWrite::init::error", Status::IOError("Artificial error"));
     BatchWriteId batch_write_id = {"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    auto st = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id.db,
-                                                      batch_write_id.table, batch_write_id.load_params, "label1", 1,
-                                                      generate_uuid(), 1000);
+    auto st = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id.db, batch_write_id.table, batch_write_id.load_params, "label1", 1, generate_uuid(), 1000);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().message().find("Artificial error") != std::string::npos);
     ASSERT_TRUE(_batch_write_mgr->get_batch_write(batch_write_id).status().is_not_found());
@@ -198,9 +215,8 @@ TEST_F(BatchWriteMgrTest, create_batch_write_fail) {
 
 TEST_F(BatchWriteMgrTest, stop) {
     BatchWriteId batch_write_id1 = {"db1", "table1", {{"param1", "value1"}, {"param2", "value2"}}};
-    auto status_or_ctx1 = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id1.db,
-                                                                  batch_write_id1.table, batch_write_id1.load_params,
-                                                                  "label1", 1, generate_uuid(), 1000);
+    auto status_or_ctx1 = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id1.db, batch_write_id1.table, batch_write_id1.load_params, "label1", 1, generate_uuid(), 1000);
     ASSERT_OK(status_or_ctx1.status());
     StreamLoadContext* ctx1 = status_or_ctx1.value();
     ASSERT_NE(ctx1, nullptr);
@@ -209,9 +225,8 @@ TEST_F(BatchWriteMgrTest, stop) {
     ASSERT_NE(batch_write1.value(), nullptr);
 
     BatchWriteId batch_write_id2 = {"db2", "table2", {{"param3", "value3"}, {"param4", "value4"}}};
-    auto status_or_ctx2 = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id2.db,
-                                                                  batch_write_id2.table, batch_write_id2.load_params,
-                                                                  "label2", 2, generate_uuid(), 1000);
+    auto status_or_ctx2 = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id2.db, batch_write_id2.table, batch_write_id2.load_params, "label2", 2, generate_uuid(), 1000);
     ASSERT_OK(status_or_ctx2.status());
     StreamLoadContext* ctx2 = status_or_ctx2.value();
     ASSERT_NE(ctx2, nullptr);
@@ -224,9 +239,8 @@ TEST_F(BatchWriteMgrTest, stop) {
     ASSERT_TRUE(batch_write2.value()->is_stopped());
 
     BatchWriteId batch_write_id3 = {"db3", "table3", {{"param5", "value5"}, {"param6", "value6"}}};
-    auto status_or_ctx3 = BatchWriteMgr::create_and_register_pipe(_exec_env, _batch_write_mgr.get(), batch_write_id3.db,
-                                                                  batch_write_id3.table, batch_write_id3.load_params,
-                                                                  "label3", 3, generate_uuid(), 1000);
+    auto status_or_ctx3 = _batch_write_mgr->create_and_register_pipe(
+            batch_write_id3.db, batch_write_id3.table, batch_write_id3.load_params, "label3", 3, generate_uuid(), 1000);
     ASSERT_TRUE(status_or_ctx3.status().is_service_unavailable());
     StreamLoadContext* data_ctx = build_data_context(batch_write_id1, "data1");
     ASSERT_TRUE(_batch_write_mgr->append_data(data_ctx).is_service_unavailable());
@@ -283,7 +297,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
     });
     SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
-    _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+    _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
     ASSERT_TRUE(response.has_json_result());
     rapidjson::Document doc;
     doc.Parse(response.json_result().c_str());
@@ -304,7 +318,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         ADD_KEY_VALUE(request, "label", "test1");
         ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "abc");
         PStreamLoadResponse response;
-        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
@@ -323,7 +337,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         ADD_KEY_VALUE(request, "label", "test1");
         ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "false");
         PStreamLoadResponse response;
-        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
@@ -343,7 +357,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
         ADD_KEY_VALUE(request, HTTP_TIMEOUT, "abc");
         PStreamLoadResponse response;
-        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
@@ -365,7 +379,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_ASYNC, "true");
         ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, "json");
         PStreamLoadResponse response;
-        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
@@ -395,7 +409,7 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
         SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::fail", [](void* arg) {
             *(Status*)arg = Status::InternalError("Artificial failure");
         });
-        _batch_write_mgr->receive_stream_load_rpc(_exec_env, &cntl, &request, &response);
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
         rapidjson::Document doc;
         doc.Parse(response.json_result().c_str());
         ASSERT_STREQ("Fail", doc["Status"].GetString());
@@ -448,7 +462,7 @@ TEST_F(BatchWriteMgrTest, update_transaction_state) {
     ASSERT_EQ(request.states_size(), response.results_size());
     for (int i = 1; i <= expected_cache_state.size(); ++i) {
         ASSERT_EQ(TStatusCode::OK, response.results(i - 1).status_code());
-        auto actual_state = _batch_write_mgr->txn_state_cache()->get_state(i);
+        auto actual_state = _batch_write_mgr->TEST_txn_state_cache()->get_state(i);
         ASSERT_OK(actual_state.status());
         ASSERT_EQ(expected_cache_state[i - 1].txn_status, actual_state.value().txn_status);
         ASSERT_EQ(expected_cache_state[i - 1].reason, actual_state.value().reason);

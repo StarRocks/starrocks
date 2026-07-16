@@ -40,7 +40,7 @@ class TxnStateHandler;
 class TxnStateSubscriber;
 class TxnStateCache;
 using TxnStateDynamicCache = DynamicCache<int64_t, TxnStateHandler, bthread::Mutex>;
-using TxnStateDynamicCachePtr = std::unique_ptr<TxnStateDynamicCache>;
+using TxnStateDynamicCachePtr = std::shared_ptr<TxnStateDynamicCache>;
 using TxnStateDynamicCacheEntry = TxnStateDynamicCache::Entry;
 
 struct TxnState {
@@ -142,8 +142,8 @@ inline std::ostream& operator<<(std::ostream& os, TxnStateHandler& holder) {
 // The subscriber can call wait_finished_state() to wait for the finished state.
 class TxnStateSubscriber {
 public:
-    TxnStateSubscriber(TxnStateDynamicCache* cache, TxnStateDynamicCacheEntry* entry, std::string name)
-            : _cache(cache), _entry(entry), _name(std::move(name)){};
+    TxnStateSubscriber(TxnStateDynamicCachePtr cache, TxnStateDynamicCacheEntry* entry, std::string name)
+            : _cache(std::move(cache)), _entry(entry), _name(std::move(name)){};
 
     ~TxnStateSubscriber() {
         _entry->value().unsubscribe();
@@ -156,7 +156,7 @@ public:
     TxnStateDynamicCacheEntry* entry() { return _entry; }
 
 private:
-    TxnStateDynamicCache* _cache;
+    TxnStateDynamicCachePtr _cache;
     TxnStateDynamicCacheEntry* _entry;
     std::string _name;
 };
@@ -215,6 +215,7 @@ private:
 class TxnStateCache {
 public:
     TxnStateCache(size_t capacity, std::unique_ptr<ThreadPoolToken> poller_token);
+    ~TxnStateCache();
     Status init();
 
     // update the txn state which is pushed by FE. It will create an entry
@@ -255,7 +256,7 @@ private:
 
     friend class TxnStatePoller;
 
-    TxnStateDynamicCache* _get_txn_cache(int64_t txn_id);
+    TxnStateDynamicCachePtr _get_txn_cache(int64_t txn_id);
     // if create_if_not_exist is true, must return non nullptr entry if status is ok.
     // if create_if_not_exist is false, return nullptr if txn is not in cache.
     // Return not ok status if error happens.
@@ -277,7 +278,7 @@ private:
     CountDownLatch _txn_state_clean_stop_latch{1};
 };
 
-inline TxnStateDynamicCache* TxnStateCache::_get_txn_cache(int64_t txn_id) {
-    return _shards[txn_id & (kNumShards - 1)].get();
+inline TxnStateDynamicCachePtr TxnStateCache::_get_txn_cache(int64_t txn_id) {
+    return _shards[txn_id & (kNumShards - 1)];
 }
 } // namespace starrocks
