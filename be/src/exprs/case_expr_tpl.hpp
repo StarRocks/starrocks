@@ -69,9 +69,7 @@ public:
 
     ~VectorizedCaseExpr() override = default;
 
-    Expr* clone(ObjectPool* pool) const override {
-        return pool->add(new VectorizedCaseExpr(*this));
-    }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCaseExpr(*this)); }
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
