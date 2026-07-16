@@ -896,6 +896,10 @@ struct TLakeScanNode {
   58: optional TBM25SearchOptions bm25_search_options
 
   60: optional list<Exprs.TExpr> partition_conjuncts
+
+  // Per-scan decision (session flag on AND not disabled by the duplicate-lake-table gate), made at plan
+  // build, that this lake scan should take the prepared physical split scan path. Absent means off.
+  62: optional bool use_prepared_physical_split_scan
 }
 
 struct TEqJoinCondition {

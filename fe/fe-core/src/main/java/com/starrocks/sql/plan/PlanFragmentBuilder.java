@@ -938,6 +938,19 @@ public class PlanFragmentBuilder {
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setBm25SearchOptions(node.getBm25SearchOptions());
             scanNode.setSample(node.getSample());
+
+            // Per-scan decision to enable the lake prepared-physical-split scan. Gated on the (INVISIBLE)
+            // session switch + a cloud-native (lake) table. Query cache is mutually exclusive with this
+            // optimization by design: when query cache is on we fall back to the non-split scan so the
+            // per-fragment cache/ticket path is not perturbed.
+            ConnectContext connectContext = context.getConnectContext();
+            if (connectContext != null
+                    && connectContext.getSessionVariable().isEnableLakePreparedPhysicalSplitScan()
+                    && !connectContext.getSessionVariable().isEnableQueryCache()
+                    && referenceTable.isCloudNativeTableOrMaterializedView()) {
+                scanNode.setUsePreparedPhysicalSplitScan(true);
+            }
+
             currentExecGroup.add(scanNode);
 
             // set slot

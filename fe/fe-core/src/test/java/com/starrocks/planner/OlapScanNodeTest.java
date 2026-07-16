@@ -123,4 +123,33 @@ public class OlapScanNodeTest {
         ctx.setScanVersionOverride(override);
         assertEquals(Long.valueOf(7L), ctx.getScanVersionOverride().get(PHYSICAL_PARTITION_ID));
     }
+
+    // When the per-scan decision turns the prepared-physical-split scan on, toThrift must
+    // propagate it as an explicitly-set optional field on the lake_scan_node so the BE
+    // LakeDataSourceProvider::init can read it.
+    @Test
+    public void testPreparedPhysicalSplitScanToThrift() {
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.CLOUD_NATIVE);
+        scanNode.setUsePreparedPhysicalSplitScan(true);
+
+        TPlanNode msg = new TPlanNode();
+        scanNode.toThrift(msg);
+
+        Assertions.assertNotNull(msg.lake_scan_node);
+        Assertions.assertTrue(msg.lake_scan_node.isSetUse_prepared_physical_split_scan());
+        Assertions.assertTrue(msg.lake_scan_node.isUse_prepared_physical_split_scan());
+    }
+
+    // The optional flag must stay unset by default so an unchanged BE treats the isset
+    // guard as "feature off" rather than reading a defaulted false.
+    @Test
+    public void testPreparedPhysicalSplitScanToThriftDefaultUnset() {
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.CLOUD_NATIVE);
+
+        TPlanNode msg = new TPlanNode();
+        scanNode.toThrift(msg);
+
+        Assertions.assertNotNull(msg.lake_scan_node);
+        Assertions.assertFalse(msg.lake_scan_node.isSetUse_prepared_physical_split_scan());
+    }
 }

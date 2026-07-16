@@ -69,8 +69,8 @@ struct PreparedSegmentReadState {
     }
 
     void disable_pruned_scan_range_cache() {
+        // Flag only; must not clear the cache here (sibling split readers read it lock-free).
         pruned_scan_range_cache_disabled.store(true, std::memory_order_release);
-        clear_pruned_scan_range();
     }
 
     // Rowid equivalents of RowsetReadOptions::ranges and the rowset's tablet range
@@ -100,8 +100,8 @@ struct PreparedSegmentReadState {
     }
 
     void disable_rowid_bounds_cache() {
+        // Flag only; see disable_pruned_scan_range_cache.
         rowid_bounds_cache_disabled.store(true, std::memory_order_release);
-        clear_rowid_bounds_cache();
     }
 
     void disable_runtime_filter_dependent_cache() {

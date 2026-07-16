@@ -52,7 +52,7 @@ public:
     // stale version, then incremental rowsets in the version range from the cached version till required version
     // should be read out and merged with the cache result, here from_version is cached version.
     void set_from_version(int64_t from_version) { _from_version = from_version; }
-    int64_t from_version() { return _from_version; }
+    int64_t from_version() const { return _from_version; }
 
     void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
     void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
