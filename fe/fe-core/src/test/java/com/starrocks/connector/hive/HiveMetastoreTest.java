@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -104,6 +105,33 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         Assertions.assertTrue(metastore.tableExists("db1", "tbl1"));
+    }
+
+    @Test
+    public void testGetPartitionKeysByFilter() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = metastore.getPartitionKeysByFilter("db1", "tbl1",
+                "col1 >= '20260601' AND col1 <= '20260606'");
+        Assertions.assertEquals(Lists.newArrayList("col1=20260601"), partitionNames);
+    }
+
+    @Test
+    public void testGetPartitionKeysByFilterEmptyResult() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = metastore.getPartitionKeysByFilter("db1", "tbl1",
+                "col1 >= '20990101'");
+        Assertions.assertEquals(Lists.newArrayList(), partitionNames);
+    }
+
+    @Test
+    public void testGetPartitionKeysByFilterMultiColumn() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = metastore.getPartitionKeysByFilter("db1", "multi_part_tbl",
+                "dt >= '20260601' AND dt <= '20260606'");
+        Assertions.assertEquals(Lists.newArrayList("dt=20260601/hour=01/app=test"), partitionNames);
     }
 
     @Test
@@ -330,7 +358,15 @@ public class HiveMetastoreTest {
                     return getTransactionalTable(dbName, tblName, false);
                 }
             }
-            List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+            List<FieldSchema> partKeys;
+            if (tblName.equals("multi_part_tbl")) {
+                partKeys = Lists.newArrayList(
+                        new FieldSchema("dt", "STRING", ""),
+                        new FieldSchema("hour", "STRING", ""),
+                        new FieldSchema("app", "STRING", ""));
+            } else {
+                partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+            }
             List<FieldSchema> unPartKeys;
             if (tblName.equals("spark_table")) {
                 unPartKeys = Lists.newArrayList(
@@ -480,7 +516,30 @@ public class HiveMetastoreTest {
         }
 
         public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
+            if ("multi_part_tbl".equals(tableName) && !partitionValues.isEmpty()) {
+                String dt = partitionValues.get(0);
+                if ("20260601".equals(dt)) {
+                    return Lists.newArrayList("dt=20260601/hour=01/app=test", "dt=20260601/hour=02/app=test");
+                } else if ("20260602".equals(dt)) {
+                    return Lists.newArrayList("dt=20260602/hour=01/app=test");
+                }
+                return Lists.newArrayList();
+            }
             return Lists.newArrayList("col1");
+        }
+
+        public List<Partition> getPartitionsByFilter(String dbName, String tableName, String filter) {
+            if (filter != null && filter.contains("20990101")) {
+                return Lists.newArrayList();
+            }
+            if ("multi_part_tbl".equals(tableName)) {
+                Partition partition = new Partition();
+                partition.setValues(Lists.newArrayList("20260601", "01", "test"));
+                return Lists.newArrayList(partition);
+            }
+            Partition partition = new Partition();
+            partition.setValues(Lists.newArrayList("20260601"));
+            return Lists.newArrayList(partition);
         }
 
         public void addPartitions(String dbName, String tableName, List<Partition> partitions) {

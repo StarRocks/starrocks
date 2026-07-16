@@ -1262,39 +1262,43 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public int getNumPartitionsByFilter(String dbName, String tableName, String filter)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return getNumPartitionsByFilter(null, dbName, tableName, filter);
     }
 
     @Override
     public int getNumPartitionsByFilter(String catName, String dbName, String tableName, String filter)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_num_partitions_by_filter(
+                MetaStoreUtils.prependCatalogToDbName(catName, dbName, conf), tableName, filter);
     }
 
     @Override
     public List<Partition> listPartitionsByFilter(String db_name, String tbl_name, String filter, short max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return listPartitionsByFilter(null, db_name, tbl_name, filter, max_parts);
     }
 
     @Override
     public List<Partition> listPartitionsByFilter(String catName, String db_name, String tbl_name, String filter,
                                                   int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_by_filter(
+                MetaStoreUtils.prependCatalogToDbName(catName, db_name, conf), tbl_name, filter,
+                shrinkMaxtoShort(max_parts));
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecsByFilter(String db_name, String tbl_name, String filter, int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return listPartitionSpecsByFilter(null, db_name, tbl_name, filter, max_parts);
     }
 
     @Override
     public PartitionSpecProxy listPartitionSpecsByFilter(String catName, String db_name, String tbl_name, String filter,
                                                          int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return PartitionSpecProxy.Factory.get(client.get_part_specs_by_filter(
+                MetaStoreUtils.prependCatalogToDbName(catName, db_name, conf), tbl_name, filter, max_parts));
     }
 
     @Override

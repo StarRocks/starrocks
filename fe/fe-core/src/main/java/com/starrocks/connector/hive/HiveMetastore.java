@@ -16,6 +16,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
@@ -55,7 +56,7 @@ import static com.starrocks.connector.hive.Partition.TRANSIENT_LAST_DDL_TIME;
 
 public class HiveMetastore implements IHiveMetastore {
 
-    private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
+    private static final Logger LOG = LogManager.getLogger(HiveMetastore.class);
     private final HiveMetaClient client;
     private final String catalogName;
     private final MetastoreType metastoreType;
@@ -155,6 +156,43 @@ public class HiveMetastore implements IHiveMetastore {
                     .map(v -> v.orElse("")).collect(Collectors.toList());
             return client.getPartitionKeysByValue(dbName, tableName, partitionValuesStr);
         }
+    }
+
+    @Override
+    public List<String> getPartitionKeysByFilter(String dbName, String tableName, String filter) {
+        LOG.info("Calling HMS listPartitionsByFilter on {}.{}, filter: {}", dbName, tableName, filter);
+        org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
+        List<String> partitionColumnNames = table.getPartitionKeys().stream()
+                .map(FieldSchema::getName)
+                .collect(Collectors.toList());
+        if (partitionColumnNames.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
+        List<org.apache.hadoop.hive.metastore.api.Partition> partitions =
+                client.getPartitionsByFilter(dbName, tableName, filter);
+
+        if (partitions == null || partitions.isEmpty()) {
+            LOG.info("HMS listPartitionsByFilter returned 0 partitions on {}.{}, filter: {}", dbName, tableName, filter);
+            return Lists.newArrayList();
+        }
+        List<String> partitionNames = Lists.newArrayListWithCapacity(partitions.size());
+        for (org.apache.hadoop.hive.metastore.api.Partition partition : partitions) {
+            if (partition == null || partition.getValues() == null) {
+                LOG.warn("Skip null partition returned by listPartitionsByFilter on {}.{}", dbName, tableName);
+                continue;
+            }
+            if (partition.getValues().size() != partitionColumnNames.size()) {
+                throw new StarRocksConnectorException(
+                        "Partition values size %s does not match partition column size %s on %s.%s, values: %s",
+                        partition.getValues().size(), partitionColumnNames.size(), dbName, tableName,
+                        partition.getValues());
+            }
+            partitionNames.add(toHivePartitionName(partitionColumnNames, partition.getValues()));
+        }
+        LOG.info("HMS listPartitionsByFilter returned {} partitions on {}.{}, filter: {}", partitionNames.size(),
+                dbName, tableName, filter);
+        return partitionNames;
     }
 
     @Override

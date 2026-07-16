@@ -84,6 +84,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     // eg: HivePartitionValue -> List("year=2022/month=10", "year=2022/month=11")
     protected LoadingCache<HivePartitionValue, List<String>> partitionKeysCache;
 
+    // eg: HivePartitionFilter -> List("dt=20260601/hour=01/app=xxx", ...)
+    protected LoadingCache<HivePartitionFilter, List<String>> partitionKeysByFilterCache;
+
     // eg: "year=2022/month=10" -> Partition
     protected LoadingCache<HivePartitionName, Partition> partitionCache;
     protected LoadingCache<DatabaseTableName, HivePartitionStats> tableStatsCache;
@@ -159,9 +162,13 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         if (enableListNamesCache) {
             partitionKeysCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
+            partitionKeysByFilterCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
+                    .build(asyncReloading(CacheLoader.from(this::loadPartitionKeysByFilter), executor));
         } else {
             partitionKeysCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
+            partitionKeysByFilterCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
+                    .build(asyncReloading(CacheLoader.from(this::loadPartitionKeysByFilter), executor));
         }
 
         hmsExternalTableCache = newCacheBuilder(expireAfterWriteSec, NEVER_REFRESH, maxSize).build();
@@ -300,13 +307,41 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     @Override
+    public List<String> getPartitionKeysByFilter(String dbName, String tableName, String filter) {
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
+        HivePartitionFilter hivePartitionFilter = HivePartitionFilter.of(databaseTableName, filter);
+        List<String> partitionNames = get(partitionKeysByFilterCache, hivePartitionFilter);
+        LOG.info("listPartitionsByFilter on {}.{} returned {} partitions, filter: {}", dbName, tableName,
+                partitionNames.size(), filter);
+        return partitionNames;
+    }
+
+    private List<String> loadPartitionKeysByFilter(HivePartitionFilter hivePartitionFilter) {
+        DatabaseTableName databaseTableName = hivePartitionFilter.getHiveTableName();
+        String dbName = databaseTableName.getDatabaseName();
+        String tableName = databaseTableName.getTableName();
+        String filter = hivePartitionFilter.getFilter();
+        LOG.info("Loading partitions by filter from metastore on {}.{}, filter: {}", dbName, tableName, filter);
+        return metastore.getPartitionKeysByFilter(dbName, tableName, filter);
+    }
+
+    @Override
     public boolean partitionExists(Table table, List<String> partitionValues) {
         return metastore.partitionExists(table, partitionValues);
     }
 
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
-        return metastore.getPartitionKeysByValue(hivePartitionValue.getHiveTableName().getDatabaseName(),
-                hivePartitionValue.getHiveTableName().getTableName(), hivePartitionValue.getPartitionValues());
+        String dbName = hivePartitionValue.getHiveTableName().getDatabaseName();
+        String tableName = hivePartitionValue.getHiveTableName().getTableName();
+        List<Optional<String>> partitionValues = hivePartitionValue.getPartitionValues();
+        if (partitionValues.isEmpty()) {
+            LOG.debug("Loading all partition names from metastore on {}.{}", dbName, tableName);
+            return metastore.getPartitionKeys(dbName, tableName);
+        }
+        LOG.debug("Loading partition names by value from metastore on {}.{}, values: {}", dbName, tableName,
+                partitionValues);
+        return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
     public Database getDb(String dbName) {
@@ -725,6 +760,7 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         databaseNamesCache.invalidateAll();
         tableNamesCache.invalidateAll();
         partitionKeysCache.invalidateAll();
+        partitionKeysByFilterCache.invalidateAll();
         databaseCache.invalidateAll();
         tableCache.invalidateAll();
         partitionCache.invalidateAll();
@@ -752,6 +788,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     private void invalidateTablePartitionInfo(String dbName, String tableName, DatabaseTableName databaseTableName) {
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+        partitionKeysByFilterCache.asMap().keySet().stream().filter(hivePartitionFilter ->
+                hivePartitionFilter.getHiveTableName().equals(databaseTableName))
+                .forEach(partitionKeysByFilterCache::invalidate);
         List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
         partitionCache.invalidateAll(presentPartitions);
         List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
@@ -762,6 +801,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         DatabaseTableName databaseTableName = DatabaseTableName.of(partitionName.getDatabaseName(), partitionName.getTableName());
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+        partitionKeysByFilterCache.asMap().keySet().stream().filter(hivePartitionFilter ->
+                hivePartitionFilter.getHiveTableName().equals(databaseTableName))
+                .forEach(partitionKeysByFilterCache::invalidate);
         partitionCache.invalidate(partitionName);
         partitionStatsCache.synchronous().invalidate(partitionName);
     }
@@ -807,6 +849,9 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                 databaseTableName = DatabaseTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
         partitionKeysCache.asMap().keySet().stream().filter(hivePartitionValue -> hivePartitionValue.getHiveTableName().
                 equals(databaseTableName)).forEach(partitionKeysCache::invalidate);
+        partitionKeysByFilterCache.asMap().keySet().stream().filter(hivePartitionFilter ->
+                hivePartitionFilter.getHiveTableName().equals(databaseTableName))
+                .forEach(partitionKeysByFilterCache::invalidate);
         partitionCache.put(hivePartitionName, partition);
         partitionStatsCache.put(hivePartitionName, CompletableFuture.completedFuture(updatedPartitionStats));
     }
