@@ -167,6 +167,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
 - 導入バージョン: v4.2
 
+### enable_lake_prepared_split_pre_refinement
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: prepared-physical-split lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない segment 範囲をカバーする追加の coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（coarse 範囲は常にリファイン範囲が差し引く対象のスーパーセットです）。早期の並列性を、冗長な coarse スキャンの削減と引き換えにするだけです。
+- 導入バージョン: v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - デフォルト: -1

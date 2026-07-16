@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
 #include "fs/fs_factory.h"
@@ -362,6 +364,91 @@ TEST_F(PhysicalSplitMorselQueueTest, test_lake_prepared_physical_split_live_pre_
     }
     EXPECT_GT(pre_refine, 0) << "a LIVE candidate must yield PRE_REFINEMENT_COARSE splits";
     EXPECT_EQ(100u, segment_state->allocated_coarse_ranges.span_size()); // whole coarse range allocated
+    EXPECT_TRUE(queue.empty());
+}
+
+// enable_lake_prepared_split_pre_refinement=false is the sole switch for the pre-refinement path:
+// the same LIVE candidate that yields PRE_REFINEMENT_COARSE splits above must produce none when the
+// switch is off. The root morsel is still handed out; the coarse range is never allocated.
+TEST_F(PhysicalSplitMorselQueueTest, test_lake_prepared_physical_split_pre_refinement_gate_off) {
+    const bool saved = config::enable_lake_prepared_split_pre_refinement;
+    config::enable_lake_prepared_split_pre_refinement = false;
+    DeferOp restore([&] { config::enable_lake_prepared_split_pre_refinement = saved; });
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* col = schema_pb.add_column();
+    col->set_unique_id(0);
+    col->set_name("c0");
+    col->set_type("INT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    col->set_length(4);
+    col->set_index_length(4);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    RowsetMetadataPB rowset_meta; // must outlive the bare Rowset below
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("/tmp/p3b_pre_refinement_gate_off"));
+
+    auto rowset = std::make_shared<lake::Rowset>(/*tablet_mgr=*/nullptr, /*tablet_id=*/10001, &rowset_meta,
+                                                 /*index=*/0, tablet_schema);
+    auto segment = std::make_shared<Segment>(fs, FileInfo{"/tmp/p3b_pre_refinement_gate_off/0.dat"}, /*seg_id=*/0,
+                                             tablet_schema, /*tablet_manager=*/nullptr);
+
+    auto tablet_state = std::make_shared<lake::PreparedTabletReadState>();
+    tablet_state->rowsets = {rowset};
+    tablet_state->rowset_segments = {{segment}};
+    auto segment_state = std::make_shared<lake::PreparedSegmentReadState>();
+    tablet_state->rowset_prepared_states = {{segment_state}};
+
+    // Same LIVE coarse cursor over [0, 100) as the gate-on test.
+    {
+        std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
+        segment_state->coarse_scan_range.add(Range<>(0, 100));
+        segment_state->coarse_scan_range_iter = segment_state->coarse_scan_range.new_iterator();
+        segment_state->allocated_coarse_ranges.clear();
+        segment_state->coarse_split_allocation_closed = false;
+    }
+
+    Morsels morsels;
+    {
+        auto morsel = std::make_unique<ScanMorsel>(1, make_scan_range());
+        auto ctx = std::make_unique<LakeSplitContext>();
+        ctx->rowid_range = std::make_shared<RowidRangeOption>();
+        ctx->rowid_range_source = LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
+        ctx->prepared_tablet_read_state = tablet_state;
+        ctx->prepared_segment_read_state = segment_state;
+        ctx->rowset_index = 0;
+        ctx->segment_index = 0;
+        morsel->set_split_context(std::move(ctx));
+        morsels.emplace_back(std::move(morsel));
+    }
+    LakePreparedPhysicalSplitMorselQueue queue(std::move(morsels), /*has_more_scan_ranges=*/false,
+                                               /*splitted_scan_rows=*/40, /*degree_of_parallelism=*/2);
+
+    // The root INITIAL_COARSE morsel is still handed out.
+    auto r0 = queue.try_get();
+    ASSERT_TRUE(r0.ok());
+    ASSERT_NE(r0.value(), nullptr);
+
+    // But no PRE_REFINEMENT_COARSE split is ever produced: the candidate was never registered.
+    int pre_refine = 0;
+    int guard = 0;
+    while (true) {
+        ASSERT_LT(guard++, 100) << "runaway loop";
+        auto r = queue.try_get();
+        ASSERT_TRUE(r.ok());
+        if (r.value() == nullptr) {
+            break;
+        }
+        auto* ctx = dynamic_cast<LakeSplitContext*>(r.value()->get_split_context());
+        ASSERT_NE(ctx, nullptr);
+        if (ctx->rowid_range_source == LakeSplitContext::RowidRangeSource::PRE_REFINEMENT_COARSE) {
+            ++pre_refine;
+        }
+    }
+    EXPECT_EQ(0, pre_refine) << "pre-refinement must be off";
+    EXPECT_EQ(0u, segment_state->allocated_coarse_ranges.span_size()); // coarse range untouched
     EXPECT_TRUE(queue.empty());
 }
 
