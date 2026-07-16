@@ -53,6 +53,11 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    // tableName->representative partition values (one tuple per concrete partition). Only populated for tables
+    // whose CREATE TABLE omits partition definitions (automatic/expression partitioning), so replay can
+    // recreate those partitions and match the per-partition row counts. Each inner list is one partition's
+    // value tuple (a single element for single-column partitioning).
+    private final Map<String, List<List<String>>> tableToAutomaticPartitionValues = new HashMap<>();
     // tableName->createTableStmt
     private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
@@ -261,6 +266,14 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {
         return tableStatisticsMap;
+    }
+
+    public void addAutomaticPartitionValues(String tableName, List<List<String>> partitionValues) {
+        tableToAutomaticPartitionValues.put(tableName, partitionValues);
+    }
+
+    public Map<String, List<List<String>>> getAutomaticPartitionValuesMap() {
+        return tableToAutomaticPartitionValues;
     }
 
     public Map<Long, Pair<String, Table>> getTableMap() {
