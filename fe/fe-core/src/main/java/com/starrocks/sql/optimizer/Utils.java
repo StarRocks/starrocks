@@ -21,11 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-<<<<<<< HEAD
 import com.starrocks.catalog.JDBCTable;
-=======
 import com.starrocks.catalog.MaterializedIndex;
->>>>>>> 6c08cdde089... [Enhancement] Gate the one-tablet optimization by tablet row count (#76301)
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;

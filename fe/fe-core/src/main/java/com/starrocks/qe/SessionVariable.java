@@ -5906,7 +5906,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
-<<<<<<< HEAD
     public boolean isEnableJdbcJoinPushDown() {
         return enableJdbcJoinPushDown;
     }
@@ -5937,14 +5936,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcProjectPushDown(boolean enableJdbcProjectPushDown) {
         this.enableJdbcProjectPushDown = enableJdbcProjectPushDown;
-=======
+    }
+
     public long getOneTabletOptMaxTabletRows() {
         return oneTabletOptMaxTabletRows;
     }
 
     public void setOneTabletOptMaxTabletRows(long oneTabletOptMaxTabletRows) {
         this.oneTabletOptMaxTabletRows = oneTabletOptMaxTabletRows;
->>>>>>> 6c08cdde089... [Enhancement] Gate the one-tablet optimization by tablet row count (#76301)
     }
 
     public TPredicateTreeParams getPredicateTreeParams() {
