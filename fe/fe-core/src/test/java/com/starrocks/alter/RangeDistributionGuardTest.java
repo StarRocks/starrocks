@@ -302,6 +302,9 @@ public class RangeDistributionGuardTest {
                         "select k1, v1 from t_guard_syncmv"));
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
+        // A plain ADD ROLLUP IS supported now; the sync-MV message must not blanket-claim otherwise.
+        assertFalse(exception.getMessage().toLowerCase(Locale.ROOT).contains("rollup is not supported"),
+                "sync-MV message must not claim rollup is unsupported: " + exception.getMessage());
     }
 
     /**

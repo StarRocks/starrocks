@@ -540,13 +540,17 @@ public class MaterializedViewHandler extends AlterHandler {
             // this method. Everything else on a range table -- a synchronous materialized view (which
             // carries a query statement), a shared-nothing table, a colocate / auto-increment /
             // primary-key table -- is rejected here.
+            if (queryStatement != null) {
+                throw new DdlException(
+                    "Synchronous materialized view is not supported on tables with range distribution. " +
+                    "Use an asynchronous materialized view instead: declare it with an explicit " +
+                    "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
+                    "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+            }
             throw new DdlException(
-                "Synchronous materialized view / rollup is not supported on " +
-                "tables with range distribution. Use an asynchronous " +
-                "materialized view instead: declare it with an explicit " +
-                "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a " +
-                "DISTRIBUTED BY clause, e.g. CREATE MATERIALIZED VIEW ... " +
-                "DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+                "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
+                "rollup is supported only on a shared-data, non-colocate, non-auto-increment, " +
+                "non-primary-key range table.");
         }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
