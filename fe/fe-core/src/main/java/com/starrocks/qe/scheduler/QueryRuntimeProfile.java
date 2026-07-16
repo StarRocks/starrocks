@@ -28,7 +28,7 @@ import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.GrowableMarkedLatch;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.datacache.LoadDataCacheMetrics;
 import com.starrocks.load.loadv2.LoadJob;
@@ -81,7 +81,7 @@ public class QueryRuntimeProfile {
                     "profile-worker", true);
 
     /**
-     * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
+     * The value is meaningless, and it is just used as a value placeholder of {@link GrowableMarkedLatch}.
      */
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
@@ -110,8 +110,10 @@ public class QueryRuntimeProfile {
     /**
      * The number of instances of this query.
      * <p> It is equal to the number of backends executing plan fragments on behalf of this query.
+     * <p> Growable so that instances registered while the query is running (elastic scan
+     * instances) can still be attached; growth is rejected once the query has finished.
      */
-    private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = null;
+    private GrowableMarkedLatch<TUniqueId, Long> profileDoneSignal = null;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
     private ExecPlan execPlan;
@@ -228,8 +230,17 @@ public class QueryRuntimeProfile {
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execution has been initiated, otherwise we might try to cancel fragment
         // execution at backends where it hasn't even started
-        profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
+        profileDoneSignal = new GrowableMarkedLatch<>();
         instanceIds.forEach(instanceId -> profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
+    }
+
+    /**
+     * Attaches one more instance after {@link #attachInstances(Collection)}, for instances
+     * registered while the query is running. Returns false when the query has already finished,
+     * in which case the late instance must not be deployed.
+     */
+    public boolean attachInstance(TUniqueId instanceId) {
+        return profileDoneSignal != null && profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE);
     }
 
     public void attachExecutionProfiles(Collection<FragmentInstanceExecState> executions) {

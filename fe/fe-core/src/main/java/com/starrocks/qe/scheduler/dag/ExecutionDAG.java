@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
@@ -85,9 +86,17 @@ public class ExecutionDAG {
     /**
      * {@code instanceIdToInstance} and {@link #workerIdToNumInstances} will be calculated in {@link #finalizeDAG()},
      * after all the fragment instances have already been added to the DAG .
+     * <p> Both are concurrent because {@link #registerLateInstance(ExecutionFragment, ComputeNode)} may grow
+     * them while report and cancel threads read them.
      */
     private final Map<TUniqueId, FragmentInstance> instanceIdToInstance;
-    private Map<Long, Integer> workerIdToNumInstances = Maps.newHashMap();
+    private Map<Long, Integer> workerIdToNumInstances = Maps.newConcurrentMap();
+
+    /**
+     * The next dense indexInJob, retained after {@link #finalizeDAG()} so that
+     * {@link #registerLateInstance(ExecutionFragment, ComputeNode)} can keep the sequence.
+     */
+    private int nextIndexInJob = 0;
 
     /**
      * The executions will be added to {@code indexInJobToExecState}, when it is deploying.
@@ -111,7 +120,7 @@ public class ExecutionDAG {
         this.fragments = Lists.newArrayList();
         this.preExecutedFragments = Lists.newArrayList();
         this.idToFragment = Maps.newHashMap();
-        this.instanceIdToInstance = Maps.newHashMap();
+        this.instanceIdToInstance = Maps.newConcurrentMap();
     }
 
     public static ExecutionDAG build(JobSpec jobSpec) {
@@ -343,11 +352,10 @@ public class ExecutionDAG {
      */
     public void finalizeDAG() throws SchedulerException {
         // Assign monotonic unique indexInJob to fragment instances to keep consistent order with indexInFragment.
-        int index = 0;
         for (ExecutionFragment fragment : fragments) {
             for (FragmentInstance instance : fragment.getInstances()) {
                 setInstanceId(instance);
-                instance.setIndexInJob(index++);
+                instance.setIndexInJob(nextIndexInJob++);
             }
         }
 
@@ -357,12 +365,12 @@ public class ExecutionDAG {
 
         computeFetchFragmentForLookUpNode();
 
-        workerIdToNumInstances = fragments.stream()
+        workerIdToNumInstances = new ConcurrentHashMap<>(fragments.stream()
                 .flatMap(fragment -> fragment.getInstances().stream())
                 .collect(Collectors.groupingBy(
                         FragmentInstance::getWorkerId,
                         Collectors.summingInt(instance -> 1)
-                ));
+                )));
 
         if (jobSpec.isStreamLoad()) {
             fragments.stream()
@@ -690,6 +698,29 @@ public class ExecutionDAG {
                 }
             }
         }
+    }
+
+    /**
+     * Registers one more instance for {@code fragment} after {@link #finalizeDAG()}, for schedulers
+     * that grow a running query (e.g. adding scan instances on newly joined compute nodes).
+     *
+     * <p>The instance gets the next dense indexInJob (the BE-to-FE report routing key) and a fresh
+     * instance id; existing instances are never reordered, so global-runtime-filter component
+     * ordinals derived from the original ordering stay valid. The destination fragment's
+     * {@code numSendersPerExchange} is deliberately NOT updated: downstream receivers were already
+     * created with the plan-time sender count, and the wire-side sender set is grown through the
+     * BE's dynamic sender-registration RPC instead.
+     *
+     * <p>Must be called on the schedule thread, serialized with scan-range assignment.
+     */
+    public FragmentInstance registerLateInstance(ExecutionFragment fragment, ComputeNode worker) {
+        Preconditions.checkState(nextIndexInJob > 0, "registerLateInstance requires a finalized DAG");
+        FragmentInstance instance = new FragmentInstance(worker, fragment);
+        setInstanceId(instance);
+        instance.setIndexInJob(nextIndexInJob++);
+        fragment.addInstanceLate(instance);
+        workerIdToNumInstances.merge(instance.getWorkerId(), 1, Integer::sum);
+        return instance;
     }
 
     private void setInstanceId(FragmentInstance instance) {
