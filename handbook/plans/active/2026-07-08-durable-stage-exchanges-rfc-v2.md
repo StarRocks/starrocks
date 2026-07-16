@@ -110,6 +110,7 @@ Beyond fault tolerance, staged execution has independent batch value:
 1. Barriers cap the concurrent resource footprint — only ready stages run, so queries larger than cluster memory become schedulable by materialize-and-drain.
 2. Committed manifests carry exact per-partition sizes, enabling adaptive per-stage parallelism from actual input sizes rather than planner estimates (§12).
 3. Batch workloads spend little for the barrier: the pipelining given up buys time-to-first-row, which is largely irrelevant to a two-hour INSERT whose output is consumed at the end.
+4. Stage boundaries make autoscaling effective for in-flight queries. Today fragment placement is fixed at deploy time, so CNs added mid-query by an autoscaler cannot join a running query — and the idle joiners dilute CPU-average scaling signals, stalling further scale-up. Under staged scheduling, each stage's placement and parallelism are decided when the stage becomes ready, from current cluster membership and committed input sizes: nodes added mid-query pick up work at the next stage boundary, including interior join/aggregation stages that no streaming design can rescale mid-flight.
 
 A structural note on prior art: StarRocks has fragments → pipelines → drivers and a streaming exchange, so this proposal must build the stage layer (schedule, commit protocol, spool transport) rather than swap a transport. This is why the scope is phased (§13) and the first milestone deliberately narrow.
 
