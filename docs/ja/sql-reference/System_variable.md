@@ -655,6 +655,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Boolean
 * **導入バージョン**: v4.2
 
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **説明**: prepared-physical-split scan において、scan range 数がすでに pipeline DOP に達している場合でも、単一の巨大な lake タブレットを分割できるようにするデータ偏りのしきい値。あるタブレットの行数が、この比率に driver あたりの理想的な分担（総行数を有効 DOP で割った値）を掛けた値を超えると、そのタブレットは偏ったストラグラーとみなされて分割されます。値が大きいほど分割にはより極端な偏りが必要になり、値が小さいほど積極的に分割します。正の有限な数値である必要があります。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: 1.5
+* **データ型**: Double
+* **導入バージョン**: v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * **説明**: 共有データクラスタ内のクラウドネイティブテーブルに対する並列スキャンを有効にするかどうか。

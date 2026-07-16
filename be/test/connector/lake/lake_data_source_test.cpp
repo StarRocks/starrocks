@@ -277,6 +277,116 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_GT(builder->max_degree_of_parallelism(), 0);
 }
 
+// The prepared-physical-split skew gate: a single oversized (skewed) lake tablet is split even when the
+// scan-range count already reaches pipeline_dop -- which the plain count gate treats as "enough parallelism,
+// no split". The override is gated on enable_lake_prepared_physical_split_scan; with it off the original
+// count gate is kept verbatim.
+TEST_F(LakeDataSourceTest, could_tablet_internal_parallel_skew_gate) {
+    // get_tablet_num_rows sums rowset num_rows from metadata, so a rowset carrying only set_num_rows()
+    // (no real segments) is enough to drive this row-count-based decision.
+    auto make_tablet = [&](int64_t num_rows) {
+        auto meta = std::make_unique<TabletMetadata>();
+        meta->set_id(next_id());
+        meta->set_version(2);
+        *meta->mutable_schema() = _tablet_metadata->schema();
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(num_rows);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*meta));
+        return meta;
+    };
+
+    // Shrink the split granularity so these modest tablets clear the "big enough to split" threshold
+    // (max_tablet_rows >= splitted_scan_rows * lake_tablet_rows_splitted_ratio). Restored on scope exit.
+    auto saved_min_rows = config::tablet_internal_parallel_min_splitted_scan_rows;
+    auto saved_cap_rows = config::lake_prepared_split_max_splitted_scan_rows;
+    auto saved_bytes = config::tablet_internal_parallel_max_splitted_scan_bytes;
+    config::tablet_internal_parallel_min_splitted_scan_rows = 1;
+    config::lake_prepared_split_max_splitted_scan_rows = 4;
+    config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
+    DeferOp restore([&]() {
+        config::tablet_internal_parallel_min_splitted_scan_rows = saved_min_rows;
+        config::lake_prepared_split_max_splitted_scan_rows = saved_cap_rows;
+        config::tablet_internal_parallel_max_splitted_scan_bytes = saved_bytes;
+    });
+
+    auto runtime_state = create_runtime_state_for_test(); // skew_split_ratio accessor defaults to 1.5
+    const int pipeline_dop = 2; // equals the scan-range count, so the count gate says "no split"
+    const auto mode = TTabletInternalParallelMode::type::AUTO;
+
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    int64_t scan_parallelism = 0;
+    int64_t splitted_scan_rows = 0;
+
+    // Skewed: one 100-row tablet dwarfs a 2-row tablet; the per-driver ideal share is 51, so 100 > 51 * 1.5.
+    auto big = make_tablet(100);
+    auto small = make_tablet(2);
+    auto skewed_ranges = create_scan_ranges({big.get(), small.get()});
+
+    // (1) Optimization ON: the skewed big tablet overrides the count gate -> split.
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_on,
+                    provider._could_tablet_internal_parallel(skewed_ranges, pipeline_dop, skewed_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_TRUE(could_when_on);
+    // splitted_scan_rows is capped by lake_prepared_split_max_splitted_scan_rows under the optimization.
+    EXPECT_EQ(config::lake_prepared_split_max_splitted_scan_rows, splitted_scan_rows);
+
+    // (2) Optimization OFF: same skew, but the count gate holds -> no split (verbatim original behavior).
+    provider._enable_lake_prepared_physical_split_scan = false;
+    ASSIGN_OR_ABORT(auto could_when_off,
+                    provider._could_tablet_internal_parallel(skewed_ranges, pipeline_dop, skewed_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_off);
+
+    // (3) Optimization ON but uniform tablets (50/50): no skew, so the count gate still holds -> no split.
+    auto uniform_a = make_tablet(50);
+    auto uniform_b = make_tablet(50);
+    auto uniform_ranges = create_scan_ranges({uniform_a.get(), uniform_b.get()});
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_uniform,
+                    provider._could_tablet_internal_parallel(uniform_ranges, pipeline_dop, uniform_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_uniform);
+
+    // (4) Group-execution / colocate scope: convert_scan_range_to_morsel_queue_builder runs once per driver
+    // sequence, so the slice passed here is a single big tablet while num_total_scan_ranges is the
+    // fragment-wide total (four such driver sequences). The per-driver ideal share must be derived from the
+    // slice (scan_ranges.size()), not the global total: with the slice-scoped denominator the lone tablet is
+    // its own whole share (100 vs 100 * 1.5) and is NOT flagged as skewed, so the count gate holds and there
+    // is no split. Were the denominator the global total (min(4, dop=2)=2), the ideal share would drop to 50
+    // and 100 > 50 * 1.5 would spuriously flag this uniform layout as skewed.
+    auto ge_slice = create_scan_ranges({big.get()});
+    const size_t fragment_wide_scan_ranges = 4; // > pipeline_dop, mimics 4 driver sequences
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_ge_uniform,
+                    provider._could_tablet_internal_parallel(ge_slice, pipeline_dop, fragment_wide_scan_ranges, mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_ge_uniform);
+
+    // (5) Optimization OFF with fewer scan ranges than pipeline_dop (num_total_scan_ranges < pipeline_dop):
+    // the early count gate does not fire, so the row-sum path runs -- byte-for-byte the pre-optimization
+    // behavior. With the skew override disabled (opt off), the decision is driven solely by scan_parallelism
+    // vs the dop / min_scan_dop thresholds (the skew term is a no-op), so a couple of small tablets that do
+    // not reach those thresholds yield no split. This pins the opt-off path where the count gate is NOT the
+    // deciding factor, complementing case (2) where it is.
+    auto low_a = make_tablet(4);
+    auto low_b = make_tablet(4);
+    auto low_ranges = create_scan_ranges({low_a.get(), low_b.get()});
+    const int low_dop = 4; // > the 2 scan ranges, so the count gate does not short-circuit
+    provider._enable_lake_prepared_physical_split_scan = false;
+    ASSIGN_OR_ABORT(auto could_off_lowdop,
+                    provider._could_tablet_internal_parallel(low_ranges, low_dop, low_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_off_lowdop);
+}
+
 TEST_F(LakeDataSourceTest, get_tablet_schema) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([&]() {
