@@ -25,6 +25,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -248,14 +249,45 @@ public class LakeTableIndexFastPathJobTest {
         job.putNewSchema(500L, 900L, 7);
 
         AlterReplicaTask stamped = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(stamped, 500L);
+        job.populateAlterRequest(stamped, 500L, null);
         verify(stamped).setOnlyAddIndex(any());
         verify(stamped).setNewIndexSchema(900L, 7L);
 
         AlterReplicaTask unstamped = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(unstamped, 999L); // no per-index entry
+        job.populateAlterRequest(unstamped, 999L, null); // no per-index entry
         verify(unstamped).setOnlyAddIndex(any());
         verify(unstamped, never()).setNewIndexSchema(anyLong(), anyLong());
+    }
+
+    @Test
+    public void testAddIndexJob_PopulateAlterRequest_SkipsProjectingRollup() {
+        // A rollup / sync-MV whose schema projects away the indexed column must
+        // receive an EMPTY index set (BE then writes a no-op txn log) and no
+        // schema-id stamp; the base meta receives the full set + its stamp.
+        TOlapTableIndex thrift = new TOlapTableIndex();
+        thrift.setIndex_type(TIndexType.BITMAP);
+        thrift.setColumns(Collections.singletonList("c1"));
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                Collections.emptyList(), Collections.singletonList(thrift));
+        job.putNewSchema(500L, 900L, 7); // base meta only; rollup meta 501 gets no bump
+
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getSchema()).thenReturn(List.of(new Column("c1", IntegerType.BIGINT)));
+        AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(baseTask, 500L, baseMeta);
+        ArgumentCaptor<List<TOlapTableIndex>> baseCap = ArgumentCaptor.forClass(List.class);
+        verify(baseTask).setOnlyAddIndex(baseCap.capture());
+        assertEquals(1, baseCap.getValue().size());
+        verify(baseTask).setNewIndexSchema(900L, 7L);
+
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getSchema()).thenReturn(List.of(new Column("k9", IntegerType.BIGINT)));
+        AlterReplicaTask rollupTask = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(rollupTask, 501L, rollupMeta);
+        ArgumentCaptor<List<TOlapTableIndex>> rollupCap = ArgumentCaptor.forClass(List.class);
+        verify(rollupTask).setOnlyAddIndex(rollupCap.capture());
+        assertTrue(rollupCap.getValue().isEmpty());
+        verify(rollupTask, never()).setNewIndexSchema(anyLong(), anyLong());
     }
 
     // -----------------------------------------------------------------

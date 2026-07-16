@@ -28,11 +28,13 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -124,11 +126,16 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         HashMap<Long, MaterializedIndexMeta> indexMetaIdToMeta = new HashMap<>();
         indexMetaIdToMeta.put(100L, baseIndexMeta);
         when(t.getIndexMetaIdToMeta()).thenReturn(indexMetaIdToMeta);
+        List<Column> metaSchema = new ArrayList<>();
         for (String name : columnNames) {
             Column col = new Column(name, IntegerType.BIGINT);
+            metaSchema.add(col);
             when(t.getColumn(name)).thenReturn(col);
             when(t.getColumn(ColumnId.create(name))).thenReturn(col);
         }
+        // The per-meta applicability filter reads each meta's schema; stub it so
+        // the base meta "contains" every registered column.
+        when(baseIndexMeta.getSchema()).thenReturn(metaSchema);
         return t;
     }
 
@@ -165,6 +172,56 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
             assertEquals(1, job.getNewIndexes().size());
             assertEquals(1, job.getIndexesToAdd().size());
             verify(table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        }
+    }
+
+    @Test
+    public void testTryBuildLakeAddIndexJob_SkipsRollupWithoutIndexedColumn() throws Exception {
+        // A rollup / sync-MV meta whose schema lacks the indexed column must not
+        // be allocated a schema-id bump, and its tablets' tasks must carry an
+        // empty index set (BE then writes a no-op txn log). The base meta keeps
+        // the full behavior.
+        SchemaChangeHandler handler = newHandler();
+        OlapTable table = stubLakeTable("c1");
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getSchemaVersion()).thenReturn(0);
+        when(rollupMeta.getSchema()).thenReturn(
+                Collections.singletonList(new Column("k9", com.starrocks.type.IntegerType.BIGINT)));
+        table.getIndexMetaIdToMeta().put(200L, rollupMeta);
+        when(table.getIndexMetaByMetaId(200L)).thenReturn(rollupMeta);
+
+        IndexDef def = new IndexDef("ix_a", Collections.singletonList("c1"),
+                IndexDef.IndexType.BITMAP, "", new HashMap<>());
+        Method m = privateMethod("tryBuildLakeAddIndexJob", Database.class, OlapTable.class, List.class);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<RunMode> rmStatic = Mockito.mockStatic(RunMode.class)) {
+            GlobalStateMgr gsm = stubGsm();
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            rmStatic.when(RunMode::getCurrentRunMode).thenReturn(RunMode.SHARED_DATA);
+            Object result = invoke(m, handler, stubDb(), table,
+                    Collections.<AlterClause>singletonList(new CreateIndexClause(def)));
+            assertNotNull(result);
+            LakeTableAddIndexJob job = (LakeTableAddIndexJob) result;
+
+            // Base meta (100L): full index set + schema-id stamp.
+            AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
+            job.populateAlterRequest(baseTask, 100L, table.getIndexMetaByMetaId(100L));
+            ArgumentCaptor<List<com.starrocks.thrift.TOlapTableIndex>> baseCap =
+                    ArgumentCaptor.forClass(List.class);
+            verify(baseTask).setOnlyAddIndex(baseCap.capture());
+            assertEquals(1, baseCap.getValue().size());
+            verify(baseTask).setNewIndexSchema(org.mockito.ArgumentMatchers.anyLong(),
+                    org.mockito.ArgumentMatchers.anyLong());
+
+            // Rollup meta (200L): empty index set, no stamp (no schema-id bump).
+            AlterReplicaTask rollupTask = mock(AlterReplicaTask.class);
+            job.populateAlterRequest(rollupTask, 200L, rollupMeta);
+            ArgumentCaptor<List<com.starrocks.thrift.TOlapTableIndex>> rollupCap =
+                    ArgumentCaptor.forClass(List.class);
+            verify(rollupTask).setOnlyAddIndex(rollupCap.capture());
+            assertTrue(rollupCap.getValue().isEmpty());
+            verify(rollupTask, never()).setNewIndexSchema(org.mockito.ArgumentMatchers.anyLong(),
+                    org.mockito.ArgumentMatchers.anyLong());
         }
     }
 

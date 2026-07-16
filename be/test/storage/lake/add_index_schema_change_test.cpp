@@ -567,6 +567,37 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id
     EXPECT_EQ(9, txn_log->op_add_index().new_schema_version());
 }
 
+// A materialized index (rollup / sync MV) whose schema lacks the indexed
+// column gets a task with an EMPTY index set: BE must write a no-op txn log
+// (version advance only) instead of erroring, so the reserved alter version
+// still publishes on every tablet of the partition.
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_no_applicable_index_noop) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    // no indexes_to_add: FE sends an empty set for a projecting rollup / MV.
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    EXPECT_EQ(0, txn_log->op_add_index().new_indexes_size());
+    EXPECT_EQ(0, txn_log->op_add_index().segment_entries_size());
+    EXPECT_EQ(version, txn_log->op_add_index().alter_version());
+}
+
 // A TOlapTableIndex with a type but no columns must fail fast in the fast path
 // (rather than fall through to init_from_thrift's unchecked field_index()).
 TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_empty_columns_rejected) {

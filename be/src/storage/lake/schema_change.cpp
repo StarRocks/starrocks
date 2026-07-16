@@ -653,19 +653,27 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // alter, not silently land in an unsupported fallback shape.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
     StorageMetrics::instance()->lake_add_index_requests_total.increment(1);
-    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
-        // The fast-path request shape (base_tablet_id == new_tablet_id, no
-        // tablet_schema diff) is incompatible with the legacy rewrite path:
-        // delegating here would self-targeted "rewrite" the tablet and
-        // append duplicate rowsets. FE's classifier guarantees this branch
-        // is unreachable in practice, so fail loudly instead of falling
-        // back.
-        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
-        return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
-    }
     if (!request.__isset.txn_id) {
         StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
+    }
+    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
+        // Explicit no-op: FE sends an EMPTY index set for a materialized index
+        // (rollup / sync MV) whose schema does not carry the indexed column(s) —
+        // the index is only built on the metas that contain the columns,
+        // mirroring the legacy path which only builds on the base index. This
+        // tablet still needs a txn log so the reserved alter version publishes
+        // on every tablet of the partition; apply_add_index on an empty op is a
+        // pure version advance. (The legacy-rewrite fallback stays forbidden:
+        // the fast-path request shape base_tablet_id == new_tablet_id would
+        // make it re-process the tablet against itself and duplicate rows.)
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(request.new_tablet_id);
+        txn_log->set_txn_id(request.txn_id);
+        txn_log->mutable_op_add_index()->set_alter_version(request.alter_version);
+        LOG(INFO) << "ADD INDEX fast path no-op (no applicable index for this materialized index): tablet="
+                  << request.new_tablet_id << " txn_id=" << request.txn_id;
+        return _tablet_manager->put_txn_log(std::move(txn_log));
     }
 
     const int64_t alter_version = request.alter_version;

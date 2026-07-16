@@ -119,13 +119,42 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
                 : new HashMap<>(other.indexMetaIdToNewSchema);
     }
 
+    /**
+     * Returns the subset of {@code indexes} whose columns are ALL present in the
+     * given materialized index meta's schema. A rollup / sync-MV that projects
+     * away an indexed column must not receive (or build) that index — mirroring
+     * the legacy path, which only builds indexes on the base index. A null meta
+     * (defensive) applies every index.
+     */
+    static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta) {
+        if (indexes == null || indexes.isEmpty() || meta == null) {
+            return indexes;
+        }
+        Set<String> metaColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (Column column : meta.getSchema()) {
+            metaColumnNames.add(column.getName());
+        }
+        List<TOlapTableIndex> applicable = new ArrayList<>();
+        for (TOlapTableIndex ix : indexes) {
+            if (ix.getColumns() != null && metaColumnNames.containsAll(ix.getColumns())) {
+                applicable.add(ix);
+            }
+        }
+        return applicable;
+    }
+
     @Override
-    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId) {
-        task.setOnlyAddIndex(indexesToAdd);
+    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId, MaterializedIndexMeta indexMeta) {
+        // A materialized index (rollup / sync MV) whose schema projects away an
+        // indexed column must not build that index: send it only the indexes
+        // whose columns its schema carries. An empty list makes BE write a no-op
+        // txn log so the reserved alter version still publishes on its tablets.
+        task.setOnlyAddIndex(applicableIndexes(indexesToAdd, indexMeta));
         // Each affected index meta got its OWN new schema id/version; stamp this
         // tablet with its index's id so BE bumps that index's schema, and
         // applyCatalogMutation bumps the same meta. Keeps FE and BE schema ids
-        // aligned per index (base + any rollup / sync-MV index).
+        // aligned per index. Metas with no applicable index were never allocated
+        // an entry (see the build sites), so their tablets carry no stamp.
         long[] newSchema = indexMetaIdToNewSchema.get(indexMetaId);
         if (newSchema != null && newSchema[0] > 0) {
             task.setNewIndexSchema(newSchema[0], newSchema[1]);
