@@ -27,12 +27,15 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.Map;
 
 public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
@@ -119,6 +122,26 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
             for (String columnKey : columnStatistics.keySet()) {
                 String columnStatistic = columnStatistics.get(columnKey).getAsString();
                 dumpInfo.addTableStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
+            }
+        }
+        // column histogram: merge the round-tripped histogram back onto the column statistic parsed above.
+        // Optional section (older dumps don't have it), guarded by has().
+        if (dumpJsonObject.has("column_histogram")) {
+            JsonObject tableColumnHistogram = dumpJsonObject.getAsJsonObject("column_histogram");
+            for (String tableKey : tableColumnHistogram.keySet()) {
+                JsonObject columnHistograms = tableColumnHistogram.get(tableKey).getAsJsonObject();
+                Map<String, ColumnStatistic> tableStats =
+                        dumpInfo.getTableStatisticsMap().getOrDefault(tableKey, Collections.emptyMap());
+                for (String columnKey : columnHistograms.keySet()) {
+                    ColumnStatistic base = tableStats.get(columnKey);
+                    if (base == null) {
+                        continue;
+                    }
+                    String histogramStr = columnHistograms.get(columnKey).getAsString();
+                    Histogram histogram = HistogramUtils.deserializeHistogram(histogramStr);
+                    dumpInfo.addTableStatistics(tableKey, columnKey,
+                            ColumnStatistic.buildFrom(base).setHistogram(histogram).build());
+                }
             }
         }
         // BE number
