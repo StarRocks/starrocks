@@ -49,6 +49,27 @@ public class BackendSelectorFactory {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
+        // Incremental delivery for OLAP scans is armed per node: only plain (non-colocated,
+        // non-bucket-shuffle, non-replicated) scans are eligible, because only
+        // NormalBackendSelector emits the has_more sentinel that keeps instances alive between
+        // batches. allowUsingBackupNode restricts it to shared-data worker providers, where any
+        // worker can serve any tablet. Local native tables are excluded: the phased scheduler's
+        // CaptureVersionFragmentBuilder snapshots their instance scan ranges at prepare time to
+        // pin tablet versions, which would only cover the first batch. Cloud-native (lake)
+        // tables carry their version inside each scan range, so batching stays consistent.
+        // An unarmed OlapScanNode ignores the batch size below.
+        boolean olapIncrementalScanRanges = useIncrementalScanRanges
+                && scanNode instanceof OlapScanNode
+                && sessionVariable.isEnableOlapIncrementalScanRanges()
+                && workerProvider.allowUsingBackupNode()
+                && !scanNode.isLocalNativeTable()
+                && !execFragment.isColocated()
+                && !execFragment.isLocalBucketShuffleJoin()
+                && !execFragment.isReplicated();
+        if (olapIncrementalScanRanges) {
+            ((OlapScanNode) scanNode).enableIncrementalScanRangeDelivery();
+        }
+
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         int maxScanRangeLength = 0;
         if (useIncrementalScanRanges) {
@@ -92,7 +113,8 @@ public class BackendSelectorFactory {
                         colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,
                         sessionVariable.getMaxBucketsPerBeToUseBalancerAssignment());
             } else {
-                return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType);
+                return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType,
+                        olapIncrementalScanRanges);
             }
         }
     }

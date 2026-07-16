@@ -507,7 +507,8 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         if (connectContext != null) {
-            if (connectContext.getSessionVariable().isEnableConnectorIncrementalScanRanges()) {
+            if (connectContext.getSessionVariable().isEnableConnectorIncrementalScanRanges()
+                    || connectContext.getSessionVariable().isEnableOlapIncrementalScanRanges()) {
                 jobSpec.setIncrementalScanRanges(true);
             }
         }

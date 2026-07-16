@@ -41,15 +41,23 @@ public class NormalBackendSelector implements BackendSelector {
 
     private final WorkerProvider workerProvider;
     private final boolean isLoad;
+    private final boolean useIncrementalScanRanges;
 
     public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                  FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
                                  boolean isLoad) {
+        this(scanNode, locations, assignment, workerProvider, isLoad, false);
+    }
+
+    public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                 FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
+                                 boolean isLoad, boolean useIncrementalScanRanges) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
         this.workerProvider = workerProvider;
         this.isLoad = isLoad;
+        this.useIncrementalScanRanges = useIncrementalScanRanges;
     }
 
     private boolean isEnableScheduleByRowCnt(TScanRangeLocations scanRangeLocations) {
@@ -132,6 +140,10 @@ public class NormalBackendSelector implements BackendSelector {
             // add scan range
             TScanRangeParams scanRangeParams = new TScanRangeParams(scanRangeLocations.scan_range);
             assignment.put(minLocation.backend_id, scanNode.getId().asInt(), scanRangeParams);
+        }
+
+        if (useIncrementalScanRanges) {
+            BackendSelector.appendIncrementalScanRangeSentinel(scanNode, workerProvider, assignment);
         }
 
         if (LOG.isDebugEnabled()) {

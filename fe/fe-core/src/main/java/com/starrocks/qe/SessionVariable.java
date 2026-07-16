@@ -1128,6 +1128,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
     public static final String CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE = "connector_incremental_scan_ranges_size";
+    public static final String ENABLE_OLAP_INCREMENTAL_SCAN_RANGES = "enable_olap_incremental_scan_ranges";
     public static final String ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS = "enable_connector_async_list_partitions";
     public static final String ENABLE_CONNECTOR_DEPLOY_SCAN_RANGES_BACKGROUND =
             "enable_connector_deploy_scan_ranges_background";
@@ -3408,6 +3409,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CONNECTOR_INCREMENTAL_SCAN_RANGE_SIZE)
     private int connectorIncrementalScanRangeSize = 500;
+
+    // Batched scan-range delivery for OLAP/lake scans (shared-data mode, plain scans only).
+    // Reuses connector_incremental_scan_ranges_size as the batch size.
+    @VarAttr(name = ENABLE_OLAP_INCREMENTAL_SCAN_RANGES)
+    private boolean enableOlapIncrementalScanRanges = false;
 
     @VarAttr(name = ENABLE_CONNECTOR_ASYNC_LIST_PARTITIONS)
     private boolean enableConnectorAsyncListPartitions = false;
@@ -6199,6 +6205,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableConnectorIncrementalScanRanges() {
         return enableConnectorIncrementalScanRanges;
+    }
+
+    public boolean isEnableOlapIncrementalScanRanges() {
+        return enableOlapIncrementalScanRanges;
+    }
+
+    public void setEnableOlapIncrementalScanRanges(boolean v) {
+        enableOlapIncrementalScanRanges = v;
     }
 
     public boolean isEnableConnectorDeployScanRangesBackground() {
