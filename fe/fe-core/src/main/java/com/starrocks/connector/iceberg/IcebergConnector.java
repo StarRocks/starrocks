@@ -164,6 +164,9 @@ public class IcebergConnector implements Connector {
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }
+        if (icebergNativeCatalog != null) {
+            icebergNativeCatalog.close();
+        }
         if (commitQueueManager != null) {
             commitQueueManager.shutdownAll();
             LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);

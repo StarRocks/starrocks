@@ -65,6 +65,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -220,6 +221,21 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .build();
 
         this.backgroundExecutor = executorService;
+        if (delegate instanceof IcebergRESTCatalog) {
+            // Cached Table entries hold the REST session that loaded them, so drop them when the REST
+            // catalog replaces its session after an auth failure. The rebuild can run inside this cache's
+            // own loader, where mutating the cache in place could deadlock Caffeine, so dispatch the
+            // invalidation instead. Best effort: a load racing the rebuild may re-insert a stale entry
+            // until refreshAfterWrite replaces it.
+            ((IcebergRESTCatalog) delegate).setDelegateRebuildListener(() -> {
+                try {
+                    backgroundExecutor.execute(tables::invalidateAll);
+                } catch (RejectedExecutionException e) {
+                    LOG.debug("table cache invalidation after delegate rebuild rejected, catalog {} is closing",
+                            catalogName);
+                }
+            });
+        }
     }
 
     @Override
@@ -375,7 +391,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                try {
+                    backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                } catch (RejectedExecutionException e) {
+                    // the catalog is being closed (e.g. ALTER/DROP CATALOG); losing the async refresh is harmless
+                    LOG.debug("background refresh rejected for {}, catalog {} is closing", key, catalogName);
+                }
                 return null;
             }
         }
@@ -522,6 +543,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
+    }
+
+    @Override
+    public void close() {
+        backgroundExecutor.shutdown();
+        delegate.close();
     }
 
     private void invalidateCache(IcebergTableName key) {

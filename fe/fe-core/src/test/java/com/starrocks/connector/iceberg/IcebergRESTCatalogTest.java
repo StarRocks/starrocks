@@ -20,11 +20,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -43,11 +45,14 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.ForbiddenException;
+import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
@@ -62,6 +67,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -751,5 +757,269 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to load table metadata using REST Catalog",
                 () -> icebergRESTCatalog.loadNamespaceMetadata(connectContext, Namespace.of("db")));
+    }
+
+    @Test
+    public void testOAuth2AuthFailureRebuildsDelegateAndRetries(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                result = ImmutableMap.of("location", "s3://bucket/db");
+            }
+        };
+
+        // the 401 from the dead OAuth2 session triggers a delegate rebuild and one retry, which succeeds
+        Database db = icebergRESTCatalog.getDB(connectContext, "db");
+        Assertions.assertEquals("s3://bucket/db", db.getLocation());
+
+        new Verifications() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                times = 2;
+
+                // the dead delegate is closed after the rebuild
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testOAuth2AuthFailurePropagatesWhenRetryFails(@Mocked RESTSessionCatalog restCatalog) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "auth server still down");
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to get database using REST Catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        new Verifications() {
+            {
+                // exactly one retry: the original attempt plus one attempt on the rebuilt delegate
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                times = 2;
+            }
+        };
+    }
+
+    @Test
+    public void testAuthFailureWithoutOAuth2DoesNotRebuild(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        // security defaults to NONE, so a 401 is not recoverable by rebuilding the catalog-level session
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), new HashMap<>());
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "bad token");
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to get database using REST Catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        new Verifications() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                times = 1;
+
+                restCatalog.close();
+                times = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testForbiddenDoesNotTriggerRebuild(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new ForbiddenException("Forbidden: %s", "not allowed");
+            }
+        };
+
+        // 403 means the principal is not authorized; rebuilding the session cannot help
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to get database using REST Catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        new Verifications() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                times = 1;
+
+                restCatalog.close();
+                times = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testDelegateRebuildNotifiesListener(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+        AtomicBoolean notified = new AtomicBoolean(false);
+        icebergRESTCatalog.setDelegateRebuildListener(() -> notified.set(true));
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                result = ImmutableMap.of("location", "s3://bucket/db");
+            }
+        };
+
+        icebergRESTCatalog.getDB(connectContext, "db");
+
+        Assertions.assertTrue(notified.get(), "a successful delegate rebuild must notify the listener");
+    }
+
+    @Test
+    public void testRebuildFailurePropagatesAndClosesNewDelegate(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                result = new RESTException("auth server still down");
+            }
+        };
+
+        // the rebuild itself fails: the replacement is discarded and the failure surfaces to the query
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to rebuild rest catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        new Verifications() {
+            {
+                // only the partially-initialized replacement is closed; the original delegate stays in place
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testStaleGenerationSkipsRebuild(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        NotAuthorizedException cause = new NotAuthorizedException("Not authorized: %s", "token expired");
+
+        // a rebuild that observed a stale generation is skipped (another request already rebuilt the delegate)
+        Deencapsulation.invoke(icebergRESTCatalog, "rebuildDelegate", 999L, cause);
+        new Verifications() {
+            {
+                restCatalog.close();
+                times = 0;
+            }
+        };
+
+        // a rebuild that observed the current generation replaces the delegate and closes the old one
+        Deencapsulation.invoke(icebergRESTCatalog, "rebuildDelegate", 0L, cause);
+        new Verifications() {
+            {
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testCloseClosesDelegate(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        icebergRESTCatalog.close();
+
+        new Verifications() {
+            {
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testNoRebuildAfterClose(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "oauth2");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+                minTimes = 0;
+            }
+        };
+
+        icebergRESTCatalog.close();
+
+        // a 401 racing with close() must not resurrect the delegate (the replacement would leak)
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to get database using REST Catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        new Verifications() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                times = 1;
+
+                // only the explicit close(); no rebuilt-and-closed replacement
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testConnectorShutdownClosesNativeCatalog(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "iceberg");
+        properties.put(ICEBERG_CATALOG_TYPE, "rest");
+        IcebergConnector connector = new IcebergConnector(
+                new ConnectorContext("test_shutdown_catalog", "iceberg", properties));
+        connector.getNativeCatalog();
+
+        connector.shutdown();
+
+        new Verifications() {
+            {
+                restCatalog.close();
+                times = 1;
+            }
+        };
     }
 }

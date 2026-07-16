@@ -266,6 +266,13 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void invalidateCache(String dbName, String tableName) {
     }
 
+    /**
+     * Releases resources held by this catalog, e.g. network connections and background refresh threads.
+     * The default is a no-op for implementations without releasable resources.
+     */
+    default void close() {
+    }
+
     default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
         return new StarRocksIcebergTableScan(
                 table,

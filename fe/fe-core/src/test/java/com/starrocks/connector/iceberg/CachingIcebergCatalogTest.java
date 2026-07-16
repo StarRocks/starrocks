@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
@@ -32,6 +33,7 @@ import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
@@ -44,7 +46,9 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -1181,5 +1185,43 @@ public class CachingIcebergCatalogTest {
         } finally {
             es.shutdownNow();
         }
+    }
+
+    @Test
+    public void testCloseClosesDelegateAndStopsBackgroundExecutor(@Mocked IcebergCatalog icebergCatalog) {
+        ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, backgroundExecutor);
+
+        cachingIcebergCatalog.close();
+
+        Assertions.assertTrue(backgroundExecutor.isShutdown());
+        new Verifications() {
+            {
+                icebergCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testDelegateRebuildInvalidatesTableCache(@Mocked RESTSessionCatalog restSessionCatalog,
+                                                         @Mocked Table nativeTable) {
+        IcebergRESTCatalog restCatalog = new IcebergRESTCatalog(restSessionCatalog, new Configuration());
+        // a direct executor makes the asynchronously dispatched cache invalidation run inline
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, MoreExecutors.newDirectExecutorService());
+
+        LoadingCache<IcebergTableName, Table> tables = Deencapsulation.getField(cachingIcebergCatalog, "tables");
+        tables.put(new IcebergTableName("db", "tbl"), nativeTable);
+        tables.cleanUp();
+        Assertions.assertEquals(1, tables.estimatedSize());
+
+        // a table cached through the old delegate must be dropped when the REST session is rebuilt
+        Deencapsulation.invoke(restCatalog, "rebuildDelegate", 0L,
+                new NotAuthorizedException("Not authorized: %s", "token expired"));
+
+        tables.cleanUp();
+        Assertions.assertEquals(0, tables.estimatedSize());
     }
 }
