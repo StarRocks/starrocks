@@ -16,7 +16,12 @@
 
 #include <memory>
 
+#include "base/time/monotime.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/rejected_record_sync_daemon.h"
 #include "data_workflows/load/stream_load/stream_load_executor.h"
 #include "data_workflows/load/stream_load/transaction_mgr.h"
@@ -35,6 +40,7 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     DCHECK(options.diagnose_daemon != nullptr);
     DCHECK(options.brpc_stub_cache != nullptr);
     DCHECK(options.load_mem_tracker != nullptr);
+    DCHECK(options.load_stream_mgr != nullptr);
 
     _stream_load_executor = std::make_unique<StreamLoadExecutor>();
     _transaction_mgr = std::make_unique<TransactionMgr>(options.exec_env, _stream_load_executor.get());
@@ -45,8 +51,20 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     RETURN_IF_ERROR(_load_channel_mgr->init(options.load_mem_tracker));
     _load_channel_mgr_started = true;
 
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::merge_commit_thread_pool_num_min)
+                            .set_max_threads(config::merge_commit_thread_pool_num_max)
+                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = std::make_unique<BatchWriteMgr>(options.load_stream_mgr, std::move(batch_write_executor));
+    RETURN_IF_ERROR(_batch_write_mgr->init(options.metrics));
+
     // Start unconditionally so mutable config can enable sync without a BE restart.
-    _rejected_record_sync_daemon = std::make_unique<RejectedRecordSyncDaemon>(options.exec_env);
+    _rejected_record_sync_daemon = std::make_unique<RejectedRecordSyncDaemon>(options.exec_env, _batch_write_mgr.get());
     Status rr_status = _rejected_record_sync_daemon->init();
     if (!rr_status.ok()) {
         LOG(ERROR) << "RejectedRecordSyncDaemon init failed: " << rr_status.message();
@@ -62,6 +80,9 @@ void DataWorkflowsEnv::stop() {
         _rejected_record_sync_daemon->stop();
         _rejected_record_sync_daemon_started = false;
     }
+    if (_batch_write_mgr != nullptr) {
+        _batch_write_mgr->stop();
+    }
     if (_load_channel_mgr != nullptr && _load_channel_mgr_started) {
         _load_channel_mgr->close();
         _load_channel_mgr_started = false;
@@ -71,6 +92,7 @@ void DataWorkflowsEnv::stop() {
 void DataWorkflowsEnv::destroy() {
     stop();
     _rejected_record_sync_daemon.reset();
+    _batch_write_mgr.reset();
     _load_channel_mgr.reset();
     _transaction_mgr.reset();
     _stream_load_executor.reset();

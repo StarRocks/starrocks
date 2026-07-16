@@ -20,7 +20,6 @@ namespace starrocks {
 
 class AgentServer;
 class BackendServiceClient;
-class BatchWriteMgr;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
@@ -116,7 +115,6 @@ struct RuntimeServices {
     BaseLoadPathMgr* load_path_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;
-    BatchWriteMgr* batch_write_mgr = nullptr;
     RuntimeFilterSender* runtime_filter_sender = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;
