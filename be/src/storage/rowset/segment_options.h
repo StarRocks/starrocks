@@ -46,9 +46,13 @@ class Status;
 struct OlapReaderStatistics;
 struct ShortKeyRangeOption;
 struct VectorSearchOption;
+struct BM25SearchOption;
+struct BM25Stats;
 
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+using BM25SearchOptionPtr = std::shared_ptr<BM25SearchOption>;
+using BM25StatsPtr = std::shared_ptr<BM25Stats>;
 
 struct SegmentReadStateCache {
     // Optional prepared scan state owned by the caller. SegmentIterator only borrows
@@ -139,6 +143,11 @@ public:
     bool belonged_to_cloud_native = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
+
+    // BM25 relevance scoring (builtin GIN, index_options=DOCS_AND_FREQS). `bm25_stats` is the
+    // tablet-local Phase-1 result injected into every segment scan of the tablet.
+    BM25SearchOptionPtr bm25_search_option = nullptr;
+    BM25StatsPtr bm25_stats = nullptr;
 
     // Data sampling by block-level, which is a core-component of TABLE-SAMPLE feature
     // 1. Regular block smapling: Bernoulli sampling on page-id

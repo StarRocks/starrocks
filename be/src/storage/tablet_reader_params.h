@@ -49,6 +49,10 @@ using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 struct OlapScanRange;
 struct VectorSearchOption;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+struct BM25SearchOption;
+using BM25SearchOptionPtr = std::shared_ptr<BM25SearchOption>;
+struct BM25Stats;
+using BM25StatsPtr = std::shared_ptr<BM25Stats>;
 using RowsetIdToDRSSId = phmap::parallel_flat_hash_map<RowsetId, uint32_t, HashOfRowsetId>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
@@ -122,6 +126,9 @@ struct TabletReaderParams {
     bool use_vector_index = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
+
+    BM25SearchOptionPtr bm25_search_option = nullptr;
+    BM25StatsPtr bm25_stats = nullptr;
 
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;

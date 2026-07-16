@@ -366,6 +366,8 @@ public:
 
     inline void incre_rowid() override { _rid++; }
 
+    inline rowid_t current_rowid() const override { return _rid; }
+
 private:
     Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset,
                         std::vector<size_t>& index) {

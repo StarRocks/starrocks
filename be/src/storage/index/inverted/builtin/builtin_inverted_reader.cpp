@@ -181,6 +181,31 @@ StatusOr<std::unique_ptr<FreqsIterator>> BuiltinInvertedReader::new_freqs_iterat
     return std::make_unique<FreqsIterator>(_posting.get(), std::move(df_iter), std::move(doc_len_iter), _sum_len);
 }
 
+Status BuiltinInvertedReader::lookup_term_ordinals(const IndexReadOptions& opts, const std::vector<Slice>& terms,
+                                                   std::vector<int64_t>* ordinals) const {
+    ordinals->assign(terms.size(), -1);
+    if (_bitmap_index == nullptr) {
+        return Status::InternalError("builtin GIN: bitmap index not loaded");
+    }
+    // Resolve through the presence-bitmap dictionary, exactly as the MATCH path does. A fresh iterator
+    // per term keeps this independent of seek order (query terms are few, so the cost is negligible).
+    for (size_t i = 0; i < terms.size(); ++i) {
+        SegmentBitmapIndexIterator* raw = nullptr;
+        RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, &raw));
+        std::unique_ptr<SegmentBitmapIndexIterator> dict_it(raw);
+        bool exact = false;
+        Status st = dict_it->seek_dictionary(&terms[i], &exact);
+        if (st.is_not_found()) {
+            continue; // term sorts past the dictionary end -> absent from this segment
+        }
+        RETURN_IF_ERROR(st);
+        if (exact) {
+            (*ordinals)[i] = static_cast<int64_t>(dict_it->current_ordinal());
+        }
+    }
+    return Status::OK();
+}
+
 FreqsIterator::FreqsIterator(const BlockPostingReader* posting_loader, std::unique_ptr<IndexedColumnIterator> df_iter,
                              std::unique_ptr<IndexedColumnIterator> doc_len_iter, uint64_t sum_len)
         : _posting_loader(posting_loader),

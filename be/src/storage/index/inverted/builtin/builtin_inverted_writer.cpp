@@ -86,10 +86,7 @@ public:
         _builtin_writer->add_nulls(count);
         if (capture_freqs()) {
             // Null rows contribute no tokens: doc_len 0, and the rowid is skipped in postings.
-            for (uint32_t i = 0; i < count; ++i) {
-                _doc_len.push_back(0);
-                ++_rid;
-            }
+            _doc_len.resize(_doc_len.size() + count, 0);
             _freq_capture_bytes += static_cast<uint64_t>(count) * sizeof(uint32_t);
         }
     }
@@ -162,7 +159,6 @@ private:
     std::unordered_map<std::string, PostingList> _freq_index;
     std::vector<uint32_t> _doc_len; // per row (token count)
     uint64_t _sum_len = 0;
-    uint32_t _rid = 0;
     // Rough heap estimate of the freq-capture state (_freq_index + _doc_len), maintained incrementally
     // so size() reflects it for the segment-flush estimator (which otherwise sees only the bitmap).
     uint64_t _freq_capture_bytes = 0;
@@ -194,6 +190,9 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
         } else {
             // DOCS_AND_FREQS: write docs AND freqs -- feed the presence bitmap while capturing this
             // row's tf per term plus doc_len, and accumulate sum_len, all from one token pass.
+            // Postings reuse the presence-bitmap writer's row counter (advanced by incre_rowid()
+            // below) rather than keeping a second one here that could drift from it.
+            const uint32_t rid = _builtin_writer->current_rowid();
             std::unordered_map<std::string, uint32_t> tf;
             uint32_t doc_len = 0;
             for_each_token(*val, [&](const Slice& tk) {
@@ -208,14 +207,13 @@ void BuiltinInvertedWriterImpl<field_type>::add_values(const void* values, size_
                     // (rough; only feeds the flush size estimator, see _freq_capture_bytes / size()).
                     _freq_capture_bytes += term.size() + sizeof(PostingList) + 64;
                 }
-                pl.docids.push_back(_rid);
+                pl.docids.push_back(rid);
                 pl.tfs.push_back(f);
                 _freq_capture_bytes += 2 * sizeof(uint32_t); // one (docid, tf) posting
             }
             _doc_len.push_back(doc_len);
             _freq_capture_bytes += sizeof(uint32_t);
             _sum_len += doc_len;
-            ++_rid;
         }
         ++val;
         _builtin_writer->incre_rowid();

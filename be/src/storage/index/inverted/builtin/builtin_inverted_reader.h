@@ -17,7 +17,9 @@
 #include <CLucene.h>
 
 #include <utility>
+#include <vector>
 
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/statusor.h"
 #include "storage/index/inverted/inverted_index_common.h"
@@ -79,6 +81,14 @@ public:
     // doc_len iterators and a factory for per-term posting cursors, while this shared reader stays
     // immutable. Fails if the index has no freqs (index_options is DOCS).
     StatusOr<std::unique_ptr<FreqsIterator>> new_freqs_iterator(const IndexReadOptions& opts) const;
+
+    // Resolve each query term to this segment's presence-bitmap dict ordinal -- the SAME ordinal that
+    // indexes the term's freqs posting + doc_freq (writer sorts both by unsigned byte order). ordinals
+    // is filled to terms.size(); entry i is the ordinal, or -1 when the term is absent from this
+    // segment's dictionary. Used by Phase-1 stats and Phase-2 scoring to translate query terms into
+    // freqs-iterator ordinals, mirroring the MATCH path (seek_dictionary -> current_ordinal).
+    Status lookup_term_ordinals(const IndexReadOptions& opts, const std::vector<Slice>& terms,
+                                std::vector<int64_t>* ordinals) const;
 
 private:
     // Load the freqs/norms side data (posting + doc_freq + doc_len + sum_len) for a >= DOCS_AND_FREQS

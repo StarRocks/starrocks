@@ -313,6 +313,8 @@ set(STORAGE_FILES
     index/inverted/builtin/gin_pfor.cpp
     index/inverted/builtin/block_posting_writer.cpp
     index/inverted/builtin/block_posting_reader.cpp
+    index/inverted/builtin/bm25_scorer.cpp
+    index/inverted/builtin/bm25_stats_provider.cpp
     manual_compaction.cpp
     rowset/unique_rowset_id_generator.cpp
     rowset/rowset.cpp

@@ -40,6 +40,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
@@ -69,6 +70,10 @@ public:
     virtual uint64_t size() const = 0;
 
     virtual void incre_rowid() = 0;
+
+    // The 0-based rowid the next add_value_with_current_rowid() call targets, i.e. the number of
+    // rows fed so far (advanced by incre_rowid() / add_values() / add_nulls()).
+    virtual rowid_t current_rowid() const = 0;
 
     void set_dictionary_compression(CompressionTypePB compression) { _dictionary_compression = compression; }
 
