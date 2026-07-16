@@ -70,7 +70,7 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         Mockito.when(catalog.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl"))).thenReturn(table);
         Mockito.when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
-        Mockito.when(snapshot.summary()).thenReturn(Collections.singletonMap("operation", "append"));
+        Mockito.when(snapshot.operation()).thenReturn("append");
 
         long nowMillis = System.currentTimeMillis();
         Mockito.when(snapshot.timestampMillis()).thenReturn(nowMillis - 1000L);
@@ -93,7 +93,7 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         Mockito.when(catalog.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl"))).thenReturn(table);
         Mockito.when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
-        Mockito.when(snapshot.summary()).thenReturn(Collections.singletonMap("operation", "delete"));
+        Mockito.when(snapshot.operation()).thenReturn("delete");
 
         long nowMillis = System.currentTimeMillis();
         long twentyFiveHoursMillis = 25L * 3600L * 1000L;
@@ -125,14 +125,14 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
     }
 
     @Test
-    public void testIsRecentlyWrittenTableSummaryNull() throws Exception {
+    public void testIsRecentlyWrittenTableNullOperation() throws Exception {
         IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
         Table table = Mockito.mock(Table.class);
         Snapshot snapshot = Mockito.mock(Snapshot.class);
 
         Mockito.when(catalog.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl"))).thenReturn(table);
         Mockito.when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
-        Mockito.when(snapshot.summary()).thenReturn(null);
+        Mockito.when(snapshot.operation()).thenReturn(null);
 
         IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
         Method method = IcebergMaintenanceProcessor.class.getDeclaredMethod(
@@ -152,7 +152,7 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         Mockito.when(catalog.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl"))).thenReturn(table);
         Mockito.when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
-        Mockito.when(snapshot.summary()).thenReturn(Collections.singletonMap("operation", "replace"));
+        Mockito.when(snapshot.operation()).thenReturn("replace");
 
         IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
         Method method = IcebergMaintenanceProcessor.class.getDeclaredMethod(
@@ -172,7 +172,7 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
 
         Mockito.when(catalog.getTable(Mockito.any(), Mockito.eq("db"), Mockito.eq("tbl"))).thenReturn(table);
         Mockito.when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
-        Mockito.when(snapshot.summary()).thenReturn(Collections.singletonMap("operation", "overwrite"));
+        Mockito.when(snapshot.operation()).thenReturn("overwrite");
 
         long nowMillis = System.currentTimeMillis();
         Mockito.when(snapshot.timestampMillis()).thenReturn(nowMillis - 1000L);

@@ -39,7 +39,6 @@ import java.nio.channels.ClosedByInterruptException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -56,7 +55,6 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(IcebergMaintenanceProcessor.class);
 
     private static final long RECENT_WRITE_WINDOW_MILLIS = 24L * 3600L * 1000L;
-    private static final String SNAPSHOT_SUMMARY_OPERATION = "operation";
 
     // Thread pool for executing per-table metadata maintenance tasks. This allows concurrent
     // processing of tables across catalogs while keeping the daemon loop simple.
@@ -222,11 +220,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
             List<Snapshot> snapshots = Lists.newArrayList(table.snapshots());
             snapshots.sort(Comparator.comparingLong(Snapshot::sequenceNumber).reversed());
             for (Snapshot snapshot : snapshots) {
-                Map<String, String> summary = snapshot.summary();
-                if (summary == null) {
-                    continue;
-                }
-                String op = summary.get(SNAPSHOT_SUMMARY_OPERATION);
+                String op = snapshot.operation();
                 if (!isWriteOperation(op)) {
                     continue;
                 }
