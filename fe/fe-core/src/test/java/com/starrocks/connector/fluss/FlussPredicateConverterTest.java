@@ -219,6 +219,19 @@ public class FlussPredicateConverterTest {
         TimestampLtz timestampLtz = (TimestampLtz) leafPredicate.literals().get(0);
         Instant expectedInstant = literal.atZone(sessionZoneId).toInstant();
         Assertions.assertEquals(expectedInstant, timestampLtz.toInstant());
+
+        LeafPredicate negatedLeafPredicate = assertLeaf(converter.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT,
+                new BinaryPredicateOperator(BinaryType.EQ, TS_LTZ, ConstantOperator.createDatetime(literal)))),
+                NotEqual.class, 5, "ts_ltz");
+        Assertions.assertEquals(expectedInstant,
+                ((TimestampLtz) negatedLeafPredicate.literals().get(0)).toInstant());
+
+        FlussPredicateConverter utcConverter = new FlussPredicateConverter(ROW_TYPE, null);
+        LeafPredicate utcLeafPredicate = assertLeaf(utcConverter.convert(new BinaryPredicateOperator(
+                BinaryType.EQ, TS_LTZ, ConstantOperator.createDatetime(literal))), Equal.class, 5, "ts_ltz");
+        Assertions.assertEquals(literal.toInstant(ZoneOffset.UTC),
+                ((TimestampLtz) utcLeafPredicate.literals().get(0)).toInstant());
     }
 
     @Test
@@ -236,6 +249,31 @@ public class FlussPredicateConverterTest {
                         NAME, ConstantOperator.createVarchar("abc%")))));
         Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.NOT, unsupported)));
+
+        ScalarOperator partiallyConvertedAnd = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, pushable, unsupported);
+        Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, partiallyConvertedAnd)));
+        Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT,
+                new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND, unsupported, pushable))));
+
+        ScalarOperator nestedPartialAnd = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR,
+                new BinaryPredicateOperator(BinaryType.GT, ID, ConstantOperator.createInt(0)),
+                partiallyConvertedAnd);
+        Assertions.assertNull(CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, nestedPartialAnd)));
+
+        Predicate fullyConvertedNot = CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT,
+                new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND,
+                        new BinaryPredicateOperator(BinaryType.GE, ID, ConstantOperator.createInt(10)),
+                        new BinaryPredicateOperator(BinaryType.LE, ID, ConstantOperator.createInt(20)))));
+        Assertions.assertTrue(fullyConvertedNot instanceof CompoundPredicate);
+        Assertions.assertEquals(2, ((CompoundPredicate) fullyConvertedNot).children().size());
     }
 
     @Test
