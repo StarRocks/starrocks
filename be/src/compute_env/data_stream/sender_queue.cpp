@@ -542,12 +542,54 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
             return;
         }
         _sender_eos_set.insert(be_number);
+        // Decrement under _lock so try_update_senders' reject-at-zero check cannot interleave
+        // with the transition to zero (a registration must never resurrect a finished stream).
+        _num_remaining_senders--;
     }
-    _num_remaining_senders--;
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
     DCHECK(_num_remaining_senders >= 0);
+}
+
+Status DataStreamRecvr::PipelineSenderQueue::try_update_senders(int be_number, bool unregister) {
+    std::lock_guard<Mutex> l(_lock);
+    if (_is_cancelled) {
+        return Status::Cancelled("receiver is cancelled");
+    }
+    if (!unregister) {
+        if (_num_remaining_senders <= 0) {
+            // All known senders already sent EOS; the exchange source may have latched
+            // is_finished(). A late registration must not resurrect the stream.
+            return Status::InternalError("receiver has already finished");
+        }
+        if (_sender_eos_set.find(be_number) != _sender_eos_set.end()) {
+            return Status::InternalError("sender has already finished");
+        }
+        if (!_dynamic_senders.insert(be_number).second) {
+            // Idempotent: the coordinator may retry after an ambiguous RPC timeout.
+            return Status::OK();
+        }
+        _num_remaining_senders++;
+        VLOG_FILE << "registered sender: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+                  << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+                  << " be_number=" << be_number;
+        return Status::OK();
+    }
+    // Unregister compensates for an aborted instance add: the sender was registered but
+    // never deployed, so it will never send EOS itself.
+    if (_sender_eos_set.find(be_number) != _sender_eos_set.end()) {
+        return Status::OK();
+    }
+    if (_dynamic_senders.erase(be_number) == 0) {
+        // Unknown sender: the registration never landed here. No-op keeps compensation safe.
+        return Status::OK();
+    }
+    _num_remaining_senders--;
+    VLOG_FILE << "unregistered sender: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
+    return Status::OK();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {

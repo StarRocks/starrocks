@@ -289,6 +289,28 @@ void PInternalServiceImplBase<T>::_transmit_runtime_filter(google::protobuf::Rpc
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::update_exchange_senders(google::protobuf::RpcController* cntl_base,
+                                                          const PUpdateExchangeSendersRequest* request,
+                                                          PUpdateExchangeSendersResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto task = [=]() {
+        ClosureGuard closure_guard(done);
+        Status st = _exec_env->stream_mgr()->update_exchange_senders(*request);
+        if (!st.ok()) {
+            LOG(WARNING) << "update exchange senders failed: fragment_instance_id=" << print_id(request->finst_id())
+                         << " node_id=" << request->node_id() << " be_number=" << request->be_number()
+                         << " unregister=" << request->unregister() << " status=" << st;
+        }
+        st.to_protobuf(response->mutable_status());
+    };
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit update_exchange_senders task failed")
+                .to_protobuf(response->mutable_status());
+    }
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_open(google::protobuf::RpcController* cntl_base,
                                                      const PTabletWriterOpenRequest* request,
                                                      PTabletWriterOpenResult* response,
