@@ -79,7 +79,6 @@ public class FsBrokerTest {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
-        long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
         fsBroker.handleHbResponse(hbResponse, false);
         Text.writeString(dos, GsonUtils.GSON.toJson(fsBroker, FsBroker.class));
@@ -103,7 +102,6 @@ public class FsBrokerTest {
     public void testBrokerAlive() throws Exception {
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
-        long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
 
         hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;

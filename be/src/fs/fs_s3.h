@@ -17,6 +17,10 @@
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
 
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include "base/random/random.h"
 #include "fs/credential/cloud_configuration.h"
 #include "fs/fs.h"
@@ -104,17 +108,20 @@ private:
         bool operator==(const ClientCacheKey& rhs) const;
     };
 
-    constexpr static int kMaxItems = 8;
-
     // Only use for UT
     bool _find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                 AWSCloudConfiguration* cloud_config = nullptr);
 
+    // Insert a newly created client into the cache. |max_items| is the runtime-mutable cache
+    // capacity snapshotted by the caller for the current creation. Random victims are evicted
+    // until the cache stays within capacity, so lowering the capacity shrinks the cache over
+    // subsequent insertions. Caller must hold |_lock|.
+    void _put_client(const ClientCacheKey& client_cache_key, const S3ClientPtr& client, size_t max_items);
+
     std::mutex _lock;
-    int _items{0};
-    // _client_cache_keys[i] is the client cache key of |_clients[i].
-    ClientCacheKey _client_cache_keys[kMaxItems];
-    S3ClientPtr _clients[kMaxItems];
+    // _client_cache_keys[i] is the client cache key of _clients[i]; the two vectors stay in sync.
+    std::vector<ClientCacheKey> _client_cache_keys;
+    std::vector<S3ClientPtr> _clients;
     Random _rand;
 };
 

@@ -1,0 +1,111 @@
+-- name: test_lake_prepared_split_skew_gate @cloud @sequential
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '2000')
+-- result:
+None
+-- !result
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '2000')
+-- result:
+None
+-- !result
+function: update_be_config('lake_prepared_split_max_splitted_scan_rows', '2000')
+-- result:
+None
+-- !result
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.0')
+-- result:
+None
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k int,
+    v bigint
+) duplicate key(k)
+distributed by hash(k) buckets 4
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t select 0, generate_series from table(generate_series(1, 40000));
+-- result:
+-- !result
+insert into t select generate_series, generate_series from table(generate_series(1, 4000));
+-- result:
+-- !result
+set enable_lake_prepared_physical_split_scan = true;
+-- result:
+-- !result
+set enable_lake_tablet_internal_parallel = true;
+-- result:
+-- !result
+set tablet_internal_parallel_mode = "auto";
+-- result:
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+set lake_tablet_internal_parallel_skew_split_ratio = 1000;
+-- result:
+-- !result
+[UC]select count(*), sum(v) from t;
+create table profile_no_skew properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(coalesce(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)), 0) = 0)
+    from profile_no_skew where line like '%- RefinedMorsels:%';
+-- result:
+1
+-- !result
+set lake_tablet_internal_parallel_skew_split_ratio = 1.0;
+-- result:
+-- !result
+[UC]select count(*), sum(v) from t;
+create table profile_skew properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_skew where line like '%- RefinedMorsels:%';
+-- result:
+1
+-- !result
+select count(*), sum(v) from t;
+-- result:
+44000	808022000
+-- !result
+select count(*) from t where k = 0;
+-- result:
+40000
+-- !result
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '16384')
+-- result:
+None
+-- !result
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '1048576')
+-- result:
+None
+-- !result
+function: update_be_config('lake_prepared_split_max_splitted_scan_rows', '262144')
+-- result:
+None
+-- !result
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.5')
+-- result:
+None
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

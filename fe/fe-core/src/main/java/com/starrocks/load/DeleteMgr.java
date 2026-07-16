@@ -626,7 +626,6 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             return infos;
         }
 
-        String dbName = db.getFullName();
         List<MultiDeleteInfo> deleteInfos = dbToDeleteInfos.get(dbId);
 
         lock.readLock().lock();

@@ -235,7 +235,7 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
 
     switch (type_desc.type) {
     case TYPE_BOOLEAN:
-        return add_nullable_numeric_column<int8_t>(column, type_desc, name, resolved);
+        return add_nullable_numeric_column<uint8_t>(column, type_desc, name, resolved);
     case TYPE_BIGINT:
         return add_nullable_numeric_column<int64_t>(column, type_desc, name, resolved);
     case TYPE_INT:

@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

@@ -19,7 +19,7 @@
 namespace starrocks {
 
 // Now UDTF only support one column return
-class JavaUDTFFunction final : public TableFunction {
+class JavaUDTFFunction : public TableFunction {
 public:
     JavaUDTFFunction() = default;
     ~JavaUDTFFunction() override = default;

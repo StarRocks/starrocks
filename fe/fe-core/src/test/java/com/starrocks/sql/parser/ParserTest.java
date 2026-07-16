@@ -177,7 +177,7 @@ class ParserTest {
                 "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
         SessionVariable sessionVariable = new SessionVariable();
         try {
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            SqlParser.parse(sql, sessionVariable).get(0);
         } catch (Exception e) {
             fail("sql should success. errMsg: " + e.getMessage());
         }

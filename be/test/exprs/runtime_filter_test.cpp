@@ -22,7 +22,7 @@
 
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
-#include "runtime/runtime_filter_serde.h"
+#include "exec/runtime_filter_compat/runtime_filter_serde.h"
 #include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 

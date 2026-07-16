@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -587,6 +588,39 @@ public class PredicateStatisticsCalculatorTest {
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+    }
+
+    @Test
+    public void testLargeOrNullsFractionIsAveragedNotFloored() {
+        // GIVEN a column with no nulls
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0)
+                        .setDistinctValuesCount(100)
+                        .setAverageRowSize(10)
+                        .build())
+                .build();
+
+        // (a IS NULL) OR (a IS NOT NULL), ANDed together more than
+        // StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT (16) times so the estimator
+        // routes through LargeOrCalculatingVisitor's averaging heuristic instead of the
+        // inclusion-exclusion path.
+        ScalarOperator group = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                new IsNullPredicateOperator(false, aColumn), new IsNullPredicateOperator(true, aColumn));
+        ScalarOperator predicate = group;
+        for (int i = 0; i < StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT; i++) {
+            predicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, predicate, group);
+        }
+
+        // WHEN
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+
+        // THEN
+        // Each OR arm hard-sets nullsFraction to 1.0 (IS NULL) and 0.0 (IS NOT NULL), so the
+        // averaging heuristic should land on 0.5, not be floored up to 1.0.
+        Assertions.assertEquals(0.5, result.getColumnStatistic(aColumn).getNullsFraction(), 0.001);
     }
 
     @Test

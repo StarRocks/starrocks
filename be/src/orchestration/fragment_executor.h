@@ -21,8 +21,8 @@
 #include "common/status.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/fragment_execution_params.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/exec_env_fwd.h"
 

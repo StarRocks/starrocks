@@ -15,7 +15,7 @@
 #include "exec/aggregate/aggregate_base_node.h"
 
 #include "exec/aggregator.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks {

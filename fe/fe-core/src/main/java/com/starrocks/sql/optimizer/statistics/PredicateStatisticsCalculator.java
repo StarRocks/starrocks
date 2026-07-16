@@ -566,7 +566,9 @@ public class PredicateStatisticsCalculator {
                 columnBuilder.setMaxValue(Math.max(columnStatistic.getMaxValue(), rightColumnStatistic.getMaxValue()));
                 double distinct = Math.max(1,
                         (columnStatistic.getDistinctValuesCount() + rightColumnStatistic.getDistinctValuesCount()) / 2);
-                double nulls = Math.max(1,
+                // nullsFraction is a ratio, not a count like distinct/NDV above it - cap at 1
+                // instead of flooring at 1, which forced every merge to the constant 1.0.
+                double nulls = Math.min(1.0,
                         (columnStatistic.getNullsFraction() + rightColumnStatistic.getNullsFraction()) / 2);
                 columnBuilder.setDistinctValuesCount(distinct);
                 columnBuilder.setNullsFraction(nulls);

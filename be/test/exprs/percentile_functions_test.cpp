@@ -17,6 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "exprs/function_context.h"
 #include "types/percentile_value.h"
 
@@ -58,6 +60,40 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
     ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
     ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+}
+
+TEST_F(PercentileFunctionsTest, percentileHashUpdateRows) {
+    Columns columns;
+    auto s = DoubleColumn::create();
+    s->append(1);
+    s->append(2);
+    s->append(3);
+    columns.emplace_back(s);
+
+    auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
+    ASSERT_TRUE(column->is_object());
+
+    auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(2, percentile->get_object(1)->quantile(1));
+    ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
+
+    columns.clear();
+    auto s1 = DoubleColumn::create();
+    s1->append(4);
+    columns.emplace_back(s1);
+
+    auto column1 = PercentileFunctions::percentile_hash(ctx, columns).value();
+    ASSERT_TRUE(column1->is_object());
+
+    std::vector<uint32_t> idx = {1};
+    auto mutable_column = Column::mutate(std::move(column));
+    mutable_column->update_rows(*column1, idx.data());
+
+    percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(mutable_column);
+    ASSERT_EQ(1, percentile->get_object(0)->quantile(1));
+    ASSERT_EQ(4, percentile->get_object(1)->quantile(1));
     ASSERT_EQ(3, percentile->get_object(2)->quantile(1));
 }
 

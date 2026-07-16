@@ -595,7 +595,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
     DCHECK(_curr_build_chunk);
     size_t cur_build_chunk_rows = _curr_build_chunk->num_rows();
     COUNTER_UPDATE(_permute_rows_counter, cur_build_chunk_rows);
-    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _col_types.size(); i++) {
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
@@ -608,7 +607,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
             dst_col->append(*src_col);
         }
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 
@@ -683,14 +681,18 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
 // 2. Apply the conjuncts, and append it to output buffer
 // 3. Maintain match index and implement left join and right join
 StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    StatusOr<ChunkPtr> res;
+    TRY_CATCH_ALLOC_SCOPE_START()
     _check_post_probe();
     size_t chunk_size = state->chunk_size();
 
     if (_join_op == TJoinOp::INNER_JOIN) {
-        return _pull_chunk_for_inner_join(chunk_size);
+        res = _pull_chunk_for_inner_join(chunk_size);
     } else {
-        return _pull_chunk_for_other_join(chunk_size);
+        res = _pull_chunk_for_other_join(chunk_size);
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
+    return res;
 }
 
 // eval conjuncts for nest loop join, apply common exprs and conjuncts first

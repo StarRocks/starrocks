@@ -6,11 +6,9 @@
 -- NULL, which -- because the read also drives the pushed-down predicate -- silently dropped
 -- rows. This test asserts rule-on == rule-off for the dotted key (cases b / b').
 --
--- NOTE: case (a) below (a path ending at an intermediate OBJECT, $.o) is a SEPARATE,
--- still-open issue: rule-on returns NULL where rule-off returns the sub-object. The
--- rule-on result recorded here is the current (incorrect) behavior, NOT the desired one;
--- it is kept only to pin the contrast and will be updated when the intermediate-object
--- case is fixed.
+-- Case (a) below (a path ending at an intermediate OBJECT, $.o) is served correctly too:
+-- the flat reader reconstructs the sub-object from its flattened leaves, so rule-on ==
+-- rule-off returns the sub-object instead of NULL.
 create table t(id int, j json) duplicate key(id)
   distributed by hash(id) buckets 1 properties("replication_num"="1");
 -- result:
@@ -33,8 +31,8 @@ set cbo_prune_json_subfield = true;
 -- !result
 select id, cast(json_query(j,'$.o') as string) from t order by id;
 -- result:
-1	None
-2	None
+1	{"inner": 10}
+2	{"inner": 20}
 -- !result
 set cbo_prune_json_subfield = false;
 -- result:

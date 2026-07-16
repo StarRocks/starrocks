@@ -138,4 +138,20 @@ public class SessionVariableConstants {
             return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
         }
     }
+
+    /**
+     * The default SQL SECURITY characteristic applied when CREATE VIEW omits the SECURITY clause.
+     */
+    public enum DefaultViewSqlSecurity {
+        // Querying the view only checks that the invoker has privileges on the view itself; the tables the view
+        // references are not checked against the invoker (maps to SECURITY NONE).
+        NONE,
+        // Additionally checks that the invoker has privileges on the tables the view references
+        // (maps to SECURITY INVOKER).
+        INVOKER;
+
+        public static DefaultViewSqlSecurity getDefault() {
+            return NONE;
+        }
+    }
 }

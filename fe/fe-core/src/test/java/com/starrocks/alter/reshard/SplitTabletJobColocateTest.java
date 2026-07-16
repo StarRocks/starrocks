@@ -15,7 +15,9 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.collect.Multimap;
+import com.staros.client.StarClientException;
 import com.staros.proto.PlacementPolicy;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
@@ -29,10 +31,12 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -57,6 +61,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -151,6 +156,13 @@ public class SplitTabletJobColocateTest {
                     new TabletRange(Range.ge(makeTwoColTuple(100, 50))).toProto());
             return result;
         });
+        boolean[] reassignCalled = {false};
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignCalled[0] = true;
+            }
+        };
 
         runSplitJob();
 
@@ -158,6 +170,8 @@ public class SplitTabletJobColocateTest {
                 "Level 2 split must not add a ColocateRange entry");
         Assertions.assertFalse(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
                 "Level 2 split must leave the group stable");
+        Assertions.assertFalse(reassignCalled[0],
+                "no boundary spliced -> no immediate PACK reassignment");
     }
 
     @Test
@@ -345,6 +359,217 @@ public class SplitTabletJobColocateTest {
                 "non-canonical range crossing existing boundary must mark unstable");
         Assertions.assertEquals(2, rangeMgr.getColocateRanges(grpId).size(),
                 "non-canonical crossing must not add a ColocateRange entry");
+    }
+
+    /**
+     * A Level 1 boundary split must immediately reassign the boundary child (whose range now belongs
+     * in the newly-spliced PACK group) from the old PACK group to the new one, without waiting for the
+     * ColocateChecker backstop. The below-boundary child stays put.
+     */
+    @Test
+    public void testLevelOneSplitImmediatelyReassignsBoundaryChild() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long oldPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        // The table's real SPREAD shard group id: a distinct StarMgr-allocated id that can never
+        // collide with a PACK group id, so findMisplacedTablets correctly ignores it.
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
+
+        List<Long> orderedNewTabletIds = new ArrayList<>();
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            orderedNewTabletIds.clear();
+            orderedNewTabletIds.addAll(newTabletIds);
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    // Every child was created in the OLD PACK group (plus the SPREAD group).
+                    infos.add(ShardInfo.newBuilder().setShardId(id)
+                            .addGroupIds(spreadGroup).addGroupIds(oldPackGroup).build());
+                }
+                return infos;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
+            }
+        };
+
+        runSplitJob();
+
+        List<ColocateRange> ranges = rangeMgr.getColocateRanges(groupId.grpId);
+        Assertions.assertEquals(2, ranges.size());
+        long newPackGroup = ranges.get(1).getShardGroupId();       // right part of the boundary
+        Assertions.assertEquals(oldPackGroup, ranges.get(0).getShardGroupId());
+
+        long boundaryChild = orderedNewTabletIds.get(1);           // lower == canonical (100, NULL)
+        long belowChild = orderedNewTabletIds.get(0);              // stays in the old range
+        Assertions.assertEquals(List.of(newPackGroup), reassignedAdd.get(boundaryChild),
+                "boundary child must be added to the new PACK group at split time");
+        Assertions.assertEquals(List.of(oldPackGroup), reassignedRemove.get(boundaryChild),
+                "boundary child must be removed from the old PACK group at split time");
+        Assertions.assertFalse(reassignedAdd.containsKey(belowChild),
+                "the below-boundary child stays in the old PACK group; no reassignment");
+    }
+
+    /**
+     * The immediate reassignment is a best-effort optimization: a reassignShardGroups failure must not
+     * abort the already-published split. The group stays unstable so the backstop reconciles later.
+     */
+    @Test
+    public void testImmediateReassignFailureDoesNotAbortSplit() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long oldPackGroup = idx.getColocateRangeMgr().getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
+
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id)
+                            .addGroupIds(spreadGroup).addGroupIds(oldPackGroup).build());
+                }
+                return infos;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds)
+                    throws DdlException {
+                throw new DdlException("mocked reassign failure");
+            }
+        };
+
+        TabletReshardJob job = createTabletReshardJob(-2);
+        job.init();
+        job.run();
+        for (int i = 0; i < 6 && job.getJobState() != TabletReshardJob.JobState.FINISHED; i++) {
+            job.run();
+        }
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState(),
+                "a reassign failure must not abort the published split");
+        Assertions.assertEquals(2, idx.getColocateRangeMgr().getColocateRanges(groupId.grpId).size());
+        Assertions.assertTrue(idx.isGroupUnstable(groupId),
+                "group stays unstable so the backstop reconciles the still-misplaced child");
+    }
+
+    /**
+     * A membership-read (getShardInfo) failure must also fail closed: no reassignment is issued and the
+     * published split still completes.
+     */
+    @Test
+    public void testImmediateReassignMembershipReadFailureDoesNotAbortSplit() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        boolean[] reassignCalled = {false};
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) throws StarClientException {
+                throw new StarClientException(com.staros.proto.StatusCode.INVALID_ARGUMENT, "mocked read failure");
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignCalled[0] = true;
+            }
+        };
+
+        TabletReshardJob job = createTabletReshardJob(-2);
+        job.init();
+        job.run();
+        for (int i = 0; i < 6 && job.getJobState() != TabletReshardJob.JobState.FINISHED; i++) {
+            job.run();
+        }
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState(),
+                "a membership-read failure must not abort the published split");
+        Assertions.assertFalse(reassignCalled[0],
+                "fail closed: no reassignment is issued when membership cannot be read");
+        Assertions.assertTrue(idx.isGroupUnstable(groupId),
+                "group stays unstable so the backstop reconciles later");
+    }
+
+    /**
+     * A child whose range straddles a pre-existing colocate boundary has no single well-defined PACK
+     * group; the immediate reassignment must skip it (leaving it to the backstop) even though its
+     * lower-prefix expectation differs from its actual membership. The contained sibling is already
+     * correctly placed, so nothing is reassigned.
+     */
+    @Test
+    public void testBoundaryCrossingChildIsNotReassigned() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long grpId = groupId.grpId;
+        StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
+
+        // Seed a boundary at colocate-prefix 100: [-inf,100) -> packLow, [100,+inf) -> packHigh.
+        long packLow = rangeMgr.getColocateRanges(grpId).get(0).getShardGroupId();
+        long packHigh = agent.createShardGroup(db.getId(), table.getId(), 0L, 0L, PlacementPolicy.PACK);
+        Tuple boundary = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+        rangeMgr.setColocateRanges(grpId, Arrays.asList(
+                new ColocateRange(Range.lt(boundary), packLow),
+                new ColocateRange(Range.ge(boundary), packHigh)));
+
+        // Legacy/mismatched BE: a child [(50,0),(150,0)) straddling the boundary at 100, plus a
+        // contained high child [(150,0),+inf). Both are reported in packHigh by the mock:
+        //   - crossing child is NOT contained -> the filter must skip it (its lower prefix 50 maps to
+        //     packLow, so an UNFILTERED reconcile would wrongly reassign it packHigh -> packLow);
+        //   - high child is contained in packHigh and already there -> correctly placed.
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0),
+                    new TabletRange(Range.gelt(makeTwoColTuple(50, 0), makeTwoColTuple(150, 0))).toProto());
+            result.put(newTabletIds.get(1),
+                    new TabletRange(Range.ge(makeTwoColTuple(150, 0))).toProto());
+            return result;
+        });
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id)
+                            .addGroupIds(spreadGroup).addGroupIds(packHigh).build());
+                }
+                return infos;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+            }
+        };
+
+        runSplitJob();
+
+        Assertions.assertTrue(reassignedAdd.isEmpty(),
+                "a boundary-crossing child must not be reassigned; leave it to the backstop");
     }
 
     private static Tuple makeCanonicalTuple(int k1) {

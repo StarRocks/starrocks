@@ -377,7 +377,10 @@ public class LakeTableAlterMetaJobTest {
     public void testSetDisblePersistentIndex() throws Exception {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t1(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+                                "PROPERTIES('enable_persistent_index'='true')");
+        // Simulate a legacy LOCAL persistent index table: creating one with LOCAL is no longer
+        // allowed, but existing tables must still be handled by the alter-meta job path.
+        table2.setPersistentIndexType(TPersistentIndexType.LOCAL);
         LakeTableAlterMetaJob job2 = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table2.getId(), table2.getName(), 60 * 1000,
                     TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "LOCAL");
@@ -565,7 +568,9 @@ public class LakeTableAlterMetaJobTest {
     public void testModifyPropertyWithIndexType() throws Exception {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+                                "PROPERTIES('enable_persistent_index'='true')");
+        // Simulate a legacy LOCAL persistent index table; migrating it to CLOUD_NATIVE must succeed.
+        table2.setPersistentIndexType(TPersistentIndexType.LOCAL);
         Map<String, String> properties = new HashMap<>();
         properties.put("persistent_index_type", "CLOUD_NATIVE");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
@@ -580,16 +585,43 @@ public class LakeTableAlterMetaJobTest {
     public void testModifyPropertyWithIndexTypeFailure() throws Exception {
         LakeTable table2 = createTable(connectContext,
                     "CREATE TABLE t11(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('enable_persistent_index'='true', 'persistent_index_type'='LOCAL')");
+                                "PROPERTIES('enable_persistent_index'='true')");
         Map<String, String> properties = new HashMap<>();
         properties.put("enable_persistent_index", "false");
         properties.put("persistent_index_type", "CLOUD_NATIVE");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
-        // should throw exception
+        // disabling the persistent index is no longer supported for shared-data primary key tables
         ExceptionChecker.expectThrows(DdlException.class,
                 () -> schemaChangeHandler.createAlterMetaJob(modify, db, table2));
 
+    }
+
+    @Test
+    public void testModifyEnablePersistentIndexOnNonPkTableNoop() throws Exception {
+        LakeTable dupTable = createTable(connectContext,
+                    "CREATE TABLE t_dup(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_persistent_index", "false");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        // enable_persistent_index is a no-op for non-primary-key tables and must not be rejected by the
+        // shared-data primary key restriction.
+        AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, dupTable);
+        Assertions.assertNull(job2);
+
+        db.dropTable(dupTable.getName());
+    }
+
+    @Test
+    public void testModifyPropertyToLocalIndexRejected() {
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        // switching persistent_index_type to LOCAL is deprecated for shared-data primary key tables
+        Map<String, String> typeProps = new HashMap<>();
+        typeProps.put("persistent_index_type", "LOCAL");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Only cloud native persistent index",
+                () -> schemaChangeHandler.createAlterMetaJob(new ModifyTablePropertiesClause(typeProps), db, table));
     }
 
     @Test
@@ -713,7 +745,7 @@ public class LakeTableAlterMetaJobTest {
     @Test
     public void testModifyPropertyCompactionStrategy() throws Exception {
         try {
-            LakeTable nonPKTable = createTable(connectContext,
+            createTable(connectContext,
                         "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                         "PROPERTIES('compaction_strategy'='real_time')");
         } catch (Exception e) {
@@ -721,7 +753,7 @@ public class LakeTableAlterMetaJobTest {
         }
 
         try {
-            LakeTable nonPKTable = createTable(connectContext,
+            createTable(connectContext,
                         "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
             String alterStmtStr = "alter table test.non_pk set ('compaction_strategy'='real_time')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);

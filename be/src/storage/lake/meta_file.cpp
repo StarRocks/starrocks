@@ -34,6 +34,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/storage_metrics.h"
@@ -71,6 +72,33 @@ uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta) {
 
 uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
+}
+
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id) {
+    // op_write.del_op_offsets is parallel to dels_meta (index by del_id). It is absent (size not
+    // aligned with dels_meta) when no del carries an offset -- the downgrade-safe default -- and an
+    // individual entry may be kUnknownDelOpOffset (spill / concurrent flush). Both cases mean "not
+    // recorded" and map to -1, for which resolve_del_op_offset() falls back to the max segment id.
+    // This is the single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel) representation
+    // to the signed value the rest of the apply/persist path uses.
+    if (op_write.del_op_offsets_size() != op_write.dels_meta_size()) {
+        return -1;
+    }
+    const uint32_t v = op_write.del_op_offsets(del_id);
+    return v == kUnknownDelOpOffset ? -1 : static_cast<int64_t>(v);
+}
+
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta) {
+    if (!column_mode && op_offset >= 0) {
+        // op_offset is a local segment position; map it to the segment index used for rssid so it is
+        // consistent with the get_max_segment_idx() fallback (handles segment_idx remapping/bundles).
+        return get_segment_idx(rowset_meta, static_cast<int32_t>(op_offset));
+    }
+    // Fall back to the max segment id (legacy "delete after all upserts") when:
+    //  - column_mode: column-mode partial update applies its deletes after all column upserts /
+    //    synthesized rows, never interleaved, so the persisted offset must match that apply order; or
+    //  - op_offset < 0: not recorded (OpWrite.del_op_offsets absent or holds kUnknownDelOpOffset).
+    return get_max_segment_idx(rowset_meta);
 }
 
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
@@ -163,6 +191,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
+            if (i < dcg_ver.versions_size()) {
+                file_meta.set_version(dcg_ver.versions(i));
+            }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -170,7 +201,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid] = new_dcg_ver;
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                    const std::map<int, SegmentFileInfo>& replace_segments,
                                     const std::vector<FileMetaPB>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
@@ -191,6 +223,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         segment_meta->clear_vector_index_ids();
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
+        }
+        // Refresh the owning tablet id wholesale like vector_index_ids: the replace FileInfo
+        // carries the authoritative owner for the rewritten segment.
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
         }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
@@ -215,13 +253,22 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
+    // Column-mode partial update applies del files in a separate phase (not interleaved with the
+    // column upserts), so the persisted op_offset must stay at the max segment id to keep the rebuild
+    // path consistent with that apply. Only the row-mode path interleaves by op_offset.
+    const bool column_mode = op_write.has_txn_meta() &&
+                             (op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+                              op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
     // collect del files
-    for (const auto& del_meta : op_write.dels_meta()) {
+    for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
+        const auto& del_meta = op_write.dels_meta(del_id);
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del_meta.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
+        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
+        // fall back to the max segment id (delete after all upserts).
+        del_file_with_rid.set_op_offset(
+                resolve_del_op_offset(del_op_offset_or_unset(op_write, del_id), column_mode, *rowset));
         if (del_meta.has_encryption_meta()) {
             del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
@@ -229,6 +276,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (del_meta.has_shared()) {
             del_file_with_rid.set_shared(del_meta.shared());
         }
+        // Freshly created del file: stamp its creation version so lake vacuum can retain it by its
+        // own version after it is later transferred onto a higher-versioned compaction output rowset.
+        del_file_with_rid.set_version(rowset->version());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id
@@ -236,7 +286,14 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : orphan_files) {
         DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
-        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
+        added_orphan->CopyFrom(orphan_file);
+        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // their creation version is the metadata version being built. Respect an accurate version if
+        // the producer already set one.
+        if (!added_orphan->has_version()) {
+            added_orphan->set_version(_tablet_meta->version());
+        }
     }
     if (!_tablet_meta->rowset_to_schema().empty()) {
         auto schema_id = _tablet_meta->schema().id();
@@ -253,9 +310,13 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     for (const auto& segment_meta : op_write.rowset().segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled segment (bundle_file_offset set) is shared with
+        // sibling tablets. The orphan FileMetaPB only carries `shared`, so encode bundling into it
+        // too, otherwise vacuum deletes the shared bundle file while a sibling still references it.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
+        // These segments are produced and discarded within this txn, so their creation version is
+        // the metadata version being built.
+        file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -457,6 +518,7 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
                     file_meta.set_name(entry.index_file());
                     if (entry.has_file_size()) file_meta.set_size(entry.file_size());
                     if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    file_meta.set_version(entry.version());
                     _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
                 }
             }
@@ -591,6 +653,7 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
             }
         }
         file_meta.set_shared(shared);
+        file_meta.set_version(input_sstable.generation_version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -607,7 +670,12 @@ void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compactio
     // tablet metadata GC process, which runs periodically and handles failures gracefully.
     // This approach is safe, non-blocking, and handles distributed cleanup correctly.
     if (op_compaction.has_lcrm_file()) {
-        _tablet_meta->add_orphan_files()->CopyFrom(op_compaction.lcrm_file());
+        auto* added = _tablet_meta->add_orphan_files();
+        added->CopyFrom(op_compaction.lcrm_file());
+        // The mapper file is produced and orphaned by this compaction and is never referenced by any
+        // visible tablet metadata, so its creation version is the metadata version being built.
+        // Stamping it lets vacuum reclaim it instead of over-retaining it under a covering snapshot.
+        added->set_version(_tablet_meta->version());
     }
 }
 
@@ -692,6 +760,9 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                 if (dcg.shared_files_size() > 0) {
                     file_meta.set_shared(dcg.shared_files(i));
                 }
+                if (i < dcg.versions_size()) {
+                    file_meta.set_version(dcg.versions(i));
+                }
                 // Put useless `.cols` files into orphan files
                 _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
             }
@@ -716,6 +787,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                     file_meta.set_name(entry.index_file());
                     if (entry.has_file_size()) file_meta.set_size(entry.file_size());
                     if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    file_meta.set_version(entry.version());
                     _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
                 }
             }
@@ -817,9 +889,13 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
     for (const auto& segment_meta : rowset_metadata.segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled compaction-output segment is shared with sibling
+        // tablets. Encode bundling into the orphan's `shared` flag so vacuum's alive-check protects
+        // it instead of deleting a bundle file a sibling still references.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
+        // These segments are produced and discarded within this txn, so their creation version is
+        // the metadata version being built.
+        file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -936,6 +1012,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         if (refered_versions.find(itr->first) == refered_versions.end()) {
             VLOG(2) << "Remove delvec file record from delvec meta, version: " << itr->first
                     << ", file: " << itr->second.name();
+            itr->second.set_version(itr->first);
             _tablet_meta->mutable_orphan_files()->Add(std::move(itr->second));
             itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->erase(itr);
         } else {
@@ -959,6 +1036,7 @@ void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
             file_meta.set_name(sstable.filename());
             file_meta.set_size(sstable.filesize());
             file_meta.set_shared(sstable.shared());
+            file_meta.set_version(sstable.generation_version());
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
         // Clear the SSTable metadata.
@@ -1201,8 +1279,10 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
+void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
+                                 const std::map<int, SegmentFileInfo>& replace_segments,
+                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
+                                 const std::vector<int64_t>& del_op_offsets) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1242,8 +1322,18 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.orphan_files.insert(_pending_rowset_data.orphan_files.end(), orphan_files.begin(),
                                              orphan_files.end());
 
-    // Merge delete files (each entry already carries name + shared + encryption_meta).
-    _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
+    // Merge delete files (each entry already carries name + shared + encryption_meta). This op_write's
+    // segments are appended into the merged rowset at base `assigned_segment_idx` (see above), so each
+    // del's op_offset (recorded in this op_write's local segment space) must shift by the same base to
+    // stay in the merged rowset's space. Without this, a later statement's del would resolve to an
+    // earlier statement's segment at persist time and diverge from apply (which uses
+    // assigned_global_segments) on rebuild/recover.
+    const uint32_t seg_base = _pending_rowset_data.assigned_segment_idx;
+    for (size_t i = 0; i < dels.size(); ++i) {
+        _pending_rowset_data.dels.emplace_back(dels[i]);
+        const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
+        _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
+    }
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
     _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
@@ -1271,6 +1361,11 @@ Status MetaFileBuilder::set_final_rowset() {
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
         }
+        // See apply_opwrite: refresh the owner from the replace FileInfo.
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
+        }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.
         if (segment_meta->has_shared()) {
@@ -1292,17 +1387,23 @@ Status MetaFileBuilder::set_final_rowset() {
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
 
-    // Handle delete files (same logic as apply_opwrite)
-    for (const auto& del : _pending_rowset_data.dels) {
+    // Handle delete files (same logic as apply_opwrite). op_offset is carried parallel in
+    // _pending_rowset_data.del_op_offsets (already rebased into the merged rowset's segment space).
+    for (size_t i = 0; i < _pending_rowset_data.dels.size(); ++i) {
+        const auto& del = _pending_rowset_data.dels[i];
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // For now, op_offset is always max segment's id
-        del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
+        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
+        // fall back to the max segment id (delete after all upserts).
+        del_file_with_rid.set_op_offset(
+                resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], /*column_mode=*/false, *rowset));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
         del_file_with_rid.set_shared(del.shared());
+        // Freshly created del file: stamp its creation version (see apply_opwrite).
+        del_file_with_rid.set_version(rowset->version());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
 
@@ -1312,7 +1413,14 @@ Status MetaFileBuilder::set_final_rowset() {
     // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
         DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
-        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
+        added_orphan->CopyFrom(orphan_file);
+        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // their creation version is the metadata version being built. Respect an accurate version if
+        // the producer already set one.
+        if (!added_orphan->has_version()) {
+            added_orphan->set_version(_tablet_meta->version());
+        }
     }
 
     // Handle schema mapping (same logic as apply_opwrite)
@@ -1332,17 +1440,22 @@ Status MetaFileBuilder::set_final_rowset() {
 }
 
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
-                                          const std::map<int, FileInfo>& replace_segments,
+                                          const std::map<int, SegmentFileInfo>& replace_segments,
                                           const std::vector<FileMetaPB>& orphan_files) {
-    // Each del already carries name + shared + encryption_meta together in its FileMetaPB.
+    // Each del already carries name + shared + encryption_meta together in its FileMetaPB; its
+    // op_offset is carried parallel in op_write.del_op_offsets (index by del_id), normalized to a
+    // signed value where < 0 means "not recorded" (absent array or kUnknownDelOpOffset).
     std::vector<FileMetaPB> dels;
+    std::vector<int64_t> del_op_offsets;
     dels.reserve(op_write.dels_meta_size());
-    for (const auto& del_meta : op_write.dels_meta()) {
-        dels.emplace_back(del_meta);
+    del_op_offsets.reserve(op_write.dels_meta_size());
+    for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
+        dels.emplace_back(op_write.dels_meta(del_id));
+        del_op_offsets.push_back(del_op_offset_or_unset(op_write, del_id));
     }
 
     // Accumulate into pending rowset
-    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels);
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_op_offsets);
 }
 
 } // namespace starrocks::lake

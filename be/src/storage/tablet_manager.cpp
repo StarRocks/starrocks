@@ -54,7 +54,6 @@
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index_load_executor.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -68,6 +67,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 

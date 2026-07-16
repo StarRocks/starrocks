@@ -44,7 +44,7 @@ TTableDescriptor make_mysql_table_descriptor() {
 
 } // namespace
 
-TEST(MySQLTableDescriptorCoreTest, KeepsConnectionFieldsInRuntimeCore) {
+TEST(MySQLTableDescriptorCoreTest, KeepsConnectionFieldsInRuntime) {
     MySQLTableDescriptor descriptor(make_mysql_table_descriptor());
 
     EXPECT_EQ("mysql_db", descriptor.mysql_db());

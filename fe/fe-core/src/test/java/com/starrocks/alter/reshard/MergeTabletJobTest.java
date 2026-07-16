@@ -219,6 +219,34 @@ public class MergeTabletJobTest {
     }
 
     @Test
+    public void testRunMergeBumpsOptimisticVersion() throws Exception {
+        TabletReshardJob splitJob = createSplitTabletReshardJob();
+        splitJob.init();
+        splitJob.run();
+        splitJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+
+        long beforeMerge = table.lastSchemaUpdateTime.get();
+
+        TabletReshardJob mergeJob = createMergeTabletReshardJob();
+        Assertions.assertNotNull(mergeJob);
+        mergeJob.init();
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+
+        // runRunningJob() -> addNewMaterializedIndexes() installs the merged index and changes the
+        // partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
+        // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
+        // "Invalid tablet id ... The tablet may have been dropped". This runs on the RUNNING step.
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+
+        long afterMerge = table.lastSchemaUpdateTime.get();
+        Assertions.assertTrue(afterMerge > beforeMerge,
+                "merge must bump lastSchemaUpdateTime (before=" + beforeMerge + ", after=" + afterMerge + ")");
+    }
+
+    @Test
     public void testGettersAndParallelTablets() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
         Assertions.assertEquals(db.getId(), mergeJob.getDbId());
@@ -483,6 +511,16 @@ public class MergeTabletJobTest {
                                        boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
+            }
+        };
+
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, long groupId, Map<String, String> properties,
+                                             ComputeResource computeResource) {
             }
         };
 

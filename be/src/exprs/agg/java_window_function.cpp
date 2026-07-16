@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "platform/user_function_cache.h"
+#include "runtime/java/java_runtime.h"
 
 namespace starrocks {
 
@@ -32,20 +33,20 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_window_shared_cont
     std::string state = symbol + "$State";
 
     auto shared = std::make_shared<JavaUDAFSharedContext>();
-    shared->udf_classloader = std::make_unique<ClassLoader>(libpath);
-    auto analyzer = std::make_unique<ClassAnalyzer>();
+    shared->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
+    auto analyzer = std::make_unique<JavaUdfClassAnalyzer>();
     RETURN_IF_ERROR(shared->udf_classloader->init());
 
     ASSIGN_OR_RETURN(shared->udaf_class, shared->udf_classloader->getClass(symbol));
     ASSIGN_OR_RETURN(shared->udaf_state_class, shared->udf_classloader->getClass(state));
 
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->name = std::move(method_name);
         (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
@@ -78,7 +79,7 @@ static Status build_window_unique_context(std::shared_ptr<JavaUDAFSharedContext>
     ASSIGN_OR_RETURN(udaf_ctx->handle, udaf_ctx->ctx->udaf_class.newInstance());
 
     // Create a new FunctionStates instance; clone method refs from the shared context.
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
     auto& state_clazz = JVMFunctionHelper::getInstance().function_state_clazz();
     ASSIGN_OR_RETURN(auto instance, state_clazz.newInstance());
     udaf_ctx->states = std::make_unique<UDAFStateList>(

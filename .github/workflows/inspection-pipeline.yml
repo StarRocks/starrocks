@@ -1,6 +1,10 @@
 name: INSPECTION PIPELINE
 
 on:
+  # Re-enabled 2026-07-15: unstable-case-review deploys the periodic inspection
+  # build (per-branch, keyed by commit sha) and OSS auto-deletes those packages
+  # after 3 days, so the schedule must run to keep a fresh package available for
+  # each reviewed branch (main, branch-4.0.x, branch-4.1.x).
   schedule:
     - cron: "0 0 * * 1-5"
     - cron: "30 4 * * 1-5"

@@ -983,31 +983,31 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         // check constant operator with null
         String sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL)/(CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
 
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL) + (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
 
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL) - (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
 
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         // check variable operator with null
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / supplier.S_NATIONKEY) " +
                 "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
 
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (supplier.S_NATIONKEY / null) " +
                 "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
 
         sql = "SELECT supplier.S_NATIONKEY FROM supplier WHERE (null / S_NAME) " +
                 "BETWEEN (((NULL) * (CAST(\"\" AS INT ) ))) AND (supplier.S_NATIONKEY)";
-        plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -1998,7 +1998,6 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
         setTableStatistics(t1, 10);
 
         String sql = "Select * " +
@@ -2052,9 +2051,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
         String sql = "select * from lineitem_partition limit 2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "     partitions=7/7\n" +
+        assertContains(plan, "     partitions=1/7\n" +
                 "     rollup: lineitem_partition\n" +
-                "     tabletRatio=1");
+                "     tabletRatio=1/48");
     }
 
     @Test

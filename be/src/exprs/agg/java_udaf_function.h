@@ -29,11 +29,15 @@
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/arrow_udf_jni.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_reflection.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "types/logical_type.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -116,9 +120,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
-                                     MutableColumnPtr& dst) const final {
+                                     MutableColumnPtr& dst) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         // 1 convert input as state
         // 1.1 create state list
@@ -162,14 +166,14 @@ public:
 
         int length = env->GetArrayLength(serialize_szs);
         std::vector<int> slice_sz(length);
-        helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
+        env->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
         int totalLength = std::accumulate(slice_sz.begin(), slice_sz.end(), 0, [](auto l, auto r) { return l + r; });
         // 4 prepare serialize buffer
         udf_ctxs->buffer_data.resize(totalLength);
         udf_ctxs->buffer =
                 std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
         // chunk size
-        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        auto buffer_array = JVMHelper::getInstance().create_object_array(udf_ctxs->buffer->handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {rets, buffer_array};
@@ -228,12 +232,13 @@ public:
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         DCHECK(udf_ctxs != nullptr);
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
-        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
-        auto defer = DeferOp([&helper]() { helper.getEnv()->PopLocalFrame(nullptr); });
+        env->PushLocalFrame(num_cols * 3 + 1);
+        auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
 
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
@@ -250,12 +255,13 @@ public:
 
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
-        auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
+        auto& helper = JVMFunctionHelper::getInstance();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         DCHECK(udf_ctxs != nullptr);
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
-        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        env->PushLocalFrame(num_cols * 3 + 1);
         auto defer = DeferOp([env = env]() { env->PopLocalFrame(nullptr); });
         {
             auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
@@ -276,7 +282,7 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         DCHECK(udf_ctxs != nullptr);
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
         env->PushLocalFrame(num_cols * 3 + 1);
@@ -299,7 +305,7 @@ public:
     void _merge_batch_process(FunctionContext* ctx, StatesProvider&& states_provider, MergeCaller&& caller,
                               const Column* column, size_t start, size_t size) const {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         // get state lists
         auto state_array = states_provider();
         RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
@@ -333,7 +339,7 @@ public:
                      AggDataPtr* states) const override {
         // batch merge
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         DCHECK(udf_ctxs != nullptr);
 
@@ -377,12 +383,12 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         auto* udf_ctxs = get_java_udaf_context(ctx);
         DCHECK(udf_ctxs != nullptr);
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto provider = [&]() {
             auto state_handle = reinterpret_cast<JavaUDAFState*>(state)->handle;
             auto res = helper.convert_handle_to_jobject(ctx, state_handle);
             LOCAL_REF_GUARD_ENV(env, res);
-            return helper.create_object_array(res, size);
+            return JVMHelper::getInstance().create_object_array(res, size);
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
@@ -395,7 +401,7 @@ public:
     void batch_serialize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
 
         const size_t origin_chunk_size = to->size();
@@ -425,7 +431,7 @@ public:
 
         int length = env->GetArrayLength(serialize_szs);
         std::vector<int> slice_sz(length);
-        helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
+        env->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
         int totalLength = std::accumulate(slice_sz.begin(), slice_sz.end(), 0, [](auto l, auto r) { return l + r; });
         // step 3 prepare serialize buffer
         udf_ctxs->buffer_data.resize(totalLength);
@@ -433,7 +439,7 @@ public:
                 std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
 
         // step 4 call serialize
-        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        auto buffer_array = JVMHelper::getInstance().create_object_array(udf_ctxs->buffer->handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {state_array, buffer_array};
         helper.batch_update_state(ctx, udf_ctxs->handle.handle(), udf_ctxs->ctx->serialize->method.handle(),
@@ -451,7 +457,7 @@ public:
     void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
                         size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
+        auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
 
         const size_t origin_chunk_size = to->size();
@@ -513,5 +519,66 @@ public:
     }
 
     std::string get_name() const override { return "java_udaf"; }
+};
+
+// Vectorized ("input"="arrow") Java UDAF. Isolates the arrow calling convention from the shared
+// JavaUDAFAggregateFunction: it reuses the base for create/merge/serialize/finalize (which don't
+// touch raw input columns) and overrides only the update paths. Arrow input fits only the
+// single-state path (whole batch -> one state), i.e. global / sorted aggregation; the interleaved
+// hash GROUP BY paths are rejected. Selected at the factory when input="arrow".
+class ArrowJavaUDAFAggregateFunction final : public JavaUDAFAggregateFunction {
+public:
+    static constexpr const char* kGroupByUnsupported =
+            "arrow-input UDAF is only supported for global / sorted aggregation, not GROUP BY";
+
+    // Single-state update: convert the whole batch to Arrow and invoke update(State, FieldVector...)
+    // via com.starrocks.udf.ArrowUDFHelper.batchUpdateSingle over the C Data Interface.
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* udf_ctxs = get_java_udaf_context(ctx);
+        DCHECK(udf_ctxs != nullptr);
+        auto* env = JVMHelper::getInstance().getEnv();
+        env->PushLocalFrame(16);
+        auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
+
+        int num_cols = ctx->get_num_args();
+        std::vector<TypeDescriptor> arg_types(num_cols);
+        for (int i = 0; i < num_cols; ++i) {
+            arg_types[i] = *ctx->get_arg_type(i);
+        }
+
+        ExportedArrowBatch input;
+        auto st = input.export_columns(batch_size, columns, num_cols, arg_types.data());
+        SET_FUNCTION_CONTEXT_ERR(st, ctx);
+        RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+
+        auto helper_cls = arrow_udf_helper_class();
+        SET_FUNCTION_CONTEXT_ERR(helper_cls.status(), ctx);
+        RETURN_IF_UNLIKELY(!helper_cls.ok(), (void)0);
+        jmethodID mid = env->GetStaticMethodID(helper_cls.value(), "batchUpdateSingle",
+                                               "(Ljava/lang/Object;Ljava/lang/reflect/Method;Ljava/lang/Object;JJ)V");
+        CHECK_UDF_CALL_EXCEPTION(env, ctx);
+
+        jobject state_obj = helper.convert_handle_to_jobject(ctx, this->data(state).handle);
+        env->CallStaticVoidMethod(helper_cls.value(), mid, udf_ctxs->handle.handle(),
+                                  udf_ctxs->ctx->update->method.handle(), state_obj, input.schema_addr(),
+                                  input.array_addr());
+        CHECK_UDF_CALL_EXCEPTION(env, ctx);
+    }
+
+    // Interleaved (per-row group routing) paths cannot hand a whole-batch FieldVector to one state.
+    void update_batch(FunctionContext* ctx, size_t, size_t, const Column**, AggDataPtr*) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+    void update_batch_selectively(FunctionContext* ctx, size_t, size_t, const Column**, AggDataPtr*,
+                                  const Filter&) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns&, size_t, MutableColumnPtr&) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+
+    std::string get_name() const override { return "arrow_java_udaf"; }
 };
 } // namespace starrocks

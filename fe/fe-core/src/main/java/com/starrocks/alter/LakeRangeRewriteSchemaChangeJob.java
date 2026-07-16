@@ -52,6 +52,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +62,8 @@ import javax.validation.constraints.NotNull;
 
 /**
  * Schema-change job for shared-data (lake) range-distribution OLAP tables whose key change
- * shifts the range sort key (sort-key reorder or keyness flip) with the column set unchanged.
+ * shifts the range sort key (sort-key reorder or keyness flip with the column set unchanged, or an
+ * ADD/DROP of a key column that changes the column set).
  *
  * <p>Unlike the 1:1 shadow-index rewrite of {@link LakeTableSchemaChangeJob}, this job re-routes
  * each partition's data into a fresh K-tablet shadow index whose tablet boundaries are sampled by
@@ -151,6 +153,15 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         this.newSortKeyColumns = newSortKeyColumns;
     }
 
+    protected List<Column> getNewSortKeyColumns() {
+        return newSortKeyColumns;
+    }
+
+    @VisibleForTesting
+    List<Integer> getNewSortKeyUniqueIds() {
+        return newSortKeyUniqueIds;
+    }
+
     public void setShadowIndex(long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
                                short shadowShortKeyColumnCount) {
         this.shadowIndexMetaId = shadowIndexMetaId;
@@ -182,6 +193,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     @Override
+    protected boolean flipNotYetApplied(@NotNull OlapTable table) {
+        // Replace flip drops the origin index meta; if it is gone, the flip has already run.
+        return table.getIndexMetaByMetaId(originIndexMetaId) != null;
+    }
+
+    @Override
     protected void validateRewriteConfig() throws AlterCancelException {
         Preconditions.checkNotNull(newSchema, "new schema is not set");
         Preconditions.checkNotNull(newKeysType, "new keys type is not set");
@@ -199,7 +216,7 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
         int requestedTabletCount = chooseTabletCount(plan.partitionDataSize, activeComputeNodeCount);
-        List<Tuple> boundaries = planBoundaries(dbName, plan.tableName, plan.partitionName,
+        List<Tuple> boundaries = planBoundaries(table, dbName, plan.tableName, plan.partitionName,
                 plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
         // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
         int shadowTabletCount = boundaries.size() + 1;
@@ -218,6 +235,36 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         plan.shadowIndex = shadowIndex;
     }
 
+    @Override
+    protected List<Column> getShadowSchema() {
+        return newSchema;
+    }
+
+    @Override
+    protected KeysType getShadowKeysType() {
+        return newKeysType;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyIdxes() {
+        return newSortKeyIdxes;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyUniqueIds() {
+        return newSortKeyUniqueIds;
+    }
+
+    @Override
+    protected short getShadowShortKeyColumnCount() {
+        return shadowShortKeyColumnCount;
+    }
+
+    @Override
+    protected String shadowKindLabel() {
+        return "range-rewrite";
+    }
+
     /**
      * Idempotently register the shadow index's {@link MaterializedIndexMeta} (schema, keysType,
      * sort-key indexes) on the table. Re-runnable on replay: {@code setIndexMeta} overwrites the
@@ -233,6 +280,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         Preconditions.checkNotNull(originIndexMeta);
         Preconditions.checkNotNull(shadowIndexMeta);
         rebuildMaterializedIndexMeta(originIndexMeta, shadowIndexMeta);
+        // Expose the shadow index's columns in getFullSchema() during the rewrite window. For an added
+        // (__starrocks_shadow_-prefixed) key column this makes InsertPlanner.fillShadowColumns materialize its
+        // constant default for the rewrite INSERT and every concurrent double-write, while the prefix keeps it
+        // out of the user namespace until the flip strips it. No-op for a same-column-set shadow (reorder /
+        // keyness flip / drop). Mirrors addShadowIndexToCatalog.
+        table.rebuildFullSchema();
     }
 
     /**
@@ -252,11 +305,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
      * boundary list = a single full-range tablet (K=1 fallback). All inputs are captured snapshots so
      * this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
      */
-    private List<Tuple> planBoundaries(String dbName, String tableName, String partitionName,
+    private List<Tuple> planBoundaries(OlapTable table, String dbName, String tableName, String partitionName,
                                        long physicalPartitionId, long partitionDataSize,
                                        int requestedTabletCount) {
         try {
-            SampleSet sampleSet = sampleByNewSortKey(dbName, tableName, partitionName, partitionDataSize);
+            SampleSet sampleSet = sampleByNewSortKey(table, dbName, tableName, partitionName, partitionDataSize);
             if (sampleSet.isEmpty()) {
                 return List.of();
             }
@@ -275,10 +328,20 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         }
     }
 
-    private SampleSet sampleByNewSortKey(String dbName, String tableName, String partitionName,
+    @VisibleForTesting
+    public List<Tuple> planBoundariesForTest(OlapTable table, String dbName, String tableName, String partitionName,
+                                             long physicalPartitionId, long partitionDataSize,
+                                             int requestedTabletCount) {
+        return planBoundaries(table, dbName, tableName, partitionName, physicalPartitionId, partitionDataSize,
+                requestedTabletCount);
+    }
+
+    private SampleSet sampleByNewSortKey(OlapTable table, String dbName, String tableName, String partitionName,
                                          long partitionDataSize) throws StarRocksException {
-        List<String> sortKeySourceColumnNames =
-                newSortKeyColumns.stream().map(Column::getName).collect(Collectors.toList());
+        Set<String> sourceColumnNames = table.getSchemaByIndexMetaId(originIndexMetaId).stream()
+                .map(Column::getName)
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        List<String> sortKeyProjection = buildSampleProjection(sourceColumnNames);
         // The sample sub-query addresses the logical partition by name; physical partitions are not
         // directly addressable in SQL. Boundaries only need to be representative, so sampling the
         // parent partition is sufficient.
@@ -286,13 +349,55 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 dbName,
                 tableName,
                 partitionName,
-                sortKeySourceColumnNames,
+                sortKeyProjection,
                 List.of(),
                 partitionDataSize,
-                computeResource);
+                computeResource,
+                /*sortKeyProjectionIsVerbatim=*/ true);
         SampleRequest request = new SampleRequest(
                 scanContext, newSortKeyColumns, Config.tablet_pre_split_sample_byte_limit, jobId);
         return getSampler().sample(request);
+    }
+
+    /**
+     * Builds the sampling sub-query projection for each {@link #newSortKeyColumns} entry: the
+     * backquoted column name when it exists in the source (base) schema, or a raw
+     * {@code CAST(<default> AS <type>) AS <alias>} literal when it does not (an added,
+     * {@code __starrocks_shadow_}-prefixed key column that has no source value at PENDING time). A
+     * constant projection contributes no distinction to {@link BoundaryPlanner}, so real boundaries
+     * still come from the other (source-present) sort-key columns; only a sole-added-key ADD
+     * collapses to K=1.
+     */
+    private List<String> buildSampleProjection(Set<String> sourceColumnNames) {
+        return newSortKeyColumns.stream()
+                .map(column -> projectSortKeyColumn(column, sourceColumnNames))
+                .collect(Collectors.toList());
+    }
+
+    @VisibleForTesting
+    public List<String> buildSampleProjectionForTest(Set<String> sourceColumnNames) {
+        return buildSampleProjection(sourceColumnNames);
+    }
+
+    /**
+     * Projects a single new-sort-key column: the backquoted name when {@code column} exists in the
+     * source (base) schema, else a raw {@code CAST(...) AS <alias>} literal built from the column's
+     * constant default (a NULL default projects SQL {@code NULL}). The CAST must stay a raw
+     * expression, not a backquoted identifier — backquoting it would send the backend a reference to
+     * a (missing) column literally named "CAST(...) AS ..." instead of a literal.
+     */
+    private static String projectSortKeyColumn(Column column, Set<String> sourceColumnNames) {
+        String backquoted = ParseUtil.backquote(column.getName());
+        if (sourceColumnNames.contains(column.getName())) {
+            return backquoted;
+        }
+        // Backslash must be escaped before the double quote, or a trailing backslash in the
+        // default would swallow the closing quote and a mid-string backslash would be silently
+        // reinterpreted by the StarRocks string-literal lexer.
+        String literal = column.getDefaultValue() == null
+                ? "NULL"
+                : "\"" + column.getDefaultValue().replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "CAST(" + literal + " AS " + column.getType().toSql() + ") AS " + backquoted;
     }
 
     /**
@@ -311,14 +416,47 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Non-generated column names the rewrite INSERT selects: the new-schema columns (the column set is
-     * unchanged from the base, so these are the base column names re-projected in the new order).
+     * Non-generated column names the rewrite INSERT selects: the newSchema columns present in the base
+     * (origin) index schema. For a sort-key reorder or keyness flip the column set is unchanged, so this
+     * is a no-op re-projection in the new order; for a DROP it yields the surviving columns; for an ADD
+     * it excludes the shadow-only added column, which has no source value in the base.
      */
     @Override
     protected List<String> rewriteSelectColumnNames(@NotNull OlapTable table) {
+        return survivingColumns(table).stream()
+                .map(column -> ParseUtil.backquote(column.getName()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Explicit target column list for the rewrite INSERT, needed only when newSchema has FEWER
+     * non-generated columns than the base index (a DROP): the INSERT then writes a column subset, so
+     * InsertAnalyzer needs an explicit target list naming the survivors (raw names; the base backquotes
+     * them once when it builds the INSERT text). A reorder, keyness flip, or ADD keeps the base default
+     * (empty = full base schema).
+     */
+    @Override
+    protected List<String> rewriteTargetColumnNames(@NotNull OlapTable table) {
+        long baseNonGenerated = table.getSchemaByIndexMetaId(originIndexMetaId).stream()
+                .filter(column -> !column.isGeneratedColumn())
+                .count();
+        List<Column> survivors = survivingColumns(table);
+        if (survivors.size() >= baseNonGenerated) {
+            return Collections.emptyList();
+        }
+        return survivors.stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    /**
+     * The non-generated newSchema columns present in the base (origin) index schema, in newSchema order.
+     */
+    private List<Column> survivingColumns(@NotNull OlapTable table) {
+        Set<String> baseNames = table.getSchemaByIndexMetaId(originIndexMetaId).stream()
+                .map(Column::getName)
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
         return newSchema.stream()
                 .filter(column -> !column.isGeneratedColumn())
-                .map(column -> ParseUtil.backquote(column.getName()))
+                .filter(column -> baseNames.contains(column.getName()))
                 .collect(Collectors.toList());
     }
 
@@ -391,10 +529,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * The columns whose meaning changed for this range-rewrite (column set unchanged), so dependent async
-     * MVs built on the old schema get inactivated: every column whose key membership flipped between the
-     * origin and new schema, plus the new sort-key columns (their ordering / role changed). Empty when
-     * nothing relevant changed and there are no dependent MVs.
+     * The columns whose meaning changed for this range-rewrite, so dependent async MVs built on the old
+     * schema get inactivated: every column whose key membership flipped between the origin and new schema,
+     * the new sort-key columns (their ordering / role changed) unless this is a pure key ADD that leaves
+     * all origin data unchanged, and every origin column dropped from the new schema. Empty when nothing
+     * relevant changed and there are no dependent MVs.
      */
     @Override
     protected Set<String> affectedColumnsForMvInactivation(@NotNull OlapTable table) {
@@ -412,8 +551,26 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 affected.add(column.getName());
             }
         }
-        for (Column sortKeyColumn : newSortKeyColumns) {
-            affected.add(sortKeyColumn.getName());
+        // A pure key ADD (newSchema contains a column absent from the origin schema, e.g. a
+        // `__starrocks_shadow_`-prefixed added key column) leaves historical base data -- and thus
+        // dependent MVs built on the pre-existing sort key -- unchanged, so the new sort-key columns must
+        // not be reported as affected in that case. Reorder/keyness-flip (same column set) and DROP
+        // (fewer columns; base data does change) still run this loop.
+        Set<String> originNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        originNames.addAll(originIsKey.keySet());
+        boolean hasAddedColumn = newSchema.stream()
+                .anyMatch(column -> !originNames.contains(Column.removeNamePrefix(column.getName())));
+        if (!hasAddedColumn) {
+            for (Column sortKeyColumn : newSortKeyColumns) {
+                affected.add(sortKeyColumn.getName());
+            }
+        }
+        Set<String> newNames = newSchema.stream().map(Column::getName)
+                .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        for (Column column : table.getSchemaByIndexMetaId(originIndexMetaId)) {
+            if (!newNames.contains(column.getName())) {
+                affected.add(column.getName()); // a dropped column: dependent MVs referencing it must inactivate
+            }
         }
         return affected;
     }

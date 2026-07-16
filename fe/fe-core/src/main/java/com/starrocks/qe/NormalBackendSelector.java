@@ -77,7 +77,6 @@ public class NormalBackendSelector implements BackendSelector {
             // assign this scan range to the host w/ the fewest assigned row count
             Long minRowCount = Long.MAX_VALUE;
             TScanRangeLocation minLocation = null;
-            List<TScanRangeLocation> backupLocations = new ArrayList<>();
 
             List<Long> unavailableDataNodeIds = new ArrayList<>();
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {

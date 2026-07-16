@@ -42,8 +42,8 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
@@ -96,7 +96,7 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     // IndexRef, not necessarily under this tracker). Routing through process keeps
     // the load off the originating query's mem limit while leaving the deterministic
     // cache consume/release as the sole source of the vector_index label.
-    auto* tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
 
     // Loader catches its own failures (incl. tenann::Error, which inherits
     // privately from std::exception and would otherwise escape GetOrCreate)

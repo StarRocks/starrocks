@@ -123,7 +123,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult close() override;
+    FileCommitResult close() override;
 
 private:
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(

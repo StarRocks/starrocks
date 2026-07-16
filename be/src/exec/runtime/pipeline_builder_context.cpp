@@ -16,13 +16,13 @@
 
 #include <memory>
 
-#include "exec/pipeline/primitives/event.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/runtime/fragment_context.h"
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/group_execution/execution_group_builder.h"
 #include "exec/runtime/pipeline.h"
+#include "exec_primitive/pipeline/primitives/event.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 

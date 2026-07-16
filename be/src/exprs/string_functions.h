@@ -709,6 +709,7 @@ private:
         pattern do_pos_format() const override { return {{none, sign, none, value}}; }
         pattern do_neg_format() const override { return {{none, sign, none, value}}; }
         int do_frac_digits() const override { return 2; }
+        char_type do_decimal_point() const override { return '.'; }
         char_type do_thousands_sep() const override { return ','; }
         string_type do_grouping() const override { return "\003"; }
         string_type do_negative_sign() const override { return "-"; }

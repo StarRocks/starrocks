@@ -17,9 +17,9 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/primitives/block_reason.h"
 #include "exec/pipeline/sort/sort_context.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/sort_exec_exprs.h"
 
 namespace starrocks::pipeline {

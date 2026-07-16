@@ -20,12 +20,12 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_index.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/primitive/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/projection_iterator.h"
 
 namespace starrocks {
 

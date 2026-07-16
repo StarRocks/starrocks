@@ -27,6 +27,7 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load_path/dummy_load_path_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "compute_env/profile_report_worker.h"
@@ -37,8 +38,8 @@
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "runtime/env/global_env.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
@@ -47,8 +48,8 @@ ComputeEnv::ComputeEnv() = default;
 ComputeEnv::~ComputeEnv() = default;
 
 Status ComputeEnv::init(const ComputeEnvOptions& options) {
-    if (options.global_env == nullptr) {
-        return Status::InternalError("ComputeEnv GlobalEnv is null");
+    if (options.runtime_env == nullptr) {
+        return Status::InternalError("ComputeEnv RuntimeEnv is null");
     }
     if (!options.driver_queue_factory || !options.driver_executor_factory) {
         return Status::InternalError("ComputeEnv workgroup driver factories must be set");
@@ -57,9 +58,9 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
         return Status::InternalError("ComputeEnv has been initialized");
     }
 
-    const int64_t max_executor_threads = options.global_env->max_executor_threads();
+    const int64_t max_executor_threads = options.runtime_env->max_executor_threads();
     if (max_executor_threads <= 0) {
-        return Status::InternalError("GlobalEnv execution thread pools are not initialized");
+        return Status::InternalError("RuntimeEnv execution thread pools are not initialized");
     }
     const int max_num_pipeline_drivers = max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
 
@@ -102,13 +103,19 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     const size_t query_cache_capacity = options.query_cache_capacity == 0
                                                 ? std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024)
                                                 : options.query_cache_capacity;
-    status = _init_query_cache(query_cache_capacity);
+    status = _init_query_cache(query_cache_capacity, options.metrics);
     if (!status.ok()) {
         destroy();
         return status;
     }
 
     status = _init_spill(options.store_paths, options.metrics);
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
+
+    status = _init_load_spill_executor(options.metrics);
     if (!status.ok()) {
         destroy();
         return status;
@@ -194,8 +201,26 @@ Status ComputeEnv::_init_spill(const std::vector<std::string>& store_paths, Metr
     return Status::OK();
 }
 
-Status ComputeEnv::_init_query_cache(size_t capacity) {
+Status ComputeEnv::_init_load_spill_executor(MetricRegistry* metrics) {
+    if (_load_spill_block_merge_executor != nullptr) {
+        return Status::InternalError("LoadSpillBlockMergeExecutor has been initialized");
+    }
+    auto executor = std::make_unique<LoadSpillBlockMergeExecutor>();
+    RETURN_IF_ERROR(executor->init());
+    if (metrics != nullptr) {
+        auto* spill_metrics = SpillMetrics::instance();
+        spill_metrics->load_spill_block_merge.register_metrics(metrics, "load_spill_block_merge",
+                                                               executor->get_thread_pool());
+        spill_metrics->tablet_internal_parallel_merge.register_metrics(
+                metrics, "tablet_internal_parallel_merge", executor->get_tablet_internal_parallel_merge_thread_pool());
+    }
+    _load_spill_block_merge_executor = std::move(executor);
+    return Status::OK();
+}
+
+Status ComputeEnv::_init_query_cache(size_t capacity, MetricRegistry* metrics) {
     _cache_mgr = std::make_unique<query_cache::CacheManager>(capacity);
+    RETURN_IF_ERROR(_cache_mgr->install_metrics(metrics));
     return Status::OK();
 }
 
@@ -263,6 +288,9 @@ void ComputeEnv::_destroy_load_path() {
 void ComputeEnv::destroy() {
     destroy_profile_report_worker();
     _destroy_load_path();
+    SpillMetrics::instance()->load_spill_block_merge.unregister_metrics();
+    SpillMetrics::instance()->tablet_internal_parallel_merge.unregister_metrics();
+    _load_spill_block_merge_executor.reset();
     _global_spill_manager.reset();
     _spill_dir_mgr.reset();
     if (_workgroup_manager != nullptr) {

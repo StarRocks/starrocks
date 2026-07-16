@@ -20,9 +20,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/sort_exec_exprs.h"
 #include "runtime/runtime_state_fwd.h"
 

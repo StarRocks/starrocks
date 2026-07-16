@@ -22,7 +22,9 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <memory>
+#include <string>
 
 #include "base/testutil/assert.h"
 #include "common/config_object_storage_fwd.h"
@@ -46,32 +48,43 @@ public:
     static void TearDownTestCase();
 
     static void put_object(const std::string& object_content);
+    static const char* get_config_or_env(const std::string& config_value, const char* env_name);
+    static void apply_endpoint_override(Aws::Client::ClientConfiguration* config);
 
 protected:
+    void SetUp() override;
+
     inline static const char* s_bucket_name = nullptr;
     inline static const char* ak = nullptr;
     inline static const char* sk = nullptr;
+    inline static bool s_skip = false;
+    inline static std::string s_skip_reason;
 };
 
 void S3PocoHttpClientTest::SetUpTestCase() {
+    s_skip = false;
+    s_skip_reason.clear();
     Aws::InitAPI(Aws::SDKOptions());
     Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
 
-    s_bucket_name = config::object_storage_bucket.empty() ? getenv("STARROCKS_UT_S3_BUCKET")
-                                                          : config::object_storage_bucket.c_str();
+    s_bucket_name = get_config_or_env(config::object_storage_bucket, "STARROCKS_UT_S3_BUCKET");
     if (s_bucket_name == nullptr) {
-        FAIL() << "s3 bucket name not set";
+        s_skip = true;
+        s_skip_reason = "s3 bucket name not set";
+        return;
     }
 
-    ak = config::object_storage_access_key_id.empty() ? getenv("STARROCKS_UT_S3_AK")
-                                                      : config::object_storage_access_key_id.c_str();
-    sk = config::object_storage_secret_access_key.empty() ? getenv("STARROCKS_UT_S3_SK")
-                                                          : config::object_storage_secret_access_key.c_str();
+    ak = get_config_or_env(config::object_storage_access_key_id, "STARROCKS_UT_S3_AK");
+    sk = get_config_or_env(config::object_storage_secret_access_key, "STARROCKS_UT_S3_SK");
     if (ak == nullptr) {
-        FAIL() << "s3 access key id not set";
+        s_skip = true;
+        s_skip_reason = "s3 access key id not set";
+        return;
     }
     if (sk == nullptr) {
-        FAIL() << "s3 secret access key not set";
+        s_skip = true;
+        s_skip_reason = "s3 secret access key not set";
+        return;
     }
     put_object(kObjectContent);
 }
@@ -81,10 +94,26 @@ void S3PocoHttpClientTest::TearDownTestCase() {
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
+void S3PocoHttpClientTest::SetUp() {
+    if (s_skip) {
+        GTEST_SKIP() << s_skip_reason;
+    }
+}
+
+const char* S3PocoHttpClientTest::get_config_or_env(const std::string& config_value, const char* env_name) {
+    return config_value.empty() ? std::getenv(env_name) : config_value.c_str();
+}
+
+void S3PocoHttpClientTest::apply_endpoint_override(Aws::Client::ClientConfiguration* config) {
+    const char* endpoint = get_config_or_env(config::object_storage_endpoint, "STARROCKS_UT_S3_ENDPOINT");
+    if (endpoint != nullptr) {
+        config->endpointOverride = endpoint;
+    }
+}
+
 void S3PocoHttpClientTest::put_object(const std::string& object_content) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
-                                                                      : config::object_storage_endpoint;
+    apply_endpoint_override(&config);
 
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
     auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
@@ -103,8 +132,7 @@ void S3PocoHttpClientTest::put_object(const std::string& object_content) {
 
 TEST_F(S3PocoHttpClientTest, TestNormalAccess) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
-                                                                      : config::object_storage_endpoint;
+    apply_endpoint_override(&config);
     // Set timeout for faster test execution
     config.connectTimeoutMs = 500;
     config.requestTimeoutMs = 2000;
@@ -155,8 +183,7 @@ TEST_F(S3PocoHttpClientTest, TestErrorEndpoint) {
 
 TEST_F(S3PocoHttpClientTest, TestErrorAkSk) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
-                                                                      : config::object_storage_endpoint;
+    apply_endpoint_override(&config);
     // Set timeout for faster test execution
     config.connectTimeoutMs = 500;
     config.requestTimeoutMs = 2000;
@@ -182,8 +209,7 @@ TEST_F(S3PocoHttpClientTest, TestErrorAkSk) {
 
 TEST_F(S3PocoHttpClientTest, TestNotFoundKey) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
-                                                                      : config::object_storage_endpoint;
+    apply_endpoint_override(&config);
     // Set timeout for faster test execution
     config.connectTimeoutMs = 500;
     config.requestTimeoutMs = 2000;

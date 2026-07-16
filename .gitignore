@@ -122,3 +122,7 @@ test/.venv
 
 .lycheecache
 memory/
+!be/src/runtime/memory/
+!be/src/runtime/memory/**
+!be/test/runtime/memory/
+!be/test/runtime/memory/**

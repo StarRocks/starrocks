@@ -118,21 +118,45 @@ public final class RangeColocateScanDispatch {
     }
 
     /**
-     * Verifies every {@link MaterializedIndex} actually scanned in the supplied
-     * physical partitions is aligned with the colocate group. Throws
-     * {@link IllegalStateException} on the first misaligned one.
+     * Fails closed unless every {@link MaterializedIndex} actually scanned in the supplied physical
+     * partitions is aligned with the colocate group AND {@code builtBucketSeq} — the bucket assignment
+     * the scan actually built — contains the current aligned mapping. Throws {@link IllegalStateException}
+     * on the first index that is unaligned, or whose built assignment does not match.
      *
-     * <p>Caller invariant: {@code physicalPartitions} must be the partitions
-     * that actually contributed scan tablets — sibling sub-partitions that
-     * were pruned out must not be passed in.
+     * <p>The containment check closes a fill→dispatch TOCTOU without any sticky per-scan state: the bucketSeq
+     * fill falls back to a position-based assignment when the group is momentarily unaligned (so a
+     * non-colocate scan of the table still works); if the group then re-aligns before this guard runs, an
+     * alignment check alone would pass while the built assignment is still the stale position mapping.
+     * Comparing the built assignment against the freshly-computed aligned mapping — which this method
+     * already computes to test alignment — catches exactly that case. A layout change that replaced the
+     * tablets (reshard) also fails the check: the aligned mapping keys on the new tablet ids, which the
+     * built (old) assignment does not contain.
+     *
+     * <p>Caller invariant: {@code physicalPartitions} must be the partitions that actually contributed
+     * scan tablets — sibling sub-partitions that were pruned out must not be passed in — and
+     * {@code builtBucketSeq} must be the assignment those scans built (tablet id → bucket sequence).
      */
-    public void requireAligned(Iterable<PhysicalPartition> physicalPartitions, long indexMetaId) {
+    public void requireAligned(Iterable<PhysicalPartition> physicalPartitions, long indexMetaId,
+                               Map<Long, Integer> builtBucketSeq) {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(indexMetaId);
-            if (computeBucketSeq(selectedIndex) == null) {
+            Map<Long, Integer> aligned = computeBucketSeq(selectedIndex);
+            if (aligned == null) {
                 throw new IllegalStateException(String.format(
                         "range colocate group %d is in an unaligned state in physical partition %d; "
                                 + "cannot dispatch colocate join until alignment is restored",
+                        colocateGroupId, physicalPartition.getId()));
+            }
+            // Containment, not equality: builtBucketSeq is the whole-scan map and can legitimately hold
+            // more tablets than this partition's aligned mapping (e.g. fully-pruned sibling subpartitions
+            // the fill still populated), so require every aligned (tablet -> bucketSeq) entry to be present
+            // rather than the two maps being equal. A stale/position assignment fails a value comparison; a
+            // reshard that replaced tablets fails because the new tablet ids are absent from builtBucketSeq.
+            if (!builtBucketSeq.entrySet().containsAll(aligned.entrySet())) {
+                throw new IllegalStateException(String.format(
+                        "range colocate group %d has a stale bucket assignment in physical partition %d "
+                                + "(the scan's built bucketSeq does not match the aligned mapping); cannot "
+                                + "dispatch colocate join until the assignment is rebuilt",
                         colocateGroupId, physicalPartition.getId()));
             }
         }

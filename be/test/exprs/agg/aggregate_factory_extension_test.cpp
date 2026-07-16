@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "exprs/agg/aggregate_factory.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -30,6 +31,15 @@ TEST(AggregateFactoryExtensionTest, srjarAggregateUsesExprsExtension) {
 
     ASSERT_NE(nullptr, func);
     EXPECT_EQ("java_udaf", func->get_name());
+}
+
+TEST(AggregateFactoryExtensionTest, srjarArrowAggregateUsesArrowVariant) {
+    TypeDescriptor bigint(TYPE_BIGINT);
+    const auto* func = get_aggregate_function("java_udaf", bigint, std::vector<TypeDescriptor>{bigint}, false,
+                                              TFunctionBinaryType::SRJAR, /*func_version=*/1, /*is_arrow_input=*/true);
+
+    ASSERT_NE(nullptr, func);
+    EXPECT_EQ("arrow_java_udaf", func->get_name());
 }
 
 TEST(AggregateFactoryExtensionTest, srjarWindowUsesExprsExtension) {

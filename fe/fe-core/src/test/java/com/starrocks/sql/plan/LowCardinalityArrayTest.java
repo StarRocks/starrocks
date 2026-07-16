@@ -1178,4 +1178,89 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         Assertions.assertNotEquals(firstSlot, secondSlot,
                 "two array_map calls reusing arg name `x` must get distinct slot ids, plan was:\n" + plan);
     }
+
+    @Test
+    public void testArrayFunctionsWithConstant() throws Exception {
+        String sql = """
+                SELECT  ARRAY_CONTAINS(S_ADDRESS, 'A'),
+                        ARRAY_CONTAINS_ALL(S_ADDRESS, ['B', 'C']),
+                        ARRAY_CONTAINS_SEQ(S_ADDRESS, ['A', 'C']),
+                        ARRAY_INTERSECT(S_ADDRESS, ['B', 'C']),
+                        ARRAY_POSITION(S_ADDRESS, 'D'),
+                        ARRAY_REMOVE(S_ADDRESS, 'A')
+                FROM supplier_nullable;
+                """;
+
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 9> : array_contains(15: S_ADDRESS, dict_encode('A', 15))\n" +
+                "  |  <slot 10> : array_contains_all(15: S_ADDRESS, [dict_encode('B', 15),dict_encode('C', 15)])\n" +
+                "  |  <slot 11> : array_contains_seq(15: S_ADDRESS, [dict_encode('A', 15),dict_encode('C', 15)])\n" +
+                "  |  <slot 12> : DictDecode(15: S_ADDRESS, [<place-holder>], " +
+                "array_intersect(15: S_ADDRESS, [dict_encode('B', 15),dict_encode('C', 15)]))\n" +
+                "  |  <slot 13> : array_position(15: S_ADDRESS, dict_encode('D', 15))\n" +
+                "  |  <slot 14> : DictDecode(15: S_ADDRESS, [<place-holder>], " +
+                "array_remove(15: S_ADDRESS, dict_encode('A', 15)))"), plan);
+    }
+
+    @Test
+    public void testArrayFunctionsWithConstantDerivedDict() throws Exception {
+        String sql = """
+                WITH CTE AS (
+                    SELECT ARRAY_AGG(UPPER(S_COMMENT)) AS arr
+                    FROM supplier_nullable
+                )
+                SELECT  ARRAY_CONTAINS(arr, 'A'),
+                        ARRAY_CONTAINS_ALL(arr, ['B', 'C']),
+                        ARRAY_CONTAINS_SEQ(arr, ['A', 'C']),
+                        ARRAY_INTERSECT(arr, ['B', 'C']),
+                        ARRAY_POSITION(arr, 'D'),
+                        ARRAY_REMOVE(arr, 'A')
+                FROM CTE;
+                """;
+
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("3:Project\n" +
+                "  |  <slot 11> : array_contains(22: array_agg, dict_encode('A', 22))\n" +
+                "  |  <slot 12> : array_contains_all(22: array_agg, [dict_encode('B', 22),dict_encode('C', 22)])\n" +
+                "  |  <slot 13> : array_contains_seq(22: array_agg, [dict_encode('A', 22),dict_encode('C', 22)])\n" +
+                "  |  <slot 14> : DictDecode(22: array_agg, [<place-holder>], " +
+                "array_intersect(22: array_agg, [dict_encode('B', 22),dict_encode('C', 22)]))\n" +
+                "  |  <slot 15> : array_position(22: array_agg, dict_encode('D', 22))\n" +
+                "  |  <slot 16> : DictDecode(22: array_agg, [<place-holder>], " +
+                "array_remove(22: array_agg, dict_encode('A', 22)))\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: array_agg(21: UPPER)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 21> : DictDefine(20: S_COMMENT, [upper(<place-holder>)])\n" +
+                "  |  "), plan);
+    }
+
+    @Test
+    public void testArrayFunctionsWithConstantArray() throws Exception {
+        String sql = """
+                SELECT  ARRAY_CONTAINS(['A', 'B'], S_COMMENT)
+                FROM supplier_nullable
+                ORDER BY S_COMMENT;
+                """;
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 9> : array_contains(['A','B'], DictDecode(10: S_COMMENT, [<place-holder>]))\n" +
+                "  |  <slot 10> : 10: S_COMMENT"), plan);
+    }
+
+    @Test
+    public void testArrayFunctionsWithNonConstantInput() throws Exception {
+        String sql = """
+                SELECT  ARRAY_INTERSECT(S_ADDRESS, ARRAY_DISTINCT(S_ADDRESS))
+                FROM supplier_nullable
+                """;
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("1:Project\n" +
+                "  |  <slot 9> : DictDecode(10: S_ADDRESS, [<place-holder>], " +
+                "array_intersect(10: S_ADDRESS, array_distinct(10: S_ADDRESS)))"), plan);
+    }
 }

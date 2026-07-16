@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 #include <gtest/gtest.h>
 
@@ -26,8 +26,10 @@
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/schema_scanner_factory.h"
+#include "exec/schema_scanner_factory_adapter.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_sender.h"
 
@@ -45,23 +47,52 @@ public:
                                        int, int64_t) override {}
 };
 
+class FakeSchemaScannerFactory final : public SchemaScannerFactory {
+public:
+    explicit FakeSchemaScannerFactory(bool* destroyed) : _destroyed(destroyed) {}
+    ~FakeSchemaScannerFactory() override { *_destroyed = true; }
+
+    std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const override { return nullptr; }
+
+private:
+    bool* _destroyed;
+};
+
 } // namespace
+
+TEST(ExecEnvTest, owns_schema_scanner_factory) {
+    bool destroyed = false;
+    auto factory = std::make_unique<FakeSchemaScannerFactory>(&destroyed);
+    auto* expected = factory.get();
+    ExecEnv env(std::move(factory));
+
+    EXPECT_EQ(expected, env.schema_scanner_factory());
+    EXPECT_EQ(expected, resolve_schema_scanner_factory(&env));
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(nullptr));
+    EXPECT_FALSE(destroyed);
+
+    env.destroy();
+    EXPECT_TRUE(destroyed);
+    EXPECT_EQ(nullptr, env.schema_scanner_factory());
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(&env));
+}
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
-    auto* global_env = GlobalEnv::GetInstance();
+    auto* runtime_env = RuntimeEnv::GetInstance();
     auto* platform_env = PlatformEnv::GetInstance();
     platform_env->destroy();
 
     static auto* metrics = new MetricRegistry("exec_env_test");
     ASSERT_OK(platform_env->init(PlatformEnvOptions{.metrics = metrics}));
-    ASSERT_OK(global_env->init_execution_thread_pools(metrics));
+    ASSERT_OK(runtime_env->init_execution_thread_pools(metrics));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
     EXPECT_EQ(env.compute_env(), nullptr);
@@ -71,7 +102,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ASSERT_FALSE(ec) << ec.message();
 
     ComputeEnvOptions compute_env_options;
-    compute_env_options.global_env = global_env;
+    compute_env_options.runtime_env = runtime_env;
     compute_env_options.metrics = metrics;
     compute_env_options.as_cn = true;
     compute_env_options.query_cache_capacity = 4 * 1024 * 1024;
@@ -97,11 +128,11 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     env.set_runtime_filter_services(&runtime_filter_services, &runtime_filter_services);
     env.set_agent_server(agent_server);
 
-    EXPECT_EQ(env.execution_services().thread_pool, global_env->thread_pool());
+    EXPECT_EQ(env.execution_services().thread_pool, runtime_env->thread_pool());
     EXPECT_EQ(env.execution_services().workgroup_manager, env.compute_env()->workgroup_manager());
     EXPECT_EQ(env.execution_services().driver_limiter, env.compute_env()->driver_limiter());
     EXPECT_EQ(env.execution_services().pipeline_timer, env.compute_env()->pipeline_timer());
-    EXPECT_EQ(env.execution_services().max_executor_threads, global_env->max_executor_threads());
+    EXPECT_EQ(env.execution_services().max_executor_threads, runtime_env->max_executor_threads());
     EXPECT_EQ(env.stream_mgr(), env.compute_env()->stream_mgr());
     EXPECT_EQ(env.result_mgr(), env.compute_env()->result_mgr());
     EXPECT_EQ(env.result_queue_mgr(), env.compute_env()->result_queue_mgr());
@@ -115,7 +146,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.platform_services().store_path_registry, platform_env->store_path_registry());
 
     EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
-              global_env->lake_vector_index_build_thread_pool());
+              runtime_env->lake_vector_index_build_thread_pool());
 
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
     EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
@@ -128,6 +159,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor,
+              env.compute_env()->load_spill_block_merge_executor());
     EXPECT_EQ(env.runtime_services().runtime_filter_sender,
               static_cast<RuntimeFilterSender*>(&runtime_filter_services));
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle,
@@ -157,6 +190,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
 
     env._query_context_mgr = nullptr;
     compute_env.destroy();

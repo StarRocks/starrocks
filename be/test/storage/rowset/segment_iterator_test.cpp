@@ -32,17 +32,22 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/seek_range.h"
+#include "storage/seek_tuple.h"
 #include "storage/tablet_schema_helper.h"
 #include "types/logical_type.h"
 
@@ -1417,6 +1422,262 @@ TEST_F(SegmentIteratorTest, TestDictLookupBatchDuplicateValues) {
     }
     // 2000/50 = 40 each. 10 matching values -> 400
     ASSERT_EQ(total, 400);
+}
+
+// Verifies the reusable-segment-iterator path: a single underlying SegmentIterator, kept in a
+// caller-owned slot, is driven for two independent scans. The second scan must go through
+// reset_for_reuse() (not rebuild a fresh iterator) and still return the full result set.
+TEST_F(SegmentIteratorTest, ReuseSegmentIteratorAcrossScans) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/reusable_iterator";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto key_provider = [](int32_t i) { return i; };
+    auto val_provider = [](int32_t i) { return i * 2; };
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, key_provider));
+    ASSERT_OK(segment_data_builder.append(1, val_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    auto make_opts = [&]() {
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        return o;
+    };
+    auto drain = [&](const ChunkIteratorPtr& it) -> size_t {
+        auto chunk = ChunkFactory::new_chunk(it->output_schema(), chunk_size);
+        size_t total = 0;
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            total += chunk->num_rows();
+        }
+        return total;
+    };
+
+    // Empty slot -> the first call builds the underlying SegmentIterator and stores it in the slot.
+    ChunkIteratorPtr reusable_slot;
+    ASSIGN_OR_ABORT(auto iter1, segment->new_reusable_iterator(vec_schema, vec_schema, make_opts(), &reusable_slot));
+    ASSERT_NE(nullptr, reusable_slot.get());
+    void* underlying = reusable_slot.get();
+    ASSERT_EQ(num_rows, drain(iter1));
+    // NonClosingChunkIterator: closing the returned iterator must NOT tear down the reused iterator.
+    iter1->close();
+
+    // Second scan reuses the same slot: new_reusable_iterator takes the reset_for_reuse() branch,
+    // so the SAME underlying SegmentIterator instance re-drives the scan and returns all rows again.
+    ASSIGN_OR_ABORT(auto iter2, segment->new_reusable_iterator(vec_schema, vec_schema, make_opts(), &reusable_slot));
+    ASSERT_EQ(underlying, reusable_slot.get()) << "expected the slot's iterator to be reused, not rebuilt";
+    ASSERT_EQ(num_rows, drain(iter2));
+    iter2->close();
+
+    // Third scan reuses the slot with a precomputed scan range (as the prepared-split seed supplies one).
+    // This exercises SegmentReadStateCache + _apply_precomputed_scan_range: the reused iterator applies the
+    // narrowed range instead of re-pruning, so it returns exactly the precomputed subset.
+    const size_t precomputed_rows = 50;
+    auto precomputed = std::make_shared<SparseRange<>>();
+    precomputed->add(Range<rowid_t>(0, precomputed_rows));
+    auto opts3 = make_opts();
+    opts3.read_state_cache.scan_range = precomputed; // borrowed during the scan; must outlive iter3
+    ASSIGN_OR_ABORT(auto iter3, segment->new_reusable_iterator(vec_schema, vec_schema, opts3, &reusable_slot));
+    ASSERT_EQ(underlying, reusable_slot.get());
+    ASSERT_EQ(precomputed_rows, drain(iter3));
+    iter3->close();
+}
+
+// Reusing a slot whose predicate column layout differs from the first scan must rebuild the underlying
+// iterator, not reset it: the stored schema was reordered (predicate columns first) for the first scan, and
+// reusing that stale ordering would mis-map predicate columns. Here scan 1 filters c1 and scan 2 filters c2,
+// so the reorder differs; the slot must be rebuilt and each scan must return its own correct row count.
+TEST_F(SegmentIteratorTest, ReuseRebuildsWhenPredicateLayoutChanges) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/reusable_pred_layout";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).create(3, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto k_provider = [](int32_t i) { return i; };       // c0 key: 0..99
+    auto c1_provider = [](int32_t i) { return i % 10; }; // c1 == 5 -> 10 rows
+    auto c2_provider = [](int32_t i) { return i % 20; }; // c2 == 7 -> 5 rows
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, k_provider));
+    ASSERT_OK(segment_data_builder.append(1, c1_provider));
+    ASSERT_OK(segment_data_builder.append(2, c2_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // Predicate on a single (non-key) column, so reorder_schema() moves it to the front and the schema
+    // ordering depends on which column is filtered.
+    auto make_pred_opts = [&](ColumnId cid, const std::string& value, std::unique_ptr<ColumnPredicate>& holder) {
+        holder.reset(new_column_eq_predicate(get_type_info(TYPE_INT), cid, value));
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode{holder.get()});
+        SegmentReadOptions o;
+        o.fs = _fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        o.enable_predicate_col_late_materialize = true;
+        o.pred_tree = PredicateTree::create(std::move(root));
+        return o;
+    };
+    auto drain = [&](const ChunkIteratorPtr& it) -> size_t {
+        CHECK_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        CHECK_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+        auto chunk = ChunkFactory::new_chunk(it->output_schema(), chunk_size);
+        size_t total = 0;
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            total += chunk->num_rows();
+        }
+        return total;
+    };
+
+    ChunkIteratorPtr reusable_slot;
+
+    // First scan filters c1 -> reorder_schema puts c1 first.
+    std::unique_ptr<ColumnPredicate> pred_c1;
+    auto opts_c1 = make_pred_opts(1, "5", pred_c1);
+    ASSIGN_OR_ABORT(auto iter_c1, segment->new_reusable_iterator(vec_schema, vec_schema, opts_c1, &reusable_slot));
+    void* first_slot = reusable_slot.get();
+    ASSERT_NE(nullptr, first_slot);
+    ASSERT_EQ(10u, drain(iter_c1));
+    iter_c1->close();
+
+    // Second scan filters c2: the predicate layout no longer matches the stored schema, so the slot must be
+    // rebuilt (different underlying iterator) and still return c2's correct row count.
+    std::unique_ptr<ColumnPredicate> pred_c2;
+    auto opts_c2 = make_pred_opts(2, "7", pred_c2);
+    ASSIGN_OR_ABORT(auto iter_c2, segment->new_reusable_iterator(vec_schema, vec_schema, opts_c2, &reusable_slot));
+    ASSERT_NE(first_slot, reusable_slot.get()) << "predicate layout changed -> slot must be rebuilt";
+    ASSERT_EQ(5u, drain(iter_c2));
+    iter_c2->close();
+}
+
+// Directly exercises the exported seed/rowid helpers used by the lake prepared-split seed path:
+// get_prepared_pruned_row_ranges (seed pruning), block_aligned_rowid_range_from_seek_ranges and
+// segment_seek_ranges_to_rowid_ranges (key-range -> rowid-range resolution), for both the empty-range
+// fast paths and a non-empty key range that drives the block-aligned bound lookups.
+TEST_F(SegmentIteratorTest, PreparedRowRangeAndSeekHelpers) {
+    using namespace starrocks::test;
+
+    // block_aligned_rowid_range_from_seek_ranges / segment_seek_ranges_to_rowid_ranges re-derive the
+    // FileSystem from the segment's stored path via FileSystemFactory::CreateSharedFromString, so the
+    // segment must live on a real (posix) path -- the in-memory MemoryFileSystem the other cases use is
+    // invisible to the derived posix fs. Write it under a private temp dir and clean it up.
+    const std::string dir = "/tmp/sr_prepared_row_range_helpers";
+    const std::string file_name = dir + "/seg.dat";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_name));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
+
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = config::vector_chunk_size;
+    const size_t num_rows = 100;
+    auto key_provider = [](int32_t i) { return i; };
+    auto val_provider = [](int32_t i) { return i * 2; };
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, key_provider));
+    ASSERT_OK(segment_data_builder.append(1, val_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    OlapReaderStatistics stats;
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+
+    // get_prepared_pruned_row_ranges: no predicate -> the seed pruning keeps every row.
+    {
+        SegmentReadOptions o;
+        o.fs = fs;
+        o.stats = &stats;
+        o.chunk_size = chunk_size;
+        o.tablet_schema = tablet_schema;
+        ASSIGN_OR_ABORT(auto pruned, get_prepared_pruned_row_ranges(segment, vec_schema, o));
+        ASSERT_EQ(num_rows, pruned.span_size());
+    }
+
+    // Empty-range fast paths: no key bounds -> both helpers cover the whole segment without an index lookup.
+    ASSIGN_OR_ABORT(auto full_block_range, block_aligned_rowid_range_from_seek_ranges(segment.get(), {}));
+    ASSERT_EQ(num_rows, full_block_range.span_size());
+    ASSIGN_OR_ABORT(auto empty_rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, {}, LakeIOOptions{}));
+    ASSERT_TRUE(empty_rowid_ranges.empty());
+
+    // A non-empty key range [10, 50) on the key column drives the short-key bound lookups.
+    // block_aligned_rowid_range_from_seek_ranges requires the index to be loaded first (per its contract);
+    // segment_seek_ranges_to_rowid_ranges loads it internally.
+    LakeIOOptions io_opts{.fill_data_cache = false};
+    ASSERT_OK(segment->load_index());
+    // The SeekTuple key column must carry the segment's short-key length (INT index_length = 4). Without it
+    // short_key_encode emits only a marker byte and every bound collapses to the same block (empty window).
+    auto key_field = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
+    key_field->set_uid(0);
+    key_field->set_is_key(true);
+    key_field->set_short_key_length(4);
+    Schema key_schema({key_field});
+    std::vector<SeekRange> seek_ranges;
+    seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
+
+    // The block-aligned window is a non-empty subset of the segment (keys 10..49 live in blocks of 10 rows).
+    ASSIGN_OR_ABORT(auto block_range, block_aligned_rowid_range_from_seek_ranges(segment.get(), seek_ranges));
+    ASSERT_GT(block_range.span_size(), 0u);
+    ASSERT_LE(block_range.span_size(), num_rows);
+
+    // One resolved rowid range per input SeekRange.
+    ASSIGN_OR_ABORT(auto rowid_ranges, segment_seek_ranges_to_rowid_ranges(segment, seek_ranges, io_opts));
+    ASSERT_EQ(1u, rowid_ranges.size());
 }
 
 } // namespace starrocks

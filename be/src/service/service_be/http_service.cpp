@@ -58,6 +58,7 @@
 #endif
 #include "common/metrics/process_metrics_registry.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/exec_env.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -84,22 +85,24 @@
 #include "platform/http/ev_http_server.h"
 #include "platform/http/http_method.h"
 #include "platform/store_path.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
 HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
-                             const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
-                             LoadChannelMgr* load_channel_mgr, int port, int num_threads)
+                             const RuntimeEnv& runtime_env, ProcessMetricsRegistry* process_metrics_registry,
+                             LoadChannelMgr* load_channel_mgr, StreamLoadExecutor* stream_load_executor,
+                             TransactionMgr* transaction_mgr, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
           _orchestration_env(orchestration_env),
-          _global_env(global_env),
+          _runtime_env(runtime_env),
           _process_metrics_registry(process_metrics_registry),
           _load_channel_mgr(load_channel_mgr),
+          _stream_load_executor(stream_load_executor),
+          _transaction_mgr(transaction_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -122,16 +125,19 @@ Status HttpServiceBE::start() {
     DCHECK(_orchestration_env != nullptr);
     auto* stream_load_orchestrator = _orchestration_env->stream_load_orchestrator();
     DCHECK(stream_load_orchestrator != nullptr);
+    DCHECK(_stream_load_executor != nullptr);
+    DCHECK(_transaction_mgr != nullptr);
 
-    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
+    register_config_update_hooks(_env, _runtime_env, _load_channel_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
-    add_default_path_handlers(_web_page_handler.get(), _global_env);
+    add_default_path_handlers(_web_page_handler.get(), _runtime_env);
 
     _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, stream_load_orchestrator, _http_concurrent_limiter.get());
+    auto* stream_load_action =
+            new StreamLoadAction(_env, stream_load_orchestrator, _stream_load_executor, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -145,13 +151,14 @@ Status HttpServiceBE::start() {
     // PrepreTransaction:   POST /api/transaction/prepare
     //
     // ListTransactions:    POST /api/transaction/list
-    auto* transaction_manager_action = new TransactionManagerAction(_env);
+    auto* transaction_manager_action = new TransactionManagerAction(_env, _transaction_mgr);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
 
     // LoadData:            PUT /api/transaction/load
-    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env, stream_load_orchestrator);
+    auto* transaction_stream_load_action =
+            new TransactionStreamLoadAction(_env, stream_load_orchestrator, _transaction_mgr);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
     _http_handlers.emplace_back(transaction_stream_load_action);
 
@@ -233,7 +240,7 @@ Status HttpServiceBE::start() {
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
-        auto memory_metric_action = new MemoryMetricsAction(_global_env);
+        auto memory_metric_action = new MemoryMetricsAction(_runtime_env);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
         _http_handlers.emplace_back(memory_metric_action);
     }
@@ -244,7 +251,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction(_global_env);
+    auto* checksum_action = new ChecksumAction(_runtime_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 

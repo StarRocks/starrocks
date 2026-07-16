@@ -55,6 +55,9 @@
 #include "common/util/thrift_client_cache.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "exec/exec_env.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -63,12 +66,9 @@
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_metrics.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
@@ -431,7 +431,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                                        const FinishCallback& cb) {
     RETURN_IF_ERROR(
-            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+            RuntimeEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
         return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
