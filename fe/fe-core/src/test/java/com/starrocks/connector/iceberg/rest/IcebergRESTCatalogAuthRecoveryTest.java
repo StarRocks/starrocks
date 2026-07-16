@@ -168,6 +168,39 @@ public class IcebergRESTCatalogAuthRecoveryTest {
     }
 
     @Test
+    public void testWrappedOperationsPassThroughOnSuccess() {
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionCatalog.SessionContext) any, (Namespace) any);
+                result = ImmutableMap.of("location", "s3://bucket/db1");
+                minTimes = 0;
+            }
+        };
+
+        IcebergRESTCatalog catalog = newOAuth2CredentialCatalog();
+        Assertions.assertNotNull(catalog.getTable(connectContext, "db1", "t1"));
+        Assertions.assertFalse(catalog.tableExists(connectContext, "db1", "t1"));
+        Assertions.assertTrue(catalog.listAllDatabases(connectContext).isEmpty());
+        catalog.createDB(connectContext, "db2", null);
+        Assertions.assertEquals("s3://bucket/db1", catalog.getDB(connectContext, "db1").getLocation());
+        Assertions.assertDoesNotThrow(() -> catalog.dropDB(connectContext, "db1"));
+        Assertions.assertTrue(catalog.listTables(connectContext, "db1").isEmpty());
+        Assertions.assertTrue(catalog.createTable(connectContext, "db1", "t1", null, null, null, null, ImmutableMap.of()));
+        Assertions.assertFalse(catalog.dropTable(connectContext, "db1", "t1", true));
+        catalog.renameTable(connectContext, "db1", "t1", "t2");
+        Assertions.assertNotNull(catalog.getView(connectContext, "db1", "v1"));
+        Assertions.assertFalse(catalog.dropView(connectContext, "db1", "v1"));
+        Assertions.assertEquals("s3://bucket/db1",
+                catalog.loadNamespaceMetadata(connectContext, Namespace.of("db1")).get("location"));
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 1; // no NotAuthorized -> no rebuild
+            }
+        };
+    }
+
+    @Test
     public void testOtherRestExceptionsDoNotRebuild() {
         new Expectations() {
             {
