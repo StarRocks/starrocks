@@ -174,12 +174,15 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        Set<String> nativeColumnNames = icebergTable.getNativeTable().schema().columns().stream()
+        // Filter against the read schema (the targeted snapshot's schema for time travel), not the
+        // current native schema, so snapshot-only column names (e.g. a column before a later rename)
+        // are not dropped before IcebergMetadata calls scan.select(fieldNames).
+        Set<String> readSchemaColumnNames = icebergTable.getReadSchema().columns().stream()
                 .map(Types.NestedField::name)
                 .collect(Collectors.toSet());
         List<String> requiredColumnNames = desc.getSlots().stream()
                 .map(slot -> slot.getColumn().getName())
-                .filter(nativeColumnNames::contains)
+                .filter(readSchemaColumnNames::contains)
                 .distinct()
                 .collect(Collectors.toList());
 
