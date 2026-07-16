@@ -868,8 +868,8 @@ PRIMARY KEY (tenant_id, created_time, id);
 
 | DDL | 理由 |
 |---|---|
-| `ALTER TABLE ... ADD ROLLUP ...` | 同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し、行順序が一致していることを前提としていますが、レンジ分散ではこの前提を満たせません。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | `ADD ROLLUP` と同じコードパスを共有します。 |
+| `ORDER BY` 句を持たない `ALTER TABLE ... ADD ROLLUP ...` | 普通の同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し行順序が一致していることを前提としますが、レンジ分散ではこれを満たせません。代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。共有データのレンジ分散テーブルでは（v4.2 以降）独立したソートキーを持つ Rollup を作成でき、この種の Rollup は複数追加できます（`ALTER TABLE` 文ごとに 1 つ）。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
 | `ALTER TABLE ... ORDER BY (...)`（ソートキーの変更） | ソートキーが tablet の境界を決定するため、これを変更すると既存のレンジ tablet が無効になります。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、新しいキー列が（導出された）レンジソートキーに自動的に追加されます。 |

@@ -864,8 +864,8 @@ The following operations are not supported on tables with range distribution:
 
 | DDL | Reason |
 |---|---|
-| `ALTER TABLE ... ADD ROLLUP ...` | Synchronous rollup assumes 1-to-1 base/rollup tablet pairing with same row order, which range distribution does not provide. |
-| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | Same code path as `ADD ROLLUP`. |
+| `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on shared-data range tables (from v4.2) it builds an independent-sort-key rollup, and multiple such rollups are supported (one per `ALTER TABLE` statement). |
+| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
 | `ALTER TABLE ... ORDER BY (...)` (modify sort key) | The sort key defines tablet boundaries, so modifying it would invalidate existing range tablets. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | New key columns auto-append to the (derived) range sort key on AGG/UNIQUE tables or tables without explicit `ORDER BY`. |
