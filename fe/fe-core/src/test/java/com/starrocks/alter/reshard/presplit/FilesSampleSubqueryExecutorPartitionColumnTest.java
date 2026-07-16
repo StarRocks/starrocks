@@ -57,8 +57,26 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
         Assertions.assertTrue(sql.contains("`ts`"), "partition-source column must appear in projection: " + sql);
         Assertions.assertTrue(sql.indexOf("`user_id`") < sql.indexOf("`ts`"),
                 "sort-key column must precede partition-source column in projection: " + sql);
-        Assertions.assertTrue(sql.contains("SELECT `user_id`, `ts` FROM FILES"),
-                "projection list must be sort-key followed by partition-source, comma-separated: " + sql);
+        Assertions.assertTrue(sql.contains("SELECT `user_id` AS ps_col_0, `ts` AS ps_col_1 FROM FILES"),
+                "projection list must be sort-key followed by partition-source, each under a unique positional alias: " + sql);
+    }
+
+    @Test
+    void sharedSortKeyAndPartitionColumnAliasedUniquely() {
+        // Regression: __time on a date_trunc('month', __time)-partitioned table is BOTH a
+        // sort-key column and the partition-source column. It must be projected twice
+        // (the positional decoder needs both the sort-key and partition-source slice), but
+        // under DISTINCT output names — otherwise the sample sub-query emits two columns
+        // named `__time`, fails analysis ("Duplicate column name"), and pre-split is
+        // silently skipped, pinning the range table at 1 tablet/partition.
+        Column shared = bigintColumn("__time");
+
+        Map<String, String> properties = Map.of("path", "s3://bucket/foo", "format", "parquet");
+        String sql = buildSampleSqlFromColumns(properties, List.of(shared), List.of(shared),
+                /*samplingRate=*/ 0.1, /*rowLimit=*/ 100, /*seed=*/ 0L);
+
+        Assertions.assertTrue(sql.contains("`__time` AS ps_col_0, `__time` AS ps_col_1"),
+                "a column shared by sort key and partition source must be projected twice under distinct aliases: " + sql);
     }
 
     @Test
@@ -71,7 +89,7 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
 
         Assertions.assertTrue(sql.contains("`user_id`"));
         // No stray comma after the lone sort-key column.
-        Assertions.assertTrue(sql.contains("SELECT `user_id` FROM FILES"),
+        Assertions.assertTrue(sql.contains("SELECT `user_id` AS ps_col_0 FROM FILES"),
                 "single-column projection must not carry a trailing comma when no partition cols: " + sql);
     }
 

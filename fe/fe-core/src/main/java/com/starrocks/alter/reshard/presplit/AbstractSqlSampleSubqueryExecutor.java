@@ -215,7 +215,22 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 sortKeyProjectionIdents.size() + partitionProjectionIdents.size());
         projected.addAll(sortKeyProjectionIdents);
         projected.addAll(partitionProjectionIdents);
-        String projection = String.join(", ", projected);
+        // A column can appear in BOTH the sort key and the partition-source list — e.g.
+        // __time on a `date_trunc('month', __time)`-partitioned table, where __time is
+        // both an (aggregate/sort) key column and the partition-expression source. Listing
+        // it twice by bare identifier produces two output columns named `__time`, which
+        // fails analysis ("Duplicate column name") and silently skips pre-split, leaving
+        // the range table at 1 tablet/partition forever. Alias each projected column to a
+        // unique positional name so the projection stays 1:1 (same count + order) with the
+        // positional decode in decodeRow(), while every output column name is distinct.
+        StringBuilder projectionBuilder = new StringBuilder();
+        for (int i = 0; i < projected.size(); i++) {
+            if (i > 0) {
+                projectionBuilder.append(", ");
+            }
+            projectionBuilder.append(projected.get(i)).append(" AS ps_col_").append(i);
+        }
+        String projection = projectionBuilder.toString();
         long orderShuffleSeed = seed ^ 0x5A5A5A5A5A5A5A5AL;
         String randFilter = "rand(" + seed + ") < " + Double.toString(samplingRate);
         String whereClause = whereClauseSqlOrNull == null
