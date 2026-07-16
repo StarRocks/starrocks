@@ -153,6 +153,24 @@ public class LakeRangeRollupJobTest {
         return table;
     }
 
+    /**
+     * Inject a NORMAL sibling rollup {@code name} into {@link #table}: register its meta + a NORMAL
+     * {@link MaterializedIndex} in every physical partition (mirrors a rollup already promoted by a
+     * prior finished job). Returns the sibling's meta id.
+     */
+    private long injectNormalSiblingRollup(String name) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> schema = new ArrayList<>(table.getSchemaByIndexMetaId(baseIndexMetaId).subList(0, 2));
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
+    }
+
     // ---- Step 1 / Step 4: construction test ---------------------------------
 
     @Test
@@ -603,15 +621,7 @@ public class LakeRangeRollupJobTest {
         Column colK2 = baseSchema.get(1);
 
         // Pre-existing NORMAL sibling rollup r1 — must survive the additive flip/replay of r2.
-        long r1MetaId = GlobalStateMgr.getCurrentState().getNextId();
-        List<Column> r1Schema = new ArrayList<>(baseSchema.subList(0, 2));
-        table.setIndexMeta(r1MetaId, "r1", r1Schema, 0, 0, (short) 1,
-                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
-        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            long physId = GlobalStateMgr.getCurrentState().getNextId();
-            pp.createRollupIndex(new MaterializedIndex(physId, r1MetaId,
-                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
-        }
+        long r1MetaId = injectNormalSiblingRollup("r1");
         MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
         assertNotNull(r1MetaBefore, "sibling r1 meta must exist before replay");
 
@@ -682,15 +692,7 @@ public class LakeRangeRollupJobTest {
     @Test
     public void testCancelRemovesShadowKeepsSiblingRollup() {
         // Inject NORMAL sibling r1.
-        long r1MetaId = GlobalStateMgr.getCurrentState().getNextId();
-        List<Column> r1Schema = new ArrayList<>(table.getSchemaByIndexMetaId(baseIndexMetaId).subList(0, 2));
-        table.setIndexMeta(r1MetaId, "r1", r1Schema, 0, 0, (short) 1,
-                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
-        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            long physId = GlobalStateMgr.getCurrentState().getNextId();
-            pp.createRollupIndex(new MaterializedIndex(physId, r1MetaId,
-                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
-        }
+        long r1MetaId = injectNormalSiblingRollup("r1");
         MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
 
         // Build r2 with its SHADOW index actually installed (meta + per-partition SHADOW indexes).

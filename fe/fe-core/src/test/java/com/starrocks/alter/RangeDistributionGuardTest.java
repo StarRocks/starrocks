@@ -38,6 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -756,7 +757,7 @@ public class RangeDistributionGuardTest {
 
         // Inject a finished rollup so the table now has two indexes.
         injectFinishedRollup(table, "r_existing",
-                new java.util.ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
 
         // With a second index present the table is STILL routable (multiple rollups supported).
         assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table),
@@ -802,7 +803,7 @@ public class RangeDistributionGuardTest {
                 .getLocalMetastore().getTable("test", "t_guard_rollup_from");
         // Fully inject a finished rollup "r_src" whose schema is [k1, k2] (omits v1).
         injectFinishedRollup(table, "r_src",
-                new java.util.ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
 
         // Explicit "duplicate key" is required here: without it, the pre-fix schema-validation branch's
         // "does not exist in base index" wording coincidentally contains "base index" too, which would
