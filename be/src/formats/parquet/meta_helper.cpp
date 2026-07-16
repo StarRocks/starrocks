@@ -203,7 +203,14 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
     bool has_valid_child = false;
 
     if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
-        for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
+        // ARRAY always has one child (element) and MAP always has two (key, value). The downstream
+        // reader (ColumnReaderFactory::create) reads those children by fixed index.
+        const size_t required_children = parquet_field->type == ColumnType::MAP ? 2 : 1;
+        if (parquet_field->children.size() < required_children || field_schema->children.size() < required_children ||
+            type_descriptor->children.size() < required_children) {
+            return false;
+        }
+        for (size_t idx = 0; idx < required_children; idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
                                &type_descriptor->children[idx])) {
                 has_valid_child = true;
