@@ -42,7 +42,9 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/rowid_types.h"
 #include "test_util.h"
@@ -1627,6 +1629,47 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
     // so the per-segment scan-row counter sums to the full row count.
     EXPECT_EQ(4, refined_segments);
     EXPECT_EQ(static_cast<int64_t>(expected.size()), refined_scan_rows);
+}
+
+// parse_seek_range() is parsed once and cached in _cached_seek_ranges, then reused on every subsequent
+// init_rowset_read_options (a reader's per-split reopens re-run it). Prove the second call reuses the
+// cache instead of re-parsing: open() populates the cache, then we overwrite it with a size-1 sentinel;
+// a reused cache yields the size-1 sentinel, while a re-parse of these (empty-key) params would yield an
+// empty range list and overwrite the sentinel.
+TEST_F(LakeTabletReaderSpit, test_seek_range_cached_across_reopen) {
+    std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20};
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    build_split_test_tablet(tablet, _schema, _tablet_metadata, keys, vals);
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    auto params = generate_tablet_reader_params(&scan_range);
+
+    // open() runs init_rowset_read_options once, which parses the seek range and engages the cache.
+    ASSERT_FALSE(reader->_cached_seek_ranges.has_value());
+    ASSERT_OK(reader->open(params));
+    ASSERT_TRUE(reader->_cached_seek_ranges.has_value());
+
+    // Overwrite the cache with a size-1 sentinel; the reader is fully set up now, so a second
+    // init_rowset_read_options is safe. A reused cache yields size 1; a re-parse of the empty-key params
+    // would yield size 0 and overwrite the sentinel.
+    reader->_cached_seek_ranges = std::vector<SeekRange>(1);
+    RowsetReadOptions opts;
+    ASSERT_OK(reader->init_rowset_read_options(params, &opts));
+    EXPECT_EQ(1u, opts.ranges.size()) << "init_rowset_read_options re-parsed instead of reusing the cache";
+    ASSERT_TRUE(reader->_cached_seek_ranges.has_value());
+    EXPECT_EQ(1u, reader->_cached_seek_ranges->size());
+
+    reader->close();
 }
 
 } // namespace starrocks::lake
