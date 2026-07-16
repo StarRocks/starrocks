@@ -74,8 +74,10 @@ public class IcebergRESTCatalogAuthRecoveryHttpTest {
             String auth = exchange.getRequestHeaders().getFirst("Authorization");
             String expected = validToken == null ? null : "Bearer " + validToken;
             if (expected == null || !expected.equals(auth)) {
-                respond(exchange, 401,
-                        "{\"error\":{\"message\":\"Not authorized\",\"type\":\"NotAuthorizedException\",\"code\":401}}");
+                // exact shape observed from Apache Polaris 1.1.0: bare 401, empty body, WWW-Authenticate: Bearer
+                exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
+                exchange.sendResponseHeaders(401, -1);
+                exchange.close();
             } else {
                 respond(exchange, 200, "{\"namespaces\":[[\"db1\"]]}");
             }
