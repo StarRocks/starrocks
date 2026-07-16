@@ -3300,6 +3300,27 @@ Status SegmentIterator::_init_inverted_index_iterators() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status SegmentIterator::_wrap_or_match_predicates_for_fallback() {
+    // Only OR subtrees need the per-row fallback. Immediate AND-children of the
+    // root keep the normal inverted-index filtering path.
+    if (!_opts.pred_tree.has_or_predicate()) {
+        return Status::OK();
+    }
+
+    OrMatchFallbackVisitor visitor{_inverted_index_ctx->inverted_index_iterators, _obj_pool,
+                                   &_inverted_index_ctx->rowid_buffer, &_inverted_index_ctx->has_fallback_predicates,
+                                   num_rows()};
+    auto root = _opts.pred_tree.release_root();
+    for (auto& or_child : root.compound_children()) {
+        RETURN_IF_ERROR(or_child.visit(visitor));
+    }
+    _opts.pred_tree = PredicateTree::create(std::move(root));
+    return Status::OK();
+}
+
+>>>>>>> 8425d06a8e ([BugFix] Exclude NULL rows for negated MATCH in OR inverted-index fallback (#76350))
 Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF(!_opts.enable_gin_filter, Status::OK());

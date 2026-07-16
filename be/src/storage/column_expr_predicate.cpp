@@ -171,6 +171,20 @@ Status ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/storage/column_expr_predicate.cpp
+=======
+bool ColumnExprPredicate::is_match_expr() const {
+    if (_expr_ctxs.empty()) {
+        return false;
+    }
+    Expr* root = _expr_ctxs[0]->root();
+    if (root->node_type() == TExprNodeType::COMPOUND_PRED && root->op() == TExprOpcode::COMPOUND_NOT) {
+        root = root->get_child(0);
+    }
+    return root->node_type() == TExprNodeType::MATCH_EXPR;
+}
+
+>>>>>>> 8425d06a8e ([BugFix] Exclude NULL rows for negated MATCH in OR inverted-index fallback (#76350)):be/src/storage_primitive/column_expr_predicate.cpp
 bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     // if expr does not satisfy monotonicity, we can not apply zone map.
     if (!_monotonic) return true;
@@ -366,6 +380,30 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
 
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
+<<<<<<< HEAD:be/src/storage/column_expr_predicate.cpp
+=======
+    return roaring;
+#else
+    return Status::NotSupported("Inverted index is not supported on Apple");
+#endif
+}
+
+Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                                roaring::Roaring* row_bitmap) const {
+#ifndef __APPLE__
+    bool with_not = _expr_ctxs[0]->root()->node_type() == TExprNodeType::COMPOUND_PRED &&
+                    _expr_ctxs[0]->root()->op() == TExprOpcode::COMPOUND_NOT;
+
+    ASSIGN_OR_RETURN(auto roaring_opt, read_inverted_index(column_name, iterator));
+
+    // nullopt means an empty match string, which matches no rows. Fall through
+    // with an empty posting set so the shared logic below produces the right
+    // result
+    if (!roaring_opt.has_value()) {
+        roaring_opt.emplace();
+    }
+
+>>>>>>> 8425d06a8e ([BugFix] Exclude NULL rows for negated MATCH in OR inverted-index fallback (#76350)):be/src/storage_primitive/column_expr_predicate.cpp
     if (with_not) {
         *row_bitmap -= roaring;
         roaring::Roaring null_roaring;

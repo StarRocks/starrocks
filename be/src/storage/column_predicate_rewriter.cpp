@@ -321,6 +321,21 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
+<<<<<<< HEAD
+=======
+
+    if (PredicateType::kGinFallback == pred->type()) {
+        const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);
+        // The bitmap is the set of rows for which the predicate is TRUE (negation
+        // and NULLs already folded in), so an empty bitmap means the predicate
+        // holds for no row regardless of whether it was negated.
+        if (fallback_pred->get_bitmap().isEmpty()) {
+            return RewriteStatus::ALWAYS_FALSE;
+        }
+        return RewriteStatus::UNCHANGED;
+    }
+
+>>>>>>> 8425d06a8e ([BugFix] Exclude NULL rows for negated MATCH in OR inverted-index fallback (#76350))
     if (PredicateType::kPlaceHolder == pred->type()) {
         return RewriteStatus::ALWAYS_TRUE;
     }

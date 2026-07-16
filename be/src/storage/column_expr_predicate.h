@@ -44,6 +44,10 @@ public:
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
+<<<<<<< HEAD:be/src/storage/column_expr_predicate.h
+=======
+    bool is_match_expr() const;
+>>>>>>> 8425d06a8e ([BugFix] Exclude NULL rows for negated MATCH in OR inverted-index fallback (#76350)):be/src/storage_primitive/column_expr_predicate.h
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
@@ -71,6 +75,12 @@ public:
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                         const SlotDescriptor* slot_desc);
+
+    // Reads the raw positive-match posting list for the (NOT) LIKE/MATCH literal.
+    // Only used by seek_inverted_index, which layers negation and NULL handling
+    // on top; not part of the public predicate surface.
+    StatusOr<std::optional<roaring::Roaring>> read_inverted_index(const std::string_view column_name,
+                                                                  InvertedIndexIterator* iterator) const;
 
     void _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
 

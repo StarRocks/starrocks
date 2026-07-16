@@ -267,6 +267,18 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "a
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "abc ABC";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
+-- Regression: a negated MATCH inside an OR must exclude NULL rows. Under
+-- three-valued logic NOT (NULL match_any 'ABC') is NULL (not TRUE), so the NULL
+-- row (id1=5) must not leak in through the OR-MATCH inverted-index fallback.
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC" OR id1 = 100;
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE id1 = 100 OR text_column NOT match_any "ABC";
+-- A sibling OR arm may still legitimately select the NULL row.
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC" OR id1 = 5;
+-- Empty match literal: match_any '' matches nothing, so NOT is TRUE for every
+-- non-null row. Both the AND path and the OR-MATCH fallback must keep those
+-- rows (only the NULL row stays out), not drop them.
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "" OR id1 = 100;
 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
