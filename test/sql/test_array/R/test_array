@@ -404,7 +404,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 44. D
 -- !result
 
 
--- name: null_or_empty
+-- name: test_null_or_empty
 select null_or_empty([1, 2]);
 -- result:
 0
