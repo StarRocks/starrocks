@@ -105,6 +105,7 @@ public class NestLoopJoinRuntimeFilterTest extends PlanTestBase {
         Assertions.assertNull(findGlobalRuntimeFilter(getExecPlan(query("p.c_int != b.c_int"))));
         Assertions.assertNull(findGlobalRuntimeFilter(getExecPlan(query("p.c_int + 1 > b.c_int"))));
         Assertions.assertNull(findGlobalRuntimeFilter(getExecPlan(query("p.s like b.pattern"))));
+        Assertions.assertNull(findGlobalRuntimeFilter(getExecPlan(query("p.s > b.pattern"))));
     }
 
     // 6. Supported range predicate data types.

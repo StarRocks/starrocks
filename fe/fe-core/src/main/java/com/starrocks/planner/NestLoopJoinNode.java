@@ -82,6 +82,9 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 if (!(expr instanceof BinaryPredicate) || !BinaryPredicate.IS_RANGE_PREDICATE.apply((BinaryPredicate) expr)) {
                     rf.setOnlyLocal(true);
                 }
+                if (!left.getType().isNumericType() && !left.getType().isDateType()) {
+                    rf.setOnlyLocal(true);
+                }
 
                 RuntimeFilterPushDownContext rfPushDownCtx =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
