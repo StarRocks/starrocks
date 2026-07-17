@@ -106,7 +106,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -130,7 +130,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -162,7 +162,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, fixedClock);
