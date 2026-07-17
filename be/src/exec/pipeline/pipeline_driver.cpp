@@ -745,13 +745,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _update_driver_level_timer();
 
-<<<<<<< HEAD:be/src/exec/pipeline/pipeline_driver.cpp
-    if (_global_rf_timer != nullptr) {
-        _global_rf_timer->unschedule_and_wait(_fragment_ctx->pipeline_timer());
-    }
-=======
     _unschedule_global_rf_timer();
->>>>>>> b0363d9b0e ([BugFix] Unschedule global RF timer in PipelineDriver destructor (#76252)):be/src/exec/runtime/pipeline_driver.cpp
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -805,8 +799,8 @@ void PipelineDriver::_unschedule_global_rf_timer() noexcept {
     // be running on the timer thread but has not yet taken its shared_from_this() reference. Otherwise
     // doRun() could observe a zero use_count and throw std::bad_weak_ptr.
     auto task = std::move(_global_rf_timer);
-    if (task != nullptr && _pipeline_timer_context != nullptr) {
-        _pipeline_timer_context->unschedule_and_join(task.get());
+    if (task != nullptr && _fragment_ctx != nullptr) {
+        task->unschedule_and_wait(_fragment_ctx->pipeline_timer());
     }
 }
 
