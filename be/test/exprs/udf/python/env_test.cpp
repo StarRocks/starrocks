@@ -145,11 +145,11 @@ TEST_F(PyWorkerManagerEnvTest, remote_worker_has_no_process_lifecycle) {
     ASSERT_EQ("grpc+tcp://example:8815", worker->url());
     ASSERT_FALSE(worker->is_dead());
     ASSERT_FALSE(worker->expired());
-    worker->touch();                 // no-op
-    worker->terminate_and_wait();    // must be a no-op, not crash / not signal any process
+    worker->touch();              // no-op
+    worker->terminate_and_wait(); // must be a no-op, not crash / not signal any process
     worker->mark_dead();
     ASSERT_TRUE(worker->is_dead());
-    worker.reset();                  // destructor must not touch any process or socket
+    worker.reset(); // destructor must not touch any process or socket
 
     ASSERT_TRUE(std::filesystem::exists(sentinel)) << "a remote worker must never unlink a socket file";
 }
