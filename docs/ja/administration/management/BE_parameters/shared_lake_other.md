@@ -535,6 +535,60 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおける RPC リクエストの最大同時実行数。このしきい値に達すると、受信リクエストは拒否されます。この項目が `0` に設定されている場合、同時実行数に制限はありません。
 - 導入バージョン: -
 
+### python_udf_nsjail_config
+
+- デフォルト: ${STARROCKS_HOME}/conf/pyudf-nsjail.conf
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 完全な namespace 分離を行う Python UDF サンドボックス(`python_udf_sandbox` が `nsjail`)が使用する nsjail 設定ファイル。すべての分離ポリシー(namespace、マウント、ケーパビリティ、uid マッピング、リソース制限、seccomp ポリシー)はこのファイルで定義され、BE は起動時にデプロイ用のパスをレンダリングするだけです。運用者はこのファイルを編集してサンドボックスを調整できます。
+- 導入バージョン: -
+
+### python_udf_nsjail_path
+
+- デフォルト: ${STARROCKS_HOME}/lib/nsjail
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: `python_udf_sandbox` が `seccomp` または `nsjail` に設定されている場合に、Python UDF サンドボックスが使用する nsjail バイナリのパス。バイナリが存在せず、サンドボックスが必須でない場合、ワーカーはサンドボックスなしで実行されます。
+- 導入バージョン: -
+
+### python_udf_nsjail_seccomp_config
+
+- デフォルト: ${STARROCKS_HOME}/conf/pyudf-nsjail-seccomp.conf
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: seccomp のみの Python UDF サンドボックス(`python_udf_sandbox` が `seccomp`、および namespace 分離が利用できない場合の `nsjail` の自動フォールバック)が使用する nsjail 設定ファイル。namespace を使わず、seccomp システムコールフィルターのみを適用します。
+- 導入バージョン: -
+
+### python_udf_sandbox
+
+- デフォルト: off
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Python UDF ワーカープロセスに適用されるランタイム分離レベル。有効な値: `off`(分離なし。ワーカーは BE の OS ユーザーとして、完全なファイルシステムおよびネットワークアクセス権で実行されます)、`seccomp`(namespace を使わず、nsjail を介して seccomp システムコールフィルターを適用します。追加の権限なしで任意のコンテナで動作します)、`nsjail`(nsjail による完全な Linux namespace 分離。`python_udf_sandbox_mode` を参照)。これはデプロイ側の制御項目であり、UDF の作成者やクエリからは設定できません。
+- 導入バージョン: -
+
+### python_udf_sandbox_mode
+
+- デフォルト: auto
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: `python_udf_sandbox` が `nsjail` の場合に使用される namespace 戦略。有効な値: `auto`(ホストが許可する場合は非特権のユーザー namespace を使用し、それ以外は CAP_SYS_ADMIN を使用し、いずれも使えない場合は `python_udf_sandbox_required` が `true` でない限り seccomp のみに降格します)、`rootless`(非特権ユーザー namespace を強制)、`privileged`(ユーザー namespace を使わずホストの CAP_SYS_ADMIN を強制)。
+- 導入バージョン: -
+
+### python_udf_sandbox_required
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 設定された Python UDF サンドボックスが必須かどうか。`true` の場合、要求されたサンドボックスレベルを確立できないと UDF の実行は失敗します(fail-closed)。`false` の場合、BE は警告をログに記録し、より弱いレベルまたはサンドボックスなしにフォールバックします(fail-open)。
+- 導入バージョン: -
+
 ### query_max_memory_limit_percent
 
 - デフォルト: 90

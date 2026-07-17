@@ -79,6 +79,11 @@ public:
     const std::string& url() const override { return _url; }
     void set_url(std::string url) { _url = std::move(url); }
 
+    // Filesystem path of the worker's unix socket, used for cleanup on death.
+    // Kept independent of the process pid so it stays valid even when the
+    // worker is launched behind a wrapper (e.g. a sandbox) with its own pid.
+    void set_sock_path(std::string path) { _sock_path = std::move(path); }
+
     void touch() override { _last_touch_time = MonotonicSeconds(); }
     bool expired() override;
 
@@ -89,6 +94,7 @@ private:
     std::atomic<bool> _once{};
     bool _is_dead{};
     std::string _url;
+    std::string _sock_path;
     pid_t _pid = -1;
     int64_t _last_touch_time = 0;
 };
@@ -120,11 +126,8 @@ public:
 
     StatusOr<WorkerClientPtr> get_client(const PyFunctionDescriptor& func_desc);
 
-    static std::string unix_socket(pid_t pid);
-
-    static std::string unix_socket_prefix();
-
-    static std::string unix_socket_path(pid_t pid);
+    // Directory that holds the worker unix sockets (created 0700 on first use).
+    static std::string socket_dir();
 
     static std::string bootstrap() {
         const char* server_main = "flight_server.py";
@@ -134,6 +137,12 @@ public:
     void cleanup_expired_worker();
 
 private:
+    // Ensure socket_dir() exists and is restricted to the BE user (0700).
+    static Status ensure_socket_dir();
+    // A fresh, collision-free unix socket path under socket_dir(). Independent
+    // of pid so BE and worker agree on the name even behind a launcher wrapper.
+    static std::string new_socket_path();
+
     Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 

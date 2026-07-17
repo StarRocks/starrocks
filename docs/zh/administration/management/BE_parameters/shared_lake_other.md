@@ -541,6 +541,60 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 `0` 表示对并发不做限制。
 - 引入版本：-
 
+### python_udf_nsjail_config
+
+- 默认值：${STARROCKS_HOME}/conf/pyudf-nsjail.conf
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：完整 namespace 隔离的 Python UDF 沙箱(`python_udf_sandbox` 为 `nsjail`)所使用的 nsjail 配置文件。所有隔离策略(namespace、挂载、capability、uid 映射、资源限制以及 seccomp 策略)均在该文件中定义;BE 仅在启动时将部署路径渲染进去。运维可编辑该文件来调整沙箱。
+- 引入版本：-
+
+### python_udf_nsjail_path
+
+- 默认值：${STARROCKS_HOME}/lib/nsjail
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：当 `python_udf_sandbox` 设置为 `seccomp` 或 `nsjail` 时,Python UDF 沙箱所使用的 nsjail 二进制文件路径。如果该二进制文件缺失且沙箱非强制(`python_udf_sandbox_required` 为 `false`),则 Worker 将在无沙箱的情况下运行。
+- 引入版本：-
+
+### python_udf_nsjail_seccomp_config
+
+- 默认值：${STARROCKS_HOME}/conf/pyudf-nsjail-seccomp.conf
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：仅 seccomp 的 Python UDF 沙箱(`python_udf_sandbox` 为 `seccomp`,以及 `nsjail` 在 namespace 隔离不可用时的自动回退)所使用的 nsjail 配置文件。它只施加 seccomp 系统调用过滤,不使用 namespace。
+- 引入版本：-
+
+### python_udf_sandbox
+
+- 默认值：off
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：对 Python UDF Worker 进程施加的运行时隔离级别。有效值:`off`(无隔离,Worker 以 BE 所属操作系统用户身份运行,拥有完整的文件系统和网络访问权限)、`seccomp`(通过 nsjail 施加 seccomp 系统调用过滤,但不使用 namespace;无需额外权限,可在任意容器中使用)、`nsjail`(通过 nsjail 施加完整的 Linux namespace 隔离,详见 `python_udf_sandbox_mode`)。该配置为部署侧控制项,UDF 作者或查询均无法修改。
+- 引入版本：-
+
+### python_udf_sandbox_mode
+
+- 默认值：auto
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：当 `python_udf_sandbox` 为 `nsjail` 时使用的 namespace 策略。有效值:`auto`(在宿主机允许时使用免特权的 user namespace,否则使用 CAP_SYS_ADMIN,否则降级为仅 seccomp,除非 `python_udf_sandbox_required` 为 `true`)、`rootless`(强制使用免特权 user namespace)、`privileged`(强制使用宿主机 CAP_SYS_ADMIN,不使用 user namespace)。
+- 引入版本：-
+
+### python_udf_sandbox_required
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：配置的 Python UDF 沙箱是否为强制。如果为 `true`,当无法建立所请求的沙箱级别时,UDF 将执行失败(fail-closed)。如果为 `false`,BE 会记录一条告警并回退到较弱的级别或无沙箱(fail-open)。
+- 引入版本：-
+
 ### query_max_memory_limit_percent
 
 - 默认值：90

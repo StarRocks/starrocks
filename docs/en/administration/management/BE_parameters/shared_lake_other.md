@@ -553,6 +553,60 @@ This topic introduces the following types of BE configurations:
 - Description: Limits the maximum number of concurrently running connector (HDFS/remote) scanners that a ConnectorScanNode can have. During scan startup the node computes an estimated concurrency (based on memory, chunk size and scanner_row_num) and then caps it with this value to determine how many scanners and chunks to reserve and how many scanner threads to start. It is also consulted when scheduling pending scanners at runtime (to avoid oversubscription) and when deciding how many pending scanners can be re-submitted considering file-handle limits. Lowering this reduces threads, memory and open-file pressure at the cost of potential throughput; increasing it raises concurrency and resource usage.
 - Introduced in: v3.2.0
 
+### python_udf_nsjail_config
+
+- Default: ${STARROCKS_HOME}/conf/pyudf-nsjail.conf
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: nsjail configuration file used by the full-namespace Python UDF sandbox (when `python_udf_sandbox` is `nsjail`). All isolation policy (namespaces, mounts, capabilities, uid mapping, resource limits, and the seccomp policy) is defined in this file; the BE only renders the deployment paths into it at startup. Operators may edit this file to tune the sandbox.
+- Introduced in: -
+
+### python_udf_nsjail_path
+
+- Default: ${STARROCKS_HOME}/lib/nsjail
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the nsjail binary used by the Python UDF sandbox when `python_udf_sandbox` is set to `seccomp` or `nsjail`. If the binary is missing and the sandbox is not required, the worker runs without a sandbox.
+- Introduced in: -
+
+### python_udf_nsjail_seccomp_config
+
+- Default: ${STARROCKS_HOME}/conf/pyudf-nsjail-seccomp.conf
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: nsjail configuration file used by the seccomp-only Python UDF sandbox (when `python_udf_sandbox` is `seccomp`, and the automatic fallback of `nsjail` when namespace isolation is unavailable). It applies a seccomp syscall filter without namespaces.
+- Introduced in: -
+
+### python_udf_sandbox
+
+- Default: off
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Runtime isolation applied to the Python UDF worker process. Valid values: `off` (no isolation; the worker runs as the BE OS user with full filesystem and network access), `seccomp` (a seccomp syscall filter applied via nsjail without namespaces; works in any container without extra privileges), and `nsjail` (full Linux-namespace isolation via nsjail, see `python_udf_sandbox_mode`). This is a deployment-side control and cannot be set by the UDF author or by a query.
+- Introduced in: -
+
+### python_udf_sandbox_mode
+
+- Default: auto
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Namespace strategy used when `python_udf_sandbox` is `nsjail`. Valid values: `auto` (use a rootless unprivileged user namespace when the host allows it, otherwise CAP_SYS_ADMIN, otherwise degrade to seccomp-only unless `python_udf_sandbox_required` is `true`), `rootless` (force an unprivileged user namespace), and `privileged` (force host CAP_SYS_ADMIN without a user namespace).
+- Introduced in: -
+
+### python_udf_sandbox_required
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether the configured Python UDF sandbox is mandatory. If `true`, a UDF fails to run when the requested sandbox level cannot be established (fail-closed). If `false`, the BE logs a warning and falls back to a weaker level or to no sandbox (fail-open).
+- Introduced in: -
+
 ### query_max_memory_limit_percent
 
 - Default: 90

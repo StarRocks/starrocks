@@ -76,14 +76,15 @@ while true; do
     esac
 done
 
-# kill all python worker process
-find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= read -r -d $'\0' worker; do
-    pid=$(echo "$worker" | sed -n 's/.*pyworker_\([0-9]*\).*/\1/p')
-    if [[ ! -z "$pid" ]]; then
-        kill -9 "$pid" > /dev/null
-        rm -- "$worker"
-    fi
-done
+# kill all python worker processes spawned by this BE, then remove their sockets.
+# Workers live under $UDF_RUNTIME_DIR/pyworker and their socket name no longer
+# encodes the worker pid, so identify them by this BE's socket directory in their
+# command line instead of parsing a pid out of the file name.
+worker_dir="${UDF_RUNTIME_DIR}/pyworker"
+if [[ -n "${UDF_RUNTIME_DIR}" && -d "$worker_dir" ]]; then
+    pkill -9 -f "flight_server\.py .*${worker_dir}/" > /dev/null 2>&1
+    rm -rf "$worker_dir" > /dev/null 2>&1
+fi
 
 
 # Stop profile collection daemon first

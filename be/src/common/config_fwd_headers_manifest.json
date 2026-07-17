@@ -386,7 +386,13 @@
         "report_python_worker_error",
         "python_worker_reuse",
         "python_worker_expire_time_sec",
-        "python_udf_rpc_timeout_ms"
+        "python_udf_rpc_timeout_ms",
+        "python_udf_sandbox",
+        "python_udf_sandbox_mode",
+        "python_udf_sandbox_required",
+        "python_udf_nsjail_path",
+        "python_udf_nsjail_config",
+        "python_udf_nsjail_seccomp_config"
       ]
     },
     {
