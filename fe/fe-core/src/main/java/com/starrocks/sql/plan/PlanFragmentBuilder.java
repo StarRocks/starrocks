@@ -3151,10 +3151,9 @@ public class PlanFragmentBuilder {
 
             Map<SlotId, Expr> commonSubExprMap = buildCommonSubExprMap(node.getPredicateCommonOperators(), context);
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
-            ColumnRefSet leftChildColumns = optExpr.inputAt(0).getOutputColumns();
-            ColumnRefSet rightChildColumns = optExpr.inputAt(1).getOutputColumns();
             List<Expr> joinOnConjuncts = extractNestLoopJoinConjuncts(
-                    node.getOnPredicate(), leftChildColumns, rightChildColumns, context);
+                    node.getOnPredicate(), optExpr.inputAt(0).getOutputColumns(),
+                    optExpr.inputAt(1).getOutputColumns(), context);
             List<Expr> probePartitionByExprs = Lists.newArrayList();
             DistributionSpec leftDistributionSpec =
                     optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
