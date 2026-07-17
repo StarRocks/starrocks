@@ -19,7 +19,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -35,11 +34,19 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class HistogramUtils {
     private static final Logger LOG = LogManager.getLogger(HistogramUtils.class);
 
-    public static List<Bucket> convertBuckets(String histogramString, Type type) throws AnalysisException {
+    public static List<Bucket> convertBuckets(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
 
         JsonElement jsonElement = jsonObject.get("buckets");
         if (jsonElement.isJsonNull()) {
+            return Collections.emptyList();
+        }
+
+        // Bucket bounds are interpolated as doubles (see the parsing below and Bucket#getRowCountInBucket).
+        // CHAR/VARCHAR bounds cannot be parsed into doubles - doing so threw NumberFormatException on every
+        // stats-cache refresh. Buckets are unusable for string columns (only MCV is), so skip them. This
+        // covers histograms persisted by older versions that still carry string bucket bounds.
+        if (type.isStringType()) {
             return Collections.emptyList();
         }
 
