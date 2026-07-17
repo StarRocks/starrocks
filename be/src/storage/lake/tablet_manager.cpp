@@ -1173,7 +1173,9 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t versi
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
+DEFINE_FAIL_POINT(put_txn_log_fail);
 Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
+    FAIL_POINT_TRIGGER_RETURN(put_txn_log_fail, Status::InternalError("put_txn_log_fail"));
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
