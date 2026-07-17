@@ -309,7 +309,6 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     for (int i = 0; i < 5; i++) {
         int64_t txn_id = next_id();
@@ -355,7 +354,6 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_data_import) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1024);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(100, 0);
@@ -474,7 +472,6 @@ TEST_F(PkTabletSSTWriterTest, test_no_parallel_execution_with_update_operations)
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_with_update_operations) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(50, 0);
@@ -522,7 +519,6 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::lake_pk_compaction_min_input_segments, 2);
     ConfigResetGuard<int64_t> guard2(&config::write_buffer_size, 512);
-    ConfigResetGuard<bool> guard3(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(80, 0);
@@ -583,7 +579,6 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_compaction_consistency) {
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_results) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(60, 0);
@@ -621,7 +616,10 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_vs_serial_execution_result
         ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
     }
 
-    ConfigResetGuard<bool> guard4(&config::enable_pk_index_eager_build, false);
+    // The enable_pk_index_eager_build config was removed (eager build is now always on for a supported
+    // schema). Disable it for this block via a data-size threshold no load here will reach, so this
+    // exercises the non-eager publish path and confirms it agrees with the eager one above.
+    ConfigResetGuard<int64_t> guard4(&config::pk_index_eager_build_threshold_bytes, 1024L * 1024 * 1024);
     {
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -671,7 +669,6 @@ TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     ConfigResetGuard<bool> guard4(&config::enable_pk_index_parallel_execution, true);
     ConfigResetGuard<int64_t> guard5(&config::pk_index_parallel_execution_min_rows, 4096);
@@ -722,7 +719,6 @@ TEST_F(PkTabletSSTWriterTest, test_publish_early_sst_compact) {
     // - Small write_buffer_size to generate multiple segments per write
     // - Enable eager PK index build to generate SST files
     ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
     // Set a lower threshold to trigger early_sst_compact more easily
     ConfigResetGuard<int32_t> guard4(&config::pk_index_early_sst_compaction_threshold, 3);
@@ -886,7 +882,6 @@ protected:
 // V1 encoding does not.
 TEST_P(PkTabletSSTWriterBigintKeyTest, test_try_enable_pk_index_eager_build_single_bigint_key) {
     auto tablet_id = _tablet_metadata->id();
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_eager_build, true);
 
     auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr.get(), tablet_id, _tablet_schema,
                                                              /*txn_id=*/next_id(), /*flush_pool=*/nullptr,
@@ -940,7 +935,6 @@ TEST_P(PkTabletSSTWriterBigintKeyTest, test_sst_build_single_bigint_pk_ascending
 TEST_P(PkTabletSSTWriterBigintKeyTest, test_write_with_eager_build_single_bigint_pk) {
     auto tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_bigint_data(100, 0);
@@ -1267,7 +1261,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_load_spill_eager_build_distinct_keys) {
     // Small buffer forces multiple memtable flushes -> spill; eager build forced for separate sort key.
     ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto chunk0 = generate_data(100, 0);
@@ -1309,7 +1302,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_load_spill_eager_build_duplicate_keys) 
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     // Overlapping key ranges across chunks: keys [0,100), [50,150) -> 150 distinct primary keys. The
@@ -1364,7 +1356,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_load_spill_dup_keys_over_existing_data)
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> guard(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> guard2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> guard3(&config::pk_index_eager_build_threshold_bytes, 1);
 
     auto load_chunks = [&](int64_t txn_id, const std::vector<Chunk*>& chunks) {
@@ -1426,7 +1417,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_load_spill_op_aware_delete) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<bool> g0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> g1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> g2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> g3(&config::pk_index_eager_build_threshold_bytes, 1);
     ConfigResetGuard<bool> g4(&config::lake_enable_pk_preserve_txn_delete_order, true);
 
@@ -1525,7 +1515,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_vertical_compaction_orderby_eager_sst) 
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<bool> g0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> g1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> g2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> g3(&config::pk_index_eager_build_threshold_bytes, 1);
     ConfigResetGuard<int64_t> g4(&config::vertical_compaction_max_columns_per_group, 1); // force vertical
     ConfigResetGuard<int64_t> g5(&config::lake_pk_compaction_min_input_segments, 2);
@@ -1594,7 +1583,6 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_horizontal_compaction_orderby_eager_sst
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<bool> g0(&config::enable_load_spill, true);
     ConfigResetGuard<int64_t> g1(&config::write_buffer_size, 1);
-    ConfigResetGuard<bool> g2(&config::enable_pk_index_eager_build, true);
     ConfigResetGuard<int64_t> g3(&config::pk_index_eager_build_threshold_bytes, 1);
     ConfigResetGuard<int64_t> g4(&config::vertical_compaction_max_columns_per_group, 100); // force horizontal
     ConfigResetGuard<int64_t> g5(&config::lake_pk_compaction_min_input_segments, 2);

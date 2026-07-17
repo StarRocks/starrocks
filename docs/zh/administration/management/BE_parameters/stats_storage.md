@@ -493,15 +493,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
 - 引入版本：-
 
-### enable_pk_index_eager_build
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在导入和 Compaction 阶段即时构建 Primary Key 索引文件。开启后，系统会在数据写入时直接生成持久化的主键索引文件，提升后续查询性能。
-- 引入版本：-
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - 默认值：true
@@ -1005,7 +996,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：当 `enable_pk_index_eager_build` 设置为 `true` 后，导入或 Compaction 生成的数据大于该阈值时，系统才会即时构建主键索引文件。默认为 100MB。
+- 描述：导入或 Compaction 生成的数据大于该阈值时，系统会即时构建主键索引文件。默认为 100MB。
 - 引入版本：-
 
 ### primary_key_limit_size

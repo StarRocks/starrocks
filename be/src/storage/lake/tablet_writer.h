@@ -46,7 +46,9 @@ class TabletManager;
 // (TabletWriter::try_enable_pk_index_eager_build) and separate-sort-key load spill
 // (DeltaWriterImpl::should_enable_load_spill), which is only correct when the unsort SST writer runs to
 // resolve duplicate primary keys. Needs no tablet metadata: shared-data PK tables are always cloud-native
-// (the only index eager build supports), so the decision is a pure function of config + schema.
+// (the only index eager build supports), so the decision is a pure function of the schema. Eager build is
+// always enabled for a supported schema -- there is no config gate (it must stay on for correctness on the
+// separate-sort-key path, which resolves non-adjacent duplicate primary keys only via the unsort writer).
 bool pk_index_eager_build_supported(const TabletSchema& schema);
 
 // Whether a load into `schema` must preserve in-transaction upsert/delete order. True when the mutable

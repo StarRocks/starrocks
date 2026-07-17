@@ -21,7 +21,7 @@
 namespace starrocks::lake {
 
 bool pk_index_eager_build_supported(const TabletSchema& schema) {
-    if (!config::enable_pk_index_eager_build || schema.keys_type() != KeysType::PRIMARY_KEYS) {
+    if (schema.keys_type() != KeysType::PRIMARY_KEYS) {
         return false;
     }
     // Eager PK index build only supports the cloud-native persistent index, and shared-data primary-key
