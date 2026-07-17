@@ -54,10 +54,11 @@ public class RangeDistributionPruner implements DistributionPruner {
         this.rangeDistributionColumns = rangeDistributionColumns;
         this.distributionColumnFilters = distributionColumnFilters;
 
-        // Capture each tablet's id and range exactly once (never call Tablet#getRange() twice) and
-        // validate arity only after every tablet has been captured, so a concurrent flip can't swap the
-        // range reference between validation and TreeMap construction, and a mismatch found partway
-        // through never truncates the tablet id list already captured.
+        // Single pass: capture each tablet's id and range (never call Tablet#getRange() twice) and check
+        // its arity in the same iteration, adding the id BEFORE the arity check and never breaking on a
+        // mismatch (only flag `degrade`). So a concurrent flip can't swap the range reference between
+        // capture and use, and a mismatch found partway through never truncates the id list already
+        // captured. The TreeMap is built only after the loop completes.
         List<Long> ids = new ArrayList<>(tabletsInOrder.size());
         List<Range<Tuple>> ranges = new ArrayList<>(tabletsInOrder.size());
         boolean degrade = false;

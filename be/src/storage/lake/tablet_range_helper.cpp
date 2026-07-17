@@ -425,10 +425,14 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
     if (t_range.__isset.upper_bound) {
         RETURN_IF_ERROR(convert_bound(t_range.upper_bound, pb_range.mutable_upper_bound()));
     }
-    if (t_range.__isset.lower_bound_included) {
+    // Persist an inclusivity flag only alongside a present bound. TabletRange.toThrift() sets the
+    // __isset.*_bound_included flags unconditionally, so an unbounded (Range.all) or one-sided range
+    // would otherwise carry a stray *_bound_included with no matching bound, leaving the persisted
+    // metadata inconsistent (has_*_bound_included() == true while has_*_bound() == false).
+    if (t_range.__isset.lower_bound_included && pb_range.has_lower_bound()) {
         pb_range.set_lower_bound_included(t_range.lower_bound_included);
     }
-    if (t_range.__isset.upper_bound_included) {
+    if (t_range.__isset.upper_bound_included && pb_range.has_upper_bound()) {
         pb_range.set_upper_bound_included(t_range.upper_bound_included);
     }
     return pb_range;

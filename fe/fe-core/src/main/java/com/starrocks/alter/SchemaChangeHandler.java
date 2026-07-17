@@ -4934,43 +4934,6 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Resolve the effective sort-key columns of {@code schema}, following the same precedence BE
-     * applies when loading a {@code TabletSchemaPB} (see {@code tablet_schema.cpp}'s sort-key
-     * resolution): a non-empty {@code sortKeyUniqueIds} locates sort-key columns by unique id;
-     * otherwise a non-empty {@code sortKeyIdxes} locates them by schema position; otherwise the sort
-     * key is the leading run of key columns ({@link Column#isKey()}). Both {@code null} and empty
-     * lists fall through to the next precedence level. This differs from {@link
-     * MetaUtils#getRangeDistributionColumns(OlapTable, long)}, which treats a non-null (but possibly
-     * empty) {@code sortKeyIdxes} as an explicit sort key and never falls back to key columns.
-     */
-    @VisibleForTesting
-    static List<Column> resolveEffectiveSortKeyColumns(List<Column> schema, @Nullable List<Integer> sortKeyUniqueIds,
-                                                        @Nullable List<Integer> sortKeyIdxes) {
-        if (sortKeyUniqueIds != null && !sortKeyUniqueIds.isEmpty()) {
-            Map<Integer, Column> uniqueIdToColumn = new HashMap<>();
-            for (Column column : schema) {
-                uniqueIdToColumn.put(column.getUniqueId(), column);
-            }
-            List<Column> sortKeyColumns = new ArrayList<>(sortKeyUniqueIds.size());
-            for (Integer uniqueId : sortKeyUniqueIds) {
-                Column column = uniqueIdToColumn.get(uniqueId);
-                Preconditions.checkArgument(column != null, "no column with unique id %s in schema", uniqueId);
-                sortKeyColumns.add(column);
-            }
-            return sortKeyColumns;
-        }
-        if (sortKeyIdxes != null && !sortKeyIdxes.isEmpty()) {
-            List<Column> sortKeyColumns = new ArrayList<>(sortKeyIdxes.size());
-            for (Integer idx : sortKeyIdxes) {
-                sortKeyColumns.add(schema.get(idx));
-            }
-            return sortKeyColumns;
-        }
-        long keyColumnCount = schema.stream().filter(Column::isKey).count();
-        return new ArrayList<>(schema.subList(0, (int) keyColumnCount));
-    }
-
-    /**
      * Whether {@code resolved} -- the {@link SchemaChangeData} produced by {@link #finalAnalyze} --
      * describes a metadata-only trailing key-column add on a shared-data range-distribution table: the
      * new column's value is a constant/NULL sentinel appended after every existing range sort-key
@@ -4985,14 +4948,14 @@ public class SchemaChangeHandler extends AlterHandler {
      *   <li>the table is not a colocate table, has no AUTO_INCREMENT column, and has no temp
      *       partitions;</li>
      *   <li>the table's keysType is DUP_KEYS, AGG_KEYS, or UNIQUE_KEYS (not PRIMARY_KEYS);</li>
-     *   <li>the base index's resolved schema adds exactly one brand-new key column (a unique id not
+     *   <li>the base index's resolved schema adds one or more brand-new key columns (unique ids not
      *       present in the current live schema -- excludes promoting an existing value column to key),
-     *       whose default is constant or NULL (not auto-increment, not generated, not a variable
+     *       each whose default is constant or NULL (not auto-increment, not generated, not a variable
      *       expression default such as {@code uuid()});</li>
      *   <li>the base index's resolved schema's key columns form a contiguous leading prefix;</li>
      *   <li>the resolved (candidate) effective sort key -- resolved with {@link
-     *       #resolveEffectiveSortKeyColumns} -- equals the current effective sort key plus exactly
-     *       that one new column trailing at the end.</li>
+     *       MetaUtils#resolveEffectiveSortKeyColumns} -- equals the current effective sort key plus
+     *       those new columns trailing at the end, in add order.</li>
      * </ul>
      */
     @VisibleForTesting
@@ -5061,9 +5024,9 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
-        List<Column> oldSortKey = resolveEffectiveSortKeyColumns(oldSchema,
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(oldSchema,
                 oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
-        List<Column> newSortKey = resolveEffectiveSortKeyColumns(newSchema,
+        List<Column> newSortKey = MetaUtils.resolveEffectiveSortKeyColumns(newSchema,
                 resolved.getSortKeyUniqueIds(), resolved.getSortKeyIdxes());
         // The new sort key must be the old sort key with exactly the new columns appended as a trailing
         // block, in add order.

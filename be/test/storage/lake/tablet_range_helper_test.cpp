@@ -420,6 +420,41 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_only_lower_bound) {
     ASSERT_FALSE(pb_range.has_upper_bound_included());
 }
 
+// TabletRange.toThrift() sets BOTH *_bound_included flags unconditionally, so a one-sided or Range.all
+// range arrives with a stray inclusivity flag whose matching bound is absent. convert_t_range_to_pb_range
+// must persist an inclusivity flag only alongside a present bound, otherwise the persisted metadata is
+// inconsistent (has_*_bound_included() == true while has_*_bound() == false).
+TEST(TabletRangeHelperTest, test_convert_t_range_drops_included_flag_without_bound) {
+    TTabletRange t_range;
+
+    TTuple lower_bound;
+    TVariant value;
+    TTypeDesc type_desc;
+    type_desc.types.resize(1);
+    type_desc.__isset.types = true;
+    type_desc.types[0].type = TTypeNodeType::SCALAR;
+    type_desc.types[0].scalar_type.__set_type(TPrimitiveType::INT);
+    type_desc.types[0].__isset.scalar_type = true;
+    value.__set_type(type_desc);
+    value.__set_value("10");
+    value.__set_variant_type(TVariantType::NORMAL_VALUE);
+    lower_bound.values.push_back(value);
+
+    t_range.__set_lower_bound(lower_bound);
+    // Simulate toThrift(): both flags __set even though upper_bound is absent.
+    t_range.__set_lower_bound_included(true);
+    t_range.__set_upper_bound_included(false);
+
+    auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
+    ASSERT_OK(res.status());
+    TabletRangePB pb_range = res.value();
+
+    ASSERT_TRUE(pb_range.has_lower_bound());
+    ASSERT_TRUE(pb_range.has_lower_bound_included()); // kept: matching bound present
+    ASSERT_FALSE(pb_range.has_upper_bound());
+    ASSERT_FALSE(pb_range.has_upper_bound_included()); // dropped: no matching bound
+}
+
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_only_upper_bound) {
     TTabletRange t_range;
 

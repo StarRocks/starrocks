@@ -36,6 +36,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
@@ -819,7 +820,7 @@ public class RangeDistributionGuardTest {
         long baseIndexMetaId = table.getBaseIndexMetaId();
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
-        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
                 oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
 
         List<Column> newSchema = new ArrayList<>();
@@ -933,7 +934,7 @@ public class RangeDistributionGuardTest {
         long baseIndexMetaId = table.getBaseIndexMetaId();
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
-        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
                 oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
 
         List<Column> newSchema = new ArrayList<>();
@@ -1004,7 +1005,7 @@ public class RangeDistributionGuardTest {
         long baseIndexMetaId = table.getBaseIndexMetaId();
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
-        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
                 oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
 
         Column newKeyColumn = constKeyColumn(table, "c_new");
@@ -1055,7 +1056,7 @@ public class RangeDistributionGuardTest {
         long baseIndexMetaId = table.getBaseIndexMetaId();
         List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
         MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
-        List<Column> oldSortKey = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
                 oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
 
         Column c1 = constKeyColumn(table, "c_new1");
@@ -1152,7 +1153,7 @@ public class RangeDistributionGuardTest {
     public void testResolverPrefersSortKeyUniqueIds() {
         List<Column> schema = threeColumnSchema();
         // Reordered relative to schema position, and ignores sortKeyIdxes entirely.
-        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
                 schema, List.of(11, 10), List.of(2, 1, 0));
         assertEquals(List.of("b", "a"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
@@ -1161,7 +1162,7 @@ public class RangeDistributionGuardTest {
     @Test
     public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsNull() {
         List<Column> schema = threeColumnSchema();
-        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(schema, null, List.of(2, 0));
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(schema, null, List.of(2, 0));
         assertEquals(List.of("c", "a"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
     }
@@ -1169,7 +1170,7 @@ public class RangeDistributionGuardTest {
     @Test
     public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsEmpty() {
         List<Column> schema = threeColumnSchema();
-        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
                 schema, List.of(), List.of(2, 0));
         assertEquals(List.of("c", "a"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
@@ -1178,7 +1179,7 @@ public class RangeDistributionGuardTest {
     @Test
     public void testResolverFallsBackToKeyColumnsWhenBothNull() {
         List<Column> schema = threeColumnSchema();
-        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(schema, null, null);
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(schema, null, null);
         assertEquals(List.of("a", "b"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
     }
@@ -1186,7 +1187,7 @@ public class RangeDistributionGuardTest {
     @Test
     public void testResolverFallsBackToKeyColumnsWhenBothEmpty() {
         List<Column> schema = threeColumnSchema();
-        List<Column> resolved = SchemaChangeHandler.resolveEffectiveSortKeyColumns(
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
                 schema, List.of(), List.of());
         assertEquals(List.of("a", "b"),
                 resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));

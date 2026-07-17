@@ -93,7 +93,8 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
         // A range-carrying update is a metadata-only trailing sort-key ADD: the schema arity grows by
-        // one and every tablet bound gains a trailing NULL sentinel. Validate the change against the
+        // one or more and every tablet bound gains one trailing NULL sentinel per added column.
+        // Validate the change against the
         // metadata as it stands (old schema + old range), archive the pre-alter schema without
         // clearing existing history, then install the new schema and range. This path is independent
         // of `lake_enable_alter_struct` and must not touch the clearing branch below.

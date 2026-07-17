@@ -103,9 +103,9 @@ public:
 
     // Apply-only validation that the schema/range change is exactly a trailing sort-key ADD relative
     // to the currently-installed metadata. Requires: the new effective sort key equals the old
-    // effective sort key plus exactly one new trailing column (existing sort-key unique-ids, types and
+    // effective sort key plus one or more new trailing columns (existing sort-key unique-ids, types and
     // order unchanged); each present bound of `new_range` equals the corresponding bound of
-    // `old_meta.range()` with exactly one trailing typed NULL_VALUE appended; bound presence and
+    // `old_meta.range()` with one trailing typed NULL_VALUE per added column appended; bound presence and
     // inclusivity are unchanged; and a fully unbounded (Range.all) range stays fully unbounded.
     // Rejections return Status::Corruption. `new_schema` is the resolved new schema; the old schema
     // and old range are read from `old_meta`.
