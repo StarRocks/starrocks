@@ -214,6 +214,14 @@ message TxnLogPB {
         // The specific table schema used to generate this rowset
         // Note this field is backported from v4.1, so use the same id as in v4.1 for compatibility
         optional TableSchemaKeyPB schema_key = 8;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
     }
 
     message OpCompaction {
