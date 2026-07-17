@@ -25,14 +25,11 @@
 #include <vector>
 
 #include "butil/time.h"
-<<<<<<< HEAD
-=======
-#include "common/brpc/brpc_stub_cache.h"
-#include "compute_env/pipeline/pipeline_timer_context.h"
-#include "exec/runtime/pipeline_driver.h"
-#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
->>>>>>> b0363d9b0e ([BugFix] Unschedule global RF timer in PipelineDriver destructor (#76252))
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "util/brpc_stub_cache.h"
 
@@ -77,42 +74,20 @@ public:
     std::atomic<bool> ran{false};
 };
 
-<<<<<<< HEAD
-=======
 // Reaches PipelineDriver's protected default constructor and its protected global-RF-timer members
-// so a test can drive the destructor cleanup path without standing up a full fragment.
+// so a test can drive the destructor cleanup path without standing up a full fragment. On this
+// branch the driver reaches the timer through _fragment_ctx->pipeline_timer(), so the test supplies
+// a FragmentContext bound to the shared test timer (see TimerBoundFragment).
 class TimerTestPipelineDriver final : public PipelineDriver {
 public:
     TimerTestPipelineDriver() = default;
 
-    void register_global_rf_timer(PipelineTimerContextPtr context, std::shared_ptr<PipelineTimerTask> task) {
-        _pipeline_timer_context = std::move(context);
+    void register_global_rf_timer(FragmentContext* fragment_ctx, std::shared_ptr<PipelineTimerTask> task) {
+        _fragment_ctx = fragment_ctx;
         _global_rf_timer = std::move(task);
     }
 };
 
-class CountingObserver final : public PipelineObserver {
-public:
-    void source_trigger() override {
-        source_count.fetch_add(1, std::memory_order_acq_rel);
-        source_signal.release();
-    }
-    void sink_trigger() override {}
-    void cancel_trigger() override {}
-    void all_trigger() override {}
-    void runtime_filter_timeout_trigger() override {
-        runtime_filter_timeout_count.fetch_add(1, std::memory_order_acq_rel);
-        runtime_filter_timeout_signal.release();
-    }
-    std::string debug_string() const override { return "CountingObserver"; }
-
-    std::atomic<int> source_count{0};
-    std::atomic<int> runtime_filter_timeout_count{0};
-    std::counting_semaphore<> source_signal{0};
-    std::counting_semaphore<> runtime_filter_timeout_signal{0};
-};
-
->>>>>>> b0363d9b0e ([BugFix] Unschedule global RF timer in PipelineDriver destructor (#76252))
 } // namespace
 
 PipelineTimer timer;
@@ -303,39 +278,36 @@ TEST_F(PipelineTimerTaskTest, batched_tasks_all_unblock_eventually) {
     EXPECT_TRUE(tasks[0]->ran.load(std::memory_order_acquire));
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(PipelineTimerTaskTest, pipeline_timer_context_submits_batched_rf_timeout_observers) {
-    RuntimeState state;
-    state.set_enable_event_scheduler(true);
-    PipelineTimerContext context(&timer);
-    CountingObserver observer1;
-    CountingObserver observer2;
+// Builds a FragmentContext whose pipeline_timer() returns the shared test timer, so a
+// TimerTestPipelineDriver exercises the real _fragment_ctx->pipeline_timer() unschedule path in the
+// destructor. set_pipeline_timer() also schedules a fragment-timeout task 300s out; it never fires
+// during the test and ~FragmentContext unschedules it on teardown.
+struct TimerBoundFragment {
+    std::shared_ptr<QueryContext> query_ctx = std::make_shared<QueryContext>();
+    FragmentContext fragment_ctx;
 
-    context.add_rf_timeout_observer(&state, &observer1, 0);
-    context.add_rf_timeout_observer(&state, &observer2, 0);
-    ASSERT_OK(context.submit_rf_timeout_tasks());
-
-    observer1.source_signal.acquire();
-    observer2.source_signal.acquire();
-    EXPECT_EQ(observer1.source_count.load(std::memory_order_acquire), 1);
-    EXPECT_EQ(observer2.source_count.load(std::memory_order_acquire), 1);
-
-    context.clear_rf_timeout_tasks();
-}
+    Status init() {
+        auto runtime_state = std::make_shared<RuntimeState>();
+        runtime_state->set_query_ctx(query_ctx.get());
+        runtime_state->set_fragment_ctx(&fragment_ctx);
+        fragment_ctx.set_runtime_state(std::move(runtime_state));
+        return fragment_ctx.set_pipeline_timer(&timer);
+    }
+};
 
 // A queued or blocked driver abandoned when the driver executor is closed during shutdown is
 // destroyed without going through finalize(). The destructor must still unschedule the global
-// runtime-filter timer, otherwise the timer thread runs a task whose owning shared_ptr is gone and
-// doRun()'s shared_from_this() throws std::bad_weak_ptr.
+// runtime-filter timer, otherwise the timer thread runs a task whose owning shared_ptr is gone.
 TEST_F(PipelineTimerTaskTest, pipeline_driver_destructor_unschedules_global_rf_timer) {
-    auto context = std::make_shared<PipelineTimerContext>(&timer);
+    TimerBoundFragment fragment;
+    ASSERT_OK(fragment.init());
+
     auto task = std::make_shared<ProbeTask>();
-    ASSERT_OK(context->schedule(task.get(), future_abstime(3600)));
+    ASSERT_OK(timer.schedule(task.get(), future_abstime(3600)));
     ASSERT_NE(0, task->tid());
 
     auto driver = std::make_unique<TimerTestPipelineDriver>();
-    driver->register_global_rf_timer(context, task);
+    driver->register_global_rf_timer(&fragment.fragment_ctx, task);
 
     // Intentionally skip finalize().
     driver.reset();
@@ -345,16 +317,18 @@ TEST_F(PipelineTimerTaskTest, pipeline_driver_destructor_unschedules_global_rf_t
 }
 
 // The destructor must block until an already-running global RF timer task returns, mirroring
-// finalize()'s unschedule_and_join, so the task is never freed while doRun() is still executing.
+// finalize()'s unschedule_and_wait, so the task is never freed while Run() is still executing.
 TEST_F(PipelineTimerTaskTest, pipeline_driver_destructor_waits_for_running_global_rf_timer) {
-    auto context = std::make_shared<PipelineTimerContext>(&timer);
+    TimerBoundFragment fragment;
+    ASSERT_OK(fragment.init());
+
     auto task = std::make_shared<ProbeTask>();
     task->block_until_released = true;
-    ASSERT_OK(context->schedule(task.get(), past_abstime()));
+    ASSERT_OK(timer.schedule(task.get(), past_abstime()));
     task->run_enter.acquire();
 
     auto driver = std::make_unique<TimerTestPipelineDriver>();
-    driver->register_global_rf_timer(context, task);
+    driver->register_global_rf_timer(&fragment.fragment_ctx, task);
 
     std::atomic<bool> destructor_returned{false};
     std::thread destructor([driver = std::move(driver), &destructor_returned]() mutable {
@@ -370,7 +344,6 @@ TEST_F(PipelineTimerTaskTest, pipeline_driver_destructor_waits_for_running_globa
     EXPECT_TRUE(destructor_returned.load(std::memory_order_acquire));
 }
 
->>>>>>> b0363d9b0e ([BugFix] Unschedule global RF timer in PipelineDriver destructor (#76252))
 // LightTimerTask goes through a separate schedule/unschedule pair and lacks the
 // _finished / _has_consumer protocol. Cover it to prevent regressions in the
 // other overload of PipelineTimer.
