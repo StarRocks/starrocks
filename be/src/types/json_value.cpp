@@ -88,7 +88,15 @@ static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';
 }
 
+std::shared_ptr<vpack::Parser> JsonValue::make_reusable_parser() {
+    return std::make_shared<vpack::Parser>();
+}
+
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
+    return parse_json_or_string(src, nullptr);
+}
+
+StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src, vpack::Parser* parser) {
     if (src.size > kJSONLengthLimit) {
         return Status::NotSupported("JSON string exceed maximum length 16MB");
     }
@@ -98,12 +106,24 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
         }
         // Check the first character for its type
         auto end = src.get_data() + src.get_size();
-        auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
+        // Skip leading ASCII whitespace. Use an inline byte comparison instead of
+        // std::iswspace: the latter is locale-dependent, hard to inline, and passing a
+        // (possibly negative) char to it is undefined behavior for non-ASCII bytes.
+        auto iter = std::find_if_not(src.get_data(), end, [](char c) {
+            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+        });
         if (iter != end && is_json_start_char(*iter)) {
             // Parse it as an object or array
-            auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
             JsonValue res;
-            res.assign(*b);
+            if (parser != nullptr) {
+                // Reuse the parser's Builder/Buffer; parse() clears the builder
+                // first (clearBuilderBeforeParse) but keeps the allocated capacity.
+                parser->parse(src.get_data(), src.get_size());
+                res.assign(parser->builder());
+            } else {
+                auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
+                res.assign(*b);
+            }
             return res;
         } else {
             // Consider it as a sub-type string

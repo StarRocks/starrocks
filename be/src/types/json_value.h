@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <type_traits>
@@ -32,6 +33,7 @@
 namespace arangodb::velocypack {
 class Slice;
 class Builder;
+class Parser;
 class Exception;
 enum class ValueType : uint8_t;
 } // namespace arangodb::velocypack
@@ -124,6 +126,14 @@ public:
     static StatusOr<JsonValue> parse(const Slice& src);
     // Try to parse it as JSON object, otherwise consider it as a string
     static StatusOr<JsonValue> parse_json_or_string(const Slice& src);
+    // Same as above, but reuses a caller-provided parser so that the internal
+    // Builder/Buffer is allocated once and amortized across many calls. This is
+    // meant for hot batch paths (e.g. casting a whole string column to JSON).
+    // Pass a parser obtained from make_reusable_parser(); a null parser falls
+    // back to the allocating one-shot path.
+    static StatusOr<JsonValue> parse_json_or_string(const Slice& src, vpack::Parser* parser);
+    // Create a parser that can be reused across many parse_json_or_string calls.
+    static std::shared_ptr<vpack::Parser> make_reusable_parser();
 
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;

@@ -2900,6 +2900,22 @@ TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
     EXPECT_EQ("-7", json1.value());
 }
 
+// Cover cast_to_json_fn reusable parser path for VARIANT -> JSON.
+TEST_F(VectorizedCastExprTest, variantCastToJsonReusableParser) {
+    auto variant_column = VariantColumn::create();
+    variant_column->append(make_variant_row_from_json(R"({"k": 1})"));
+    variant_column->append(make_variant_row_from_json(R"([1, 2, 3])"));
+
+    ColumnPtr result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), variant_column);
+    ASSERT_NE(nullptr, result);
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->has_null());
+
+    ColumnPtr json_col = ColumnHelper::cast_to<TYPE_JSON>(result);
+    ASSERT_EQ(R"({"k": 1})", json_col->get(0).get_json()->to_string().value());
+    ASSERT_EQ(R"([1, 2, 3])", json_col->get(1).get_json()->to_string().value());
+}
+
 // Verifies const variant input can cast to complex types with stable semantics.
 TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
     constexpr size_t kInputSize = 3;
