@@ -686,6 +686,13 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_RESOURCE = 13557;
 
+    // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
+    // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
+    // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
+    // Must stay below OP_TYPE_EOF (20000): buildIgnorableOperations() System.exit()s on any non-
+    // whitelisted op above it.
+    public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -706,11 +713,6 @@ public class OperationType {
     // Grant Role to Group
     public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
-
-    // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
-    // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
-    // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
-    public static final short OP_ERASE_MATERIALIZED_INDEX = 20503;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
