@@ -273,22 +273,27 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    to the front of the per-segment `entries` list so readers see the
     //    newest first (mirrors DCG reverse-by-version ordering). Multiple
     //    entries may coexist on the same segment from successive alters.
-    auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
-    for (const auto& se : op.segment_entries()) {
-        // Defense-in-depth: an entry missing segment_id would index the map at
-        // default 0 and corrupt segment 0's IDG. FE always sets both fields.
-        if (!se.has_entry() || !se.has_segment_id()) {
-            LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
-            continue;
+    //    Guarded so the empty no-op shape (a materialized index whose schema
+    //    lacks the indexed columns — the op carries only alter_version) does
+    //    not materialize an empty idg_meta submessage into the metadata.
+    if (!op.segment_entries().empty()) {
+        auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+        for (const auto& se : op.segment_entries()) {
+            // Defense-in-depth: an entry missing segment_id would index the map at
+            // default 0 and corrupt segment 0's IDG. FE always sets both fields.
+            if (!se.has_entry() || !se.has_segment_id()) {
+                LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
+                continue;
+            }
+            IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
+            // Build new entries list: [new_entry, old_entries...]
+            IndexDeltaGroupVerPB merged;
+            merged.add_entries()->CopyFrom(se.entry());
+            for (const auto& old_e : ver.entries()) {
+                merged.add_entries()->CopyFrom(old_e);
+            }
+            ver.Swap(&merged);
         }
-        IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
-        // Build new entries list: [new_entry, old_entries...]
-        IndexDeltaGroupVerPB merged;
-        merged.add_entries()->CopyFrom(se.entry());
-        for (const auto& old_e : ver.entries()) {
-            merged.add_entries()->CopyFrom(old_e);
-        }
-        ver.Swap(&merged);
     }
 
     // 2. Reconcile table_indices: add any new index not already present.

@@ -121,10 +121,12 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
 
     /**
      * Returns the subset of {@code indexes} whose columns are ALL present in the
-     * given materialized index meta's schema. A rollup / sync-MV that projects
-     * away an indexed column must not receive (or build) that index — mirroring
-     * the legacy path, which only builds indexes on the base index. A null meta
-     * (defensive) applies every index.
+     * given materialized index meta's schema. Mirrors the legacy path's
+     * {@code OlapTable.getIndexesBySchema} rule: an index is built on every
+     * materialized index whose schema carries all of the index's columns (base
+     * plus any qualifying rollup / sync-MV); a meta that projects an indexed
+     * column away gets an empty (no-op) task instead of failing the alter. A
+     * null meta (defensive) applies every index.
      */
     static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta) {
         if (indexes == null || indexes.isEmpty() || meta == null) {

@@ -21,6 +21,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -143,6 +145,41 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
         when(gsm.getNextId()).thenReturn(50L, 51L, 52L);
         return gsm;
+    }
+
+    // ============================================================
+    // isLakeIndexFastPathAdmissible (under-lock admission guards)
+    // ============================================================
+
+    @Test
+    public void testIsLakeIndexFastPathAdmissible() {
+        OlapTable table = stubLakeTable("c1");
+        InsertOverwriteJobMgr overwriteMgr = mock(InsertOverwriteJobMgr.class);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+            when(gsm.getInsertOverwriteJobMgr()).thenReturn(overwriteMgr);
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            // Admissible: NORMAL, no running overwrite, no temp partitions.
+            when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+            when(overwriteMgr.hasRunningOverwriteJob(anyLong())).thenReturn(false);
+            when(table.existTempPartitions()).thenReturn(false);
+            assertTrue(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table));
+
+            // A racing ALTER already moved the table to SCHEMA_CHANGE.
+            when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            assertFalse(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table));
+
+            // Running INSERT OVERWRITE blocks admission.
+            when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+            when(overwriteMgr.hasRunningOverwriteJob(anyLong())).thenReturn(true);
+            assertFalse(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table));
+
+            // Temp partitions block admission.
+            when(overwriteMgr.hasRunningOverwriteJob(anyLong())).thenReturn(false);
+            when(table.existTempPartitions()).thenReturn(true);
+            assertFalse(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table));
+        }
     }
 
     // ============================================================

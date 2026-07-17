@@ -2127,6 +2127,31 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
     EXPECT_EQ(10, v.entries(3).version());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_empty_op_is_pure_noop) {
+    // The rollup no-op shape: FE sends an empty index set for a materialized
+    // index whose schema lacks the indexed column(s); do_process writes a txn
+    // log whose op_add_index carries only alter_version. Applying it must leave
+    // the tablet metadata untouched (the version advance itself happens in the
+    // generic publish machinery): no idg_meta materialized, schema id/content
+    // unchanged, no historical archiving, no rowset pins.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20031);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20031);
+    metadata->set_version(7);
+    metadata->mutable_schema()->set_id(300);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(7);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(metadata->has_idg_meta());
+    EXPECT_EQ(300, metadata->schema().id());
+    EXPECT_EQ(0, metadata->schema().table_indices_size());
+    EXPECT_TRUE(metadata->historical_schemas().empty());
+    EXPECT_TRUE(metadata->rowset_to_schema().empty());
+}
+
 TEST_F(MetaFileTest, test_apply_add_index_stamps_new_schema_id) {
     // When FE allocates a new schema id/version (durability fix), apply_add_index
     // must stamp it onto metadata->schema() so every by-id schema cache misses and

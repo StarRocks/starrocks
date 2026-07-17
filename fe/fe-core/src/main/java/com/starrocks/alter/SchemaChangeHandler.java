@@ -2356,10 +2356,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // reach here after this table already entered SCHEMA_CHANGE. Skipping
         // the fast path here lets the legacy path raise its canonical error
         // instead of admitting a second live job on the same table.
-        boolean fastPathAdmissible = olapTable.getState() == OlapTable.OlapTableState.NORMAL
-                && !GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr()
-                        .hasRunningOverwriteJob(olapTable.getId())
-                && !olapTable.existTempPartitions();
+        boolean fastPathAdmissible = isLakeIndexFastPathAdmissible(olapTable);
         if (!fastPathAdmissible) {
             LOG.info("lake index fast path not admissible for table {} (state={}); "
                     + "falling through to regular path", olapTable.getName(), olapTable.getState());
@@ -3439,6 +3436,21 @@ public class SchemaChangeHandler extends AlterHandler {
      * Returns null on any unexpected failure so the caller can fall back to the
      * regular schema-change path (safer than throwing).
      */
+    /**
+     * Admission guards for the lake index fast path, mirroring the legacy
+     * path's under-lock checks (finalAnalyze's state re-check plus the
+     * per-clause insert-overwrite / temp-partition guards). Must be evaluated
+     * under the table write lock — the entry-point state check in
+     * AlterJobExecutor is lock-free, so without this a racing ALTER could
+     * admit a second live fast-path job on the same table.
+     */
+    static boolean isLakeIndexFastPathAdmissible(OlapTable olapTable) {
+        return olapTable.getState() == OlapTable.OlapTableState.NORMAL
+                && !GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr()
+                        .hasRunningOverwriteJob(olapTable.getId())
+                && !olapTable.existTempPartitions();
+    }
+
     private AlterJobV2 tryBuildLakeAddIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
         boolean stateSet = false;
         try {
