@@ -2148,7 +2148,7 @@ public class SchemaChangeHandler extends AlterHandler {
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
             if (col.isPresent() && !col.get().equals(distributionCol)) {
                 if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
-                    if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {
+                    if (olapTable.hasColocateGroup()) {
                         throw new DdlException("Can not modify distribution column[" + colName
                                 + "] for colocate table. index["
                                 + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
@@ -4842,7 +4842,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // table's tablets must stay range-aligned with its ColocateRangeMgr expected ranges; the rewrite
         // samples a fresh K-tablet layout independently, which would desync colocate scan/join routing
         // after the flip. AUTO_INCREMENT columns are likewise out of scope for the re-route.
-        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
+        if (table.hasColocateGroup()
                 || table.hasAutoIncrementColumn()) {
             return false;
         }

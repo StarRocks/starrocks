@@ -17,7 +17,6 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -950,7 +949,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             throws DdlException, AnalysisException {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
                 && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
@@ -1032,7 +1030,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             }
             // 2. replication num
             if (newReplicationNum != (short) -1) {
-                if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                if (olapTable.hasColocateGroup()) {
                     throw new DdlException(
                             "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
                 }
