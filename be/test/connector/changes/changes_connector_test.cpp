@@ -929,6 +929,10 @@ TEST_F(ChangesConnectorTest, test_provider_and_connector_shells) {
     EXPECT_EQ(0, ds_ptr->num_bytes_read());
     EXPECT_EQ(0, ds_ptr->cpu_time_spent());
 
+    // Framework sets the profile before open(); closing a never-opened scan must not deref null counters.
+    RuntimeProfile parent_profile("ChangesScanTest");
+    ds_ptr->set_runtime_profile(&parent_profile);
+
     // close() before open() and close() called twice must both be safe.
     ds_ptr->close(_runtime_state.get());
     ds_ptr->close(_runtime_state.get());

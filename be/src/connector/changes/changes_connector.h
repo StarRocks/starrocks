@@ -259,6 +259,14 @@ private:
         const SlotDescriptor* slot;
     };
 
+    struct ScanCounters {
+        RuntimeProfile::Counter* raw_rows = nullptr;
+        RuntimeProfile::Counter* zonemap_filtered = nullptr;
+        RuntimeProfile::Counter* bloom_filter_filtered = nullptr;
+        RuntimeProfile::Counter* short_key_filtered = nullptr;
+        RuntimeProfile::Counter* predicate_filtered = nullptr;
+    };
+
     void _init_counter();
     Status _init_tablet_schema();
     Status _init_pushdown_predicates();
@@ -360,11 +368,7 @@ private:
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
 
-    RuntimeProfile::Counter* _raw_rows_counter = nullptr;
-    RuntimeProfile::Counter* _zonemap_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bloom_filter_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _short_key_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _predicate_filtered_counter = nullptr;
+    std::unique_ptr<ScanCounters> _scan_counters;
 };
 
 } // namespace starrocks::connector

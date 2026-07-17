@@ -347,7 +347,9 @@ Status ChangesDataSource::open(RuntimeState* state) {
 }
 
 void ChangesDataSource::close(RuntimeState* state) {
-    _update_counter();
+    if (_scan_counters != nullptr) {
+        _update_counter();
+    }
     if (_current_segment_iterator != nullptr) _current_segment_iterator->close();
     _current_segment_iterator.reset();
     _current_plan.reset();
@@ -366,11 +368,12 @@ Status ChangesDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
 void ChangesDataSource::_init_counter() {
     if (_runtime_profile == nullptr) return;
-    _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
-    _zonemap_filtered_counter = ADD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT);
-    _bloom_filter_filtered_counter = ADD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT);
-    _short_key_filtered_counter = ADD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT);
-    _predicate_filtered_counter = ADD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT);
+    _scan_counters = std::make_unique<ScanCounters>();
+    _scan_counters->raw_rows = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
+    _scan_counters->zonemap_filtered = ADD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT);
+    _scan_counters->bloom_filter_filtered = ADD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT);
+    _scan_counters->short_key_filtered = ADD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT);
+    _scan_counters->predicate_filtered = ADD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT);
 }
 
 Status ChangesDataSource::_init_tablet_schema() {
@@ -560,14 +563,13 @@ Status ChangesDataSource::_init_output_columns() {
 }
 
 void ChangesDataSource::_update_counter() {
-    if (_runtime_profile == nullptr) return;
     const auto& i = _insert_read_stats;
     const auto& d = _delete_read_stats;
-    COUNTER_UPDATE(_raw_rows_counter, i.raw_rows_read + d.raw_rows_read);
-    COUNTER_UPDATE(_zonemap_filtered_counter, i.rows_stats_filtered + d.rows_stats_filtered);
-    COUNTER_UPDATE(_bloom_filter_filtered_counter, i.rows_bf_filtered + d.rows_bf_filtered);
-    COUNTER_UPDATE(_short_key_filtered_counter, i.rows_key_range_filtered + d.rows_key_range_filtered);
-    COUNTER_UPDATE(_predicate_filtered_counter, i.rows_vec_cond_filtered + d.rows_vec_cond_filtered);
+    COUNTER_UPDATE(_scan_counters->raw_rows, i.raw_rows_read + d.raw_rows_read);
+    COUNTER_UPDATE(_scan_counters->zonemap_filtered, i.rows_stats_filtered + d.rows_stats_filtered);
+    COUNTER_UPDATE(_scan_counters->bloom_filter_filtered, i.rows_bf_filtered + d.rows_bf_filtered);
+    COUNTER_UPDATE(_scan_counters->short_key_filtered, i.rows_key_range_filtered + d.rows_key_range_filtered);
+    COUNTER_UPDATE(_scan_counters->predicate_filtered, i.rows_vec_cond_filtered + d.rows_vec_cond_filtered);
 }
 
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
