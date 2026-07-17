@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -54,7 +55,10 @@ import java.util.stream.Collectors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class CatalogRecycleBinTest {
     private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
@@ -767,6 +771,40 @@ public class CatalogRecycleBinTest {
         } finally {
             Config.partition_recycle_retention_period_secs = savedRetention;
         }
+    }
+
+    @Test
+    public void testDeleteDetachesInstalledIndex() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long dbId = 91;
+        long tableId = 92;
+        long physicalPartitionId = 93;
+        long indexId = 9001;
+
+        // A real superseded index carrying two tablets, registered in the inverted index -- the state
+        // a reshard leaves behind (index still installed on its partition).
+        TabletInvertedIndex invertedIndex = globalStateMgr.getTabletInvertedIndex();
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, TStorageMedium.HDD, true);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, 7777L);
+        index.addTablet(new LakeTablet(90001L), tabletMeta, false);
+        index.addTablet(new LakeTablet(90002L), tabletMeta, false);
+        invertedIndex.addTablet(90001L, tabletMeta);
+        invertedIndex.addTablet(90002L, tabletMeta);
+        Assertions.assertNotNull(invertedIndex.getTabletMeta(90001L));
+
+        // Stub the metastore so delete() finds the live partition still carrying the index, then
+        // detaches it under the table write lock.
+        OlapTable olapTable = mock(OlapTable.class);
+        PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
+        doReturn(olapTable).when(globalStateMgr.getLocalMetastore()).getTable(dbId, tableId);
+        when(olapTable.getPhysicalPartition(physicalPartitionId)).thenReturn(physicalPartition);
+        when(physicalPartition.deleteMaterializedIndexByIndexId(indexId)).thenReturn(index);
+
+        new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId).delete();
+
+        // Detached: the index was removed from its partition and its tablets dropped from the inverted index.
+        Assertions.assertNull(invertedIndex.getTabletMeta(90001L));
+        Assertions.assertNull(invertedIndex.getTabletMeta(90002L));
     }
 
     @Test
