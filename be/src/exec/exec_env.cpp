@@ -210,25 +210,10 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
 
-<<<<<<< HEAD
-    std::unique_ptr<ThreadPool> batch_write_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::merge_commit_thread_pool_num_min)
-                            .set_max_threads(config::merge_commit_thread_pool_num_max)
-                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
-                            .build(&batch_write_thread_pool));
-    auto batch_write_executor =
-            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
-    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
-
     _remote_chunk_queue_mgr = new RemoteChunkQueueMgr(process_metrics);
     _remote_arrow_queue_mgr = new RemoteArrowQueueMgr(process_metrics);
     _remote_scan_token_mgr = new RemoteScanTokenMgr();
 
-=======
->>>>>>> c41123ee2a1... [Refactor] Move batch write into the data workflows module (#76490)
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
@@ -342,13 +327,9 @@ void ExecEnv::destroy() {
 
     delete_and_null(_runtime_filter_cache);
     delete_and_null(_lookup_dispatcher_mgr);
-<<<<<<< HEAD
-    delete_and_null(_batch_write_mgr);
     delete_and_null(_remote_scan_token_mgr);
     delete_and_null(_remote_arrow_queue_mgr);
     delete_and_null(_remote_chunk_queue_mgr);
-=======
->>>>>>> c41123ee2a1... [Refactor] Move batch write into the data workflows module (#76490)
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
     _compute_env = nullptr;
