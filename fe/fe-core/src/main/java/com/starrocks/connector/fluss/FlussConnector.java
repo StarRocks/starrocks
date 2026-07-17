@@ -80,6 +80,10 @@ public class FlussConnector implements Connector {
             if (admin != null) {
                 admin.close();
             }
+        } catch (Exception e) {
+            // ignore
+        }
+        try {
             if (connection != null) {
                 connection.close();
             }
