@@ -35,13 +35,15 @@ namespace starrocks::lake {
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
                                                                  std::unique_ptr<LoadSpillMergeInputBatch> task,
                                                                  const Schema* schema, std::atomic<bool>* quit_flag,
-                                                                 RuntimeProfile::Counter* write_io_timer, bool op_aware)
+                                                                 RuntimeProfile::Counter* write_io_timer, bool op_aware,
+                                                                 bool need_rssid_rowids)
         : _writer(std::move(writer)),
           _task(std::move(task)),
           _schema(schema),
           _quit_flag(quit_flag),
           _write_io_timer(write_io_timer),
-          _op_aware(op_aware) {
+          _op_aware(op_aware),
+          _need_rssid_rowids(need_rssid_rowids) {
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(_writer->tablet_id()) + "-" + std::to_string(_writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
@@ -63,9 +65,15 @@ namespace {
 // the PK encoder, which reads only the leading key columns); `write_schema` is the segment schema.
 Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, const Schema& merge_schema,
                               const Schema& write_schema, const std::vector<size_t>& char_field_indexes,
-                              PrimaryKeyEncodingType pk_enc, MutableColumnPtr* deletes, bool* wrote_upsert) {
+                              PrimaryKeyEncodingType pk_enc, MutableColumnPtr* deletes, bool* wrote_upsert,
+                              bool* had_deletes, const std::vector<uint64_t>* rssid_rowids) {
     if (!has_op) {
         ChunkHelper::padding_char_columns(char_field_indexes, write_schema, writer->tablet_schema(), chunk);
+        // Separate-sort-key unsort path forwards per-row ordering keys so the writer can resolve
+        // duplicate primary keys by last-flushed-wins; otherwise the plain write overload is used.
+        if (rssid_rowids != nullptr) {
+            return writer->write(*chunk, *rssid_rowids);
+        }
         return writer->write(*chunk, nullptr);
     }
     // Split the merged chunk by __op (last column).
@@ -80,13 +88,35 @@ Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, c
     for (uint32_t i = 0; i < nrows; i++) {
         (ops[i] == TOpType::UPSERT ? up_idx : del_idx).push_back(i);
     }
-    // Encode net-deleted keys.
+    // Net-deleted keys.
     if (!del_idx.empty()) {
-        if (*deletes == nullptr) {
-            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(merge_schema, deletes, pk_enc));
+        *had_deletes = true;
+        if (writer->tablet_schema()->has_separate_sort_key()) {
+            // Separate-sort-key unsort path: the merge is ordered by sort key, so a DELETE and a later
+            // UPSERT of the same PK are not adjacent and cannot be REPLACE-aggregated to the latest op
+            // before this split. Instead feed the DELETE rows (with their per-row ordering keys) to the
+            // eager SST writer, which reconciles them against the upserts by order (last op wins) and,
+            // for a PK whose latest op is a DELETE, hands the key back at flush to be written to this
+            // batch's del file (see flush_segment_writer) so publish erases even a pre-existing row.
+            // rssid_rowids is always present on this path.
+            DCHECK(rssid_rowids != nullptr);
+            auto del_chunk = chunk->clone_empty_with_schema(del_idx.size());
+            del_chunk->append_selective(*chunk, del_idx.data(), 0, del_idx.size());
+            std::vector<uint64_t> del_rssid_rowids;
+            del_rssid_rowids.reserve(del_idx.size());
+            for (uint32_t i : del_idx) {
+                del_rssid_rowids.push_back((*rssid_rowids)[i]);
+            }
+            RETURN_IF_ERROR(writer->append_pk_index_deletes(*del_chunk, del_rssid_rowids));
+        } else {
+            // sort-key == PK: the merge already reduced each PK to its latest op, so all DELETEs here
+            // are net deletes; encode them for this batch's del file.
+            if (*deletes == nullptr) {
+                RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(merge_schema, deletes, pk_enc));
+            }
+            PrimaryKeyEncoder::encode_selective(merge_schema, *chunk, del_idx.data(), del_idx.size(), deletes->get(),
+                                                pk_enc);
         }
-        PrimaryKeyEncoder::encode_selective(merge_schema, *chunk, del_idx.data(), del_idx.size(), deletes->get(),
-                                            pk_enc);
     }
     // Write upsert rows as a chunk without __op. Copy the upsert rows into a temp chunk (Chunk-level
     // append_selective handles the immutable columns), then repackage its leading data columns into a
@@ -99,7 +129,18 @@ Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, c
         Columns up_cols(tmp->columns().begin(), tmp->columns().begin() + write_schema.num_fields()); // drop __op
         auto up_chunk = std::make_shared<Chunk>(std::move(up_cols), std::make_shared<Schema>(write_schema));
         ChunkHelper::padding_char_columns(char_field_indexes, write_schema, writer->tablet_schema(), up_chunk.get());
-        RETURN_IF_ERROR(writer->write(*up_chunk, nullptr));
+        if (rssid_rowids != nullptr) {
+            // Both op-aware split and the unsort path are active: forward only the upsert rows' ordering
+            // keys, aligned with the rows selected into up_chunk.
+            std::vector<uint64_t> up_rssid_rowids;
+            up_rssid_rowids.reserve(up_idx.size());
+            for (uint32_t i : up_idx) {
+                up_rssid_rowids.push_back((*rssid_rowids)[i]);
+            }
+            RETURN_IF_ERROR(writer->write(*up_chunk, up_rssid_rowids));
+        } else {
+            RETURN_IF_ERROR(writer->write(*up_chunk, nullptr));
+        }
         *wrote_upsert = true;
     }
     return Status::OK();
@@ -112,10 +153,13 @@ Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, c
 // sort after, and wrongly erase, a key re-upserted in that later segment. Mirrors the serial path, which
 // writes a 0-row segment for a delete-only flush.
 Status finalize_merged_batch(TabletWriter* writer, bool has_op, const Schema& write_schema,
-                             const MutableColumnPtr& deletes, bool wrote_upsert,
+                             const MutableColumnPtr& deletes, bool wrote_upsert, bool had_deletes,
                              RuntimeProfile::Counter* write_io_timer) {
-    const bool has_deletes = has_op && deletes != nullptr && deletes->size() > 0;
-    if (has_deletes && !wrote_upsert) {
+    // A batch that produced deletes but no upsert segment still needs a 0-row anchor segment so its
+    // SST and del file attach to a real segment index rather than colliding with a later batch's
+    // segment 0. `had_deletes` covers both del-file sinks: the column encoded here (sort-key==PK) and
+    // the winning keys the unsort writer writes during flush() (separate-sort-key).
+    if (has_op && had_deletes && !wrote_upsert) {
         SCOPED_TIMER(write_io_timer);
         auto empty_chunk = ChunkFactory::new_chunk(write_schema, 0);
         RETURN_IF_ERROR(writer->write(*empty_chunk, nullptr));
@@ -124,7 +168,9 @@ Status finalize_merged_batch(TabletWriter* writer, bool has_op, const Schema& wr
         SCOPED_TIMER(write_io_timer);
         RETURN_IF_ERROR(writer->flush());
     }
-    if (has_deletes) {
+    // Only the sort-key==PK path routes deletes through this `deletes` column; the separate-sort-key
+    // path's writer wrote its own del file during flush() above, so there is nothing to write here.
+    if (deletes != nullptr && deletes->size() > 0) {
         SCOPED_TIMER(write_io_timer);
         // op_offset is a placeholder here; the real (global) value is assigned in merge_other_writer when
         // this batch's writer is consolidated into the parent, based on the cumulative segment count.
@@ -192,13 +238,27 @@ void TabletInternalParallelMergeTask::run() {
     auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
-    MutableColumnPtr deletes;  // accumulates net-deleted keys for this batch's del file
+
+    // Per-row ordering keys for the separate-sort-key unsort path (empty otherwise); pulled alongside
+    // each chunk so the writer resolves duplicate primary keys by last-flushed-wins.
+    std::vector<uint64_t> rssid_rowids;
+    MutableColumnPtr deletes;  // accumulates net-deleted keys for this batch's del file (sort-key==PK)
     bool wrote_upsert = false; // whether this batch produced any upsert segment
-    // Read and write each merged chunk. _quit_flag (when non-null) lets a sibling task's error abort the
-    // loop early; when nullptr, cancellation is unsupported and we run to completion.
+    bool had_deletes = false;  // whether this batch saw any DELETE rows (either delete sink)
+    // CANCELLATION CHECK: read and write each merged chunk. _quit_flag (when non-null) lets a sibling
+    // task's error abort the loop early; when nullptr, cancellation is unsupported and we run to completion.
     while (_quit_flag == nullptr || !_quit_flag->load()) {
         chunk->reset();
-        auto itr_st = _task->merge_itr->get_next(chunk);
+        // For the separate-sort-key unsort path, pull per-row ordering keys (rssid_rowids) alongside
+        // the chunk so the writer can resolve duplicate primary keys by last-flushed-wins. Kept in
+        // lockstep with the chunk rows; no row filtering happens between here and append_sst_record.
+        Status itr_st;
+        if (_need_rssid_rowids) {
+            rssid_rowids.clear();
+            itr_st = _task->merge_itr->get_next(chunk, &rssid_rowids);
+        } else {
+            itr_st = _task->merge_itr->get_next(chunk);
+        }
         if (itr_st.is_end_of_file()) {
             break;
         }
@@ -208,13 +268,15 @@ void TabletInternalParallelMergeTask::run() {
         }
         SCOPED_TIMER(_write_io_timer);
         st = write_one_merged_chunk(_writer.get(), chunk, has_op, *_schema, write_schema, char_field_indexes, pk_enc,
-                                    &deletes, &wrote_upsert);
+                                    &deletes, &wrote_upsert, &had_deletes,
+                                    _need_rssid_rowids ? &rssid_rowids : nullptr);
         if (!st.ok()) {
             break;
         }
     }
     if (st.ok()) {
-        st = finalize_merged_batch(_writer.get(), has_op, write_schema, deletes, wrote_upsert, _write_io_timer);
+        st = finalize_merged_batch(_writer.get(), has_op, write_schema, deletes, wrote_upsert, had_deletes,
+                                   _write_io_timer);
     }
     if (st.ok()) {
         hot_delete_merged_spill_files(_writer.get(), _task.get());

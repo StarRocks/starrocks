@@ -33,10 +33,8 @@
 
 namespace starrocks::lake {
 
-Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
-    if (_pk_sst_builder == nullptr) {
-        return Status::InternalError("pk sst writer not initialized");
-    }
+StatusOr<const Slice*> PkTabletSSTWriter::encode_pk_keys(const Chunk& data, Buffer<Slice>* keys,
+                                                         MutableColumnPtr* owned_column) {
     ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet_schema_ptr->primary_key_encoding_type_or_error());
     if (_pk_column == nullptr) {
         vector<uint32_t> pk_columns;
@@ -51,10 +49,21 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     auto clone_pk_column = _pk_column->clone_empty();
     TRY_CATCH_BAD_ALLOC(
             PrimaryKeyEncoder::encode(_pkey_schema, data, 0, data.num_rows(), clone_pk_column.get(), pk_encoding_type));
-    Buffer<Slice> keys;
     ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(*clone_pk_column, _key_size, 0,
-                                                                             clone_pk_column->size(), &keys));
-    for (size_t i = 0; i < clone_pk_column->size(); i++) {
+                                                                             clone_pk_column->size(), keys));
+    *owned_column = std::move(clone_pk_column);
+    return vkeys;
+}
+
+Status PkTabletSSTWriter::append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids,
+                                            const std::vector<uint32_t>* column_indexes) {
+    if (_pk_sst_builder == nullptr) {
+        return Status::InternalError("pk sst writer not initialized");
+    }
+    Buffer<Slice> keys;
+    MutableColumnPtr owned_column;
+    ASSIGN_OR_RETURN(const Slice* vkeys, encode_pk_keys(data, &keys, &owned_column));
+    for (size_t i = 0; i < owned_column->size(); i++) {
         RETURN_IF_ERROR(_pk_sst_builder->add(vkeys[i]));
     }
     return Status::OK();
