@@ -15,6 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UDFInternalClassLoader;
@@ -1130,6 +1132,64 @@ public class CreateFunctionStmtAnalyzerTest {
         });
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPyInlineUDFWithoutFileProperty() {
+        CreateFunctionStmt stmt = createPyInlineStmtNoFile("a");
+        Assertions.assertNotNull(stmt.getContent(), "Inline body must be parsed into content");
+        new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+        Assertions.assertEquals("inline", stmt.getFunction().getLocation().toString(),
+                "Analyzer must auto-set location to 'inline' when file property is omitted");
+    }
+
+    private CreateFunctionStmt createPyInlineStmtWithServiceUrl(String serviceUrl) {
+        Config.enable_udf = true;
+        String createFunctionSql = String.format("CREATE FUNCTION ABC.MY_PY_UDF_SVC(string) \n"
+                + "RETURNS string \n"
+                + "type = 'Python'\n"
+                + "symbol = 'echo'\n"
+                + "service_url = '%s'\n"
+                + "AS $$\n"
+                + "def echo(b):\n"
+                + "   return b\n"
+                + "$$;", serviceUrl);
+        return (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(createFunctionSql, 32).get(0);
+    }
+
+    @Test
+    public void testPyInlineUDFWithServiceUrl() {
+        try {
+            Config.enable_udf = true;
+            String url = "grpc+tcp://192.168.1.10:8815";
+            CreateFunctionStmt stmt = createPyInlineStmtWithServiceUrl(url);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Function fn = stmt.getFunction();
+            Assertions.assertInstanceOf(ScalarFunction.class, fn);
+            Assertions.assertEquals(url, ((ScalarFunction) fn).getServiceUrl(),
+                    "service_url property must be carried onto the ScalarFunction");
+            Assertions.assertEquals(url, fn.toThrift().getService_url(),
+                    "service_url must be shipped to the BE via TFunction");
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testPyInlineUDFWithoutServiceUrl() {
+        try {
+            Config.enable_udf = true;
+            CreateFunctionStmt stmt = createPyInlineStmtNoFile("a");
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertNull(((ScalarFunction) stmt.getFunction()).getServiceUrl(),
+                    "service_url must be null (local spawn) when not specified");
+            Assertions.assertFalse(stmt.getFunction().toThrift().isSetService_url(),
+                    "TFunction.service_url must be unset when no service_url is specified");
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+>>>>>>> 7e0f4919b8 ([Enhancement] Add per-UDF service_url to connect an external Python UDF worker (#76466))
     public static class DateEval {
         public java.time.LocalDateTime evaluate(java.time.LocalDate d, java.time.LocalDateTime ts) {
             return ts;

@@ -53,6 +53,7 @@ RETURNS return_type
 | symbol    | 是       | UDF 所属的 Python 项目的类名。此参数的值格式为 `<package_name>.<class_name>`。 |
 | input     | 否       | 输入类型。有效值：`scalar`（默认）和 `arrow`（矢量化输入）。         |
 | file      | 否       | 可从中下载包含 UDF 代码的 Python 包文件的 HTTP URL。此参数的值格式为 `http://<http_server_ip>:<http_server_port>/<python_package_name>`。注意包名必须以 `.py.zip` 结尾。默认值：`inline`，表示创建内联 UDF。 |
+| service_url | 否     | 运行 UDF 的外部 Arrow Flight worker 服务的 URL，例如 `grpc+tcp://<host>:<port>`。设置后，BE 将连接该 worker 服务，而不是在本地启动 Python worker，此时需由您自行运行和隔离该 worker 服务。不设置（默认）则使用内置的本地 worker。参见[使用外部 worker 服务](#使用外部-worker-服务)。 |
 
 ### 使用 Python 创建内联标量输入 UDF
 
@@ -131,6 +132,34 @@ symbol = "add"
 type = "Python"
 file = "http://HTTP_IP:HTTP_PORT/m1.py.zip"
 symbol = "main.echo"
+;
+```
+
+### 使用外部 worker 服务
+
+默认情况下,BE 会启动并管理一个本地 Python worker 进程来运行 Python UDF。您也可以自行以外部 Arrow Flight 服务的形式运行 worker,并通过设置 `service_url` 属性让 BE 连接到它。这样您就可以独立于 BE 运行和隔离该 worker(例如放在一个单独的、带沙箱的容器中)。
+
+设置 `service_url` 后:
+
+- BE 连接到该 URL 的 worker,而不是在本地启动 worker。
+- 对于内联 UDF,函数代码通过连接发送给 worker。
+- 对于打包(`file`)UDF,worker 会自行从 `file` URL 下载包,并根据函数的 checksum 校验,因此该 worker 服务必须能访问到该 URL。
+- 运行、扩缩容、安全加固以及隔离该 worker 服务由您负责。连接默认为明文,请自行限制到 worker 的网络访问,并按需启用 TLS/鉴权。
+- 为避免 worker 不可达或卡住时查询一直挂起,可设置 BE 配置项 `python_udf_rpc_timeout_ms`(单位:毫秒)来限制对 worker 的调用。该配置对本地和外部 worker 均生效,默认值为 `0`(不超时)。由于它限制的是整个调用流的时长,请将其设置为大于最长的 UDF 查询耗时。
+
+以下示例创建一个运行在外部 worker 服务上的内联 UDF:
+
+```SQL
+CREATE FUNCTION py_echo(string)
+RETURNS string
+type = "Python"
+symbol = "echo"
+service_url = "grpc+tcp://192.168.1.10:8815"
+AS
+$$
+def echo(x):
+    return x
+$$
 ;
 ```
 
