@@ -224,6 +224,9 @@ subprojects {
             implementation("org.bouncycastle:bcpkix-jdk18on:${project.ext["bouncycastle.version"]}")
             implementation("org.bouncycastle:bcprov-jdk18on:${project.ext["bouncycastle.version"]}")
             implementation("org.bouncycastle:bcutil-jdk18on:${project.ext["bouncycastle.version"]}")
+            // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+            // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+            implementation("org.tukaani:xz:1.9")
             implementation("org.eclipse.jetty:jetty-client:${project.ext["jetty.version"]}")
             implementation("org.eclipse.jetty:jetty-io:${project.ext["jetty.version"]}")
             implementation("org.eclipse.jetty:jetty-security:${project.ext["jetty.version"]}")
@@ -268,6 +271,9 @@ subprojects {
         // JSP engine, unused by FE; tomcat 9.0.93 carries CVE-2025-55754/CVE-2025-52434
         exclude(group = "org.apache.tomcat")
         exclude(group = "org.apache.tomcat.embed")
+        // ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's unused tether feature references it
+        exclude(group = "org.apache.avro", module = "avro-ipc")
+        exclude(group = "org.apache.avro", module = "avro-ipc-jetty")
     }
 
     tasks.withType<JavaCompile> {
