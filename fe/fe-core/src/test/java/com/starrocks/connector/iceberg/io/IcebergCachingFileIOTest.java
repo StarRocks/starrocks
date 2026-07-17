@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
@@ -136,12 +137,22 @@ public class IcebergCachingFileIOTest {
         String path = "gs://iceberg_gcp/iceberg_catalog/path/1/2";
 
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
-        cachingFileIO.setConf(new Configuration());
+        Configuration baseConf = new Configuration();
+        baseConf.set(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
+                "impersonated@project.iam.gserviceaccount.com");
+        cachingFileIO.setConf(baseConf);
         Configuration configuration = cachingFileIO.buildConfFromProperties(properties, path);
         String token = configuration.get("fs.gs.temporary.access.token");
         Assertions.assertEquals(accessToken, token);
         Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
                 configuration.get("fs.gs.auth.access.token.provider.impl"));
+        Assertions.assertEquals(GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER,
+                configuration.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY));
+        Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
+                configuration.get(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY));
+        Assertions.assertEquals("true", configuration.get(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY));
+        // catalog-level impersonation must not ride on top of the vended token
+        Assertions.assertNull(configuration.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY));
     }
 
     @Test
