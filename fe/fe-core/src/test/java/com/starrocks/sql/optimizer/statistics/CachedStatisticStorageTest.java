@@ -651,6 +651,136 @@ public class CachedStatisticStorageTest {
 
     @Test
     @Timeout(5)
+    public void testWaitForStatsFutureUsesPerCallTimeoutWithoutQueryBudget() {
+        final var storage = new CachedStatisticStorage();
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+            Config.sync_statistics_load_per_query_budget_ms = 0;
+            connectContext.setStatisticsLoadBudget(null);
+
+            long startNanos = System.nanoTime();
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    (Supplier<String>) () -> "context");
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+            Assertions.assertTrue(elapsedMs >= 80);
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    public void testStatisticsLoadBudgetDefaultUsesPerCallTimeout() {
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        try {
+            Config.sync_statistics_load_timeout_ms = 123;
+            Config.sync_statistics_load_per_query_budget_ms = -1;
+
+            StatisticsLoadBudget budget = StatisticsLoadBudget.fromConfig();
+
+            Assertions.assertEquals(123, budget.getTotalBudgetMs());
+        } finally {
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureSkippedWhenQueryBudgetIsZero() {
+        final var storage = new CachedStatisticStorage();
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            Config.sync_statistics_load_per_query_budget_ms = 0;
+            connectContext.setStatisticsLoadBudget(null);
+
+            try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
+                long startNanos = System.nanoTime();
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                        (Supplier<String>) () -> "context");
+                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+                Assertions.assertTrue(elapsedMs < 100);
+                Assertions.assertFalse(neverCompletingFuture.isDone());
+                Assertions.assertEquals(0, connectContext.getStatisticsLoadBudget().getConsumedBudgetMs());
+            }
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureUsesRemainingQueryBudget() {
+        final var storage = new CachedStatisticStorage();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            Config.sync_statistics_load_per_query_budget_ms = 100;
+            connectContext.setStatisticsLoadBudget(null);
+
+            try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
+                final var firstFuture = new CompletableFuture<>();
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", firstFuture,
+                        (Supplier<String>) () -> "first");
+
+                Assertions.assertTrue(connectContext.getStatisticsLoadBudget().getRemainingBudgetMs() <= 5);
+
+                final var secondFuture = new CompletableFuture<>();
+                long startNanos = System.nanoTime();
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", secondFuture,
+                        (Supplier<String>) () -> "second");
+                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+                Assertions.assertTrue(elapsedMs < 100);
+                Assertions.assertFalse(secondFuture.isDone());
+            }
+            Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+            Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    @Timeout(5)
     public void testGetColumnStatisticReturnsUnknownOnTimeout() {
         // GIVEN
         final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");

@@ -459,6 +459,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Timeout to synchronously wait for stats (when `enable_sync_statistics_load` is enabled). When the stats are not available during this time, the query will proceed without the stats, which may lead to suboptimal plans. Set this value to a reasonable time based on your cluster's performance and workload characteristics.
 - Introduced in: -
 
+### `sync_statistics_load_per_query_budget_ms`
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Total per-query budget for synchronously waiting for statistics when `enable_sync_statistics_load` is enabled. `-1` uses `sync_statistics_load_timeout_ms` as the total budget. `0` disables synchronous waiting for statistics. A positive value sets an explicit total budget. Each individual statistics wait is still capped by `sync_statistics_load_timeout_ms`, and when the budget is exhausted, the query proceeds without unavailable statistics.
+- Introduced in: -
+
 
 ### `enable_udf`
 

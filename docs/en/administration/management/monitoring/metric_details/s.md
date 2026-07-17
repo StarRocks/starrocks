@@ -481,6 +481,13 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_sync_stats_budget_exceeded`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: None
+- Description: Total number of scoped synchronous statistics waits that could not continue because the per-query stats wait budget was exhausted, or because a scoped wait reached its remaining budget timeout. Per-call waits that run without a per-query budget scope are not counted.
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - Unit: Count
@@ -691,4 +698,3 @@ All transaction metrics share the following labels:
 - Description: Total number of Stream Load requests.
 
 ##### SPLIT
-

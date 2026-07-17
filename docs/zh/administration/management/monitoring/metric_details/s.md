@@ -503,6 +503,13 @@ description: "Alphabetical s"
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
 
+## `starrocks_fe_sync_stats_budget_exceeded`
+
+- 单位：计数
+- 类型：累计
+- 标签：无
+- 描述：有作用域的同步统计信息等待因单查询统计信息等待预算耗尽而无法继续，或因等待达到剩余预算超时时间而结束的总次数。没有单查询预算作用域时执行的单次调用等待不计入该指标。
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - 单位：计数
@@ -693,4 +700,3 @@ description: "Alphabetical s"
 - 描述: Stream Load请求的总数量。
 
 ##### 分割
-
