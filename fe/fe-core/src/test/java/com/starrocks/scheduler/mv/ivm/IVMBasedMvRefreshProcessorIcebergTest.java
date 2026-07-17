@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -1702,7 +1703,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
         Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
                 "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
-        Assertions.assertFalse(chain.contains("INCREMENTAL materialized views do not support partition-shape"),
-                "partition-shape framing must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
+                "non-append-only breaking framing must not apply to non-ancestry connector failures, got: " + chain);
     }
 }
