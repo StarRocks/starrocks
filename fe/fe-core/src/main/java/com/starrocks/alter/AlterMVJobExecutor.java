@@ -1286,7 +1286,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 continue;
             }
             // do inactive this mvs
-            doInactiveMaterializedViewRecursive(relatedMV, reason, clearVersionMap, visited, changedTable);
+            doInactiveMaterializedViewRecursive(relatedMV, reason, isClearVersionMap, visited, changedTable);
         }
     }
 

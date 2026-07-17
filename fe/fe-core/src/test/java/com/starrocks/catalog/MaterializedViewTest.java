@@ -2021,4 +2021,76 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertFalse(mv.getRefreshScheme().getAsyncRefreshContext()
                 .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
     }
+
+    /**
+     * Cascade scenario: base table t is rebuilt. mv_a excludes t from refresh (keeps its version map), but
+     * mv_b depends on t directly and does NOT exclude t. This verifies that mv_a's exclusion decision is NOT
+     * inherited by the downstream mv_b, which must still have its version map cleared (force refresh).
+     */
+    @Test
+    public void testMvCascadeExclusionNotInheritedByNonExcludedDescendant() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.cascade_base_t (\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                // mv_a excludes cascade_base_t from refresh
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.cascade_mv_a \n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1', \"excluded_refresh_tables\" = \"test.cascade_base_t\")\n" +
+                        "AS SELECT k1, k2, sum(v1) AS sum_v1 FROM test.cascade_base_t GROUP BY k1, k2;")
+                // mv_b depends on cascade_base_t directly (NOT excluded) and also on cascade_mv_a
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.cascade_mv_b \n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
+                        "AS SELECT a.k1, a.k2, sum(a.v1 + b.sum_v1) AS sum_v1 " +
+                        "FROM test.cascade_base_t a JOIN test.cascade_mv_a b ON a.k2 = b.k2 " +
+                        "GROUP BY a.k1, a.k2;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mvA = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "cascade_mv_a");
+        MaterializedView mvB = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "cascade_mv_b");
+
+        // seed both MVs' partition->base partition maps with sentinels
+        mvA.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+        mvB.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // rebuild the base table t (it is in mv_a's excluded_refresh_tables)
+        starRocksAssert.dropTable("test.cascade_base_t");
+        starRocksAssert.withTable("CREATE TABLE test.cascade_base_t (\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+
+        // mv_a excludes t, so its version map must be kept
+        Assertions.assertFalse(mvA.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+        // mv_b depends on t directly and does NOT exclude it, so its version map must be cleared (force refresh)
+        Assertions.assertTrue(mvB.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
 }
