@@ -596,6 +596,7 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+    void _unschedule_global_rf_timer() noexcept;
 
     // Helper function to build readable string with option to use raw operator names
     std::string _build_readable_string(bool use_raw_name) const;
