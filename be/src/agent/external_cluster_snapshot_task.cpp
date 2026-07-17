@@ -119,10 +119,11 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
     const int64_t table_id = request.table_id;
     const int64_t physical_partition_id = request.physical_partition_id;
 
-    phmap::flat_hash_set<std::string> globally_bound_segments;
+    phmap::flat_hash_set<std::string> globally_bound_files;
     FileSet pre_bundle_data_files;
     FileSet unused_data_files;
     FileSet unused_meta_files;
+    FileSet partition_live_files;
     phmap::flat_hash_set<int64_t> pre_schema_ids;
     phmap::flat_hash_set<int64_t> new_schema_ids;
 
@@ -176,7 +177,7 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
             process_tablet_status = process_tablet_for_snapshot(
                     tablet_mgr, tablet_id, pre_version, new_version, request.is_filebundling, meta_added,
                     pre_bundle_data_files, unused_data_files, unused_meta_files, pre_schema_ids, new_schema_ids,
-                    globally_bound_segments, node_req);
+                    globally_bound_files, partition_live_files, node_req);
             if (!process_tablet_status.ok()) {
                 break;
             }
@@ -206,7 +207,7 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
     if (pre_version >= 0 && cluster_snapshot_rpc_ctx.final_status.ok()) {
         FileSet unused_schema_files;
         prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
-                                     pre_schema_ids, new_schema_ids, unused_schema_files);
+                                     pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
 
         // Get first tablet ID for log
         int64_t first_tablet_id = 0;

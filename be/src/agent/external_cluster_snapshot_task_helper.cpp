@@ -76,6 +76,39 @@ FileSet collect_delvec_files(const TabletMetadataPtr& metadata) {
     return files;
 }
 
+FileSet collect_del_files(const TabletMetadataPtr& metadata) {
+    FileSet files;
+    if (metadata == nullptr) {
+        return files;
+    }
+    for (const auto& rowset : metadata->rowsets()) {
+        for (const auto& del_file : rowset.del_files()) {
+            if (!del_file.name().empty()) {
+                files.emplace(del_file.name());
+            }
+        }
+    }
+    return files;
+}
+
+FileSet collect_live_data_files(const TabletFileCollections& collections) {
+    FileSet files;
+    // Segments live only in the rowsets; the other classes are already materialized as new_* sets by
+    // TabletFileCollections::collect, so reuse them instead of re-walking the metadata.
+    for (const auto& [rowset_id, rowset] : collections.new_rowsets) {
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            if (!segment_meta.filename().empty()) {
+                files.emplace(segment_meta.filename());
+            }
+        }
+    }
+    for (const auto* set : {&collections.new_sstable_files, &collections.new_dcg_files, &collections.new_delvec_files,
+                            &collections.new_del_files}) {
+        files.insert(set->begin(), set->end());
+    }
+    return files;
+}
+
 void collect_schema_ids(const TabletMetadataPtr& metadata, phmap::flat_hash_set<int64_t>& schema_ids) {
     if (metadata == nullptr) {
         return;
@@ -101,12 +134,14 @@ TabletFileCollections TabletFileCollections::collect(const TabletMetadataPtr& pr
         collections.pre_sstable_files = collect_sstable_files(pre_metadata);
         collections.pre_dcg_files = collect_dcg_files(pre_metadata);
         collections.pre_delvec_files = collect_delvec_files(pre_metadata);
+        collections.pre_del_files = collect_del_files(pre_metadata);
     }
 
     collections.new_rowsets = build_rowset_index(new_metadata);
     collections.new_sstable_files = collect_sstable_files(new_metadata);
     collections.new_dcg_files = collect_dcg_files(new_metadata);
     collections.new_delvec_files = collect_delvec_files(new_metadata);
+    collections.new_del_files = collect_del_files(new_metadata);
 
     return collections;
 }
@@ -134,6 +169,14 @@ void collect_unused_files(const TabletFileCollections& collections, FileSet& unu
         }
     }
 
+    // Collect unused del files (kept safe later by the partition-wide live-file subtraction, so a
+    // .del still referenced by a sibling child is not deleted).
+    for (const auto& del_file : collections.pre_del_files) {
+        if (!collections.new_del_files.contains(del_file)) {
+            unused_data_files.emplace(del_file);
+        }
+    }
+
     // Process rowsets for bundle/non-bundle files
     for (const auto& [rowset_id, rowset] : collections.pre_rowsets) {
         if (collections.new_rowsets.contains(rowset_id)) {
@@ -152,30 +195,44 @@ void collect_unused_files(const TabletFileCollections& collections, FileSet& unu
 
 TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFileCollections& collections,
                                                FileSet& pre_bundle_data_files,
-                                               phmap::flat_hash_set<std::string>& globally_bound_segments,
+                                               phmap::flat_hash_set<std::string>& globally_bound_files,
                                                UploadSnapshotFilesRequestPB& node_req) {
     auto* tablet_pb = node_req.add_tablet_snapshots();
     tablet_pb->set_tablet_id(tablet_id);
 
-    // Add new SSTable files
+    // Emit a data file at most once per partition cycle: split siblings can reference the same shared
+    // sstable/dcg/delvec/del/segment file, and the receiver's path_exists->create is not atomic, so a
+    // partition-wide dedup across all classes and all tablets prevents redundant concurrent uploads.
+    auto add_data_file = [&](const std::string& name) {
+        if (globally_bound_files.emplace(name).second) {
+            tablet_pb->add_new_data_files(name);
+        }
+    };
+
+    // New SSTable / DCG / delvec files: incremental (not already on external from the previous
+    // snapshot), then partition-wide dedup.
     for (const auto& file : collections.new_sstable_files) {
         if (!collections.pre_sstable_files.contains(file)) {
-            tablet_pb->add_new_data_files(file);
+            add_data_file(file);
         }
     }
-
-    // Add new DCG files
     for (const auto& file : collections.new_dcg_files) {
         if (!collections.pre_dcg_files.contains(file)) {
-            tablet_pb->add_new_data_files(file);
+            add_data_file(file);
+        }
+    }
+    for (const auto& file : collections.new_delvec_files) {
+        if (!collections.pre_delvec_files.contains(file)) {
+            add_data_file(file);
         }
     }
 
-    // Add new delvec files
-    for (const auto& file : collections.new_delvec_files) {
-        if (!collections.pre_delvec_files.contains(file)) {
-            tablet_pb->add_new_data_files(file);
-        }
+    // Del files: uploaded in FULL (all current), not incrementally. Del files were previously untracked
+    // by external snapshot, so an incremental new-minus-pre diff would never backfill a del file present
+    // in both pre and new, leaving existing snapshots permanently incomplete. skip_if_exists on the
+    // receiver makes re-requesting already-uploaded files cheap.
+    for (const auto& file : collections.new_del_files) {
+        add_data_file(file);
     }
 
     // Process new rowsets for segments
@@ -186,10 +243,7 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
         for (const auto& segment_meta : rowset->segment_metas()) {
             const auto& segment_filename = segment_meta.filename();
             pre_bundle_data_files.erase(segment_filename);
-            auto [it, inserted] = globally_bound_segments.emplace(segment_filename);
-            if (inserted) {
-                tablet_pb->add_new_data_files(segment_filename);
-            }
+            add_data_file(segment_filename);
         }
     }
 
@@ -207,14 +261,21 @@ void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t t
                                 phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_meta_files,
                                 TabletDataSnapshotPB* tablet_pb) {
     DCHECK(tablet_pb != nullptr);
-    // Handle metadata files
+    // Handle metadata files. Only queue the pre-version meta for deletion when there actually was a
+    // pre-version metadata (same predicate the schema-file half uses below): on the reshard boundary a
+    // split/merge child has no {tablet}_{pre_version}.meta, so it must not be deleted; the new metadata
+    // is still uploaded.
     if (is_filebundling) {
         if (!meta_added) {
             tablet_pb->add_new_metadata_files(tablet_metadata_filename(0, new_version));
-            unused_meta_files.emplace(tablet_metadata_filename(0, pre_version));
+            if (pre_tablet_metadata != nullptr) {
+                unused_meta_files.emplace(tablet_metadata_filename(0, pre_version));
+            }
         }
     } else {
-        unused_meta_files.emplace(tablet_metadata_filename(tablet_id, pre_version));
+        if (pre_tablet_metadata != nullptr) {
+            unused_meta_files.emplace(tablet_metadata_filename(tablet_id, pre_version));
+        }
         tablet_pb->add_new_metadata_files(tablet_metadata_filename(tablet_id, new_version));
     }
 
@@ -234,7 +295,8 @@ void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t t
 
 void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle_data_files, FileSet& unused_data_files,
                                   const FileSet& unused_meta_files, const phmap::flat_hash_set<int64_t>& pre_schema_ids,
-                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files) {
+                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files,
+                                  const FileSet& partition_live_files) {
     if (pre_version < 0) {
         return;
     }
@@ -242,6 +304,14 @@ void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle
     // Add bundle files to unused data files
     for (const auto& file : pre_bundle_data_files) {
         unused_data_files.emplace(file);
+    }
+
+    // Never delete a data file that some current tablet in the partition still references. After a
+    // split/merge, siblings share files, so a per-tablet pre-minus-new diff can flag a file a sibling
+    // still uses. Subtract the partition-wide live set here -- AFTER the bundle expansion above, since a
+    // bundle file can also be live in a sibling -- so both mutations of unused_data_files stay together.
+    for (const auto& file : partition_live_files) {
+        unused_data_files.erase(file);
     }
 
     // Collect unused schema files

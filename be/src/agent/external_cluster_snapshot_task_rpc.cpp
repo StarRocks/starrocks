@@ -148,15 +148,27 @@ Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id,
                                    FileSet& pre_bundle_data_files, FileSet& unused_data_files,
                                    FileSet& unused_meta_files, phmap::flat_hash_set<int64_t>& pre_schema_ids,
                                    phmap::flat_hash_set<int64_t>& new_schema_ids,
-                                   phmap::flat_hash_set<std::string>& globally_bound_segments,
-                                   UploadSnapshotFilesRequestPB& node_req) {
-    // Get pre-version tablet metadata
+                                   phmap::flat_hash_set<std::string>& globally_bound_files,
+                                   FileSet& partition_live_files, UploadSnapshotFilesRequestPB& node_req) {
+    // Get pre-version tablet metadata.
     TabletMetadataPtr pre_tablet_metadata;
     if (pre_version >= 0) {
         auto meta_or_st = tablet_mgr->get_tablet_metadata(tablet_id, pre_version);
-        RETURN_IF_ERROR_WITH_WARN(meta_or_st.status(),
-                                  fmt::format("get pre tablet metadata failed, tablet_id: {}", tablet_id));
-        pre_tablet_metadata = std::move(meta_or_st.value());
+        if (meta_or_st.ok()) {
+            pre_tablet_metadata = std::move(meta_or_st.value());
+        } else if (meta_or_st.status().is_not_found()) {
+            // Reshard boundary: a split/merge child has no metadata at pre_version (its earliest
+            // version is the reshard publish version). Leave pre_tablet_metadata null so collect() does
+            // a full re-sync of its current live files; skip_if_exists on the receiver makes
+            // re-uploading inherited files cheap. Deletion stays safe via the partition-wide live-file
+            // subtraction. A null pre also tells populate_meta_schema_files not to queue the
+            // (nonexistent) child pre-version meta for deletion.
+            LOG(INFO) << "external snapshot: tablet " << tablet_id << " has no metadata at pre_version " << pre_version
+                      << " (reshard boundary), full re-sync";
+        } else {
+            RETURN_IF_ERROR_WITH_WARN(meta_or_st.status(),
+                                      fmt::format("get pre tablet metadata failed, tablet_id: {}", tablet_id));
+        }
     }
 
     // Get new-version tablet metadata
@@ -165,17 +177,25 @@ Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id,
                               fmt::format("get new tablet metadata failed, tablet_id: {}", tablet_id));
     auto new_tablet_metadata = std::move(meta_or_st.value());
 
-    // Collect file collections
+    // Collect file collections (pre null -> a full re-sync of new)
     auto collections = TabletFileCollections::collect(pre_tablet_metadata, new_tablet_metadata);
+
+    // Record this tablet's current live data files into the partition-wide set so the caller keeps any
+    // file still referenced by some sibling (split children share files) out of the delete log. Derived
+    // from the collections just built, avoiding a second walk of new_tablet_metadata.
+    for (const auto& file : collect_live_data_files(collections)) {
+        partition_live_files.emplace(file);
+    }
 
     // Collect unused files
     collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
 
     // Populate tablet snapshot in node request
     auto* tablet_pb =
-            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_segments, node_req);
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_files, node_req);
 
-    // Populate metadata and schema files
+    // Populate metadata and schema files. populate_meta_schema_files itself skips queuing the pre-version
+    // meta for deletion when pre_tablet_metadata is null (the reshard-boundary case).
     populate_meta_schema_files(is_filebundling, meta_added, tablet_id, pre_version, new_version, pre_tablet_metadata,
                                new_tablet_metadata, pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
