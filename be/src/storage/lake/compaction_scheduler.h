@@ -71,6 +71,12 @@ public:
 
     bool allow_partial_success() const;
 
+    // Whether the originating FE request asked the CN to skip persisting the txn log to object
+    // storage and instead return it inline via the RPC response. Only the aggregate/file-bundling
+    // path sets this; on the regular path it is false, meaning the CN must persist the txn log
+    // itself. The parallel compaction manager consults this to decide how to deliver the merged log.
+    bool skip_write_txnlog() const;
+
     void set_last_check_time(int64_t now) {
         std::lock_guard l(_txn_valid_check_mutex);
         _last_check_time = now;
