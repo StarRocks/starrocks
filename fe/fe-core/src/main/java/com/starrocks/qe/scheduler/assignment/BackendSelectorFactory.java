@@ -70,9 +70,17 @@ public class BackendSelectorFactory {
             ((OlapScanNode) scanNode).enableIncrementalScanRangeDelivery();
         }
 
+        // Connector (HDFS/bucket) incremental delivery is gated on its own session variable, kept
+        // independent of the OLAP flag. The job-level incrementalScanRanges flag is the OR of both
+        // (it only drives the deploy loop), so without this a session that enabled only
+        // enable_olap_incremental_scan_ranges would still switch connector scans to incremental
+        // delivery, contrary to enable_connector_incremental_scan_ranges being off.
+        boolean connectorIncrementalScanRanges = useIncrementalScanRanges
+                && sessionVariable.isEnableConnectorIncrementalScanRanges();
+
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         int maxScanRangeLength = 0;
-        if (useIncrementalScanRanges) {
+        if (connectorIncrementalScanRanges || olapIncrementalScanRanges) {
             maxScanRangeLength = sessionVariable.getConnectorIncrementalScanRangeNumber();
         }
 
@@ -92,11 +100,12 @@ public class BackendSelectorFactory {
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                 String mode = connectContext.getSessionVariable().getLakeBucketAssignMode();
                 return new BucketAwareBackendSelector(scanNode, locations, colocatedAssignment,
-                        workerProvider, isRightOrFullBucketShuffleFragment, useIncrementalScanRanges, mode);
+                        workerProvider, isRightOrFullBucketShuffleFragment, connectorIncrementalScanRanges, mode);
             }
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
-                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges, connectContext);
+                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), connectorIncrementalScanRanges,
+                    connectContext);
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
