@@ -48,6 +48,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "   WHERE $randFilter and $columnName is not null $MCVExclude" +
                     "   ORDER BY $columnName LIMIT $totalRows) t";
 
+    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName', NULL, $mcv, NOW()";
+
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
                     "cast(column_key as varchar), cast(column_value as varchar) from (" +
@@ -98,7 +101,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 }
             }
 
-            sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+            if (shouldSkipHistogramBuckets(columnType)) {
+                sql = buildCollectMcvOnly(db, table, mostCommonValues, columnName);
+            } else {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+            }
             collectStatisticSync(sql, context, analyzeStatus);
 
             finishedSQLNum++;
@@ -138,15 +145,19 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
     }
 
-    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
-                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName,
-                                         Type columnType) {
+    private String buildInsertIntoHistogramStatistics(String query) {
         List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
                 .map(ColumnDef::getName)
                 .collect(Collectors.toList());
         String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME)
-                .append(columnNames).append(" ");
+        return "INSERT INTO " +
+                HISTOGRAM_STATISTICS_TABLE_NAME +
+                columnNames +
+                " " +
+                query;
+    }
+
+    private VelocityContext buildBaseContext(Database database, Table table, String columnName) {
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
@@ -157,8 +168,47 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
 
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
+        return context;
+    }
+
+    private void addMcvToContext(VelocityContext context, Map<String, String> mostCommonValues) {
+        List<String> mcvList = new ArrayList<>();
+        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
+            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
+        }
+
+        if (mostCommonValues.isEmpty()) {
+            context.put("mcv", "NULL");
+        } else {
+            String mcvJson = "[" + Joiner.on(",").join(mcvList) + "]";
+            String escapedMcvJson = mcvJson.replace("'", "''");
+            context.put("mcv", "'" + escapedMcvJson + "'");
+        }
+    }
+
+    private void addMcvExcludeToContext(VelocityContext context, Map<String, String> mostCommonValues, String columnName,
+                                        Type columnType) {
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
+        if (!mostCommonValues.isEmpty()) {
+            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
+                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
+                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
+            } else {
+                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
+                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            }
+        } else {
+            context.put("MCVExclude", "");
+        }
+    }
+
+
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
+                                         Map<String, String> mostCommonValues, String columnName, Type columnType) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
@@ -172,33 +222,14 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             context.put("sampleClause", "");
         }
 
-        List<String> mcvList = new ArrayList<>();
-        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
-            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
-        }
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
+    }
 
-        if (mostCommonValues.isEmpty()) {
-            context.put("mcv", "NULL");
-        } else {
-            String mcvJson = "[" + Joiner.on(",").join(mcvList) + "]";
-            String escapedMcvJson = mcvJson.replace("'", "''");
-            context.put("mcv", "'" + escapedMcvJson + "'");
-        }
-
-        if (!mostCommonValues.isEmpty()) {
-            if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
-                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
-            } else {
-                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
-                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
-            }
-        } else {
-            context.put("MCVExclude", "");
-        }
-
-        builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
-        return builder.toString();
+    private String buildCollectMcvOnly(Database database, Table table, Map<String, String> mostCommonValues,
+                                       String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
     }
 
     @Override

@@ -59,6 +59,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -545,7 +546,44 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
                 "('percent'='10') " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+
+        // buildCollectMcvOnly produces MCV-only SQL (no bucket aggregate). This is the SQL collect() substitutes
+        // for char-family columns (see the testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode
+        // end-to-end test).
+        Map<String, String> stringMcv = new HashMap<>();
+        stringMcv.put("1", "10");
+        stringMcv.put("2", "20");
+        String mcvOnlySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMcvOnly",
+                db, olapTable, stringMcv, "v2");
+        String mcvOnlyNormalized = normalize.apply(mcvOnlySql);
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                        "'test.t0_stats', NULL, '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW()",
+                t0StatsTableId, dbid)), mcvOnlyNormalized);
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram("));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("order by"));
+
+        // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
+        // so it emits histogram() even for a char-family column.
+        boolean originalSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = false;
+            sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                    db, olapTable, 0.1, 64L, stringMcv, "v2", Type.VARCHAR, false);
+            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                            "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM (   SELECT `v2` as column_key FROM " +
+                            "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null  and `v2` " +
+                            "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
+                    normalize.apply(sql));
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalSample;
+        }
     }
+
+
 
     @Test
     public void testNativeAnalyzeJob() {
