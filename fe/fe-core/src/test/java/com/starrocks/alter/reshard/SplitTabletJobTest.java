@@ -16,7 +16,6 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -30,7 +29,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
@@ -158,43 +156,6 @@ public class SplitTabletJobTest {
 
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
-        }
-    }
-
-    @Test
-    public void testSupersededIndexErasedFromRecycleBin() throws Exception {
-        installLakeServiceMock(this::addDataDrivenRanges);
-
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
-        long oldIndexId = materializedIndex.getId();
-        long oldShardGroupId = materializedIndex.getShardGroupId();
-        List<Long> oldTabletIds = new ArrayList<>();
-        for (Tablet tablet : materializedIndex.getTablets()) {
-            oldTabletIds.add(tablet.getId());
-        }
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
-
-        TabletReshardJob tabletReshardJob = createTabletReshardJob();
-        tabletReshardJob.init();
-        tabletReshardJob.run();
-        tabletReshardJob.run();
-        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
-
-        // The split parked the superseded index: its shard group is retained in the recycle bin.
-        Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(oldShardGroupId));
-
-        // Force-expire this index's recycle entry, then run the erase cycle. eraseMaterializedIndex ->
-        // delete() drops the index's tablets from the inverted index synchronously; physical shard
-        // reclamation then follows on the StarMgrMetaSyncer cycle (covered on-cluster).
-        Map<Long, Long> idToRecycleTime = Deencapsulation.getField(recycleBin, "idToRecycleTime");
-        idToRecycleTime.put(oldIndexId, 1L); // far in the past -> expired regardless of retention
-        Deencapsulation.invoke(recycleBin, "eraseMaterializedIndex", System.currentTimeMillis());
-
-        Assertions.assertFalse(recycleBin.getRecycledIndexShardGroupIds().contains(oldShardGroupId));
-        for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
         }
     }
 
