@@ -49,6 +49,10 @@ DEFINE_FAIL_POINT(operator_return_large_column);
 DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
 PipelineDriver::~PipelineDriver() noexcept {
+    // Queued or blocked drivers abandoned when the driver executor is closed during shutdown are
+    // destroyed without going through finalize(), so unschedule the global runtime-filter timer here
+    // as well; otherwise the timer thread may run a task whose owning shared_ptr is already gone.
+    _unschedule_global_rf_timer();
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
@@ -740,9 +744,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _update_driver_level_timer();
 
-    if (_global_rf_timer != nullptr) {
-        _global_rf_timer->unschedule_and_wait(_fragment_ctx->pipeline_timer());
-    }
+    _unschedule_global_rf_timer();
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -789,6 +791,16 @@ void PipelineDriver::_update_global_rf_timer() {
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
+}
+
+void PipelineDriver::_unschedule_global_rf_timer() noexcept {
+    // Move the task out first so it stays alive while we synchronize with a callback that may already
+    // be running on the timer thread but has not yet taken its shared_from_this() reference. Otherwise
+    // doRun() could observe a zero use_count and throw std::bad_weak_ptr.
+    auto task = std::move(_global_rf_timer);
+    if (task != nullptr && _fragment_ctx != nullptr) {
+        task->unschedule_and_wait(_fragment_ctx->pipeline_timer());
+    }
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {
