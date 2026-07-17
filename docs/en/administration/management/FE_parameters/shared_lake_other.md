@@ -534,15 +534,6 @@ This topic introduces the following types of FE configurations:
 
 - Introduced in: -
 
-### `shard_group_clean_retention_grace_seconds`
-
-- Default: 1800
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The retention grace period for a superseded materialized index during a tablet reshard (split or merge) in a shared-data cluster. When a tablet split or merge replaces an index, the old index is parked in the recycle bin as a non-recoverable partition, and its tablet metadata is retained for this period before being physically deleted from object storage. This protects an in-flight query planned against the old (tablet-split parent or tablet-merge child) index from failing when that index's shards are reclaimed. A value `<= 0` disables the grace, so the old index becomes eligible for cleanup on the next GC cycle (reverting to the previous behavior, still subject to `shard_group_clean_threshold_sec` and cluster-snapshot safety). This value should exceed the maximum expected query time.
-- Introduced in: v4.1
-
 ### `shard_group_clean_threshold_sec`
 
 - Default: 3600

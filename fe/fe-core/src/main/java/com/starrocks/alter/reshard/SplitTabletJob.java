@@ -757,39 +757,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     private void removeOldMaterializedIndexes() {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition
-                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                    // Idempotency guard: on a re-run/replay of this step the old index is already gone,
-                    // so deleteMaterializedIndexByIndexId returns null and we skip. This ensures the
-                    // (non-idempotent) recyclePartition below runs at most once per index -- its
-                    // checkState forbids a duplicate partition id.
-                    if (oldIndex == null) {
-                        continue;
-                    }
-                    // Instead of dropping the superseded index's tablets right away, park it in the
-                    // recycle bin so an in-flight split-parent read can finish (issue #75993). Allocate
-                    // the virtual-partition ids once on the leader; reuse the persisted ids on replay so
-                    // both build an identical recycle-bin entry (never re-allocate under replay).
-                    if (reshardingIndex.getRecycledVirtualPartitionId() == -1L) {
-                        reshardingIndex.setRecycledVirtualPartitionIds(
-                                GlobalStateMgr.getCurrentState().getNextId(),
-                                GlobalStateMgr.getCurrentState().getNextId());
-                    }
-                    recycleSupersededMaterializedIndex(dbId, olapTable, oldIndex,
-                            reshardingIndex.getRecycledVirtualPartitionId(),
-                            reshardingIndex.getRecycledVirtualPhysicalPartitionId());
-                }
-            }
+            recycleOldMaterializedIndexes(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         }
     }
 
