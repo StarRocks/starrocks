@@ -69,6 +69,16 @@ class OutputPropertyDeriverRangeTest {
         return new OutputPropertyDeriver(null, null, childrenOutputProperties);
     }
 
+    // Non-null EMPTY requirements so that, if a child combo were ever misrouted
+    // into the shuffle-join branch, computeShuffleJoinOutputProperty returns
+    // PhysicalPropertySet.EMPTY (the requirements are not shuffle) and the method
+    // returns normally — reproducing a "silently derive a degenerate output"
+    // outcome rather than an incidental NPE, so a throw assertion is meaningful.
+    private static OutputPropertyDeriver newDeriverWithEmptyRequirements(
+            List<PhysicalPropertySet> childrenOutputProperties) {
+        return new OutputPropertyDeriver(null, PhysicalPropertySet.EMPTY, childrenOutputProperties);
+    }
+
     private static RangeDistributionSpec buildRangeSkeleton(long tableId, int... colIds) {
         EquivalentDescriptor descriptor = new EquivalentDescriptor(tableId, Collections.emptyList());
         List<DistributionCol> cols = Arrays.stream(colIds)
@@ -395,6 +405,60 @@ class OutputPropertyDeriverRangeTest {
         StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
         assertTrue(ex.getMessage().contains("Children output property distribution error"),
                 "expected the children-distribution diagnostic, got: " + ex.getMessage());
+    }
+
+    // Shared body for the shuffle-join-branch precedence guards below. A
+    // (leftSource, SHUFFLE_ENFORCE) child combo whose leftSource is neither
+    // shuffle nor shuffle-enforce (LOCAL / BUCKET) is not a legal shuffle join,
+    // so the deriver must reject it with the clean children-distribution error.
+    // Follows the assertRangeJoinEmitsDominatedSide helper idiom above.
+    private void assertShuffleEnforceRightRejectsLeft(PhysicalHashJoinOperator node,
+            ExpressionContext context, HashDistributionDesc.SourceType leftSource) {
+        stubInnerJoinWithEmptyColumns(node, context);
+        OutputPropertyDeriver deriver = newDeriverWithEmptyRequirements(List.of(
+                propertyOf(buildHashSpec(leftSource, 1)),
+                propertyOf(buildHashSpec(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE, 2))));
+
+        StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
+        assertTrue(ex.getMessage().contains("Children output property distribution error"),
+                "expected the children-distribution diagnostic, got: " + ex.getMessage());
+    }
+
+    /**
+     * Operator-precedence regression guard for the shuffle-join branch.
+     *
+     * <p>A (LOCAL, SHUFFLE_ENFORCE) child combo is not a legal shuffle join: the
+     * left side is bucket-local. The intended guard —
+     * {@code (leftShuffle || leftEnforce) && (rightShuffle || rightEnforce)} —
+     * evaluates to false here, so the deriver must reject it with the clean
+     * children-distribution error.
+     *
+     * <p>Before the parentheses were added, {@code &&} bound tighter than
+     * {@code ||}, so the guard collapsed to
+     * {@code [(leftShuffle || leftEnforce) && rightShuffle] || rightEnforce}.
+     * With the right side SHUFFLE_ENFORCE the trailing {@code || rightEnforce}
+     * forced the branch true regardless of the left side, and this combo slipped
+     * into the shuffle-join branch, silently deriving a degenerate output
+     * property instead of throwing.
+     */
+    @Test
+    void visitPhysicalJoinThrowsOnLocalLeftShuffleEnforceRight(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        assertShuffleEnforceRightRejectsLeft(node, context, HashDistributionDesc.SourceType.LOCAL);
+    }
+
+    /**
+     * Same precedence guard as
+     * {@link #visitPhysicalJoinThrowsOnLocalLeftShuffleEnforceRight}, but with a
+     * BUCKET left side — the other left source type that is neither shuffle nor
+     * shuffle-enforce, so the correct guard also rejects it.
+     */
+    @Test
+    void visitPhysicalJoinThrowsOnBucketLeftShuffleEnforceRight(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        assertShuffleEnforceRightRejectsLeft(node, context, HashDistributionDesc.SourceType.BUCKET);
     }
 
     @Test

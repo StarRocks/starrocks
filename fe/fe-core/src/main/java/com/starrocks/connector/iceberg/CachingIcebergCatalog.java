@@ -32,7 +32,6 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -147,8 +146,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         }
                     }
                 });
-        this.partitionCache = newCacheBuilderWithMaximumSize(
-                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE, DEFAULT_CACHE_NUM).build(
+        long partitionCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergPartitionCacheMemoryUsageRatio());
+        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE)
+                .executor(executorService)
+                .maximumWeight(partitionCacheSize)
+                .weigher((Weigher<IcebergTableName, Map<String, Partition>>) this::weighPartitionEntry)
+                .build(
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
@@ -284,10 +288,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
-            Throwable ce = ExceptionUtils.getRootCause(e);
-            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
-            throw new StarRocksConnectorException(String.format("Failed to get iceberg table %s.%s.%s. %s",
-                    catalogName, dbName, tableName, errMsg), e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get iceberg table %s.%s.%s", catalogName, dbName, tableName), e);
         } finally {
             TABLE_LOAD_CONTEXT.remove();
         }
@@ -650,6 +652,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return (int) size;
     }
 
+    // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
+    // millions of partitions). Sample the partition values so weighing stays cheap on large maps.
+    private int weighPartitionEntry(IcebergTableName key, Map<String, Partition> partitions) {
+        long size = Estimator.estimate(key) + Estimator.estimate(partitions, 3);
+        if (size > Integer.MAX_VALUE) {
+            LOG.warn("Partition cache entry size for key {} is too large: {} bytes", key, size);
+            return Integer.MAX_VALUE;
+        }
+        return (int) size;
+    }
+
     private long estimateContentFilesSize(Set<? extends ContentFile<?>> files) {
         if (files == null || files.isEmpty()) {
             return 0L;
@@ -694,7 +707,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return Estimator.estimate(tables.asMap(), 10) +
                 Estimator.estimate(databases.asMap(), 10) +
                 estimateDataFileCacheSize() +
-                estimateDeleteFileCacheSize() + Estimator.estimate(metaFileCacheMap, 10);
+                estimateDeleteFileCacheSize() +
+                Estimator.estimate(partitionCache.asMap(), 10) +
+                Estimator.estimate(metaFileCacheMap, 10) +
+                Estimator.estimate(tableLatestAccessTime, 10) +
+                Estimator.estimate(tableLatestRefreshTime, 10) +
+                Estimator.estimate(tableRefreshLockMap, 10);
     }
 
     private long estimateDataFileCacheSize() {

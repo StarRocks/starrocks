@@ -1465,6 +1465,7 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, Tab
                 fm.set_name(e.index_file());
                 if (e.has_file_size()) fm.set_size(e.file_size());
                 if (tgt_shared) fm.set_shared(true);
+                fm.set_version(e.version());
             }
         }
         if (ver.entries_size() == 0) continue;
@@ -2665,6 +2666,8 @@ Status emit_legacy_shared_sstable_into_dest(TabletManager* tablet_manager, const
     RETURN_IF_ERROR(rebuild_legacy_shared_sstable(tablet_manager, new_metadata.id(), src_pb, ctx.metadata(),
                                                   new_metadata, *family_maps_ptr, &projected_pb));
     if (!projected_pb.filename().empty()) {
+        // Rebuilt = a brand-new physical file, first visible at the merge version.
+        projected_pb.set_generation_version(new_metadata.version());
         dest->Add()->Swap(&projected_pb);
     }
     return Status::OK();
@@ -2690,6 +2693,8 @@ Status emit_non_shared_legacy_sstable_into_dest(TabletManager* tablet_manager, c
         RETURN_IF_ERROR(rebuild_non_shared_legacy_sstable(tablet_manager, new_metadata.id(), src_pb, ctx,
                                                           ctx.metadata(), &rebuilt_pb));
         if (!rebuilt_pb.filename().empty()) {
+            // Rebuilt = a brand-new physical file, first visible at the merge version.
+            rebuilt_pb.set_generation_version(new_metadata.version());
             dest->Add()->Swap(&rebuilt_pb);
         }
         return Status::OK();
@@ -2741,7 +2746,8 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         // the case where an old tablet accumulated post-split DML that never
         // reached shared storage before merge; see the symmetric call in
         // split_tablet for the pre-split side of the invariant.
-        ASSIGN_OR_RETURN(auto flushed_metadata, update_manager->flush_pk_memtable(ctx.metadata()));
+        ASSIGN_OR_RETURN(auto flushed_metadata,
+                         update_manager->flush_pk_memtable(ctx.metadata(), new_metadata->version()));
         ctx.set_metadata(std::move(flushed_metadata));
         if (!ctx.metadata()->has_sstable_meta()) continue;
 

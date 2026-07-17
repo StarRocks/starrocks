@@ -415,7 +415,7 @@ public class CloudConfigurationFactoryTest {
                 cloudConfiguration.toConfString());
         Configuration conf = new Configuration();
         cloudConfiguration.applyToConfiguration(conf);
-        Assertions.assertNull(conf.get("fs.gs.auth.type"));
+        Assertions.assertEquals("ACCESS_TOKEN_PROVIDER", conf.get("fs.gs.auth.type"));
         Assertions.assertEquals("access_token", conf.get("fs.gs.temporary.access.token"));
     }
 

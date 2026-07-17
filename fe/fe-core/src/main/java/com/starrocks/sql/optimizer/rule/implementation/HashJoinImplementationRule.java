@@ -54,6 +54,7 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
+                joinOperator.getPredicateCommonOperators(),
                 joinOperator.getProjection(),
                 joinOperator.getSkewColumn(),
                 joinOperator.getSkewValues());

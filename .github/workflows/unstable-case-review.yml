@@ -4,8 +4,8 @@ name: UNSTABLE CASE REVIEW
 # Cases that now pass are auto-removed from unstable_case.json.
 # Still-failing cases get AI analysis in an HTML report uploaded to OSS.
 # Runs on the native ubuntu server ([self-hosted, ubuntu, ai]).
-# Manual-only for now (schedule removed): once validated on CelerData and
-# runners are also registered on StarRocks, a schedule can be re-added.
+# Manual-only for now (schedule removed): once validated and self-hosted
+# [ubuntu, ai] runners are registered, a schedule can be re-added.
 
 on:
   workflow_dispatch:
@@ -22,6 +22,16 @@ on:
         required: false
         default: 'main'
         type: string
+      runs:
+        description: 'Consecutive runs per case for the stability check (default 3; set 1 for a quick debug run)'
+        required: false
+        default: '3'
+        type: string
+      grant_probation:
+        description: 'Open a PR moving now-passing blacklisted cases into PROBATION (default false; needs SYNC_PAT to open the PR)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   checks: write
@@ -32,6 +42,9 @@ permissions:
 env:
   IS_INSPECTION: 'true'
   SHARE_PATH: /var/local/env
+  # Consecutive-run count for the stability check, consumed by ci-tool
+  # run-sql-tester.sh / elastic-ut-review.sh (default 3; 1 = quick debug).
+  REVIEW_RUNS: ${{ inputs.runs || '3' }}
 
 jobs:
   # ─── Info / gate ─────────────────────────────────────────────────────────
@@ -66,6 +79,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py prepare \
             --json files/unstable_case.json \
+            --repo "${{ github.repository }}" \
             --branch "${BRANCH}" \
             --case-types "${CASE_TYPES}"
 
@@ -175,14 +189,23 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ubuntu
           _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
-          _base="oss://starrocks-ci-release/${BRANCH}/Release/inspection/pr/ubuntu"
-          # Sort by modification time (line starts with date), take latest BE to get the commit SHA
-          LATEST_SHA=$(${_oss} ls "${_base}/" | grep "\-BE\.tar\.gz" | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
-          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package found for branch ${BRANCH}" && exit 1
+          # Deploy the latest inspection build. The inspection-pipeline does a
+          # periodic FULL build of the branch (BE+FE together, keyed by the
+          # 40-char commit sha) under <owner>-ci-release/<branch>/Release/inspection/pr/ubuntu/,
+          # so it is ALWAYS a complete pair. The bucket and the tar-name prefix are
+          # derived from github.repository_owner, so the same workflow works in
+          # whatever org/fork runs it (no hardcoded owner).
+          # NOTE: OSS auto-deletes these after 3 days, so the inspection-pipeline
+          # schedule must be enabled for ${BRANCH} or there is nothing to deploy.
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
+          product="${{ github.repository_owner }}"   # tar-name prefix = the org name
+          _base="oss://${bucket}/${BRANCH}/Release/inspection/pr/ubuntu"
+          LATEST_SHA=$(${_oss} ls "${_base}/" | grep '\-BE\.tar\.gz' | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
+          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package under ${_base}/ -- is the inspection-pipeline schedule enabled for ${BRANCH}? (packages auto-delete after 3 days)" && exit 1
           SHORT_SHA=${LATEST_SHA:0:7}
-          BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/StarRocks-${SHORT_SHA}-BE.tar.gz"
-          FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/StarRocks-${SHORT_SHA}-FE.tar.gz"
-          echo "Inspection commit: ${LATEST_SHA}"
+          BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/${product}-${SHORT_SHA}-BE.tar.gz"
+          FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/${product}-${SHORT_SHA}-FE.tar.gz"
           echo "BE: ${BE_OUTPUT_TAR}"
           echo "FE: ${FE_OUTPUT_TAR}"
           export BE_OUTPUT_TAR FE_OUTPUT_TAR LINUX_DISTRO=ubuntu
@@ -253,6 +276,7 @@ jobs:
 
           python3 bin/review-unstable-cases.py report \
             --json     files/unstable_case.json \
+            --repo     "${{ github.repository }}" \
             --branch   "${BRANCH}" \
             --commit   "${COMMIT_SHA}" \
             --case-types "${CASE_TYPES}" \
@@ -260,8 +284,7 @@ jobs:
             --be-oss-path  "${BE_OSS}"  \
             --sql-oss-path "${SQL_OSS}" \
             --output-dir "${WORK_DIR}" \
-            --probation files/unstable_case_probation.json \
-            --batch 30
+            --recovered-pool files/unstable_case_recovered_pool.json
 
           echo "WORK_DIR=${WORK_DIR}" >> $GITHUB_OUTPUT
 
@@ -298,14 +321,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Open PR granting probation eligibility
-        # Temporarily disabled: secrets.SYNC_PAT is not configured on
-        # this repo (the `SYNC_PAT` name lives in celerdata-enterprise),
-        # so `gh pr create` runs with an empty GH_TOKEN and fails. Also
-        # /var/lib/ci-tool is a shared dirty working tree on the runner.
-        # Re-enable after a working PAT is wired in and a clean-checkout
-        # safeguard is added to the step.
-        if: false
+      - name: Open PR updating recovered pool
+        # §13.1/§13.2: review is discovery-only — it writes recovered candidates to
+        # unstable_case_recovered_pool.json; the promote-demote workflow drips them
+        # into probation. This step opens a PR carrying the pool update.
+        # Opt-in via the grant_probation input (kept for backward compat — same
+        # cron/dispatch flag). Needs SYNC_PAT and [ubuntu, ai] runners.
+        if: ${{ inputs.grant_probation == 'true' }}
         id: open_pr
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
@@ -314,10 +336,11 @@ jobs:
           git config user.name  "wanpengfei-git"
           git config user.email "wanpengfei91@163.com"
 
-          # Grant-eligibility touches these three files; skip if none changed.
-          if git diff --quiet files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json; then
-            echo "No probation-eligibility changes this run — skipping PR"
+          # Discovery-only now touches just the recovered pool; skip if unchanged.
+          if git diff --quiet files/unstable_case_recovered_pool.json; then
+            echo "No recovered-pool changes this run — skipping PR"
             echo "pr_url=" >> $GITHUB_OUTPUT
+            echo "_recovered pool unchanged → no PR opened._" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -325,10 +348,10 @@ jobs:
           # RUN_ATTEMPT increments), so include RUN_ATTEMPT or a retry after a
           # partial failure reuses the branch and the push is rejected
           # non-fast-forward.
-          BR="auto/probation-eligibility-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
+          BR="auto/recovered-pool-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
-          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json
-          git commit -m "[Tool] grant probation eligibility ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
+          git add files/unstable_case_recovered_pool.json
+          git commit -m "[Tool] update recovered pool ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
           git push origin "$BR"
 
           # YAML's run: | block strips the common indent, so the heredoc body and EOF
@@ -337,20 +360,21 @@ jobs:
           cat > "$BODY_FILE" <<EOF
           Auto-generated by [unstable-case-review run #${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
 
-          Cases that passed all 3 isolation rounds are **moved into probation** (not removed): they leave \`unstable_case.json\`, enter \`unstable_case_probation.json\` (stamped \`probation_since\`), and must now earn promotion from real PR-concurrency evidence. An isolated green is not PR-concurrency stable, so this only grants a trial — promotion/demotion is decided by the promote-demote workflow.
+          Cases that passed all 3 isolation rounds are added to the **recovered pool** (\`unstable_case_recovered_pool.json\`). Review is now discovery-only: the pool is the durable candidate list, and the **promote-demote workflow drips** cases from it into probation up to the target watermark (no re-running this regression per batch). An isolated green is not PR-concurrency stable, so probation + promote-demote still decide the final outcome.
 
-          Please sanity-check the diff — cases with a high \`add_count\` (yo-yo counter) are riskier.
+          Please sanity-check the diff.
           EOF
 
           PR_URL=$(gh pr create \
             --repo StarRocks/ci-tool \
             --base main \
             --head "$BR" \
-            --title "[Tool] grant probation eligibility $(date +%Y-%m-%d) (auto)" \
+            --title "[Tool] update recovered pool $(date +%Y-%m-%d) (auto)" \
             --body-file "$BODY_FILE")
           rm -f "$BODY_FILE"
           echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
           echo "Opened PR: ${PR_URL}"
+          echo "**recovered-pool PR opened:** ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Notify int-cd-rd-ci Slack channel
         if: steps.open_pr.outputs.pr_url != ''

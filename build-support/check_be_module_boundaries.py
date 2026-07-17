@@ -50,6 +50,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "platform",
     "orchestration",
     "runtime",
+    "schema_scanner",
     "script",
     "serde",
     "service",

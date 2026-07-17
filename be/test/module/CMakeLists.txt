@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(module_bootstrap_test module_bootstrap_test.cpp)
+set(MODULE_BOOTSTRAP_TEST_EXTRA_SOURCES)
+if (APPLE)
+    list(APPEND MODULE_BOOTSTRAP_TEST_EXTRA_SOURCES ../base/macos_link_stubs.cpp)
+endif()
+
+add_executable(module_bootstrap_test
+        ${MODULE_BOOTSTRAP_TEST_EXTRA_SOURCES}
+        module_bootstrap_test.cpp)
 target_link_be_test_cxa_throw_wrap(module_bootstrap_test)
-target_link_libraries(module_bootstrap_test ModuleBootstrap ${TEST_LINK_LIBS} gtest_main)
+set(MODULE_BOOTSTRAP_TEST_LINK_LIBS ${TEST_LINK_LIBS})
+list(REMOVE_ITEM MODULE_BOOTSTRAP_TEST_LINK_LIBS arrow_testing)
+target_link_libraries(module_bootstrap_test ModuleBootstrap ${MODULE_BOOTSTRAP_TEST_LINK_LIBS} gtest_main)
 set_target_properties(module_bootstrap_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

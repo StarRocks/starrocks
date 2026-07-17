@@ -60,6 +60,8 @@ FAILPOINT=
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
 MIN_JDK_VERSION=17
+# recommended jdk version; versions in [MIN_JDK_VERSION, RECOMMENDED_JDK_VERSION) are deprecated
+RECOMMENDED_JDK_VERSION=21
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -149,8 +151,10 @@ JAVA=$JAVA_HOME/bin/java
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
-    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $MIN_JDK_VERSION or higher"
+    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $RECOMMENDED_JDK_VERSION or higher"
     exit -1
+elif [[ "$JAVA_VERSION" -lt $RECOMMENDED_JDK_VERSION ]]; then
+    echo "Warning: JDK $JAVA_VERSION is deprecated and support will be removed in a future release, please upgrade to JDK version $RECOMMENDED_JDK_VERSION or higher"
 fi
 
 final_java_opt=${JAVA_OPTS}

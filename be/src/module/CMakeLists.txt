@@ -28,6 +28,10 @@ target_link_libraries(ModuleBootstrap PRIVATE
         HdfsFileSystem
         ComputeEnv
         Connector
+        ConnectorFile
+        ConnectorHive
+        ConnectorIceberg
+        ConnectorLake
         ConnectorCacheStats
         Base
         Gutil

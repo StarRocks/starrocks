@@ -34,9 +34,11 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
-target_link_libraries(Service PRIVATE Script Runtime Orchestration Cache AgentServer ComputeEnv ExecRuntime Platform ColumnCore)
+target_link_libraries(Service PRIVATE Script Runtime DataWorkflows Orchestration Cache AgentServer ComputeEnv ExecRuntime
+                                      Platform ConnectorFile ColumnCore)
 target_link_libraries(ServiceBE PUBLIC Service)
-target_link_libraries(ServiceBE PRIVATE AgentServer ModuleBootstrap DataWorkflows Orchestration Storage)
+target_link_libraries(ServiceBE PRIVATE AgentServer ModuleBootstrap DataWorkflows Orchestration SchemaScannerBuiltin
+                                        Storage)
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))

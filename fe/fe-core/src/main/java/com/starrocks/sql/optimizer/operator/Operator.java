@@ -265,6 +265,11 @@ public abstract class Operator {
         public B withOperator(O operator) {
             builder.limit = operator.limit;
             builder.predicate = operator.predicate;
+            // predicateCommonOperators defines the common sub-expression columns that predicate may
+            // reference (produced by ScalarOperatorsReuseRule). It must be copied together with predicate;
+            // otherwise the rebuilt operator keeps a predicate referencing columns that are no longer
+            // defined and the plan fails InputDependenciesChecker.
+            builder.predicateCommonOperators = operator.predicateCommonOperators;
             builder.projection = operator.projection;
             builder.equivalentOp = operator.equivalentOp;
             builder.opRuleBits.or(operator.opRuleBits);

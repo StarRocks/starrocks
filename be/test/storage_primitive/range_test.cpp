@@ -204,4 +204,38 @@ TEST(SparseRangeIteratorTest, intersect_test) {
     }
 }
 
+TEST(SparseRangeIteratorTest, remaining_rows) {
+    // Three disjoint ranges, 10 + 20 + 20 = 50 rows in total.
+    SparseRange<> r1({{0, 10}, {20, 40}, {50, 70}});
+    SparseRangeIterator<> iter = r1.new_iterator();
+
+    // Fresh iterator: every row remains.
+    EXPECT_EQ(50u, iter.remaining_rows());
+
+    // Consume 5 rows inside the first range (still _index == 0).
+    (void)iter.next(5);
+    EXPECT_EQ(45u, iter.remaining_rows());
+
+    // Consume the remaining 5 rows of the first range; the iterator now sits at the
+    // start of the second range (_index == 1, _next_rowid == 20). This is the case the
+    // fix targets: the un-consumed part of the *current* range must be measured against
+    // _ranges[_index].end(), not _ranges[0].end(). The buggy version treated the current
+    // partial range as empty and returned 20 (dropping [20,40)'s 20 rows).
+    (void)iter.next(5);
+    EXPECT_EQ(40u, iter.remaining_rows());
+
+    // Advance 5 rows into the second range (_index == 1, _next_rowid == 25).
+    (void)iter.next(5);
+    EXPECT_EQ(35u, iter.remaining_rows());
+
+    // Finish the second range; now at the third range (_index == 2, _next_rowid == 50).
+    (void)iter.next(15);
+    EXPECT_EQ(20u, iter.remaining_rows());
+
+    // Drain the last range.
+    (void)iter.next(20);
+    EXPECT_FALSE(iter.has_more());
+    EXPECT_EQ(0u, iter.remaining_rows());
+}
+
 } // namespace starrocks

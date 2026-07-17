@@ -181,7 +181,7 @@ TEST(StorageValueTypesTest, FlatJsonConfigUpdateAndSerializationSemantics) {
     EXPECT_EQ(12, config.get_flat_json_max_column_max());
     EXPECT_EQ(
             "FlatJsonConfig{flat_json_enable=true, flat_json_null_factor=0.25, "
-            "flat_json_sparsity_factor=0.75, flat_json_max_column_max=12}",
+            "flat_json_sparsity_factor=0.75, flat_json_max_column_max=12, version=0}",
             config.to_string());
 
     FlatJsonConfigPB pb;

@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -72,6 +73,7 @@ public class StarRocksIcebergTableScan
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap;
+    private final Map<Integer, PartitionSpec> scanSpecsById;
     private final Map<Integer, String> specStringCache;
     private final Map<Integer, ResidualEvaluator> residualCache;
     private final Map<Integer, Evaluator> partitionEvaluatorCache;
@@ -115,10 +117,14 @@ public class StarRocksIcebergTableScan
         this.planMode = scanContext.getPlanMode();
         this.connectContext = scanContext.getConnectContext();
         this.scanContext = scanContext;
-        this.specStringCache = specCache(PartitionSpecParser::toJson);
-        this.residualCache = specCache(this::newResidualEvaluator);
-        this.partitionEvaluatorCache = specCache(this::newPartitionEvaluator);
-        this.inclusiveMetricsEvaluatorCache = specCache(this::newInclusiveMetricsEvaluator);
+        // The scan schema is the snapshot schema for time travel (DataScan#useSnapshotSchema), but
+        // partition specs stay bound to the current schema. Rebind them so evaluators bind against
+        // the same schema as the filter; spec strings sent to scan tasks keep the original specs.
+        this.scanSpecsById = specsForScanSchema(table.specs());
+        this.specStringCache = specCache(table.specs(), PartitionSpecParser::toJson);
+        this.residualCache = specCache(scanSpecsById, this::newResidualEvaluator);
+        this.partitionEvaluatorCache = specCache(scanSpecsById, this::newPartitionEvaluator);
+        this.inclusiveMetricsEvaluatorCache = specCache(scanSpecsById, this::newInclusiveMetricsEvaluator);
         this.schemaString = SchemaParser.toJson(tableSchema());
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
@@ -135,6 +141,31 @@ public class StarRocksIcebergTableScan
         StarRocksIcebergTableScan scan = new StarRocksIcebergTableScan(newTable, newSchema, newContext, scanContext);
         scan.metricsReporter = this.metricsReporter;
         return scan;
+    }
+
+    @Override
+    public TableScan useSnapshot(long scanSnapshotId) {
+        // Delegate to the parent (inheriting its validation and context assembly), which binds the scan
+        // to the target snapshot's recorded schema (DataScan#useSnapshotSchema). When a read schema was
+        // resolved for this query, rebind to it so the scan uses the same schema the query bound its
+        // predicates and descriptor against: the current table schema for an ordinary read (making a
+        // metadata-only ADD COLUMN visible), or the targeted snapshot's schema for a time-travel read.
+        TableScan scan = super.useSnapshot(scanSnapshotId);
+        Schema readSchema = scanContext.getReadSchema();
+        if (readSchema != null && useSnapshotSchema()) {
+            return newRefinedScan(table(), readSchema, ((StarRocksIcebergTableScan) scan).context());
+        }
+        return scan;
+    }
+
+    @Override
+    protected ManifestGroup newManifestGroup(List<ManifestFile> dataManifests,
+                                             List<ManifestFile> deleteManifests,
+                                             boolean withColumnStats) {
+        // Use the specs rebound to the scan schema so that the manifest evaluators bind the
+        // filter consistently for time-travel reads.
+        return super.newManifestGroup(dataManifests, deleteManifests, withColumnStats)
+                .specsById(scanSpecsById);
     }
 
     @Override
@@ -185,7 +216,7 @@ public class StarRocksIcebergTableScan
         executeInNewThread(threadNamePrefix + "-fetch_result", metadataCollectJob::asyncCollectMetadata);
 
         MetadataParser parser = new MetadataParser(
-                table(), specStringCache, residualCache, planExecutor(), scanMetrics(),
+                table(), schemaString, specStringCache, residualCache, planExecutor(), scanMetrics(),
                 deleteFileIndex, metadataCollectJob, liveFilesCount);
         executeInNewThread(threadNamePrefix + "-parallel_parser", parser::parse);
 
@@ -203,7 +234,7 @@ public class StarRocksIcebergTableScan
         }
 
         return builder
-                .specsById(table().specs())
+                .specsById(scanSpecsById)
                 .filterData(filter())
                 .caseSensitive(isCaseSensitive())
                 .scanMetrics(scanMetrics())
@@ -215,7 +246,8 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> dataManifests = snapshot.dataManifests(io());
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
-        List<ManifestFile> matchingDataManifests = IcebergApiConverter.filterManifests(dataManifests, table(), filter());
+        List<ManifestFile> matchingDataManifests =
+                IcebergApiConverter.filterManifests(dataManifests, scanSpecsById, filter());
         int skippedDataManifestsCount = dataManifests.size() - matchingDataManifests.size();
         scanMetrics().skippedDataManifests().increment(skippedDataManifestsCount);
 
@@ -224,7 +256,8 @@ public class StarRocksIcebergTableScan
 
     private List<ManifestFile> findMatchingDeleteManifests(Snapshot snapshot) {
         List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
-        List<ManifestFile> matchingDeleteManifests = IcebergApiConverter.filterManifests(deleteManifests, table(), filter());
+        List<ManifestFile> matchingDeleteManifests =
+                IcebergApiConverter.filterManifests(deleteManifests, scanSpecsById, filter());
 
         scanMetrics().totalDeleteManifests().increment(deleteManifests.size());
         scanMetrics().skippedDeleteManifests().increment(deleteManifests.size() - matchingDeleteManifests.size());
@@ -347,7 +380,7 @@ public class StarRocksIcebergTableScan
                         .caseSensitive(isCaseSensitive())
                         .select(shouldReturnColumnStats() ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS)
                         .filterData(filter())
-                        .specsById(table().specs())
+                        .specsById(scanSpecsById)
                         .scanMetrics(scanMetrics())
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
@@ -464,7 +497,7 @@ public class StarRocksIcebergTableScan
             if (shouldPlanWithExecutor() && deleteManifests.size() > 1) {
                 builder.planWith(planExecutor());
             }
-            builder.specsById(table().specs())
+            builder.specsById(scanSpecsById)
                     .filterData(filter())
                     .caseSensitive(isCaseSensitive())
                     .scanMetrics(scanMetrics())
@@ -532,25 +565,62 @@ public class StarRocksIcebergTableScan
     }
 
     private ResidualEvaluator newResidualEvaluator(PartitionSpec spec) {
-        return ResidualEvaluator.of(spec, residualFilter(), isCaseSensitive());
+        try {
+            return ResidualEvaluator.of(spec, residualFilter(), isCaseSensitive());
+        } catch (ValidationException e) {
+            // The filter references a column this spec's schema doesn't have (the spec couldn't
+            // be rebound to the scan schema). Keep the whole filter as the residual so the rows
+            // are still filtered after scanning.
+            return ResidualEvaluator.unpartitioned(residualFilter());
+        }
     }
 
     private Evaluator newPartitionEvaluator(PartitionSpec spec) {
-        Expression projected = Projections.inclusive(spec, false).project(filter());
-        return new Evaluator(spec.partitionType(), projected, false);
+        try {
+            Expression projected = Projections.inclusive(spec, false).project(filter());
+            return new Evaluator(spec.partitionType(), projected, false);
+        } catch (ValidationException e) {
+            // Cannot evaluate the filter against this spec; skip partition pruning for it.
+            return new Evaluator(spec.partitionType(), Expressions.alwaysTrue(), false);
+        }
     }
 
     private InclusiveMetricsEvaluator newInclusiveMetricsEvaluator(PartitionSpec spec) {
-        if (filter() != null) {
-            return new InclusiveMetricsEvaluator(spec.schema(), filter(), false);
-        } else {
+        try {
+            if (filter() != null) {
+                return new InclusiveMetricsEvaluator(spec.schema(), filter(), false);
+            } else {
+                return new InclusiveMetricsEvaluator(spec.schema(), Expressions.alwaysTrue(), false);
+            }
+        } catch (ValidationException e) {
+            // Cannot evaluate the filter against this spec's schema; skip metrics pruning for it.
             return new InclusiveMetricsEvaluator(spec.schema(), Expressions.alwaysTrue(), false);
         }
     }
 
-    private <R> Map<Integer, R> specCache(Function<PartitionSpec, R> load) {
+    // Rebind the given specs to the scan schema, which is the snapshot schema for time-travel
+    // reads. A spec referencing a column the scan schema doesn't have is kept as-is; the
+    // evaluators above fall back to no pruning for it.
+    private Map<Integer, PartitionSpec> specsForScanSchema(Map<Integer, PartitionSpec> specs) {
+        Schema scanSchema = tableSchema();
+        Map<Integer, PartitionSpec> result = new ConcurrentHashMap<>();
+        specs.forEach((specId, spec) -> {
+            PartitionSpec boundSpec = spec;
+            if (spec.schema().schemaId() != scanSchema.schemaId()) {
+                try {
+                    boundSpec = spec.toUnbound().bind(scanSchema);
+                } catch (RuntimeException e) {
+                    boundSpec = spec;
+                }
+            }
+            result.put(specId, boundSpec);
+        });
+        return result;
+    }
+
+    private <R> Map<Integer, R> specCache(Map<Integer, PartitionSpec> specs, Function<PartitionSpec, R> load) {
         Map<Integer, R> cache = new ConcurrentHashMap<>();
-        table().specs().forEach((specId, spec) -> cache.put(specId, load.apply(spec)));
+        specs.forEach((specId, spec) -> cache.put(specId, load.apply(spec)));
         return cache;
     }
 
@@ -607,6 +677,12 @@ public class StarRocksIcebergTableScan
         }
 
         if (files != null) {
+            if (!files.isEmpty()) {
+                // A non-empty entry that fails the count check is a corrupted/incomplete cache write, not a
+                // normal empty placeholder; log it so this failure path is no longer silent.
+                LOG.warn("Dropping incomplete Iceberg manifest cache entry {}: cached {} files, manifest expects {}",
+                        manifest.path(), files.size(), expectedLiveFilesCount(manifest));
+            }
             cache.invalidate(manifest.path());
         }
         return null;

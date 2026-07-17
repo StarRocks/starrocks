@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -76,6 +77,12 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+    void set_estimated_scan_row_bytes(size_t value) { _estimated_scan_row_bytes = value; }
+    size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    void set_filtered_above_iterator(bool value) { _filtered_above_iterator = value; }
+    bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
+
     virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
@@ -89,10 +96,20 @@ public:
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
+    // Whether this provider's data sources support the prepared-physical-split chunk-source reuse
+    // path (a segment's prepared read state / reader shared across a tablet's split children). Only
+    // the lake provider overrides it; exposing it here lets the generic ConnectorScanOperator gate
+    // reuse without depending on any concrete provider implementation.
+    virtual bool enable_prepared_split_chunk_source_reuse() const { return false; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<TBucketProperty> _bucket_properties;
     int64_t scan_dop = 0;
+
+private:
+    size_t _estimated_scan_row_bytes = 0;
+    bool _filtered_above_iterator = false;
 };
 
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;

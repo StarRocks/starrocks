@@ -91,7 +91,21 @@
                     <artifactId>lz4-pure-java</artifactId>
                     <groupId>org.lz4</groupId>
                 </exclusion>
+                <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
+                     bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcprov-jdk15on</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- aliyun-java-auth needs org.bouncycastle.*; the vulnerable bcprov-jdk15on
+             is excluded above, so ship bcprov-jdk18on in odps-reader-lib instead
+             (each BE reader has its own isolated classpath) -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
         </dependency>
 
         <dependency>

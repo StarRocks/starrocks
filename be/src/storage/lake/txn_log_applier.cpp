@@ -50,7 +50,6 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         if (alter_meta.has_enable_persistent_index()) {
             auto update_mgr = tablet_mgr->update_mgr();
             metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
-            update_mgr->set_enable_persistent_index(metadata->id(), alter_meta.enable_persistent_index());
             // Try remove index from index cache
             // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
             // because the primary index is available in cache
@@ -106,6 +105,13 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
                                      CompactionStrategyPB_Name(metadata->compaction_strategy()),
                                      CompactionStrategyPB_Name(alter_meta.compaction_strategy()), metadata->id());
             metadata->set_compaction_strategy(alter_meta.compaction_strategy());
+        }
+
+        if (alter_meta.has_flat_json_config()) {
+            LOG(INFO) << fmt::format("alter flat_json_config from version {} to version {} for tablet id: {}",
+                                     metadata->has_flat_json_config() ? metadata->flat_json_config().version() : 0,
+                                     alter_meta.flat_json_config().version(), metadata->id());
+            metadata->mutable_flat_json_config()->CopyFrom(alter_meta.flat_json_config());
         }
     }
     return Status::OK();
@@ -228,6 +234,9 @@ void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
+            if (i < dcg_ver.versions_size()) {
+                file_meta.set_version(dcg_ver.versions(i));
+            }
             metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -250,6 +259,7 @@ void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
             file_meta.set_name(entry.index_file());
             if (entry.has_file_size()) file_meta.set_size(entry.file_size());
             file_meta.set_shared(entry.shared_file());
+            file_meta.set_version(entry.version());
             metadata->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -304,6 +314,7 @@ public:
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
                 file_meta.set_shared(sstable.shared());
+                file_meta.set_version(sstable.generation_version());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             _metadata->clear_sstable_meta();
@@ -630,7 +641,12 @@ private:
         // Cleanup orphan lcrm files from merged large rowset split subtasks
         // These files are no longer valid after merging (segment IDs changed)
         for (const auto& lcrm_file : op_parallel.orphan_lcrm_files()) {
-            _metadata->add_orphan_files()->CopyFrom(lcrm_file);
+            auto* added = _metadata->add_orphan_files();
+            added->CopyFrom(lcrm_file);
+            // Transient mapper file produced and orphaned by this compaction, never referenced by
+            // visible metadata; stamp its creation version so vacuum can reclaim it rather than
+            // over-retaining it under a covering snapshot.
+            added->set_version(_new_version);
         }
 
         return Status::OK();
@@ -820,6 +836,7 @@ private:
                 file_meta.set_name(file.name());
                 file_meta.set_size(file.size());
                 file_meta.set_shared(file.shared());
+                file_meta.set_version(version);
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             // Clear sstable_meta and add to orphan files.
@@ -829,6 +846,7 @@ private:
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
                 file_meta.set_shared(sstable.shared());
+                file_meta.set_version(sstable.generation_version());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
