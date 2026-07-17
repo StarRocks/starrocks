@@ -305,18 +305,22 @@ public class HistogramStatisticsTest {
         // only one bucket in histogram can cover the predicate range
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, IntegerType.BIGINT)), true);
-        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(1, exist.get().getBuckets().size());
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(3, IntegerType.BIGINT)), true);
-        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(1, exist.get().getBuckets().size());
 
         // all the two bucket in histogram can cover the predicate range
         exist = BinaryPredicateStatisticCalculator.updateHistWithGreaterThan(columnStatistic,
                 Optional.of(new ConstantOperator(3, IntegerType.BIGINT)), true);
-        Assertions.assertEquals(exist.get().getBuckets().size(), 2);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(2, exist.get().getBuckets().size());
         exist = BinaryPredicateStatisticCalculator.updateHistWithLessThan(columnStatistic,
                 Optional.of(new ConstantOperator(18, IntegerType.BIGINT)), true);
-        Assertions.assertEquals(exist.get().getBuckets().size(), 2);
+        Assertions.assertTrue(exist.isPresent());
+        Assertions.assertEquals(2, exist.get().getBuckets().size());
     }
 
     @Test
@@ -339,14 +343,14 @@ public class HistogramStatisticsTest {
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
                 Optional.of(new ConstantOperator(22, IntegerType.BIGINT)));
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertEquals(exist.get().getBuckets().size(), 0);
+        Assertions.assertEquals(0, exist.get().getBuckets().size());
         Assertions.assertEquals(exist.get().getMCV(), mcv);
 
         // histogram contains the constant in a bucket
         exist = BinaryPredicateStatisticCalculator.updateHistWithEqual(columnStatistic,
                 Optional.of(new ConstantOperator(2, IntegerType.BIGINT)));
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertEquals(exist.get().getBuckets().size(), 0);
+        Assertions.assertEquals(0, exist.get().getBuckets().size());
         Assertions.assertTrue(exist.get().getMCV().containsKey("2"));
     }
 
@@ -536,8 +540,8 @@ public class HistogramStatisticsTest {
                 columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertNull(exist.get().getBuckets());
-        Assertions.assertEquals(exist.get().getMCV().size(), 1);
-        Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
+        Assertions.assertEquals(1, exist.get().getMCV().size());
+        Assertions.assertEquals(100 * 80, exist.get().getMCV().get("22").longValue());
 
         // MCV to bucket intersection (upper).
         bucketListLeft = new ArrayList<>();
@@ -564,9 +568,9 @@ public class HistogramStatisticsTest {
                 columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getBuckets().isEmpty());
-        Assertions.assertEquals(exist.get().getMCV().size(), 2);
-        Assertions.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 20);
-        Assertions.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 20);
+        Assertions.assertEquals(2, exist.get().getMCV().size());
+        Assertions.assertEquals(300 * 20, exist.get().getMCV().get("10").longValue());
+        Assertions.assertEquals(80 * 20, exist.get().getMCV().get("23").longValue());
 
         // MCV to bucket intersection (not upper).
         bucketListLeft = new ArrayList<>();
@@ -593,9 +597,9 @@ public class HistogramStatisticsTest {
                 columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getBuckets().isEmpty());
-        Assertions.assertEquals(exist.get().getMCV().size(), 2);
-        Assertions.assertEquals(exist.get().getMCV().get("10").longValue(), 300 * 14);
-        Assertions.assertEquals(exist.get().getMCV().get("23").longValue(), 80 * 9);
+        Assertions.assertEquals(2, exist.get().getMCV().size());
+        Assertions.assertEquals(300 * 14, exist.get().getMCV().get("10").longValue());
+        Assertions.assertEquals(80 * 9, exist.get().getMCV().get("23").longValue());
 
         // bucket to bucket intersection (upper).
         bucketListLeft = new ArrayList<>();
@@ -616,12 +620,12 @@ public class HistogramStatisticsTest {
                 columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getMCV().isEmpty());
-        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertEquals(1, exist.get().getBuckets().size());
         Bucket joinBucket = exist.get().getBuckets().get(0);
-        Assertions.assertEquals(joinBucket.getLower(), 5D, 0.001);
-        Assertions.assertEquals(joinBucket.getUpper(), 5D, 0.001);
-        Assertions.assertEquals(joinBucket.getCount().longValue(), 20L * 14L);
-        Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+        Assertions.assertEquals(5D, joinBucket.getLower(), 0.001);
+        Assertions.assertEquals(5D, joinBucket.getUpper(), 0.001);
+        Assertions.assertEquals(20L * 14L, joinBucket.getCount().longValue());
+        Assertions.assertEquals(20L * 14L, joinBucket.getUpperRepeats().longValue());
 
         // bucket to bucket intersection (not upper).
         bucketListLeft = new ArrayList<>();
@@ -642,16 +646,16 @@ public class HistogramStatisticsTest {
                 columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
         Assertions.assertTrue(exist.get().getMCV().isEmpty());
-        Assertions.assertEquals(exist.get().getBuckets().size(), 1);
+        Assertions.assertEquals(1, exist.get().getBuckets().size());
         joinBucket = exist.get().getBuckets().get(0);
-        Assertions.assertEquals(joinBucket.getLower(), 5D, 0.001);
-        Assertions.assertEquals(joinBucket.getUpper(), 9D, 0.001);
-        Assertions.assertEquals(joinBucket.getCount().longValue(), 833);
-        Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+        Assertions.assertEquals(5D, joinBucket.getLower(), 0.001);
+        Assertions.assertEquals(9D, joinBucket.getUpper(), 0.001);
+        Assertions.assertEquals(833, joinBucket.getCount().longValue());
+        Assertions.assertEquals(20L * 14L, joinBucket.getUpperRepeats().longValue());
     }
 
     @Test
-    public void testConvertBucketsSkipsStringTypeHistogram() throws Exception {
+    public void testConvertBucketsSkipsStringTypeHistogram() {
         // A histogram persisted by an older version for a CHAR/VARCHAR column carries string bucket
         // bounds. Parsing them used to throw NumberFormatException on every stats-cache refresh; the
         // guard must skip such buckets (returning empty) while MCV stays readable.
@@ -665,7 +669,7 @@ public class HistogramStatisticsTest {
     }
 
     @Test
-    public void testConvertBucketsParsesNumericTypeHistogram() throws Exception {
+    public void testConvertBucketsParsesNumericTypeHistogram() {
         // Non-string columns must still parse normally - the string guard must not over-skip.
         String histogram = "{\"buckets\": [[\"1\",\"10\",\"100\",\"20\"],"
                 + "[\"15\",\"20\",\"200\",\"20\"]], \"mcv\": null}";
