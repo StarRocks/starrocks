@@ -230,8 +230,14 @@ public class QueryRuntimeProfile {
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execution has been initiated, otherwise we might try to cancel fragment
         // execution at backends where it hasn't even started
-        profileDoneSignal = new GrowableMarkedLatch<>();
-        instanceIds.forEach(instanceId -> profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
+        //
+        // Populate the latch fully before publishing it: a GrowableMarkedLatch with no marks
+        // reads as complete (count 0), so if it were assigned to the field before the marks were
+        // added, a concurrent cancel could seal it via countDownToZero in that window and the
+        // subsequent addMark calls would be dropped, losing all instance tracking.
+        GrowableMarkedLatch<TUniqueId, Long> latch = new GrowableMarkedLatch<>();
+        instanceIds.forEach(instanceId -> latch.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
+        profileDoneSignal = latch;
     }
 
     /**
