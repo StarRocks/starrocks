@@ -1428,16 +1428,28 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_files++;
                                                   total_bytes += entry.size.value_or(0);
 
-                                                  // should consider segment files, sst, del file, delvector, vector index, idx
+                                                  // should consider segment files, sst, del file, delvector, vector index, idx, lcrm
                                                   // NOTE: .idx files are produced by the ADD INDEX fast path (Index
                                                   // Delta Group). Active .idx files are referenced from
                                                   // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
                                                   // MetaFileBuilder::apply_drop_index. Any .idx file that is older
                                                   // than the expire window and not referenced by any live metadata is
                                                   // a candidate here and reclaimed by the existing orphan scan logic.
+                                                  // NOTE: .lcrm files are the Lake Compaction Rows Mapper files produced
+                                                  // by (parallel and serial) PK compaction. They are referenced only from
+                                                  // the transaction log (OpCompaction.lcrm_file / OpParallelCompaction
+                                                  // subtask/orphan lcrm), never from any live TabletMetadataPB field --
+                                                  // on a successful publish they are consumed and deleted by
+                                                  // RowsMapperIterator, and superseded ones enter orphan_files. So an
+                                                  // .lcrm left behind by an aborted/failed/crashed compaction is
+                                                  // referenced by nothing durable and, before this filter included it,
+                                                  // could never be reclaimed by any GC path. It is protected here by the
+                                                  // same expire window as the segments the same compaction wrote, so an
+                                                  // in-flight .lcrm is never a candidate.
                                                   if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                                       !is_delvec(entry.name) && !is_del(entry.name) &&
-                                                      !is_vector_index(entry.name) && !is_idx(entry.name)) {
+                                                      !is_vector_index(entry.name) && !is_idx(entry.name) &&
+                                                      !is_lcrm(entry.name)) {
                                                       return true;
                                                   }
                                                   if (!entry.mtime.has_value()) {

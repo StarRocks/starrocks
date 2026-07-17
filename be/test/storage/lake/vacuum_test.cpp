@@ -80,7 +80,7 @@ protected:
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
-                   is_idx(name)) {
+                   is_idx(name) || is_lcrm(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -4105,6 +4105,30 @@ TEST_P(LakeVacuumTest, idg_idx_files_unreferenced_are_orphaned) {
     ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
     EXPECT_TRUE(file_exist(live_idx));
     EXPECT_FALSE(file_exist(stranded_idx));
+}
+
+// .lcrm (Lake Compaction Rows Mapper) files are referenced only from the transaction
+// log, never from any live TabletMetadataPB field: on a successful publish they are
+// consumed and deleted by RowsMapperIterator, and superseded ones enter orphan_files.
+// One left behind by an aborted/failed/crashed PK compaction is therefore referenced
+// by nothing durable -- before .lcrm was added to the orphan-file candidate filter it
+// could not be reclaimed by any GC path (the reference-driven vacuum never sees it and
+// the datafile GC skipped its extension), a permanent storage leak. datafile_gc must
+// now treat such an unreferenced .lcrm as an orphan, while still protecting an
+// in-flight .lcrm via the same expire window that guards the segments written by the
+// same compaction.
+TEST_P(LakeVacuumTest, lcrm_files_unreferenced_are_orphaned) {
+    const std::string orphan_lcrm = "0000000000abc020_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+
+    // Safety: within the expire window an .lcrm is never a candidate, even when it is
+    // unreferenced -- an in-flight compaction's mapper must survive until publish.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/3600, /*do_delete=*/true));
+    EXPECT_TRUE(file_exist(orphan_lcrm));
+
+    // Past the expire window, an unreferenced .lcrm is reclaimed as an orphan.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/0, /*do_delete=*/true));
+    EXPECT_FALSE(file_exist(orphan_lcrm));
 }
 
 // Drop tablet local cache evicts active IDG .idx files (vacuum.cpp 1524-1528).
