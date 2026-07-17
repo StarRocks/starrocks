@@ -151,6 +151,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // treat a live PACK shard group as an orphan and reap it (along with its live tablets).
         groupIds.addAll(GlobalStateMgr.getCurrentState().getColocateTableIndex().getAllPackShardGroupIds());
 
+        // Superseded materialized indexes parked in the recycle bin by a tablet reshard (issue #75993)
+        // are no longer on any live PhysicalPartition. Union their shard groups so this cycle does not
+        // reap them (and their still-readable tablets) before the recycle retention expires.
+        groupIds.addAll(GlobalStateMgr.getCurrentState().getRecycleBin().getRecycledIndexShardGroupIds());
+
         long elapsedMs = System.currentTimeMillis() - startMs;
         if (elapsedMs > SLOW_COLLECTION_WARN_THRESHOLD_MS) {
             LOG.warn("getAllPartitionShardGroupId is slow: elapsed={}ms, dbCount={}, groupCount={}",

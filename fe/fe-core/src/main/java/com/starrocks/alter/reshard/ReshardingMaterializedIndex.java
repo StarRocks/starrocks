@@ -33,18 +33,6 @@ public class ReshardingMaterializedIndex {
     @SerializedName(value = "reshardingTablets")
     protected final List<ReshardingTablet> reshardingTablets;
 
-    // Synthetic ids for the "virtual partition" that parks this superseded (old) materialized index in
-    // the CatalogRecycleBin during reshard cleanup, so an in-flight query planned against it can keep
-    // reading its tablets' metadata until the recycle retention expires (issue #75993 / split-read
-    // race). Allocated once on the leader in removeOldMaterializedIndexes() and persisted here, so the
-    // replay path reuses the same ids (never re-allocates) and rebuilds an identical recycle-bin entry.
-    // -1 means "not yet recycled".
-    @SerializedName(value = "recycledVirtualPartitionId")
-    protected long recycledVirtualPartitionId = -1L;
-
-    @SerializedName(value = "recycledVirtualPhysicalPartitionId")
-    protected long recycledVirtualPhysicalPartitionId = -1L;
-
     public ReshardingMaterializedIndex(long materializedIndexId, MaterializedIndex materializedIndex,
             List<ReshardingTablet> reshardingTablets) {
         this.materializedIndexId = materializedIndexId;
@@ -62,19 +50,6 @@ public class ReshardingMaterializedIndex {
 
     public List<ReshardingTablet> getReshardingTablets() {
         return reshardingTablets;
-    }
-
-    public long getRecycledVirtualPartitionId() {
-        return recycledVirtualPartitionId;
-    }
-
-    public long getRecycledVirtualPhysicalPartitionId() {
-        return recycledVirtualPhysicalPartitionId;
-    }
-
-    public void setRecycledVirtualPartitionIds(long partitionId, long physicalPartitionId) {
-        this.recycledVirtualPartitionId = partitionId;
-        this.recycledVirtualPhysicalPartitionId = physicalPartitionId;
     }
 
     public long getParallelTablets() {

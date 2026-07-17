@@ -728,6 +728,47 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testRecycleAndEraseMaterializedIndex() {
+        long savedRetention = Config.partition_recycle_retention_period_secs;
+        try {
+            CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+            long dbId = 1;
+            long tableId = 2;
+            long physicalPartitionId = 3;
+            long indexId = 1001;
+            long shardGroupId = 7777;
+            MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+            RecycleMaterializedIndexInfo info =
+                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, index);
+
+            // 1. recycle: the shard group is retained so StarMgrMetaSyncer won't reap it.
+            recycleBin.recycleMaterializedIndex(info);
+            Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+            Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(indexId));
+
+            // 2. idempotent: a re-run/replay of the reshard cleanup is a no-op.
+            recycleBin.recycleMaterializedIndex(info);
+            Assertions.assertEquals(1, recycleBin.getRecycledIndexShardGroupIds().size());
+
+            // 3. not expired yet -> retained.
+            Config.partition_recycle_retention_period_secs = 3600;
+            recycleBin.eraseMaterializedIndex(System.currentTimeMillis());
+            Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+
+            // 4. expired -> erased.
+            recycleBin.idToRecycleTime.put(indexId, 1L);
+            recycleBin.eraseMaterializedIndex(System.currentTimeMillis());
+            Assertions.assertFalse(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+            Assertions.assertFalse(recycleBin.idToRecycleTime.containsKey(indexId));
+
+            // 5. replaying an erase for an already-gone index is null-safe (no NPE).
+            recycleBin.replayEraseMaterializedIndex(indexId);
+        } finally {
+            Config.partition_recycle_retention_period_secs = savedRetention;
+        }
+    }
+
+    @Test
     public void testShowCatalogRecycleBinDatabase() {
         Database db1 = new Database(211, "uno");
         Database db2SameName = new Database(32, "dos"); // samename

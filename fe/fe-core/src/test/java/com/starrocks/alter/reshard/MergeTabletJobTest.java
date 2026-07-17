@@ -220,11 +220,10 @@ public class MergeTabletJobTest {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
 
-        // Symmetric to SplitTabletJobTest: the superseded index is parked in the recycle bin as a
-        // partition of the table carrying the old shard group and tablets, via the shared
-        // TabletReshardJob.recycleSupersededMaterializedIndex helper.
-        ReshardRecycleAssertions.assertSupersededIndexParked(
-                table, beforeMergeIndex.getShardGroupId(), oldTabletIds);
+        // Symmetric to SplitTabletJobTest: the superseded index is parked in the recycle bin at index
+        // granularity, so its shard group is retained via CatalogRecycleBin.getRecycledIndexShardGroupIds().
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .getRecycledIndexShardGroupIds().contains(beforeMergeIndex.getShardGroupId()));
     }
 
     @Test

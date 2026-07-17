@@ -707,6 +707,11 @@ public class OperationType {
     public static final short OP_GRANT_ROLE_TO_GROUP = 20501;
     public static final short OP_REVOKE_ROLE_FROM_GROUP = 20502;
 
+    // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
+    // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
+    // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
+    public static final short OP_ERASE_MATERIALIZED_INDEX = 20503;
+
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
     private static ImmutableSet<Short> buildIgnorableOperations() {

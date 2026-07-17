@@ -20,7 +20,6 @@ import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -65,10 +64,8 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -149,15 +146,15 @@ public class SplitTabletJobTest {
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
 
-        // The superseded (old) split-parent index is parked in the recycle bin as a non-recoverable
-        // virtual partition rather than deleted immediately (issue #75993), so an in-flight query
-        // planned against it can finish reading. Its tablets are therefore retained (still in the
-        // inverted index) and its shard group stays reachable through the recycle bin until the
-        // retention expires.
+        // The superseded (old) split-parent index is parked in the recycle bin (issue #75993) rather
+        // than deleted immediately, so an in-flight query planned against it can finish reading: its
+        // tablets are retained (still in the inverted index) and its shard group stays in the FE live
+        // set via the recycle bin until the retention expires.
         for (Long tabletId : oldTabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
-        ReshardRecycleAssertions.assertSupersededIndexParked(table, materializedIndex.getShardGroupId(), oldTabletIds);
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .getRecycledIndexShardGroupIds().contains(materializedIndex.getShardGroupId()));
 
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
@@ -170,6 +167,8 @@ public class SplitTabletJobTest {
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        long oldIndexId = materializedIndex.getId();
+        long oldShardGroupId = materializedIndex.getShardGroupId();
         List<Long> oldTabletIds = new ArrayList<>();
         for (Tablet tablet : materializedIndex.getTablets()) {
             oldTabletIds.add(tablet.getId());
@@ -177,48 +176,23 @@ public class SplitTabletJobTest {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
 
-        Set<Long> parkedBefore = new HashSet<>();
-        for (Partition p : recycleBin.getPartitions(table.getId())) {
-            parkedBefore.add(p.getId());
-        }
-
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
         tabletReshardJob.init();
         tabletReshardJob.run();
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
 
-        // The split parked the superseded index. Force-expire only that entry (leave anything parked by
-        // other tests untouched), then drive recycle-bin erase passes. delete() -> onErasePartition() is
-        // an in-memory inverted-index removal, so it converges within a couple of passes.
+        // The split parked the superseded index: its shard group is retained in the recycle bin.
+        Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(oldShardGroupId));
+
+        // Force-expire this index's recycle entry, then run the erase cycle. eraseMaterializedIndex ->
+        // delete() drops the index's tablets from the inverted index synchronously; physical shard
+        // reclamation then follows on the StarMgrMetaSyncer cycle (covered on-cluster).
         Map<Long, Long> idToRecycleTime = Deencapsulation.getField(recycleBin, "idToRecycleTime");
-        boolean parkedSomething = false;
-        for (Partition p : recycleBin.getPartitions(table.getId())) {
-            if (!parkedBefore.contains(p.getId())) {
-                idToRecycleTime.put(p.getId(), 1L); // far in the past -> expired regardless of retention
-                parkedSomething = true;
-            }
-        }
-        Assertions.assertTrue(parkedSomething, "split must park the superseded index in the recycle bin");
+        idToRecycleTime.put(oldIndexId, 1L); // far in the past -> expired regardless of retention
+        Deencapsulation.invoke(recycleBin, "eraseMaterializedIndex", System.currentTimeMillis());
 
-        long now = System.currentTimeMillis();
-        for (int i = 0; i < 100; i++) {
-            boolean anyRetained = false;
-            for (Long tabletId : oldTabletIds) {
-                if (invertedIndex.getTabletMeta(tabletId) != null) {
-                    anyRetained = true;
-                    break;
-                }
-            }
-            if (!anyRetained) {
-                break;
-            }
-            Deencapsulation.invoke(recycleBin, "erasePartition", now);
-            Thread.sleep(50);
-        }
-
-        // onErasePartition() dropped the old (superseded) index's tablets from the inverted index;
-        // StarMgr shard reclamation then follows on the StarMgrMetaSyncer cycle (covered on-cluster).
+        Assertions.assertFalse(recycleBin.getRecycledIndexShardGroupIds().contains(oldShardGroupId));
         for (Long tabletId : oldTabletIds) {
             Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
         }

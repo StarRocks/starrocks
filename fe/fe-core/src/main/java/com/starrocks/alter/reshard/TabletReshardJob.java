@@ -15,13 +15,10 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.RecyclePartitionInfo;
-import com.starrocks.catalog.RecycleUnPartitionInfo;
+import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -301,16 +298,26 @@ public abstract class TabletReshardJob implements Writable {
 
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
-     * remove it from its live physical partition and park it in the {@code CatalogRecycleBin} so an
-     * in-flight query planned against it can keep reading until the retention expires (issue #75993).
-     * Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob), so it must be
-     * deterministic; the caller holds the table WRITE lock and passes the locked table.
+     * remove it from its live physical partition and park it in the {@code CatalogRecycleBin} at index
+     * granularity, so an in-flight query planned against it can keep reading until the retention
+     * (partition_recycle_retention_period_secs) expires (issue #75993).
+     *
+     * <p>While parked, {@code StarMgrMetaSyncer.getAllPartitionShardGroupId()} unions the recycled
+     * index's shard group into the FE live set, so it is not reaped; on erase, the recycle bin drops
+     * the index's tablets from the inverted index and {@code StarMgrMetaSyncer} reclaims the shards
+     * per-shard -- never a partition-directory delete, which for a split would destroy the live child
+     * tablets that share the parent's object-storage directory.
+     *
+     * <p>Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob); it is
+     * deterministic (the index keeps its own id, no id allocation) and
+     * {@code recycleMaterializedIndex} is idempotent, so a re-run is safe. The caller holds the table
+     * WRITE lock and passes the locked table.
      */
     protected static void recycleOldMaterializedIndexes(long dbId, OlapTable olapTable,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-            PhysicalPartition physicalPartition = olapTable
-                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null) {
                 continue;
             }
@@ -318,64 +325,14 @@ public abstract class TabletReshardJob implements Writable {
                     .getReshardingIndexes().values()) {
                 MaterializedIndex oldIndex = physicalPartition
                         .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                // Idempotency guard: on a re-run/replay of this step the old index is already gone, so
-                // deleteMaterializedIndexByIndexId returns null and we skip. This ensures the
-                // (non-idempotent) recyclePartition below runs at most once per index -- its checkState
-                // forbids a duplicate partition id.
+                // Idempotency guard: on a re-run/replay the old index is already gone, so
+                // deleteMaterializedIndexByIndexId returns null and we skip.
                 if (oldIndex == null) {
                     continue;
                 }
-                recycleSupersededMaterializedIndex(dbId, olapTable, oldIndex, reshardingIndex);
+                GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
+                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndex));
             }
         }
-    }
-
-    /**
-     * Park one superseded (old) materialized index in the {@code CatalogRecycleBin} as a synthetic,
-     * non-recoverable "virtual" partition tagged with the real db/table id, which makes the shared lake
-     * GC behave correctly with no changes on its side:
-     * <ul>
-     *   <li>while retained, {@code StarMgrMetaSyncer.getAllPartitionShardGroupId()} sees this shard
-     *       group (via {@code getPartitions(tableId)}) and keeps it in the FE live set, so it is not
-     *       reaped;</li>
-     *   <li>on erase, {@code onErasePartition()} removes its tablets from the inverted index and the
-     *       shard group leaves the live set, so {@code StarMgrMetaSyncer} reclaims it on its next
-     *       cycle -- still gated by {@code isSafeToDelete()} / cluster-snapshot safety.</li>
-     * </ul>
-     *
-     * <p>The virtual-partition ids are allocated once on the leader and persisted on the reshard job
-     * (see {@link ReshardingMaterializedIndex}); the replay path reuses the same ids and rebuilds an
-     * identical recycle-bin entry rather than re-allocating.
-     */
-    protected static void recycleSupersededMaterializedIndex(long dbId, OlapTable table,
-            MaterializedIndex oldIndex, ReshardingMaterializedIndex reshardingIndex) {
-        // Allocate the virtual-partition ids once on the leader; the replay path finds them already set.
-        // Treat <= 0 as "not allocated": besides the -1 field initializer, a reshard job serialized
-        // before these fields existed deserializes them as 0 (Gson instantiates via Unsafe with no
-        // no-arg constructor, so the -1 initializer never runs); real getNextId() ids are always > 0.
-        if (reshardingIndex.getRecycledVirtualPartitionId() <= 0L
-                || reshardingIndex.getRecycledVirtualPhysicalPartitionId() <= 0L) {
-            reshardingIndex.setRecycledVirtualPartitionIds(
-                    GlobalStateMgr.getCurrentState().getNextId(),
-                    GlobalStateMgr.getCurrentState().getNextId());
-        }
-        long virtualPartitionId = reshardingIndex.getRecycledVirtualPartitionId();
-        long virtualPhysicalPartitionId = reshardingIndex.getRecycledVirtualPhysicalPartitionId();
-
-        // Hyphens make this name illegal as a user partition name (which must match ^[a-zA-Z]\w*$), so
-        // it can never collide with a real dropped partition in disableRecoverPartitionWithSameName;
-        // the globally-unique virtual-partition id also keeps it distinct.
-        Partition virtualPartition = new Partition(virtualPartitionId, virtualPhysicalPartitionId,
-                "reshard-recycled-index-" + virtualPartitionId, oldIndex, table.getDefaultDistributionInfo());
-        RecyclePartitionInfo recyclePartitionInfo = new RecycleUnPartitionInfo(dbId, table.getId(),
-                virtualPartition, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, null);
-        // Never user-recoverable: an internal artifact of a completed reshard, not a user DROP.
-        recyclePartitionInfo.setRecoverable(false);
-        // Reuse the partition recycle retention (default 30 min). Floor to a positive value: a zero
-        // retention would make getAdjustedRecycleTimestamp() return 0 for a non-recoverable partition,
-        // so the entry could be erased -- and logErasePartition journaled -- in the window before the
-        // reshard job's FINISHED update makes the recycle entry durable, NPEing replayErasePartition().
-        recyclePartitionInfo.setRetentionPeriod(Math.max(Config.partition_recycle_retention_period_secs, 1L));
-        GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
     }
 }

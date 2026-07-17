@@ -96,6 +96,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private final Map<Long, RecyclePartitionInfo> idToPartition;
     private final Map<Long, Long> physicalPartitionIdToPartitionId;
+    // Superseded materialized indexes parked here by a tablet reshard (issue #75993), keyed by the
+    // index's own (globally unique) id. Never user-recoverable; erased strictly at the tablet level.
+    private final Map<Long, RecycleMaterializedIndexInfo> idToIndex;
 
     private Map<RecyclePartitionInfo, CompletableFuture<Boolean>> asyncDeleteForPartitions;
 
@@ -123,6 +126,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         nameToTableInfo = HashBasedTable.create();
         idToPartition = Maps.newHashMap();
         physicalPartitionIdToPartitionId = Maps.newHashMap();
+        idToIndex = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
         asyncDeleteForPartitions = Maps.newHashMap();
@@ -267,6 +271,84 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         putPartitionToRecycleBin(recyclePartitionInfo);
         LOG.debug("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
+    }
+
+    /**
+     * Park a superseded materialized index (e.g. retired by a tablet reshard) in the recycle bin.
+     * Idempotent: a re-run/replay of the reshard cleanup that re-invokes this is a no-op, so it can be
+     * called unconditionally without a duplicate-id precondition. Keyed by the index's own id.
+     */
+    public synchronized void recycleMaterializedIndex(RecycleMaterializedIndexInfo info) {
+        long indexId = info.getIndexId();
+        if (idToIndex.containsKey(indexId)) {
+            return;
+        }
+        idToIndex.put(indexId, info);
+        idToRecycleTime.put(indexId, System.currentTimeMillis());
+        LOG.info("Put materialized index {} to recycle bin. dbId: {} tableId: {} physicalPartitionId: {}",
+                indexId, info.getDbId(), info.getTableId(), info.getPhysicalPartitionId());
+    }
+
+    // Shard groups of the parked indexes. StarMgrMetaSyncer unions these into the FE "live set" so a
+    // retained index's shards are not reaped until it is erased.
+    public synchronized Set<Long> getRecycledIndexShardGroupIds() {
+        Set<Long> shardGroupIds = new HashSet<>();
+        for (RecycleMaterializedIndexInfo info : idToIndex.values()) {
+            long shardGroupId = info.getShardGroupId();
+            if (shardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                shardGroupIds.add(shardGroupId);
+            }
+        }
+        return shardGroupIds;
+    }
+
+    // Erase parked indexes whose retention (reusing partition_recycle_retention_period_secs, floored
+    // to a positive value so an entry is never immediately erasable before its recycle is durable) has
+    // elapsed. delete() only drops the index's tablets from the inverted index; the shard group then
+    // becomes orphaned and StarMgrMetaSyncer reclaims the shards per-shard, still gated by cluster
+    // snapshot safety. The snapshot check here mirrors that gate so we don't drop tablets a snapshot
+    // still needs.
+    protected synchronized void eraseMaterializedIndex(long currentTimeMs) {
+        long expireMs = Math.max(Config.partition_recycle_retention_period_secs, 1L) * 1000L;
+        int erasedCnt = 0;
+        Iterator<Map.Entry<Long, RecycleMaterializedIndexInfo>> iterator = idToIndex.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, RecycleMaterializedIndexInfo> entry = iterator.next();
+            long indexId = entry.getKey();
+            RecycleMaterializedIndexInfo info = entry.getValue();
+
+            Long recycleTime = idToRecycleTime.get(indexId);
+            if (recycleTime == null || currentTimeMs - recycleTime < expireMs) {
+                continue;
+            }
+            if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(info.getTableId())) {
+                continue;
+            }
+
+            GlobalStateMgr.getCurrentState().getEditLog().logEraseMaterializedIndex(indexId, wal -> {
+                info.delete();
+                iterator.remove();
+                idToRecycleTime.remove(indexId);
+            });
+            LOG.info("Erased materialized index {} from recycle bin. dbId: {} tableId: {}", indexId,
+                    info.getDbId(), info.getTableId());
+
+            erasedCnt++;
+            if (erasedCnt >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
+                break;
+            }
+        }
+    }
+
+    public synchronized void replayEraseMaterializedIndex(long indexId) {
+        RecycleMaterializedIndexInfo info = idToIndex.remove(indexId);
+        idToRecycleTime.remove(indexId);
+        // Null-safe on purpose: tolerate replaying an erase for an index no longer present, rather than
+        // dereferencing a missing entry.
+        if (info != null) {
+            info.delete();
+        }
+        LOG.info("Replayed erase materialized index {} from recycle bin", indexId);
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -1210,6 +1292,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 } // end for indices
             } // end for partitions
         }
+
+        // idToIndex (superseded materialized indexes parked by reshard)
+        for (RecycleMaterializedIndexInfo indexInfo : idToIndex.values()) {
+            indexInfo.addTabletToInvertedIndex();
+        }
     }
 
     public void removeInvalidateReference() {
@@ -1229,6 +1316,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         try {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
+            Thread.sleep(100);
+            eraseMaterializedIndex(currentTimeMs);
             Thread.sleep(100);
             eraseTable(currentTimeMs);
             Thread.sleep(100);
@@ -1495,7 +1584,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
-                + 1 + idToPartition.size() + 1;
+                + 1 + idToPartition.size() + 1
+                + 1 + idToIndex.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
         writer.writeInt(idToDatabase.size());
@@ -1527,6 +1617,13 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
         writer.writeJson(idToRecycleTime);
 
+        // Written last so an older FE (which stops after idToRecycleTime) still loads a newer image,
+        // and a newer FE tolerates an older image via the SRMetaBlockEOFException guard in load().
+        writer.writeInt(idToIndex.size());
+        for (RecycleMaterializedIndexInfo info : idToIndex.values()) {
+            writer.writeJson(info);
+        }
+
         writer.close();
     }
 
@@ -1547,6 +1644,17 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
 
         idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
         }.getType());
+
+        // Recycled materialized indexes are written after idToRecycleTime. An image produced before
+        // this field existed ends earlier, so the read throws SRMetaBlockEOFException -- treat that as
+        // "no recycled indexes" and continue.
+        try {
+            reader.readCollection(RecycleMaterializedIndexInfo.class, info -> {
+                idToIndex.put(info.getIndexId(), info);
+            });
+        } catch (SRMetaBlockEOFException e) {
+            LOG.info("No recycled materialized indexes in image (older format), skip");
+        }
 
         if (!isCheckpointThread()) {
             // add tablet in Recycle bin to TabletInvertedIndex
@@ -1615,6 +1723,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 .put("Partition", (long) idToPartition.size())
                 .put("PhysicalPartitionIndex", (long) physicalPartitionIdToPartitionId.size())
                 .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
+                .put("MaterializedIndex", (long) idToIndex.size())
                 .build();
     }
 
@@ -1624,6 +1733,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 Estimator.estimate(idToTableInfo.rowMap(), 20) +
                 Estimator.estimate(idToPartition, 20) +
                 Estimator.estimate(physicalPartitionIdToPartitionId, 20) +
+                Estimator.estimate(idToIndex, 20) +
                 Estimator.estimate(idToRecycleTime, 20);
     }
 }
