@@ -84,5 +84,5 @@ The AI assistant is expected to help draft and update these documents as part of
 
 ## 5. Environment & Dependencies
 
-- **Dependency Management**: Project dependencies are managed via `setup.py`.
+- **Dependency Management**: Project dependencies are managed via `pyproject.toml`.
 - **Local Development**: A running StarRocks instance is typically required for integration testing. Connection information is usually configured via environment variables.
