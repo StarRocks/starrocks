@@ -699,7 +699,8 @@ public class AlterJobMgr {
                 }
             });
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
-                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()));
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()),
+                    new TableName(db.getFullName(), view.getName()));
             LOG.info("modify view[{}] definition to {}", view.getName(), inlineViewDef);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
