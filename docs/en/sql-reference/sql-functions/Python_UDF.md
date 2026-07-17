@@ -53,6 +53,7 @@ Properties include:
 | symbol        | Yes          | The name of the class for the Python project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
 | input         | No           | Type of input. Valid values: `scalar` (Default) and `arrow` (vectorized input).     |
 | file          | No           | The HTTP URL from which you can download the Python package file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<python_package_name>` format. Note the package name must have the suffix `.py.zip`. Default value: `inline`, which indicates to create an inline UDF. |
+| service_url   | No           | The URL of an external Arrow Flight worker service to run the UDF on, for example, `grpc+tcp://<host>:<port>`. When set, the BE connects to this worker service instead of spawning a local Python worker, and you are responsible for running and isolating that worker service yourself. Leave it unset (default) to use the built-in local worker. See [Use an external worker service](#use-an-external-worker-service). |
 
 ### Create an inline scalar input UDF using Python
 
@@ -131,6 +132,34 @@ symbol = "add"
 type = "Python"
 file = "http://HTTP_IP:HTTP_PORT/m1.py.zip"
 symbol = "main.echo"
+;
+```
+
+### Use an external worker service
+
+By default, the BE spawns and manages a local Python worker process to run a Python UDF. Alternatively, you can run the worker as an external Arrow Flight service yourself and have the BE connect to it by setting the `service_url` property. This lets you run and isolate the worker independently of the BE (for example, in a separate, sandboxed container).
+
+When `service_url` is set:
+
+- The BE connects to the worker at that URL instead of spawning a local worker.
+- For inline UDFs, the function code is sent to the worker over the connection.
+- For packaged (`file`) UDFs, the worker downloads the package from the `file` URL itself and verifies it against the function's checksum, so the worker service must be able to reach that URL.
+- You are responsible for running, scaling, securing, and isolating the worker service. The connection is plaintext by default; restrict network access to the worker and enable TLS/authentication as needed.
+- To keep a query from hanging when a worker is unreachable or stuck, set the BE configuration item `python_udf_rpc_timeout_ms` (milliseconds) to bound the worker call. It applies to both local and external workers and defaults to `0` (no timeout). Because it bounds the whole call stream, set it above the longest expected UDF query.
+
+The example below creates an inline UDF that runs on an external worker service:
+
+```SQL
+CREATE FUNCTION py_echo(string)
+RETURNS string
+type = "Python"
+symbol = "echo"
+service_url = "grpc+tcp://192.168.1.10:8815"
+AS
+$$
+def echo(x):
+    return x
+$$
 ;
 ```
 

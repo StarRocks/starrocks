@@ -43,17 +43,17 @@
 
 namespace starrocks {
 
-bool PyWorker::expired() {
+bool LocalPyWorker::expired() {
     return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec;
 }
 
-void PyWorker::terminate() {
+void LocalPyWorker::terminate() {
     if (_pid != -1) {
         kill(_pid, SIGKILL);
     }
 }
 
-void PyWorker::wait() {
+void LocalPyWorker::wait() {
     if (_pid != -1) {
         int status;
         waitpid(_pid, &status, 0);
@@ -61,7 +61,7 @@ void PyWorker::wait() {
     }
 }
 
-void PyWorker::remove_unix_socket() {
+void LocalPyWorker::remove_unix_socket() {
     unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
 }
 
@@ -80,7 +80,7 @@ std::string PyWorkerManager::unix_socket_path(pid_t pid) {
     return unix_socket_path;
 }
 
-Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {
+Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
 
     std::string python_path = py_env.get_python_path();
@@ -154,7 +154,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
         return Status::InternalError(fmt::format("posix_spawnp failed: {}", std::strerror(rc)));
     }
 
-    *child_process = std::make_unique<PyWorker>(pid);
+    *child_process = std::make_unique<LocalPyWorker>(pid);
 
     pollfd fds[1];
     fds[0].fd = pipefd[0];
@@ -202,7 +202,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
 StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t driver_id, size_t reusable,
                                                                      std::string* url) {
     if (!reusable) {
-        std::unique_ptr<PyWorker> child_process;
+        std::unique_ptr<LocalPyWorker> child_process;
         RETURN_IF_ERROR(_fork_py_worker(&child_process));
         *url = child_process->url();
         return child_process;
@@ -228,7 +228,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         return worker;
     }
 
-    std::unique_ptr<PyWorker> uniq_worker;
+    std::unique_ptr<LocalPyWorker> uniq_worker;
     RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
     *url = uniq_worker->url();
     worker = std::move(uniq_worker);
