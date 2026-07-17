@@ -19,6 +19,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
@@ -28,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class Operator {
     public static final long DEFAULT_LIMIT = -1;
@@ -40,6 +45,7 @@ public abstract class Operator {
     // common sub operators in predicate
     protected Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators = null;
 
+    private static final AtomicLong SALT_GENERATOR = new AtomicLong(0);
     /**
      * Before entering the Cascades search framework,
      * we need to merge LogicalProject and child children into one node
@@ -49,6 +55,13 @@ public abstract class Operator {
     protected Projection projection;
 
     protected RowOutputInfo rowOutputInfo;
+
+    // Add salt make the original equivalent operators nonequivalent to avoid Group
+    // mutual reference in Memo.
+    // Only LogicalScanOperator/PhysicalScanOperator yielded by CboTablePruneRule has salt.
+    // if no salt, two different Groups will be merged into one, that leads to mutual reference
+    // or self reference of groups
+    protected long salt = 0;
 
     // mark which rule(bit) has been applied to the operator.
     protected BitSet opRuleBits = new BitSet();
@@ -134,6 +147,28 @@ public abstract class Operator {
 
     public void setProjection(Projection projection) {
         this.projection = projection;
+    }
+
+    public void addSalt() {
+        if ((this instanceof LogicalJoinOperator) || (this instanceof LogicalScanOperator)) {
+            this.salt = SALT_GENERATOR.incrementAndGet();
+        }
+    }
+
+    public void setSalt(long salt) {
+        if ((this instanceof LogicalJoinOperator) ||
+                (this instanceof LogicalScanOperator) ||
+                (this instanceof PhysicalScanOperator) ||
+                (this instanceof PhysicalJoinOperator)) {
+            this.salt = salt;
+        }
+    }
+    public boolean hasSalt() {
+        return salt > 0;
+    }
+
+    public long getSalt() {
+        return salt;
     }
 
     public void setOpRuleBit(int bit) {
@@ -249,12 +284,13 @@ public abstract class Operator {
         Operator operator = (Operator) o;
         return limit == operator.limit && opType == operator.opType &&
                 Objects.equals(predicate, operator.predicate) &&
-                Objects.equals(projection, operator.projection);
+                Objects.equals(projection, operator.projection) &&
+                Objects.equals(salt, operator.salt);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType.ordinal(), limit, predicate, projection);
+        return Objects.hash(opType.ordinal(), limit, predicate, projection, salt);
     }
 
     public abstract static class Builder<O extends Operator, B extends Builder> {
@@ -271,6 +307,7 @@ public abstract class Operator {
             // defined and the plan fails InputDependenciesChecker.
             builder.predicateCommonOperators = operator.predicateCommonOperators;
             builder.projection = operator.projection;
+            builder.salt = operator.salt;
             builder.equivalentOp = operator.equivalentOp;
             builder.opRuleBits.or(operator.opRuleBits);
             builder.opAppliedMVs.addAll(operator.opAppliedMVs);
@@ -311,6 +348,11 @@ public abstract class Operator {
 
         public B setProjection(Projection projection) {
             builder.projection = projection;
+            return (B) this;
+        }
+
+        public B addSalt() {
+            builder.salt = SALT_GENERATOR.incrementAndGet();
             return (B) this;
         }
 
