@@ -26,6 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.type.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -126,6 +127,10 @@ public class AnalyzeStmtAnalyzer {
 
     public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
+    }
+
+    public static boolean isUnsupportedHistogramColumnType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
     }
 
     static class AnalyzeStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -443,13 +448,25 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
                 }
+                // Explicitly-listed columns: reject unsupported types outright.
                 for (Expr column : columns) {
-                    if (column.getType().isComplexType()
-                            || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()
-                            || column.getType().isBinaryType()) {
+                    if (isUnsupportedHistogramColumnType(column.getType())) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
+                    }
+                }
+
+                // Filters out unsupported types from the list of columns to analyze, if no columns were explicitly listed.
+                if (columns.isEmpty() && statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    if (CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                        List<String> supported = analyzeStmt.getColumnNames().stream()
+                                .filter(name -> {
+                                    Column col = analyzeTable.getColumn(name);
+                                    return col == null || !isUnsupportedHistogramColumnType(col.getType());
+                                })
+                                .collect(Collectors.toList());
+                        analyzeStmt.setColumnNames(supported);
                     }
                 }
 

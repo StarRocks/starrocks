@@ -627,6 +627,13 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testHistogramAllColumnsSkipsUnsupportedColumnType() {
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(
+                "analyze table db.tb_unsupported_histogram update histogram on all columns");
+        Assertions.assertEquals(List.of("k1"), analyzeStmt.getColumnNames());
+    }
+
+    @Test
     public void testHistogramSampleRatio() {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
                 .getLocalMetastore().getDb("db").getTable("tbl");
