@@ -325,8 +325,7 @@ public:
                                                bool& has_null) override;
 
     uint32_t serialize_size(size_t idx) const override {
-        // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
-        return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
+        return saturate_serialize_size(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }

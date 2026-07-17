@@ -434,4 +434,30 @@ TEST(StructColumnTest, test_reference_memory_usage) {
     ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
+// NOLINTNEXTLINE
+TEST(StructColumnTest, test_serialize_size_saturates_on_overflow) {
+    // Each field claims ~2.5GB via its offset only (bytes buffer stays empty). reset_column() before
+    // scope end since ~BinaryColumnBase() DCHECKs bytes/offsets consistency.
+    std::vector<std::string> field_name{"a", "b"};
+    auto a = LargeBinaryColumn::create();
+    auto* a_ptr = a.get();
+    a->get_offset().push_back(2'500'000'000ULL);
+    auto b = LargeBinaryColumn::create();
+    auto* b_ptr = b.get();
+    b->get_offset().push_back(2'500'000'000ULL);
+    MutableColumns fields;
+    fields.emplace_back(std::move(a));
+    fields.emplace_back(std::move(b));
+    auto column = StructColumn::create(std::move(fields), std::move(field_name));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_LT(column->field_column_raw_ptr(0)->serialize_size(0), Column::SERIALIZE_SIZE_LIMIT);
+    ASSERT_LT(column->field_column_raw_ptr(1)->serialize_size(0), Column::SERIALIZE_SIZE_LIMIT);
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->max_one_element_serialize_size());
+    EXPECT_TRUE(serialize_size_overflow(column->serialize_size(0)));
+    a_ptr->reset_column();
+    b_ptr->reset_column();
+}
+
 } // namespace starrocks

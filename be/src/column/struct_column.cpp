@@ -292,19 +292,19 @@ void StructColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chun
 }
 
 uint32_t StructColumn::max_one_element_serialize_size() const {
-    uint32_t max_size = 0;
+    size_t max_size = 0;
     for (const auto& column : _fields) {
         max_size += column->max_one_element_serialize_size();
     }
-    return max_size;
+    return saturate_serialize_size(max_size);
 }
 
 uint32_t StructColumn::serialize_size(size_t idx) const {
-    uint32_t ser_size = 0;
+    size_t ser_size = 0;
     for (const ColumnPtr& column : _fields) {
         ser_size += column->serialize_size(idx);
     }
-    return ser_size;
+    return saturate_serialize_size(ser_size);
 }
 
 MutableColumnPtr StructColumn::clone_empty() const {

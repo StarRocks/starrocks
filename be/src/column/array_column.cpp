@@ -277,11 +277,11 @@ uint32_t ArrayColumn::serialize_size(size_t idx) const {
     uint32_t offset = offsets[idx];
     uint32_t array_size = offsets[idx + 1] - offset;
 
-    uint32_t ser_size = sizeof(array_size);
+    size_t ser_size = sizeof(array_size);
     for (size_t i = 0; i < array_size; ++i) {
         ser_size += _elements->serialize_size(offset + i);
     }
-    return ser_size;
+    return saturate_serialize_size(ser_size);
 }
 
 void ArrayColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,

@@ -1026,19 +1026,15 @@ int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs
 
 template <typename T>
 uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
-    uint32_t max_size = 0;
+    size_t max_size = 0;
     size_t length = _offsets.size() - 1;
     _offsets.visit_storage([&](const auto& offsets_buf) {
         const auto* __restrict offsets = offsets_buf.data();
         for (size_t i = 0; i < length; ++i) {
-            // it's safe to cast, because max size of one string is 2^32
-            const size_t curr_length = offsets[i + 1] - offsets[i];
-            DCHECK_LE(curr_length, std::numeric_limits<uint32_t>::max());
-            max_size = std::max(max_size, static_cast<uint32_t>(curr_length));
+            max_size = std::max<size_t>(max_size, offsets[i + 1] - offsets[i]);
         }
     });
-    // TODO: may be overflow here, i will solve it later
-    return max_size + sizeof(uint32_t);
+    return saturate_serialize_size(max_size + sizeof(uint32_t));
 }
 
 template <bool IsNullable, typename Offset>

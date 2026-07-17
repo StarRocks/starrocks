@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -63,6 +64,8 @@ public:
 
     static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
+
+    static constexpr uint32_t SERIALIZE_SIZE_LIMIT = UINT32_MAX;
 
     static const int EQUALS_FALSE = 0;
     static const int EQUALS_NULL = -1;
@@ -505,6 +508,24 @@ using ColumnPtr = Column::Ptr;
 using Columns = std::vector<ColumnPtr>;
 using MutableColumnPtr = Column::MutablePtr;
 using MutableColumns = std::vector<MutableColumnPtr>;
+
+inline bool serialize_size_overflow(size_t serialize_size) {
+    return serialize_size >= Column::SERIALIZE_SIZE_LIMIT;
+}
+
+inline uint32_t saturate_serialize_size(size_t serialize_size) {
+    return serialize_size >= Column::SERIALIZE_SIZE_LIMIT ? Column::SERIALIZE_SIZE_LIMIT
+                                                          : static_cast<uint32_t>(serialize_size);
+}
+
+inline const char* serialize_key_size_overflow_message() {
+    return "the serialized size of a single row exceeds the 4GB (uint32) limit, which is not supported; "
+           "reduce the size of array/map/string values used as group by / distinct / set / partition-by keys";
+}
+
+[[noreturn]] inline void throw_serialize_key_size_overflow() {
+    throw std::runtime_error(serialize_key_size_overflow_message());
+}
 
 template <typename... Args>
 struct IsMutableColumns;
