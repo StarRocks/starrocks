@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.staros.util.LockCloseable;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
@@ -30,6 +32,7 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import com.uber.m3.util.ImmutableMap;
 import mockit.Mock;
 import mockit.MockUp;
@@ -51,6 +54,28 @@ public class AnalyzeSetVariableTest {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+    }
+
+    private static WarehouseManager installTestWarehouseManager() {
+        WarehouseManager warehouseManager = new WarehouseManager() {
+            @Override
+            public void replayDropWarehouse(DropWarehouseLog log) {
+                try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                    Warehouse warehouse = nameToWh.remove(log.getWarehouseName());
+                    if (warehouse != null) {
+                        idToWh.remove(warehouse.getId());
+                    }
+                }
+            }
+        };
+        warehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        return warehouseManager;
     }
 
     @Test
@@ -243,7 +268,7 @@ public class AnalyzeSetVariableTest {
 
     @Test
     public void testSetResourceGroupNameIgnoresWarehouse() throws Exception {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManager warehouseManager = installTestWarehouseManager();
         warehouseManager.addWarehouse(new DefaultWarehouse(2, "wh2"));
         BackendResourceStat.getInstance().setNumCoresOfBe(2, 2, 32);
 
@@ -262,7 +287,7 @@ public class AnalyzeSetVariableTest {
             analyzeSuccess("SET resource_group_id = " + rgId);
         } finally {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP IF EXISTS rg_set_wh2");
-            warehouseManager.replayDropWarehouse(new com.starrocks.persist.DropWarehouseLog("wh2"));
+            warehouseManager.replayDropWarehouse(new DropWarehouseLog("wh2"));
             BackendResourceStat.getInstance().reset();
         }
     }

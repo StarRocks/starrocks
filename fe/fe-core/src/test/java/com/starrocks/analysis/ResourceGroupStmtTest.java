@@ -207,6 +207,28 @@ public class ResourceGroupStmtTest {
         }
     }
 
+    private static WarehouseManager installTestWarehouseManager() {
+        WarehouseManager warehouseManager = new WarehouseManager() {
+            @Override
+            public void replayDropWarehouse(DropWarehouseLog log) {
+                try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                    Warehouse warehouse = nameToWh.remove(log.getWarehouseName());
+                    if (warehouse != null) {
+                        idToWh.remove(warehouse.getId());
+                    }
+                }
+            }
+        };
+        warehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        return warehouseManager;
+    }
+
     private static String rowsToString(List<List<String>> rows) {
         List<String> lines = rows.stream().map(
                 row -> {
@@ -573,7 +595,7 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testChooseResourceGroupFiltersByCurrentWarehouse() throws Exception {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManager warehouseManager = installTestWarehouseManager();
         warehouseManager.addWarehouse(new DefaultWarehouse(2, "wh2"));
         BackendResourceStat.getInstance().setNumCoresOfBe(2, 2, 32);
 
@@ -657,7 +679,7 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testChooseResourceGroupByNameAndIdFiltersByCurrentWarehouse() throws Exception {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManager warehouseManager = installTestWarehouseManager();
         warehouseManager.addWarehouse(new DefaultWarehouse(2, "wh2"));
         BackendResourceStat.getInstance().setNumCoresOfBe(2, 2, 32);
 
@@ -2735,24 +2757,7 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testWarehouses() throws Exception {
-        WarehouseManager warehouseManager = new WarehouseManager() {
-            @Override
-            public void replayDropWarehouse(DropWarehouseLog log) {
-                try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-                    Warehouse wg = nameToWh.remove(log.getWarehouseName());
-                    if (wg != null) {
-                        idToWh.remove(wg.getId());
-                    }
-                }
-            }
-        };
-        warehouseManager.initDefaultWarehouse();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return warehouseManager;
-            }
-        };
+        WarehouseManager warehouseManager = installTestWarehouseManager();
 
         warehouseManager.addWarehouse(new DefaultWarehouse(2, "wh2"));
         warehouseManager.addWarehouse(new DefaultWarehouse(3, "wh3"));
