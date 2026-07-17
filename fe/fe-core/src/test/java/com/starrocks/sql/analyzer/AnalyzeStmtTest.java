@@ -113,6 +113,24 @@ public class AnalyzeStmtTest {
                 + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr);
 
+        createTblStmtStr = "create table db.tb_unsupported_histogram("
+                + "k1 int, "
+                + "c_array array<int>, "
+                + "c_struct struct<a int>, "
+                + "c_map map<int, int>, "
+                + "c_json json, "
+                + "c_varbinary varbinary) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        createTblStmtStr = "create table db.tb_metric_histogram("
+                + "k1 int, "
+                + "c_hll hll hll_union, "
+                + "c_bitmap bitmap bitmap_union, "
+                + "c_percentile percentile percentile_union) "
+                + "AGGREGATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
         String createStructTableSql = "CREATE TABLE struct_a(\n" +
                 "a INT, \n" +
                 "b STRUCT<a INT, c INT> COMMENT 'smith',\n" +
@@ -589,6 +607,23 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals("test", dropHistogramStmt.getDbName());
         Assertions.assertEquals("t0", dropHistogramStmt.getTableName());
         Assertions.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
+    }
+
+    @Test
+    public void testHistogramUnsupportedColumnType() {
+        String msg = "Can't create histogram statistics on column type is";
+        // complex types
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_array with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_struct with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_map with 256 buckets", msg);
+        // json type
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_json with 256 buckets", msg);
+        // binary type
+        analyzeFail("analyze table db.tb_unsupported_histogram update histogram on c_varbinary with 256 buckets", msg);
+        // only-metric types
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_hll with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_bitmap with 256 buckets", msg);
+        analyzeFail("analyze table db.tb_metric_histogram update histogram on c_percentile with 256 buckets", msg);
     }
 
     @Test
