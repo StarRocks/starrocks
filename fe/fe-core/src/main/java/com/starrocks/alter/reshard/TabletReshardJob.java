@@ -350,7 +350,11 @@ public abstract class TabletReshardJob implements Writable {
     protected static void recycleSupersededMaterializedIndex(long dbId, OlapTable table,
             MaterializedIndex oldIndex, ReshardingMaterializedIndex reshardingIndex) {
         // Allocate the virtual-partition ids once on the leader; the replay path finds them already set.
-        if (reshardingIndex.getRecycledVirtualPartitionId() == -1L) {
+        // Treat <= 0 as "not allocated": besides the -1 field initializer, a reshard job serialized
+        // before these fields existed deserializes them as 0 (Gson instantiates via Unsafe with no
+        // no-arg constructor, so the -1 initializer never runs); real getNextId() ids are always > 0.
+        if (reshardingIndex.getRecycledVirtualPartitionId() <= 0L
+                || reshardingIndex.getRecycledVirtualPhysicalPartitionId() <= 0L) {
             reshardingIndex.setRecycledVirtualPartitionIds(
                     GlobalStateMgr.getCurrentState().getNextId(),
                     GlobalStateMgr.getCurrentState().getNextId());
