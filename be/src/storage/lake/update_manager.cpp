@@ -379,7 +379,29 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         rowset_segment_ids.push_back(global_segment_id);
         uint32_t rssid = rowset_id + global_segment_id;
         new_rowset_rssids.insert(rssid);
-        new_deletes[rssid] = {};
+        // Seed this segment's deletes with the unsort SST writer's per-segment dedup losers
+        // (separate-sort-key PK), if any. The unsort writer already resolved duplicate primary keys
+        // within the segment (the SST points at the winner); the losing rows remain in the segment and
+        // must be masked by its delete vector. The index update below appends historical-duplicate
+        // deletes on top via push_back, so this seed is preserved. Absent/empty (the sort-key==PK path,
+        // or a pre-feature writer) -> the legacy empty init below, i.e. no behavior change.
+        if (local_id < op_write.seg_delvecs_size() && !op_write.seg_delvecs(local_id).data().empty()) {
+            const auto& seg_delvec_pb = op_write.seg_delvecs(local_id);
+            DelVector writer_dv;
+            RETURN_IF_ERROR(
+                    writer_dv.load(metadata->version(), seg_delvec_pb.data().data(), seg_delvec_pb.data().size()));
+            auto& seg_deletes = new_deletes[rssid];
+            // A serialized *empty* DelVector has non-empty bytes but loads to a null roaring (empty()),
+            // so guard before dereferencing: an empty entry (a no-loser segment) is treated as empty,
+            // not a null deref. The index update below still appends historical-duplicate deletes.
+            if (!writer_dv.empty()) {
+                for (const auto rowid : *writer_dv.roaring()) {
+                    seg_deletes.push_back(rowid);
+                }
+            }
+        } else {
+            new_deletes[rssid] = {};
+        }
     }
     // A delete file's rssid is `rowset_id + op_offset`, where op_offset is the in-transaction segment
     // index the delete logically follows (delete sorts after that segment via the reserved UINT32_MAX
@@ -581,8 +603,26 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     size_t new_del = 0;
     size_t total_del = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels;
+    // Separate-sort-key spill (the unsort SST writer, signalled by op_write.seg_delvecs) is the only
+    // path that can leave duplicate primary keys in one incoming segment: the writer dedups the PK
+    // INDEX (SST points at the winner), but the segment DATA file still physically holds the loser
+    // rows -- they are only masked by a delete vector, not removed. A read-only index lookup over that
+    // segment's PK column (duplicates included) can push a historical rowid into new_deletes once per
+    // occurrence, so cur_add (the raw vector size) would exceed the deduplicated bitmap cardinality and
+    // trip the "cur_old + cur_add != cur_new" consistency check below. Deduplicate the rowids here so
+    // the count matches the bitmap; the delvec content is unchanged (a roaring bitmap dedups anyway).
+    // Gated on the load carrying any seg_delvecs at all: the common sort-key==PK path (and any
+    // pre-feature writer) emits none, so seg_delvecs_size() == 0 and this stays a no-op -- unchanged
+    // behavior. (When seg_delvecs are present, deduping every entry is harmless: the new-segment entries
+    // come from a roaring bitmap and are already unique.)
+    const bool dedupe_new_deletes = op_write.seg_delvecs_size() > 0;
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
+        if (dedupe_new_deletes) {
+            auto& del_ids = new_delete.second;
+            std::sort(del_ids.begin(), del_ids.end());
+            del_ids.erase(std::unique(del_ids.begin(), del_ids.end()), del_ids.end());
+        }
         if (new_rowset_rssids.contains(rssid)) {
             // it's newly added rowset's segment, do not have latest delvec yet
             new_del_vecs[idx].first = rssid;
