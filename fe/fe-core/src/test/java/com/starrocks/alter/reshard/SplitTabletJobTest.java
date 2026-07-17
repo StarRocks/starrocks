@@ -411,7 +411,7 @@ public class SplitTabletJobTest {
                 tabletRangeLowerOnly(200));
 
         TabletReshardJob tabletReshardJob = SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTabletId, newTabletRanges);
+                db, table, Map.of(oldTabletId, newTabletRanges));
         Assertions.assertNotNull(tabletReshardJob);
 
         // The SplittingTablet inside the job must carry the FE-supplied
@@ -469,15 +469,15 @@ public class SplitTabletJobTest {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId,
-                        List.of(tabletRange(0, 100))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(oldTabletId, List.of(tabletRange(0, 100)))));
     }
 
     @Test
     public void testForExternalBoundariesRejectsUnknownTablet() {
         Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, /*oldTabletId=*/Long.MAX_VALUE,
-                        List.of(tabletRange(0, 100), tabletRange(100, 200))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(/*oldTabletId=*/Long.MAX_VALUE, List.of(tabletRange(0, 100), tabletRange(100, 200)))));
     }
 
     // external boundaries must respect the tablet_reshard_max_split_count cap that the
@@ -493,7 +493,7 @@ public class SplitTabletJobTest {
             tooMany.add(tabletRange(i * 100, (i + 1) * 100));
         }
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, tooMany));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, Map.of(oldTabletId, tooMany)));
     }
 
     // Installs a MockUp on MockLakeService that intercepts both publishVersion and
