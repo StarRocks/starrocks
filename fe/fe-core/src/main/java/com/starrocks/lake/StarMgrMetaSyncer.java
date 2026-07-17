@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
-import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -151,14 +150,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // PhysicalPartition. Without unioning them in, deleteUnusedShardAndShardGroup would
         // treat a live PACK shard group as an orphan and reap it (along with its live tablets).
         groupIds.addAll(GlobalStateMgr.getCurrentState().getColocateTableIndex().getAllPackShardGroupIds());
-
-        // Superseded materialized indexes parked in the recycle bin by a tablet reshard (issue #75993)
-        // are no longer on any live PhysicalPartition. Union their shard groups so this cycle does not
-        // reap them (and their still-readable tablets) before the recycle retention expires.
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
-        if (recycleBin != null) {
-            groupIds.addAll(recycleBin.getRecycledIndexShardGroupIds());
-        }
 
         long elapsedMs = System.currentTimeMillis() - startMs;
         if (elapsedMs > SLOW_COLLECTION_WARN_THRESHOLD_MS) {

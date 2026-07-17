@@ -17,16 +17,37 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-// Journal entry for physically erasing a materialized index that was parked in the
-// CatalogRecycleBin (e.g. a superseded index retired by a tablet reshard). Keyed by the
-// index's own (globally unique) id.
+// Journal entry for erasing a materialized index that was parked in the CatalogRecycleBin (e.g. a
+// superseded index retired by a tablet reshard). Self-contained: carries the index's full coordinates
+// so replay can detach it from its partition without depending on the recycle-bin's in-memory state.
 public class EraseMaterializedIndexLog implements Writable {
 
+    @SerializedName(value = "dbId")
+    private long dbId;
+    @SerializedName(value = "tableId")
+    private long tableId;
+    @SerializedName(value = "physicalPartitionId")
+    private long physicalPartitionId;
     @SerializedName(value = "indexId")
     private long indexId;
 
-    public EraseMaterializedIndexLog(long indexId) {
+    public EraseMaterializedIndexLog(long dbId, long tableId, long physicalPartitionId, long indexId) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public long getTableId() {
+        return tableId;
+    }
+
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getIndexId() {

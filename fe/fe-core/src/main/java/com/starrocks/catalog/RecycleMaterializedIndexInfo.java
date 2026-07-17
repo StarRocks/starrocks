@@ -14,37 +14,51 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageMedium;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
- * A superseded materialized index parked in the {@link CatalogRecycleBin} (e.g. the old index retired
- * by a tablet split/merge, issue #75993). Modeling the retired object as an index -- rather than
- * wrapping it in a synthetic partition -- lets the recycle bin retain and reclaim it at its natural
- * granularity: never user-recoverable, and erased strictly at the tablet level.
+ * A superseded materialized index scheduled for removal by the {@link CatalogRecycleBin} (e.g. the old
+ * index retired by a tablet split/merge, issue #75993). This record only carries the index's
+ * coordinates -- the index object itself stays on its live {@link PhysicalPartition} for the whole
+ * retention window and is only detached at erase time.
  *
- * <p>{@link #delete()} only drops the index's tablets from the {@code TabletInvertedIndex} (the
- * index-level analog of {@code LocalMetastore#onErasePartition}); the physical shard reclamation is
- * left to {@code StarMgrMetaSyncer}, which reaps the now-orphaned shard group per-shard. It never
- * removes a partition directory -- which matters for a split, where the parent and child tablets share
- * the same object-storage directory and a directory-level delete would destroy the live child data.
+ * <p>Keeping the old index installed is what protects its shards during retention: a split reuses the
+ * parent's shard group for the child, so the group is never orphaned and the group-level reaper never
+ * touches it; the shards are reclaimed by {@code StarMgrMetaSyncer.syncTableMetaInternal}, which lists
+ * every shard in the group and drops the ones not referenced by an index still on the partition. While
+ * the old index is installed, {@code getAllMaterializedIndices} enumerates it, its tablets are
+ * subtracted, and its shards are kept. Reads/writes never pick it: every scan/load resolves the
+ * partition via {@code getLatestIndex}/{@code getLatestMaterializedIndices}, which return only the new
+ * child.
+ *
+ * <p>{@link #delete()} detaches the index from the partition (under the table write lock) and drops its
+ * tablets from the {@code TabletInvertedIndex}. The next {@code StarMgrMetaSyncer} cycle then reaps the
+ * now-unreferenced shards per-shard -- never a partition directory, which matters for a split where the
+ * parent and child tablets share the same object-storage directory.
  */
 public class RecycleMaterializedIndexInfo {
+    private static final Logger LOG = LogManager.getLogger(RecycleMaterializedIndexInfo.class);
+
     @SerializedName(value = "dbId")
     private final long dbId;
     @SerializedName(value = "tableId")
     private final long tableId;
     @SerializedName(value = "physicalPartitionId")
     private final long physicalPartitionId;
-    @SerializedName(value = "index")
-    private final MaterializedIndex index;
+    @SerializedName(value = "indexId")
+    private final long indexId;
 
-    public RecycleMaterializedIndexInfo(long dbId, long tableId, long physicalPartitionId, MaterializedIndex index) {
+    public RecycleMaterializedIndexInfo(long dbId, long tableId, long physicalPartitionId, long indexId) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.physicalPartitionId = physicalPartitionId;
-        this.index = index;
+        this.indexId = indexId;
     }
 
     public long getDbId() {
@@ -59,41 +73,44 @@ public class RecycleMaterializedIndexInfo {
         return physicalPartitionId;
     }
 
-    public MaterializedIndex getIndex() {
-        return index;
-    }
-
     public long getIndexId() {
-        return index.getId();
-    }
-
-    public long getShardGroupId() {
-        return index.getShardGroupId();
+        return indexId;
     }
 
     /**
-     * Register the retained index's tablets in the inverted index so the FE keeps them addressable
-     * while the index is parked. Mirrors {@code CatalogRecycleBin#addTabletToInvertedIndex} for
-     * recycled partitions; used when the recycle bin is reloaded from the image.
-     */
-    public void addTabletToInvertedIndex() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, index.getId(),
-                TStorageMedium.HDD, true);
-        for (Tablet tablet : index.getTablets()) {
-            invertedIndex.addTablet(tablet.getId(), tabletMeta);
-        }
-    }
-
-    /**
-     * Drop the index's tablets from the inverted index. Physical shard/data reclamation then happens
-     * on the {@code StarMgrMetaSyncer} cycle, which deletes the orphaned shards per-shard (never a
-     * directory) and is still gated by {@code isSafeToDelete()} / cluster-snapshot safety.
+     * Detach the index from its live partition and drop its tablets from the inverted index. Physical
+     * shard/data reclamation then happens on the {@code StarMgrMetaSyncer} cycle, which deletes the
+     * now-unreferenced shards per-shard (never a directory) and is still gated by cluster-snapshot
+     * safety. Idempotent and null-safe: a re-run/replay, or a table/partition that has since been
+     * dropped, is a no-op.
      */
     public void delete() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (Tablet tablet : index.getTablets()) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        MaterializedIndex removed = null;
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(dbId, Lists.newArrayList(tableId), LockType.WRITE);
+        try {
+            Table table = globalStateMgr.getLocalMetastore().getTable(dbId, tableId);
+            if (!(table instanceof OlapTable)) {
+                return;
+            }
+            PhysicalPartition physicalPartition = ((OlapTable) table).getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                return;
+            }
+            removed = physicalPartition.deleteMaterializedIndexByIndexId(indexId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(dbId, Lists.newArrayList(tableId), LockType.WRITE);
+        }
+
+        if (removed == null) {
+            return;
+        }
+        TabletInvertedIndex invertedIndex = globalStateMgr.getTabletInvertedIndex();
+        for (Tablet tablet : removed.getTablets()) {
             invertedIndex.deleteTablet(tablet.getId());
         }
+        LOG.info("Detached recycled materialized index {} from partition {} (table {}); {} tablets unregistered",
+                indexId, physicalPartitionId, tableId, removed.getTablets().size());
     }
 }

@@ -736,33 +736,34 @@ public class CatalogRecycleBinTest {
             long tableId = 2;
             long physicalPartitionId = 3;
             long indexId = 1001;
-            long shardGroupId = 7777;
-            MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
             RecycleMaterializedIndexInfo info =
-                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, index);
+                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId);
 
-            // 1. recycle: the shard group is retained so StarMgrMetaSyncer won't reap it.
+            // 1. recycle: the index is scheduled for removal (it stays installed on its partition until
+            //    erase, so nothing is detached here).
             recycleBin.recycleMaterializedIndex(info);
-            Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+            Assertions.assertTrue(recycleBin.isMaterializedIndexRecycled(indexId));
             Assertions.assertTrue(recycleBin.idToRecycleTime.containsKey(indexId));
 
             // 2. idempotent: a re-run/replay of the reshard cleanup is a no-op.
             recycleBin.recycleMaterializedIndex(info);
-            Assertions.assertEquals(1, recycleBin.getRecycledIndexShardGroupIds().size());
+            Assertions.assertTrue(recycleBin.isMaterializedIndexRecycled(indexId));
 
             // 3. not expired yet -> retained.
             Config.partition_recycle_retention_period_secs = 3600;
             recycleBin.eraseMaterializedIndex(System.currentTimeMillis());
-            Assertions.assertTrue(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+            Assertions.assertTrue(recycleBin.isMaterializedIndexRecycled(indexId));
 
-            // 4. expired -> erased.
+            // 4. expired -> erased. The table does not exist in this fixture, so delete() takes the
+            //    table lock and then no-ops (null-safe); the recycle-bin bookkeeping is still cleared.
             recycleBin.idToRecycleTime.put(indexId, 1L);
             recycleBin.eraseMaterializedIndex(System.currentTimeMillis());
-            Assertions.assertFalse(recycleBin.getRecycledIndexShardGroupIds().contains(shardGroupId));
+            Assertions.assertFalse(recycleBin.isMaterializedIndexRecycled(indexId));
             Assertions.assertFalse(recycleBin.idToRecycleTime.containsKey(indexId));
 
             // 5. replaying an erase for an already-gone index is null-safe (no NPE).
-            recycleBin.replayEraseMaterializedIndex(indexId);
+            recycleBin.replayEraseMaterializedIndex(
+                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId));
         } finally {
             Config.partition_recycle_retention_period_secs = savedRetention;
         }

@@ -70,6 +70,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -289,65 +290,77 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 indexId, info.getDbId(), info.getTableId(), info.getPhysicalPartitionId());
     }
 
-    // Shard groups of the parked indexes. StarMgrMetaSyncer unions these into the FE "live set" so a
-    // retained index's shards are not reaped until it is erased.
-    public synchronized Set<Long> getRecycledIndexShardGroupIds() {
-        Set<Long> shardGroupIds = new HashSet<>();
-        for (RecycleMaterializedIndexInfo info : idToIndex.values()) {
-            long shardGroupId = info.getShardGroupId();
-            if (shardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
-                shardGroupIds.add(shardGroupId);
-            }
-        }
-        return shardGroupIds;
+    // Whether the given materialized index is scheduled for removal (parked by a reshard and awaiting
+    // its retention deadline). The index stays installed on its partition until then.
+    public synchronized boolean isMaterializedIndexRecycled(long indexId) {
+        return idToIndex.containsKey(indexId);
     }
 
     // Erase parked indexes whose retention (reusing partition_recycle_retention_period_secs, floored
     // to a positive value so an entry is never immediately erasable before its recycle is durable) has
-    // elapsed. delete() only drops the index's tablets from the inverted index; the shard group then
-    // becomes orphaned and StarMgrMetaSyncer reclaims the shards per-shard, still gated by cluster
-    // snapshot safety. The snapshot check here mirrors that gate so we don't drop tablets a snapshot
-    // still needs.
-    protected synchronized void eraseMaterializedIndex(long currentTimeMs) {
+    // elapsed. info.delete() detaches the index from its live partition and drops its tablets from the
+    // inverted index; the now-unreferenced shards are then reclaimed per-shard by StarMgrMetaSyncer,
+    // still gated by cluster-snapshot safety. The snapshot check here mirrors that gate so we don't
+    // drop tablets a snapshot still needs.
+    //
+    // delete() takes the table write lock, and the established lock order is catalog-lock -> recycle-bin
+    // monitor (e.g. recyclePartition / recycleMaterializedIndex run under a catalog lock). So we must
+    // NOT hold the monitor while calling delete(): collect the erasable entries under the monitor, then
+    // detach + journal outside it (the journal's WAL applier reacquires the monitor only for the map
+    // bookkeeping, holding no table lock).
+    protected void eraseMaterializedIndex(long currentTimeMs) {
         long expireMs = Math.max(Config.partition_recycle_retention_period_secs, 1L) * 1000L;
-        int erasedCnt = 0;
-        Iterator<Map.Entry<Long, RecycleMaterializedIndexInfo>> iterator = idToIndex.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Long, RecycleMaterializedIndexInfo> entry = iterator.next();
-            long indexId = entry.getKey();
-            RecycleMaterializedIndexInfo info = entry.getValue();
+        List<RecycleMaterializedIndexInfo> erasable = new ArrayList<>();
+        synchronized (this) {
+            for (Map.Entry<Long, RecycleMaterializedIndexInfo> entry : idToIndex.entrySet()) {
+                long indexId = entry.getKey();
+                RecycleMaterializedIndexInfo info = entry.getValue();
 
-            Long recycleTime = idToRecycleTime.get(indexId);
-            if (recycleTime == null || currentTimeMs - recycleTime < expireMs) {
-                continue;
+                Long recycleTime = idToRecycleTime.get(indexId);
+                if (recycleTime == null || currentTimeMs - recycleTime < expireMs) {
+                    continue;
+                }
+                if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                        .isTableSafeToDeleteTablet(info.getTableId())) {
+                    continue;
+                }
+                erasable.add(info);
+                if (erasable.size() >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
+                    break;
+                }
             }
-            if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(info.getTableId())) {
-                continue;
-            }
+        }
 
-            GlobalStateMgr.getCurrentState().getEditLog().logEraseMaterializedIndex(indexId, wal -> {
+        for (RecycleMaterializedIndexInfo info : erasable) {
+            long indexId = info.getIndexId();
+            try {
                 info.delete();
-                iterator.remove();
-                idToRecycleTime.remove(indexId);
+            } catch (Exception e) {
+                // Leave the entry in place so the next cycle retries; do not journal a half-done erase.
+                LOG.warn("Failed to erase materialized index {} (table {}); will retry next cycle: {}",
+                        indexId, info.getTableId(), e.getMessage());
+                continue;
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logEraseMaterializedIndex(info, wal -> {
+                synchronized (this) {
+                    idToIndex.remove(indexId);
+                    idToRecycleTime.remove(indexId);
+                }
             });
             LOG.info("Erased materialized index {} from recycle bin. dbId: {} tableId: {}", indexId,
                     info.getDbId(), info.getTableId());
-
-            erasedCnt++;
-            if (erasedCnt >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
-                break;
-            }
         }
     }
 
-    public synchronized void replayEraseMaterializedIndex(long indexId) {
-        RecycleMaterializedIndexInfo info = idToIndex.remove(indexId);
-        idToRecycleTime.remove(indexId);
-        // Null-safe on purpose: tolerate replaying an erase for an index no longer present, rather than
-        // dereferencing a missing entry.
-        if (info != null) {
-            info.delete();
+    public void replayEraseMaterializedIndex(RecycleMaterializedIndexInfo info) {
+        long indexId = info.getIndexId();
+        synchronized (this) {
+            idToIndex.remove(indexId);
+            idToRecycleTime.remove(indexId);
         }
+        // Detach outside the monitor (delete() takes the table write lock). Idempotent and null-safe:
+        // tolerates replaying an erase for an index/partition/table no longer present.
+        info.delete();
         LOG.info("Replayed erase materialized index {} from recycle bin", indexId);
     }
 
@@ -1292,11 +1305,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 } // end for indices
             } // end for partitions
         }
-
-        // idToIndex (superseded materialized indexes parked by reshard)
-        for (RecycleMaterializedIndexInfo indexInfo : idToIndex.values()) {
-            indexInfo.addTabletToInvertedIndex();
-        }
+        // Indexes parked by a reshard (idToIndex) stay installed on their live partition, so their
+        // tablets are already registered by the partition walk above / the normal image load -- no
+        // separate re-registration is needed here.
     }
 
     public void removeInvalidateReference() {

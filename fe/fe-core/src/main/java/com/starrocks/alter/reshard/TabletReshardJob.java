@@ -15,7 +15,6 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
@@ -298,15 +297,20 @@ public abstract class TabletReshardJob implements Writable {
 
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
-     * remove it from its live physical partition and park it in the {@code CatalogRecycleBin} at index
-     * granularity, so an in-flight query planned against it can keep reading until the retention
-     * (partition_recycle_retention_period_secs) expires (issue #75993).
+     * schedule its removal in the {@code CatalogRecycleBin} at index granularity, so an in-flight query
+     * planned against it can keep reading until the retention (partition_recycle_retention_period_secs)
+     * expires (issue #75993).
      *
-     * <p>While parked, {@code StarMgrMetaSyncer.getAllPartitionShardGroupId()} unions the recycled
-     * index's shard group into the FE live set, so it is not reaped; on erase, the recycle bin drops
-     * the index's tablets from the inverted index and {@code StarMgrMetaSyncer} reclaims the shards
-     * per-shard -- never a partition-directory delete, which for a split would destroy the live child
-     * tablets that share the parent's object-storage directory.
+     * <p>Crucially, the old index is <b>left installed</b> on its live partition; only a retention
+     * record is parked. A split reuses the parent's shard group for the child, so the group is never
+     * orphaned; keeping the old index installed is what protects its shards, because
+     * {@code StarMgrMetaSyncer.syncTableMetaInternal} reaps a group's shards per-shard by subtracting
+     * the tablets of every index still on the partition. Reads/writes never pick the old index: every
+     * scan/load resolves the partition via {@code getLatestIndex}/{@code getLatestMaterializedIndices},
+     * which return only the new child. On erase, the recycle bin detaches the old index and drops its
+     * tablets, and {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
+     * never a partition-directory delete, which for a split would destroy the live child tablets that
+     * share the parent's object-storage directory.
      *
      * <p>Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob); it is
      * deterministic (the index keeps its own id, no id allocation) and
@@ -323,15 +327,14 @@ public abstract class TabletReshardJob implements Writable {
             }
             for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                     .getReshardingIndexes().values()) {
-                MaterializedIndex oldIndex = physicalPartition
-                        .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                // Idempotency guard: on a re-run/replay the old index is already gone, so
-                // deleteMaterializedIndexByIndexId returns null and we skip.
-                if (oldIndex == null) {
+                long oldIndexId = reshardingIndex.getMaterializedIndexId();
+                // Idempotency guard: if the old index has already been erased (detached by a prior
+                // retention cycle), there is nothing to schedule.
+                if (physicalPartition.getIndex(oldIndexId) == null) {
                     continue;
                 }
                 GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
-                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndex));
+                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndexId));
             }
         }
     }
