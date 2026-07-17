@@ -100,6 +100,23 @@ public:
         DCHECK_LT(_cur_block, _num_blocks);
         return _cur_block < _num_blocks ? _last_docid[_cur_block] : 0;
     }
+
+    // Whole-term directory accessors (valid right after seek_to_term; no block decode needed).
+    // WAND uses these for term-level upper bounds and the stateless block-max recheck.
+    uint32_t num_blocks() const { return _num_blocks; }
+    uint32_t block_last_docid(uint32_t block_idx) const {
+        DCHECK_LT(block_idx, _num_blocks);
+        return block_idx < _num_blocks ? _last_docid[block_idx] : 0;
+    }
+    uint32_t block_max_tf(uint32_t block_idx) const {
+        DCHECK_LT(block_idx, _num_blocks);
+        return block_idx < _num_blocks ? _max_tf[block_idx] : 0;
+    }
+    uint32_t block_min_doclen(uint32_t block_idx) const {
+        DCHECK_LT(block_idx, _num_blocks);
+        return block_idx < _num_blocks ? _min_doclen[block_idx] : 0;
+    }
+
     // Advance to the first block whose last_docid >= target_docid and decode it.
     Status seek_block(uint32_t target_docid);
 

@@ -315,6 +315,7 @@ set(STORAGE_FILES
     index/inverted/builtin/block_posting_reader.cpp
     index/inverted/builtin/bm25_scorer.cpp
     index/inverted/builtin/bm25_stats_provider.cpp
+    index/inverted/builtin/bm25_wand_scorer.cpp
     manual_compaction.cpp
     rowset/unique_rowset_id_generator.cpp
     rowset/rowset.cpp

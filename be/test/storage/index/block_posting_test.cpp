@@ -406,4 +406,33 @@ TEST_F(BlockPostingTest, rejects_zero_doc_count_block) {
     EXPECT_TRUE(st.is_corruption()) << st;
 }
 
+TEST_F(BlockPostingTest, directory_stats_accessors) {
+    const std::string file = kTestDir + "/dirstats";
+    Term t0;
+    for (uint32_t i = 0; i < 300; ++i) { // 3 blocks: [0..127] [128..255] [256..299]
+        t0.docids.push_back(i);
+        t0.tfs.push_back(1 + (i % 7));
+        t0.doclens.push_back(3 + (i % 5));
+    }
+    PostingIndexPB pb = write(file, {t0});
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file));
+    _opts.read_file = rfile.get();
+    BlockPostingReader r;
+    ASSERT_OK(r.load(_opts, pb));
+    std::unique_ptr<BlockPostingIterator> it;
+    ASSERT_OK(r.new_iterator(_opts, &it));
+
+    // Directory accessors are valid right after seek_to_term, before any block decode.
+    ASSERT_OK(it->seek_to_term(0));
+    ASSERT_EQ(3u, it->num_blocks());
+    // Directory stats must match what cur_block_* reports while walking the blocks.
+    for (uint32_t b = 0; b < it->num_blocks(); ++b) {
+        ASSERT_OK(it->next_block());
+        EXPECT_EQ(it->cur_block_last_docid(), it->block_last_docid(b));
+        EXPECT_EQ(it->cur_block_max_tf(), it->block_max_tf(b));
+        EXPECT_EQ(it->cur_block_min_doclen(), it->block_min_doclen(b));
+    }
+}
+
 } // namespace starrocks
