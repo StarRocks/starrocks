@@ -18,6 +18,8 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
@@ -25,6 +27,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -142,7 +145,16 @@ final class PreSplitFlow {
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
                                       LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
-        SampleSet samples = runDataTierSampler(table, prepared, loadKind);
+        // Try the meta tier first (row-group footer statistics, no data scan), mirroring the
+        // single-partition flow's meta-tier-first routing; fall back to the exact data tier for
+        // any shape the footer path cannot serve.
+        SampleSet samples = runMetaTierMultiPartitionSampler(table, prepared, loadKind);
+        if (samples != null) {
+            LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) served by META tier "
+                    + "(row-group footer stats, no data scan) for table {}", loadKind, table.getName());
+        } else {
+            samples = runDataTierSampler(table, prepared, loadKind);
+        }
         if (samples == null) {
             return;
         }
@@ -186,5 +198,109 @@ final class PreSplitFlow {
             PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
             return null;
         }
+    }
+
+    /**
+     * Meta-tier producer for the multi-partition flow, tried before the data tier (mirroring the
+     * single-partition flow's meta-tier-first routing). Reads only Parquet row-group min/max
+     * footer statistics (no data scan) and emits one synthetic sample per row-group endpoint, so
+     * the existing {@link PartitionSampleGrouper} (partition attribution +
+     * auto-create) and {@link TabletPreSplitCoordinator} (boundary planning + submission) consume
+     * the result unchanged. The partition-source value for each endpoint is lifted out of the
+     * sort-key tuple — the partition source column is part of the sort key for time-partitioned
+     * tables — so the grouper applies the partition expression and buckets endpoints exactly as it
+     * would per-row samples; a row group straddling a boundary contributes its min endpoint to the
+     * lower partition and its max endpoint to the upper one. Boundaries stay full sort-key arity
+     * (the footer min/max tuples span the whole sort key), so the BE's {@code
+     * validate_new_tablet_ranges} accepts them just as it does data-tier boundaries.
+     *
+     * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
+     * the footer path cannot serve: a load kind without Parquet footers, a rollup target
+     * (secondary-index sort keys the footer path does not carry), a partition source column absent
+     * from the sort key, or too few usable footer statistics.
+     */
+    static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
+        if (loadKind != LoadKind.INSERT_FROM_FILES) {
+            return null;
+        }
+        if (!prepared.secondaryIndexSpecs().isEmpty()) {
+            return null;
+        }
+        List<Column> sortKeyColumns = prepared.sortKeyColumns();
+        List<Column> partitionSourceColumns = prepared.partitionColumns();
+        if (sortKeyColumns.isEmpty() || partitionSourceColumns.isEmpty()) {
+            return null;
+        }
+        int[] partitionSourceIndexInSortKey = new int[partitionSourceColumns.size()];
+        for (int i = 0; i < partitionSourceColumns.size(); i++) {
+            int indexInSortKey = indexOfColumnByName(sortKeyColumns, partitionSourceColumns.get(i).getName());
+            if (indexInSortKey < 0) {
+                // Partition source column is not part of the sort key, so its per-row-group value is
+                // absent from the min/max tuple: the footer path cannot attribute row groups to
+                // partitions. Let the data tier (which projects partition source columns) handle it.
+                return null;
+            }
+            partitionSourceIndexInSortKey[i] = indexInSortKey;
+        }
+        try {
+            SampleRequest request = new SampleRequest(
+                    prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
+                    partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
+            List<RowGroupStatistics> rowGroups = new InsertFromFilesRowGroupStatisticsProvider().fetch(request);
+            if (rowGroups == null || rowGroups.isEmpty()) {
+                return null;
+            }
+            List<Tuple> sortKeyTuples = new ArrayList<>();
+            List<Tuple> partitionSourceTuples = new ArrayList<>();
+            for (RowGroupStatistics rowGroup : rowGroups) {
+                if (rowGroup == null || rowGroup.getRowCount() == 0L || rowGroup.isTruncated()) {
+                    continue;
+                }
+                addRowGroupEndpoint(rowGroup.getMinTuple(), partitionSourceIndexInSortKey,
+                        sortKeyTuples, partitionSourceTuples);
+                addRowGroupEndpoint(rowGroup.getMaxTuple(), partitionSourceIndexInSortKey,
+                        sortKeyTuples, partitionSourceTuples);
+            }
+            if (sortKeyTuples.size() < 2) {
+                // Too few usable endpoints to place any interior boundary; let the data tier try.
+                return null;
+            }
+            return new SampleSet(sortKeyTuples, partitionSourceTuples,
+                    new Estimates(prepared.estimatedBytes(), 0L));
+        } catch (StarRocksException | RuntimeException metaTierFailure) {
+            LOG.info("Pre-split meta tier (multi-partition) unavailable for table {}; falling back to "
+                    + "data tier: {}", table.getName(), metaTierFailure.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Appends one synthetic sample built from a row-group endpoint tuple: the full sort-key tuple
+     * plus the partition-source values lifted out of it by their sort-key positions. The two lists
+     * grow in lock-step so {@code sortKeyTuples} and {@code partitionSourceTuples} stay parallel,
+     * as {@link SampleSet} requires.
+     */
+    private static void addRowGroupEndpoint(Tuple endpointTuple, int[] partitionSourceIndexInSortKey,
+                                            List<Tuple> sortKeyTuples, List<Tuple> partitionSourceTuples) {
+        if (endpointTuple == null) {
+            return;
+        }
+        List<Variant> sortKeyValues = endpointTuple.getValues();
+        List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceIndexInSortKey.length);
+        for (int indexInSortKey : partitionSourceIndexInSortKey) {
+            partitionSourceValues.add(sortKeyValues.get(indexInSortKey));
+        }
+        sortKeyTuples.add(endpointTuple);
+        partitionSourceTuples.add(new Tuple(partitionSourceValues));
+    }
+
+    private static int indexOfColumnByName(List<Column> columns, String columnName) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).getName().equalsIgnoreCase(columnName)) {
+                return i;
+            }
+        }
+        return -1;
     }
 }
