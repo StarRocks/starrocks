@@ -75,7 +75,7 @@ import java.util.function.BooleanSupplier;
  *       takes a {@link PartitionSampleGrouper#group grouped} list of
  *       {@link PartitionSamples}, pre-creates missing partitions, and
  *       submits ONE combined reshard via
- *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundariesMultiTablet}.</li>
+ *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundaries}.</li>
  * </ul>
  */
 public final class TabletPreSplitCoordinator {
@@ -566,7 +566,7 @@ public final class TabletPreSplitCoordinator {
      * </ul>
      *
      * <p>After the loop, when at least one partition contributed,
-     * {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet} builds
+     * {@link SplitTabletJobFactory#forExternalBoundaries} builds
      * the combined job and
      * {@link com.starrocks.alter.reshard.TabletReshardJobMgr#addTabletReshardJob}
      * admits it. Any synchronous failure of either step downgrades the whole
@@ -626,7 +626,7 @@ public final class TabletPreSplitCoordinator {
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
         try {
-            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundaries(
                     database, table, oldTabletIdToRanges);
             // Carry the load's acquired compute resource (the one that sized the split) so the job's
             // shard creation + publish run in the load's warehouse. Use prepared.computeResource() (passed
@@ -642,7 +642,7 @@ public final class TabletPreSplitCoordinator {
                     table.getName(), submitFailure.getMessage());
             return skipPostEligibility(SkipReason.SUBMIT_FAILED);
         } catch (RuntimeException submitFailure) {
-            // forExternalBoundariesMultiTablet validates the range list shape and may throw
+            // forExternalBoundaries validates the range list shape and may throw
             // IllegalArgumentException for bad caller-supplied ranges. Map to SUBMIT_FAILED
             // so the load still proceeds against the pre-create-only layout.
             LOG.warn("Pre-split combined submit rejected for table {}: {}",

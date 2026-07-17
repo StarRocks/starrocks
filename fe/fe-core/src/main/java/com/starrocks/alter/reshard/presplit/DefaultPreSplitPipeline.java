@@ -36,6 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
@@ -223,7 +224,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
         List<TabletRange> tabletRanges = buildTabletRanges(outcome.result.getBoundaries());
         TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(
-                database, table, oldTabletId, tabletRanges);
+                database, table, Map.of(oldTabletId, tabletRanges));
         // Carry the triggering load's warehouse so the job's shard creation + publish run there.
         if (loadComputeResource != null) {
             job.setWarehouseId(loadComputeResource.getWarehouseId());
