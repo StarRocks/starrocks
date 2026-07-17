@@ -625,6 +625,10 @@
                                         <exclude>com.fasterxml.jackson.jaxrs:*:[,2.15.0)</exclude>
                                         <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
                                         <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
+                                        <!-- ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's
+                                             unused tether feature references it -->
+                                        <exclude>org.apache.avro:avro-ipc</exclude>
+                                        <exclude>org.apache.avro:avro-ipc-jetty</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>
