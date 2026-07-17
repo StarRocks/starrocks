@@ -38,6 +38,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
@@ -252,6 +253,107 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+}
+
+// A separate-sort-key spill load leaves duplicate-primary-key loser rows physically in a segment (the
+// eager PK-index SST points at the winner) and carries their rowids in op_write.seg_delvecs. Publish must
+// fold those rowids into the segment's delete vector so the losers are masked. Here we synthesize a single
+// segment plus a seg_delvecs entry masking two of its rows, and assert those rows are gone after publish.
+// This exercises the reader/apply path only (no eager-SST write side needed). Without the seg_delvecs
+// handling, all rows would remain visible.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_applies_seg_delvecs) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> v0{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    // Mask the rows at rowid 2 and 6 (keys 3 and 7) via a seg_delvecs entry for local segment 0.
+    std::vector<uint32_t> losers{2, 6};
+    DelVector dv;
+    dv.init(/*version=*/1, losers.data(), losers.size());
+    auto* seg_delvec_pb = op_write->add_seg_delvecs();
+    seg_delvec_pb->set_version(1);
+    seg_delvec_pb->set_data(dv.save());
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    writer->close();
+
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    // Two of the ten rows are masked by seg_delvecs -> eight visible.
+    EXPECT_EQ(k0.size() - losers.size(), read_rows(_tablet_metadata->id(), 2));
+}
+
+// Regression: a serialized *empty* DelVector (a seg_delvecs entry for a segment with no dedup losers)
+// has non-empty bytes but loads to a null roaring. Publish must treat it as empty (mask nothing) rather
+// than dereference the null roaring and crash.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_seg_delvecs_empty_entry) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    std::vector<int> k0{1, 2, 3, 4, 5};
+    std::vector<int> v0{10, 20, 30, 40, 50};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    // A serialized empty DelVector: save() writes a non-empty payload, load() leaves roaring() null.
+    DelVector dv;
+    dv.set_empty();
+    auto* seg_delvec_pb = op_write->add_seg_delvecs();
+    seg_delvec_pb->set_version(1);
+    seg_delvec_pb->set_data(dv.save());
+    EXPECT_FALSE(seg_delvec_pb->data().empty()); // the payload really is non-empty (the crash precondition)
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    writer->close();
+
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    // No masking, no crash: all rows visible.
+    EXPECT_EQ(k0.size(), read_rows(_tablet_metadata->id(), 2));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
