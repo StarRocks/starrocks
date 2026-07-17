@@ -279,31 +279,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry, commitQueueManager);
-    }
-
     @Override
     public Table.TableType getTableType() {
         return ICEBERG;
