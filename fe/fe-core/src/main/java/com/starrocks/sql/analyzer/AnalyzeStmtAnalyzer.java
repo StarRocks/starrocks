@@ -93,6 +93,10 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
             StatsConstants.INIT_SAMPLE_STATS_JOB,
 
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP,
+
             //Deprecated , just not throw exception
             StatsConstants.PRO_SAMPLE_RATIO,
             StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY,
@@ -103,7 +107,17 @@ public class AnalyzeStmtAnalyzer {
             Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
                     StatsConstants.HISTOGRAM_MCV_SIZE,
-                    StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
+                    StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+                    StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+                    StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+                    StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP)).build();
+
+    // Properties that only take effect for external-table statistics collection. Setting them on an internal
+    // (OLAP) table has no effect, so we reject them up front instead of silently ignoring the value.
+    private static final List<String> EXTERNAL_ONLY_PROPERTIES = Lists.newArrayList(
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP);
 
     public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
@@ -211,7 +225,7 @@ public class AnalyzeStmtAnalyzer {
                 statement.setColumnNames(targetColumns);
             }
 
-            analyzeProperties(statement.getProperties());
+            analyzeProperties(statement.getProperties(), analyzeTable);
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getCatalogName())) {
@@ -233,6 +247,9 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             TableRef tableRef = statement.getTableRef();
+            // Resolved target table when the job targets a single table; stays null for database/catalog-wide
+            // jobs. Used to validate table-scoped properties (see analyzeProperties).
+            Table analyzeJobTable = null;
             if (tableRef != null) {
                 tableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
                 statement.setTableRef(tableRef);
@@ -250,6 +267,7 @@ public class AnalyzeStmtAnalyzer {
                     String dbName = tableRef.getDbName();
                     TableName tableName = new TableName(catalogName, dbName, tableRef.getTableName(), tableRef.getPos());
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
+                    analyzeJobTable = analyzeTable;
                     if (!analyzeTable.isAnalyzableExternalTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
                                 "paimon and odps table", tableName.toString());
@@ -296,6 +314,7 @@ public class AnalyzeStmtAnalyzer {
                 TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
                         statement.getTableName(), tablePos);
                 Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, tableName);
+                analyzeJobTable = analyzeTable;
 
                 if (analyzeTable.isTemporaryTable()) {
                     throw new SemanticException("Don't support create analyze job for temporary table");
@@ -334,15 +353,26 @@ public class AnalyzeStmtAnalyzer {
                             session.getCurrentCatalog());
                 }
             }
-            analyzeProperties(statement.getProperties());
+            analyzeProperties(statement.getProperties(), analyzeJobTable);
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
 
-        private void analyzeProperties(Map<String, String> properties) {
+        private void analyzeProperties(Map<String, String> properties, Table analyzeTable) {
             for (String property : properties.keySet()) {
                 if (!VALID_PROPERTIES.contains(property)) {
                     throw new SemanticException("Property '%s' is not valid", property);
+                }
+            }
+
+            // Reject external-only properties on internal (OLAP) tables so an unsupported knob fails loudly
+            // rather than being silently dropped. When analyzeTable is null (e.g. a database/catalog-wide
+            // analyze job) there is no single table to validate against, so this check is skipped.
+            if (analyzeTable != null && !analyzeTable.isAnalyzableExternalTable()) {
+                for (String key : EXTERNAL_ONLY_PROPERTIES) {
+                    if (properties.containsKey(key)) {
+                        throw new SemanticException("Property '%s' is only supported for external tables", key);
+                    }
                 }
             }
 

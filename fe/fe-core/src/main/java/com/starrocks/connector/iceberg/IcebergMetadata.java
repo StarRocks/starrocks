@@ -1019,6 +1019,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = table.getCatalogTableName();
 
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, params);
+
+        // Bounded-cost statistics scan (design 2.4): the split cache key ignores the scan caps, so we must
+        // neither read it (a cached full split list would defeat early stop) nor write it (a truncated list
+        // must never leak into an ordinary query and corrupt its result). Plan a fresh, budget-limited list.
+        if (params.hasScanBudget()) {
+            List<FileScanTask> boundedTasks = planIcebergScanTasks(key, table, ConnectContext.get(), true);
+            return boundedTasks.stream().map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+        }
+
         triggerIcebergPlanFilesIfNeeded(key, table);
 
         List<FileScanTask> icebergScanTasks = splitTasks.get(key);
@@ -1245,11 +1254,27 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private void collectTableStatisticsAndCacheIcebergSplit(PredicateSearchKey key, Table table, Tracers tracers,
                                                             ConnectContext connectContext) {
-        IcebergTable icebergTable = (IcebergTable) table;
         TvrVersionRange tvrVersionRange = key.getVersion();
         // empty table
         if (tvrVersionRange == null || tvrVersionRange.isEmpty()) {
             return;
+        }
+
+        List<FileScanTask> icebergScanTasks = planIcebergScanTasks(key, table, connectContext, false);
+        splitTasks.put(key, icebergScanTasks);
+        scannedTables.add(key);
+    }
+
+    // Plans the split list for (predicate, version) once. When applyScanBudget is true the file-scan-task
+    // iterator is wrapped with a bounded-cost budget (design 2.4): it stops early once a scan cap is reached,
+    // and the caller must NOT cache the (possibly truncated) result. When false this is the ordinary full
+    // planning used by the split cache.
+    private List<FileScanTask> planIcebergScanTasks(PredicateSearchKey key, Table table,
+                                                    ConnectContext connectContext, boolean applyScanBudget) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        TvrVersionRange tvrVersionRange = key.getVersion();
+        if (tvrVersionRange == null || tvrVersionRange.isEmpty()) {
+            return Lists.newArrayList();
         }
 
         GetRemoteFilesParams params = key.getParams();
@@ -1267,8 +1292,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
-                     buildFileScanTaskIterator((IcebergTable) table, icebergPredicate, tvrVersionRange,
-                             connectContext, enableCollectColumnStatistics, params.getFieldNames())) {
+                     maybeApplyScanBudget(
+                             buildFileScanTaskIterator(icebergTable, icebergPredicate, tvrVersionRange,
+                                     connectContext, enableCollectColumnStatistics, params.getFieldNames()),
+                             applyScanBudget ? params : null)) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
                 if (residual.hasResidual() && !PartitionCastPredicatePruner.partitionMayMatch(residual.residual,
@@ -1308,8 +1335,89 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Failed to iter iceberg file scan iterator", e);
         }
 
-        splitTasks.put(key, icebergScanTasks);
-        scannedTables.add(key);
+        return icebergScanTasks;
+    }
+
+    // Wraps a lazy file-scan-task iterator with the bounded-cost statistics-scan budget (design 2.2/2.4).
+    // Returns the delegate untouched when there is no active budget, so ordinary reads are unaffected.
+    private CloseableIterator<FileScanTask> maybeApplyScanBudget(CloseableIterator<FileScanTask> delegate,
+                                                                 GetRemoteFilesParams params) {
+        if (params == null || !params.hasScanBudget()) {
+            return delegate;
+        }
+        return boundedFileScanTaskIterator(delegate, params.getScanBytesCap(), params.getScanFilesCap(),
+                params.getScanRowsCap());
+    }
+
+    // Package-private for unit testing. Wraps a delegate iterator so it stops early once any positive cap is
+    // reached (soft cap - the task that trips the cap is still returned; see design 2.2), closing the delegate
+    // promptly so upstream planning halts.
+    static CloseableIterator<FileScanTask> boundedFileScanTaskIterator(CloseableIterator<FileScanTask> delegate,
+                                                                       long bytesCap, long filesCap, long rowsCap) {
+        return new CloseableIterator<>() {
+            private long bytes = 0;
+            private long files = 0;
+            private long rows = 0;
+            private boolean stopped = false;
+            private boolean closed = false;
+
+            @Override
+            public boolean hasNext() {
+                return !stopped && delegate.hasNext();
+            }
+
+            @Override
+            public FileScanTask next() {
+                FileScanTask task = delegate.next();
+                // Soft cap: account for the task first, then decide - so the accumulated amount may overshoot
+                // by at most one task, but the scan is guaranteed to have an upper bound.
+                bytes += task.length();
+                files += 1;
+                rows += estimateTaskRows(task);
+                if ((bytesCap > 0 && bytes >= bytesCap)
+                        || (filesCap > 0 && files >= filesCap)
+                        || (rowsCap > 0 && rows >= rowsCap)) {
+                    stopped = true;
+                    // Close the underlying planner promptly so we stop listing manifests/files early - the
+                    // whole point of the budget. close() is idempotent, so the caller's later close() is safe.
+                    closeDelegate();
+                }
+                return task;
+            }
+
+            @Override
+            public void close() {
+                closeDelegate();
+            }
+
+            private void closeDelegate() {
+                if (closed) {
+                    return;
+                }
+                closed = true;
+                try {
+                    delegate.close();
+                } catch (Exception e) {
+                    LOG.warn("close budgeted file scan task iterator failed", e);
+                }
+            }
+        };
+    }
+
+    // Best-effort row estimate for one split. Precise when the task spans the whole file (task.length() ==
+    // fileSizeInBytes); otherwise pro-rated by byte fraction because recordCount() is per-file, not per-split.
+    // Only feeds the auxiliary rows_cap, so approximation is acceptable (design 2.2). Package-private for tests.
+    static long estimateTaskRows(FileScanTask task) {
+        DataFile file = task.file();
+        long recordCount = file.recordCount();
+        long fileSize = file.fileSizeInBytes();
+        if (recordCount <= 0 || fileSize <= 0) {
+            return recordCount > 0 ? recordCount : 0;
+        }
+        if (task.length() >= fileSize) {
+            return recordCount;
+        }
+        return (long) (recordCount * ((double) task.length() / fileSize));
     }
 
     @Override
@@ -1325,7 +1433,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = table.getCatalogTableName();
         PredicateSearchKey predicateSearchKey = PredicateSearchKey.of(dbName, tableName, params);
         RemoteFileInfoSource baseSource;
-        if (splitTasks.containsKey(predicateSearchKey)) {
+        // Bounded-cost statistics scan (design 2.4): never read a cached split list (it may be a full,
+        // non-budgeted list) - always build a fresh, budget-limited source below.
+        if (!params.hasScanBudget() && splitTasks.containsKey(predicateSearchKey)) {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
@@ -1344,6 +1454,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
         if (tableFullMORParams.isEmpty()) {
             return baseSource;
+        } else if (params.hasScanBudget()) {
+            // Bounded-cost statistics scan (design 2.4): do not populate the shared remoteFileInfoSources
+            // cache (its key ignores the scan caps). Build a throwaway MOR trigger over the budget-limited
+            // baseSource and return the queue for the requested MOR params, without caching.
+            IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
+            return new QueueIcebergRemoteFileInfoSource(trigger, trigger.getQueue(param.getMORParams()));
         } else {
             // build remote file info source for table with equality delete files.
             IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
@@ -1372,8 +1488,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        TvrVersionRange tvrVersionRange,
                                                        GetRemoteFilesParams params) {
         CloseableIterator<FileScanTask> iterator =
-                buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
-                        params.isEnableColumnStats(), params.getFieldNames());
+                maybeApplyScanBudget(
+                        buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
+                                params.isEnableColumnStats(), params.getFieldNames()),
+                        params);
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {

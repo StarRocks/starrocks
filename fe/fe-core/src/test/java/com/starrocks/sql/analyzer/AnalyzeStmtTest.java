@@ -241,6 +241,28 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testExternalScanCapProperties() {
+        // Accepted on external tables.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1073741824')");
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '2147483648', " +
+                "'scan_files_cap' = '500', 'scan_rows_cap' = '10000000')");
+        // -1 (unlimited) is a legal value.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_rows_cap' = '-1')");
+
+        // Rejected on internal (OLAP) tables instead of being silently ignored.
+        analyzeFail("analyze full table db.tbl properties('scan_bytes_cap' = '1073741824')",
+                "Property 'scan_bytes_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_files_cap' = '500')",
+                "Property 'scan_files_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_rows_cap' = '10000')",
+                "Property 'scan_rows_cap' is only supported for external tables");
+
+        // Non-numeric value is rejected on external tables too.
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = 'abc')",
+                "Property 'scan_bytes_cap' value must be numeric");
+    }
+
+    @Test
     public void testShow() throws MetaNotFoundException, AlreadyExistsException {
         String sql = "show analyze";
         analyzeSuccess(sql);

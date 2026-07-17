@@ -36,6 +36,7 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -136,10 +137,30 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 partitionNames.size(), columnNames.size());
         logIfRawKeyWouldExceedPkLimit(jobId);
 
+        // Bounded-cost scan budgets (design 2.4): resolve per-statement PROPERTIES over global Config, then
+        // stash on the session variable so every statistics scan this job triggers inherits them via the
+        // normal query path (read back in IcebergScanNode). Restored in the finally block. All three <= 0
+        // leaves early stop disabled, i.e. the pre-existing full-scan behavior.
+        SessionVariable sessionVariable = context.getSessionVariable();
+        long savedScanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
+        long savedScanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
+        long savedScanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
+        long scanBytesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+                Config.connector_table_analyze_scan_bytes_cap, jobId);
+        long scanFilesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+                Config.connector_table_analyze_scan_files_cap, jobId);
+        long scanRowsCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP,
+                Config.connector_table_analyze_scan_rows_cap, jobId);
+
         Map<String, String> extendedInfo = new LinkedHashMap<>();
         extendedInfo.put("table_format", table.getType().name().toLowerCase(Locale.ROOT));
         extendedInfo.put("partition_count", String.valueOf(partitionNames.size()));
         extendedInfo.put("column_count", String.valueOf(columnNames.size()));
+        // Surface the resolved scan budgets so operators can see, in SHOW ANALYZE STATUS, whether a run was
+        // bounded-cost and with what caps (the lightweight observability of design 2.7).
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP, String.valueOf(scanBytesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP, String.valueOf(scanFilesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP, String.valueOf(scanRowsCap));
         extendedInfo.putAll(table.getStatsCollectMetadata());
 
         // Merge into the existing properties map so it surfaces via the Properties column of
@@ -153,6 +174,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
                 jobId, catalogName, db.getOriginName(), table.getName(), extendedInfo);
+
+        sessionVariable.setExternalStatsScanBytesCap(scanBytesCap);
+        sessionVariable.setExternalStatsScanFilesCap(scanFilesCap);
+        sessionVariable.setExternalStatsScanRowsCap(scanRowsCap);
+        LOG.info("[ExternalStats] scan budget | jobId={} catalog={} db={} table={} bytesCap={} filesCap={} rowsCap={}",
+                jobId, catalogName, db.getOriginName(), table.getName(), scanBytesCap, scanFilesCap, scanRowsCap);
 
         String status = "SUCCESS";
         String failureReason = "";
@@ -191,12 +218,30 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             failureReason = e.getMessage();
             throw e;
         } finally {
+            sessionVariable.setExternalStatsScanBytesCap(savedScanBytesCap);
+            sessionVariable.setExternalStatsScanFilesCap(savedScanFilesCap);
+            sessionVariable.setExternalStatsScanRowsCap(savedScanRowsCap);
             LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
                             "durationMs={} partitions={} columns={} reason={}",
                     jobId, catalogName, db.getOriginName(), table.getName(),
                     status, System.currentTimeMillis() - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
         }
+    }
+
+    // Resolves a scan cap: an explicit ANALYZE ... PROPERTIES value wins over the global Config default;
+    // an absent or unparseable property falls back to the Config value. <= 0 means the dimension is unlimited.
+    private long resolveScanCap(String propertyKey, long configDefault, long jobId) {
+        if (properties != null && properties.containsKey(propertyKey)) {
+            String raw = properties.get(propertyKey);
+            try {
+                return Long.parseLong(raw.trim());
+            } catch (NumberFormatException e) {
+                LOG.warn("[ExternalStats] invalid scan cap property | jobId={} key={} value={} fallbackConfig={}",
+                        jobId, propertyKey, raw, configDefault);
+            }
+        }
+        return configDefault;
     }
 
     // table_uuid is always hashed for storage (StatisticUtils.hashTableUuidForPkStorage), so this
