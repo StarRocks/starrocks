@@ -275,6 +275,54 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
 }
 
+// Production full-vacuum path: an orphan .lcrm from a finalized txn (txn_id <
+// min_active_txn_id) is reclaimed, while an in-flight .lcrm (txn_id >=
+// min_active_txn_id) is protected by the same txn-id gate that guards output
+// segments. This exercises the real vacuum_orphaned_datafiles path (runs the
+// orphan scan with expired_seconds=0 + the txn-id filter), complementing the
+// mtime-window offline datafile_gc test above. .lcrm is never referenced by any
+// live metadata, so it relies entirely on that txn-id gate for safety.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
+    // txn 2 < min_active(10), unreferenced -> reclaimed.
+    const std::string orphan_lcrm = "0000000000000002_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    // txn 0xFFFF >= min_active(10) -> in-flight, protected.
+    const std::string inflight_lcrm = "000000000000FFFF_bff53950-a542-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+    create_data_file(inflight_lcrm);
+
+    // A retained metadata (version above max_check_version) that references neither
+    // .lcrm -- metadata never references .lcrm, so check_reference_files protects
+    // nothing here and the txn-id gate is the only guard.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66610,
+        "version": 6,
+        "rowsets": [],
+        "commit_time": 99
+        }
+        )DEL")));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66610);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    ASSERT_TRUE(file_exist(orphan_lcrm));
+    ASSERT_TRUE(file_exist(inflight_lcrm));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(orphan_lcrm));   // reclaimed (fix)
+    EXPECT_TRUE(file_exist(inflight_lcrm));  // protected (safety)
+}
+
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
 // there is at least one expired metadata. Previously, trying to read 0_1.meta
 // would cause NotFound and fail the whole vacuum. Now it should succeed.

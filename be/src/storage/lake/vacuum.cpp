@@ -1443,9 +1443,14 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                           // RowsMapperIterator, and superseded ones enter orphan_files. So an
                                           // .lcrm left behind by an aborted/failed/crashed compaction is
                                           // referenced by nothing durable and, before this filter included it,
-                                          // could never be reclaimed by any GC path. It is protected here by the
-                                          // same expire window as the segments the same compaction wrote, so an
-                                          // in-flight .lcrm is never a candidate.
+                                          // could never be reclaimed by any GC path. An in-flight .lcrm is
+                                          // protected here identically to the output segments the same
+                                          // compaction wrote: the production full-vacuum path keeps any file
+                                          // whose txn-id filename prefix is >= min_active_txn_id (see
+                                          // vacuum_orphaned_datafiles, which runs this scan with
+                                          // expired_seconds=0), and the offline datafile_gc tool keeps files
+                                          // within its mtime expire window. So exposing .lcrm here only ever
+                                          // reclaims a truly-orphaned mapper, never a live one.
                                           if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                               !is_delvec(entry.name) && !is_del(entry.name) &&
                                               !is_vector_index(entry.name) && !is_idx(entry.name) &&
