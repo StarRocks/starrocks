@@ -319,8 +319,8 @@ TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 
-    EXPECT_FALSE(file_exist(orphan_lcrm));   // reclaimed (fix)
-    EXPECT_TRUE(file_exist(inflight_lcrm));  // protected (safety)
+    EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
+    EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
