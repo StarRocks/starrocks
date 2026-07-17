@@ -151,6 +151,30 @@ public class SplitTabletJobTest {
     }
 
     @Test
+    public void testRunBumpsOptimisticVersion() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+
+        long beforeSplit = table.lastSchemaUpdateTime.get();
+
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
+        tabletReshardJob.init();
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+
+        // runRunningJob() -> addNewMaterializedIndexes() installs the split-child indexes and changes
+        // the partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
+        // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
+        // "Invalid tablet id ... The tablet may have been dropped". This runs on the RUNNING step.
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+
+        long afterSplit = table.lastSchemaUpdateTime.get();
+        Assertions.assertTrue(afterSplit > beforeSplit,
+                "split must bump lastSchemaUpdateTime (before=" + beforeSplit + ", after=" + afterSplit + ")");
+    }
+
+    @Test
     public void testFallbackToIdenticalTablet() throws Exception {
         installLakeServiceMock(this::addFallbackToIdenticalRanges);
 
