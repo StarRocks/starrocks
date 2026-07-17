@@ -448,6 +448,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _raw_input_bytes_counter = ADD_COUNTER(_unique_metrics, "RawInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
+    _compressed_input_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedInputBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
@@ -751,6 +752,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
                                          compression_time_ns);
         }
 
+        COUNTER_UPDATE(_compressed_input_bytes_counter, serialized_size * num_receivers);
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
         VLOG_ROW << "chunk compression: uncompressed size: " << serialized_size
