@@ -95,6 +95,22 @@ public class RegisterLateInstanceTest extends SchedulerTestBase {
         }
     }
 
+    @Test
+    public void testRejectLateInstanceOnRuntimeFilterBuilder() throws Exception {
+        // A hash join builds a global runtime filter; its build fragment sizes the RF merge layout at
+        // plan time and cannot safely grow the builder set mid-query.
+        DefaultCoordinator coordinator =
+                startScheduling("select count(*) from lineitem join orders on l_orderkey = o_orderkey");
+        ExecutionDAG dag = coordinator.getExecutionDAG();
+        ExecutionFragment rfBuilder = dag.getFragmentsInPostorder().stream()
+                .filter(fragment -> !fragment.getPlanFragment().getBuildRuntimeFilters().isEmpty())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("expected a runtime-filter build fragment"));
+
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> dag.registerLateInstance(rfBuilder, backend2));
+    }
+
     private static int countInstancesOfWorker(ExecutionDAG dag, long workerId) {
         return (int) dag.getInstances().stream().filter(instance -> instance.getWorkerId() == workerId).count();
     }

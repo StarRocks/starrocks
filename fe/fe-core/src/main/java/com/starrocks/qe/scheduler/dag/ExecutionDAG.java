@@ -724,6 +724,15 @@ public class ExecutionDAG {
      */
     public FragmentInstance registerLateInstance(ExecutionFragment fragment, ComputeNode worker,
                                                  int reservedIndexInJob) {
+        // A fragment that builds a global runtime filter sizes its merge layout (numInstances,
+        // bucketSeqToInstance) once at first deploy via ExecutionFragment#setLayoutInfosForRuntimeFilters.
+        // Growing the builder set afterwards would leave the RF merger expecting the plan-time count and
+        // the new builder hashing against a stale layout; recomputing only the late instance's view does
+        // not fix the already-deployed builders or the merger. Refuse to grow such fragments — this keeps
+        // the primitive safe for any caller (elastic scheduling already gates them out at eligibility, and
+        // probe-only runtime-filter fragments carry no build filters and are unaffected).
+        Preconditions.checkState(fragment.getPlanFragment().getBuildRuntimeFilters().isEmpty(),
+                "cannot register a late instance on a fragment that builds runtime filters");
         FragmentInstance instance = new FragmentInstance(worker, fragment);
         setInstanceId(instance);
         instance.setIndexInJob(reservedIndexInJob);
