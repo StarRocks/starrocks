@@ -689,7 +689,7 @@ public class SplitTabletJobColocateTest {
 
         // No exception expected — the default ColocateRange covers every colocate prefix.
         TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTabletId, newTabletRanges);
+                db, table, Map.of(oldTabletId, newTabletRanges));
         Assertions.assertNotNull(job);
     }
 
@@ -727,7 +727,7 @@ public class SplitTabletJobColocateTest {
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> SplitTabletJobFactory.forExternalBoundaries(
-                        db, table, oldTabletId, newTabletRanges));
+                        db, table, Map.of(oldTabletId, newTabletRanges)));
         Assertions.assertTrue(thrown.getMessage().contains("no covering ColocateRange"),
                 "expected 'no covering ColocateRange' in message, got: " + thrown.getMessage());
     }

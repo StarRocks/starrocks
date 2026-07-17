@@ -50,13 +50,12 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Unit tests for {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet}.
+ * Unit tests for {@link SplitTabletJobFactory#forExternalBoundaries}.
  *
  * <p>Substrate-only coverage: confirms the factory produces a metadata-only
  * {@link SplitTabletJob} (PENDING state, no shard allocation) whose
  * {@code splittingTablets} list spans every entry of the input
- * {@code Map<Long, List<TabletRange>>} and mirrors the existing single-tablet
- * factory's per-entry validation.
+ * {@code Map<Long, List<TabletRange>>}, with per-entry shape validation.
  */
 public class SplitTabletJobFactoryMultiTabletTest {
     private static ConnectContext connectContext;
@@ -84,17 +83,15 @@ public class SplitTabletJobFactoryMultiTabletTest {
         // The default range-distribution test table is born with one tablet
         // covering Range.all(). The multi-tablet tests below need at least 3
         // tablets in a single index so they can produce a map with 3 entries.
-        // Reuse the existing single-tablet factory to grow the index to >= 3
-        // tablets by splitting Range.all() into 3 contiguous external-boundaries
-        // ranges; that gives us a stable 3-tablet base for every test method.
+        // Grow the index to >= 3 tablets by inserting synthetic siblings; that
+        // gives us a stable 3-tablet base for every test method.
         ensureMultipleTablets();
     }
 
     /**
      * Bootstrap the shared static table to have at least 3 tablets in its
-     * latest base index by invoking the existing single-tablet
-     * {@code forExternalBoundaries} factory followed by a job run that drives
-     * the index to its final tablet set. Idempotent: skips when the index
+     * latest base index by inserting synthetic {@code LakeTablet} siblings
+     * directly. Idempotent: skips when the index
      * already has >= 3 tablets (e.g. the table was created with >1 buckets).
      */
     private static void ensureMultipleTablets() throws Exception {
@@ -116,7 +113,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
             Tablet tablet = new com.starrocks.lake.LakeTablet(tabletId, range);
             // updateInvertedIndex=true: the factory looks up each old tablet via
             // TabletInvertedIndex.getTabletMeta — synthetic siblings have to be
-            // registered there too, otherwise forExternalBoundariesMultiTablet
+            // registered there too, otherwise forExternalBoundaries
             // throws "Cannot find tablet ... in inverted index".
             index.addTablet(tablet, new com.starrocks.catalog.TabletMeta(
                     db.getId(), table.getId(), physicalPartition.getId(), index.getId(),
@@ -150,7 +147,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
             input.put(oldTabletId, twoRanges());
         }
 
-        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input);
+        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(db, table, input);
 
         Assertions.assertNotNull(job);
         Assertions.assertTrue(job instanceof SplitTabletJob, "factory must return SplitTabletJob");
@@ -184,7 +181,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
                 List.of(tabletRangeUpperOnly(50), tabletRange(50, 60), tabletRange(60, 70),
                         tabletRangeLowerOnly(70)));
 
-        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input);
+        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(db, table, input);
 
         // For each input entry, the produced SplittingTablet's
         // newTabletRanges must match the supplied list element-for-element.
@@ -217,7 +214,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
 
         // One bad entry must fail the whole factory call — no partial job is built.
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
     }
 
     @Test
@@ -247,46 +244,16 @@ public class SplitTabletJobFactoryMultiTabletTest {
             }
         };
 
-        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input);
+        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(db, table, input);
 
         // Two orthogonal checks: (1) StarOSAgent.createShardsForSplit was NOT
         // invoked during the factory call, and (2) the returned job is PENDING
         // (which is what allows the scheduler — not the factory — to allocate
         // shards later via SplitTabletJob.createShardsOnStarOS).
         Assertions.assertFalse(createShardsCalled.get(),
-                "factory must not invoke StarOSAgent.createShardsForSplit (parity with forExternalBoundaries)");
+                "factory must not invoke StarOSAgent.createShardsForSplit");
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, job.getJobState(),
-                "multi-tablet factory must return a PENDING job (no shard allocation yet)");
-    }
-
-    @Test
-    public void parityWithSingleTabletFactory() throws Exception {
-        List<Long> oldTabletIds = getOldTabletIds(1);
-        long oldTabletId = oldTabletIds.get(0);
-        List<TabletRange> ranges = twoRanges();
-
-        // Single-entry map through the multi-tablet factory must produce
-        // a job structurally equivalent to the single-tablet factory.
-        Map<Long, List<TabletRange>> input = new LinkedHashMap<>();
-        input.put(oldTabletId, ranges);
-        TabletReshardJob multiJob =
-                SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input);
-        TabletReshardJob singleJob =
-                SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, ranges);
-
-        Assertions.assertEquals(singleJob.getClass(), multiJob.getClass(),
-                "multi-tablet and single-tablet factories must produce the same job class");
-
-        SplittingTablet multiSt = findSplittingTablet((SplitTabletJob) multiJob, oldTabletId);
-        SplittingTablet singleSt = findSplittingTablet((SplitTabletJob) singleJob, oldTabletId);
-
-        Assertions.assertEquals(singleSt.getNewTabletRanges().size(), multiSt.getNewTabletRanges().size(),
-                "newTabletRanges size must match the single-tablet factory output");
-        for (int i = 0; i < singleSt.getNewTabletRanges().size(); i++) {
-            Assertions.assertEquals(singleSt.getNewTabletRanges().get(i).getRange(),
-                    multiSt.getNewTabletRanges().get(i).getRange(),
-                    "newTabletRanges[" + i + "] must match the single-tablet factory");
-        }
+                "factory must return a PENDING job (no shard allocation yet)");
     }
 
     @Test
@@ -296,7 +263,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
         // so the operator gets the error synchronously instead of a silently
         // empty job that would later fail on submission.
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, empty));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, empty));
     }
 
     /**
@@ -353,7 +320,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
         input.put(oldTabletIdB, twoRanges());
 
         TabletReshardJob job =
-                SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, partitionedTable, input);
+                SplitTabletJobFactory.forExternalBoundaries(db, partitionedTable, input);
         SplitTabletJob splitJob = (SplitTabletJob) job;
 
         // Each ReshardingPhysicalPartition must enumerate exactly its own
@@ -394,9 +361,67 @@ public class SplitTabletJobFactoryMultiTabletTest {
         input.put(unknownTabletId, twoRanges());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
         Assertions.assertTrue(thrown.getMessage().contains("Cannot find tablet"),
                 "unknown tablet id must report 'Cannot find tablet': " + thrown.getMessage());
+    }
+
+    @Test
+    public void rejectsTabletMetaWithMissingPhysicalPartition() {
+        // Inverted-index meta names this table but a physical partition id it does not
+        // contain -> resolveTabletMeta must surface "Cannot find physical partition".
+        long realIndexId = table.getAllPhysicalPartitions().iterator().next().getLatestBaseIndex().getId();
+        long tabletId = GlobalStateMgr.getCurrentState().getNextId();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId,
+                new com.starrocks.catalog.TabletMeta(db.getId(), table.getId(),
+                        /*physicalPartitionId=*/ Long.MAX_VALUE, realIndexId,
+                        com.starrocks.thrift.TStorageMedium.HDD, true));
+        Map<Long, List<TabletRange>> input = new LinkedHashMap<>();
+        input.put(tabletId, twoRanges());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
+        Assertions.assertTrue(thrown.getMessage().contains("Cannot find physical partition"),
+                "must report 'Cannot find physical partition': " + thrown.getMessage());
+    }
+
+    @Test
+    public void rejectsTabletMetaWithMissingIndex() {
+        // Meta resolves to a real physical partition but names an index id the partition
+        // does not contain -> "Cannot find materialized index".
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        long tabletId = GlobalStateMgr.getCurrentState().getNextId();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId,
+                new com.starrocks.catalog.TabletMeta(db.getId(), table.getId(),
+                        physicalPartition.getId(), /*indexId=*/ Long.MAX_VALUE,
+                        com.starrocks.thrift.TStorageMedium.HDD, true));
+        Map<Long, List<TabletRange>> input = new LinkedHashMap<>();
+        input.put(tabletId, twoRanges());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
+        Assertions.assertTrue(thrown.getMessage().contains("Cannot find materialized index"),
+                "must report 'Cannot find materialized index': " + thrown.getMessage());
+    }
+
+    @Test
+    public void rejectsTabletMetaAbsentFromItsIndex() {
+        // Meta resolves to a real, NORMAL index, but the tablet id is not one of that
+        // index's tablets -> "Cannot find tablet ... in materialized index".
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+        long tabletId = GlobalStateMgr.getCurrentState().getNextId();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId,
+                new com.starrocks.catalog.TabletMeta(db.getId(), table.getId(),
+                        physicalPartition.getId(), baseIndex.getId(),
+                        com.starrocks.thrift.TStorageMedium.HDD, true));
+        Map<Long, List<TabletRange>> input = new LinkedHashMap<>();
+        input.put(tabletId, twoRanges());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
+        Assertions.assertTrue(thrown.getMessage().contains("in materialized index"),
+                "must report tablet missing from its materialized index: " + thrown.getMessage());
     }
 
     @Test
@@ -414,7 +439,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         try {
             StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                    () -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, table, input));
+                    () -> SplitTabletJobFactory.forExternalBoundaries(db, table, input));
             Assertions.assertTrue(thrown.getMessage().contains("Unexpected table state"),
                     "non-NORMAL table must report 'Unexpected table state': " + thrown.getMessage());
         } finally {
@@ -438,7 +463,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
         input.put(GlobalStateMgr.getCurrentState().getNextId(), twoRanges());
 
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(db, hashTable, input));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, hashTable, input));
         Assertions.assertTrue(thrown.getMessage().contains("Unsupported distribution type"),
                 "hash-distributed table must report 'Unsupported distribution type': " + thrown.getMessage());
     }
