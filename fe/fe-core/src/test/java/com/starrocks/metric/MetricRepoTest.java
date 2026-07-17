@@ -80,7 +80,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testLicenseExpireDaysMetric() {
         List<Metric> metrics = MetricRepo.getMetricsByName("license_expire_days");
         Assertions.assertEquals(1, metrics.size());
@@ -96,7 +95,9 @@ public class MetricRepoTest extends PlanTestBase {
         MetricVisitor coreVisitor = new SimpleCoreMetricVisitor("starrocks_fe");
         coreVisitor.visit(metric);
         Assertions.assertTrue(coreVisitor.build().contains("starrocks_fe_license_expire_days"));
-=======
+    }
+
+    @Test
     public void testAlterColumnMetricsExposure() {
         // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
         // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
@@ -112,7 +113,6 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("alter_operation_total{"), output);
         Assertions.assertTrue(output.contains("alter_duration_ms"), output);
         Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
->>>>>>> 9363e4d23a3... [Enhancement] Add FE metrics for ALTER TABLE column operations and duration (backport #76247) (#76337)
     }
 
     @Test
