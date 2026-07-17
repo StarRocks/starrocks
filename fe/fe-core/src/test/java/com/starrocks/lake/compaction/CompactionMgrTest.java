@@ -223,7 +223,7 @@ public class CompactionMgrTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 PhysicalPartition partition = new PhysicalPartition(123, 123,  new MaterializedIndex());
-                CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
+                CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "", null);
                 r.put(partitionIdentifier, job);
                 return r;
             }
