@@ -109,6 +109,16 @@ public class DeletePlanner {
                 }
             }
 
+            // Row-level DELETE writes position-delete files, which only format version 2 supports:
+            // v1 has no row-level deletes and v3 forbids adding position-delete files. The metadata
+            // (whole-file) delete above works on any format version, so it must stay reachable.
+            if (icebergTable.getFormatVersion() != 2) {
+                throw new SemanticException(
+                        "Row-level DELETE is only supported for Iceberg V2 tables, but table format version is "
+                                + icebergTable.getFormatVersion()
+                                + ". Only DELETE predicates that match entire files/partitions are supported on this table");
+            }
+
             // For Iceberg, create shuffled property based on partitioning
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
             requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
