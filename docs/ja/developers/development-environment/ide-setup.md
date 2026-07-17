@@ -69,7 +69,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 サーバーのセットアップ
+### Ubuntu サーバーのセットアップ
 
 #### StarRocks コードのクローン
 

@@ -77,7 +77,10 @@ fi
 
 if [ -f /etc/lsb-release ]; then
     source /etc/lsb-release
-    if [[ $DISTRIB_ID = "Ubuntu" && $DISTRIB_RELEASE =~ 22.* && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
+    # Ubuntu 22.04 and 24.04 share the same prebuilt thirdparty artifacts (vars-ubuntu22-*).
+    # The ubuntu22 artifacts (glibc 2.35) run on both 22.04 and 24.04 (glibc 2.39) by forward
+    # compatibility, so there is no separate vars-ubuntu24-* set.
+    if [[ $DISTRIB_ID = "Ubuntu" && ( $DISTRIB_RELEASE =~ ^22\. || $DISTRIB_RELEASE =~ ^24\. ) && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
         . ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh
     fi
 fi
