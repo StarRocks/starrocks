@@ -83,6 +83,10 @@ bool CompactionTaskCallback::allow_partial_success() const {
     }
 }
 
+bool CompactionTaskCallback::skip_write_txnlog() const {
+    return _request->has_skip_write_txnlog() && _request->skip_write_txnlog();
+}
+
 Status CompactionTaskCallback::has_error() const {
     std::lock_guard l(_mtx);
     if (_status.ok()) {
