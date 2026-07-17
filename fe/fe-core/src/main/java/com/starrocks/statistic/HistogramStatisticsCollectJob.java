@@ -48,6 +48,27 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "   WHERE $randFilter and $columnName is not null $MCVExclude" +
                     "   ORDER BY $columnName LIMIT $totalRows) t";
 
+<<<<<<< HEAD
+=======
+    private static final String COLLECT_HISTOGRAM_WITH_HLL_NDV_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName'," +
+                    " histogram_hll_ndv($columnName, '$buckets')," +
+                    " $mcv," +
+                    " NOW()" +
+                    " FROM `$dbName`.`$tableName`;";
+
+    private static final String COLLECT_BUCKETS_WITHOUT_NDV_STATISTIC_TEMPLATE =
+            "SELECT cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT) as version," +
+                    " cast($dbId  as BIGINT), cast($tableId as BIGINT), '$columnNameStr'," +
+                    " $histogramFunction" +
+                    " FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
+                    " and $columnName is not null $MCVExclude" +
+                    " ORDER BY $columnName LIMIT $totalRows) t";
+
+    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName', NULL, $mcv, NOW()";
+
+>>>>>>> a7c8da0dae ([Enhancement] Skip histogram computation and only compute MCVs for char-family columns (#75968))
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
                     "cast(column_key as varchar), cast(column_value as varchar) from (" +
@@ -98,7 +119,23 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 }
             }
 
+<<<<<<< HEAD
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+=======
+            if (shouldSkipHistogramBuckets(columnType)) {
+                sql = buildCollectMcvOnly(db, table, mostCommonValues, columnName);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                        columnType, false);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.SAMPLE) {
+                sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                        columnType, true);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.HLL) {
+                sql = buildCollectBucketsWithoutNdv(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                List<TStatisticData> buckets = statisticExecutor.executeStatisticDQL(context, sql);
+                sql = buildCollectHistogramWithHllNdv(db, table, mostCommonValues, buckets.get(0).histogram, columnName);
+            }
+>>>>>>> a7c8da0dae ([Enhancement] Skip histogram computation and only compute MCVs for char-family columns (#75968))
             collectStatisticSync(sql, context, analyzeStatus);
 
             finishedSQLNum++;
@@ -159,6 +196,35 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
+<<<<<<< HEAD
+=======
+
+        return build(context, HISTOGRAM_FUNCTION_WITHOUT_NDV_TEMPLATE);
+    }
+
+    private String buildHistogramFunction(Database database, Table table, double sampleRatio, Long bucketNum,
+                                          String columnName, boolean withSampleNdv) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        if (withSampleNdv) {
+            context.put("ndvEstimator", Config.statistics_sample_ndv_estimator);
+            return build(context, HISTOGRAM_FUNCTION_WITH_NDV_TEMPLATE);
+        } else {
+            return build(context, HISTOGRAM_FUNCTION_WITHOUT_NDV_TEMPLATE);
+        }
+    }
+
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
+                                         Map<String, String> mostCommonValues, String columnName, Type columnType,
+                                         boolean withSampleNdv) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+
+        context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
+                withSampleNdv));
+>>>>>>> a7c8da0dae ([Enhancement] Skip histogram computation and only compute MCVs for char-family columns (#75968))
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
@@ -172,6 +238,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             context.put("sampleClause", "");
         }
 
+<<<<<<< HEAD
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
             mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
@@ -196,6 +263,23 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         } else {
             context.put("MCVExclude", "");
         }
+=======
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
+    }
+
+    private String buildCollectMcvOnly(Database database, Table table, Map<String, String> mostCommonValues,
+                                       String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
+    }
+
+    private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,
+                                                String buckets, String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        context.put("buckets", buckets);
+>>>>>>> a7c8da0dae ([Enhancement] Skip histogram computation and only compute MCVs for char-family columns (#75968))
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
         return builder.toString();
