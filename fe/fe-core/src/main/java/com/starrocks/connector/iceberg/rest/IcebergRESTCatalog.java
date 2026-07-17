@@ -15,11 +15,13 @@
 package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -38,8 +40,10 @@ import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
@@ -51,6 +55,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -66,12 +72,20 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String KEY_VENDED_CREDENTIALS_ENABLED = "vended-credentials-enabled";
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
 
+    private static final long AUTH_RECOVERY_MIN_INTERVAL_MS = 60_000L;
+
+    private String catalogName = null;
     private final Configuration conf;
-    private final RESTCatalog delegate;
+    // swapped under synchronized on auth recovery; read lock-free everywhere else
+    private final AtomicReference<RESTCatalog> delegate = new AtomicReference<>();
+    private Map<String, String> restCatalogProperties;
     private final boolean nestedNamespaceEnabled;
+    private final boolean authRecoveryEnabled;
+    private long lastAuthRecoveryMillis;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
+        this.catalogName = name;
         this.conf = conf;
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
 
@@ -98,9 +112,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(copiedProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
         copiedProperties.putAll(securityProperties.get());
+        this.restCatalogProperties = copiedProperties;
+
+        // only an OAuth2 client credential lets us mint a new token; a bare bearer token cannot be renewed by the FE
+        authRecoveryEnabled = copiedProperties.containsKey(OAuth2Properties.CREDENTIAL);
 
         try {
-            delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
+            delegate.set((RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf));
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
             throw new StarRocksConnectorException("Failed to load rest catalog",
@@ -111,9 +129,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     // for ut
     public IcebergRESTCatalog(RESTCatalog restCatalog, Configuration conf) {
-        this.delegate = restCatalog;
+        this.delegate.set(restCatalog);
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
+        this.restCatalogProperties = Maps.newHashMap();
+        this.authRecoveryEnabled = false;
     }
 
     @Override
@@ -124,7 +144,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         try {
-            return delegate.loadTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+            return withAuthRecovery(() ->
+                    delegate.get().loadTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName)));
         } catch (RESTException re) {
             LOG.error("Failed to load table using REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
             throw new StarRocksConnectorException("Failed to load table using REST Catalog",
@@ -135,7 +156,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
         try {
-            return delegate.tableExists(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
+            return withAuthRecovery(() ->
+                    delegate.get().tableExists(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName)));
         } catch (RESTException re) {
             LOG.error("Failed to check tableExists REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
             throw new StarRocksConnectorException("Failed to check tableExists using REST Catalog",
@@ -147,10 +169,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public List<String> listAllDatabases() {
         try {
             if (nestedNamespaceEnabled) {
-                return listNamespaces(Namespace.empty());
+                return withAuthRecovery(() -> listNamespaces(Namespace.empty()));
             } else {
-                return delegate.listNamespaces().stream().map(ns -> ns.level(0))
-                            .collect(Collectors.toList());
+                return withAuthRecovery(() -> delegate.get().listNamespaces().stream().map(ns -> ns.level(0))
+                            .collect(Collectors.toList()));
             }
         } catch (RESTException re) {
             LOG.error("Failed to list databases using REST Catalog ", re);
@@ -160,15 +182,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private List<String> listNamespaces(Namespace parent) {
-        return delegate.listNamespaces(parent).stream().
+        return delegate.get().listNamespaces(parent).stream().
                 flatMap(child -> Stream.concat(Stream.of(child.toString()), listNamespaces(child).stream()))
                 .collect(toImmutableList());
     }
 
     @Override
     public void createDB(String dbName, Map<String, String> properties) {
-        properties = properties == null ? new HashMap<>() : properties;
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
+        Map<String, String> dbProperties = properties == null ? new HashMap<>() : properties;
+        for (Map.Entry<String, String> entry : dbProperties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
@@ -185,7 +207,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         }
         try {
-            delegate.createNamespace(convertDbNameToNamespace(dbName), properties);
+            runWithAuthRecovery(() -> delegate.get().createNamespace(convertDbNameToNamespace(dbName), dbProperties));
         } catch (RESTException re) {
             LOG.error("Failed to list create namespace using REST Catalog, for dbName {}", dbName, re);
             throw new StarRocksConnectorException("Failed to create namespace using REST Catalog",
@@ -212,7 +234,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             throw new MetaNotFoundException("Database location is empty");
         }
         try {
-            delegate.dropNamespace(convertDbNameToNamespace(dbName));
+            runWithAuthRecovery(() -> delegate.get().dropNamespace(convertDbNameToNamespace(dbName)));
         } catch (RESTException re) {
             LOG.error("Failed to drop database using REST Catalog, for dbName {}", dbName, re);
             throw new StarRocksConnectorException("Failed to drop database using REST Catalog",
@@ -223,7 +245,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Database getDB(String dbName) {
         try {
-            Map<String, String> dbMeta = delegate.loadNamespaceMetadata(convertDbNameToNamespace(dbName));
+            Map<String, String> dbMeta = withAuthRecovery(() ->
+                    delegate.get().loadNamespaceMetadata(convertDbNameToNamespace(dbName)));
             return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
         } catch (RESTException re) {
             LOG.error("Failed to get database using REST Catalog, for dbName {}", dbName, re);
@@ -237,7 +260,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         Namespace ns = convertDbNameToNamespace(dbName);
         List<TableIdentifier> tableIdentifiers = null;
         try {
-            tableIdentifiers = delegate.listTables(ns);
+            tableIdentifiers = withAuthRecovery(() -> delegate.get().listTables(ns));
         } catch (RESTException re) {
             LOG.error("Failed to list tables using REST Catalog, for dbName {}", dbName, re);
             // creating a new RuntimeException with the custom message, as in the upstream code, it picks the `exception.getCause().getMessage()`
@@ -248,7 +271,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
         try {
-            viewIdentifiers = delegate.listViews(ns);
+            viewIdentifiers = withAuthRecovery(() -> delegate.get().listViews(ns));
         } catch (BadRequestException e) {
             LOG.warn("Failed to list views from {} namespace. Perhaps the server side does not implement the interface. " +
                     "Ask the user to check it", ns, e);
@@ -277,11 +300,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         Table nativeTable = null;
         try {
-            nativeTable = delegate.buildTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
-                    .withLocation(location)
-                    .withPartitionSpec(partitionSpec)
-                    .withProperties(properties)
-                    .create();
+            nativeTable = withAuthRecovery(() ->
+                    delegate.get().buildTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), schema)
+                            .withLocation(location)
+                            .withPartitionSpec(partitionSpec)
+                            .withProperties(properties)
+                            .create());
         } catch (RESTException re) {
             LOG.error("Failed to create table using REST Catalog, for dbName {} schema {} tableName {}",
                     dbName, schema, tableName, re);
@@ -295,7 +319,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         try {
-            return delegate.dropTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), purge);
+            return withAuthRecovery(() ->
+                    delegate.get().dropTable(TableIdentifier.of(convertDbNameToNamespace(dbName), tableName), purge));
         } catch (RESTException re) {
             LOG.error("Failed to drop table using REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
             throw new StarRocksConnectorException("Failed to drop table using REST Catalog",
@@ -308,7 +333,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         Namespace ns = convertDbNameToNamespace(dbName);
 
         try {
-            delegate.renameTable(TableIdentifier.of(ns, tblName), TableIdentifier.of(ns, newTblName));
+            runWithAuthRecovery(() ->
+                    delegate.get().renameTable(TableIdentifier.of(ns, tblName), TableIdentifier.of(ns, newTblName)));
         } catch (RESTException re) {
             LOG.error("Failed to rename table using REST Catalog, for dbName {} tableName {} newTblName {}",
                     dbName, tblName, newTblName, re);
@@ -319,13 +345,26 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public ViewBuilder getViewBuilder(TableIdentifier identifier) {
-        return delegate.buildView(identifier);
+        return delegate.get().buildView(identifier);
+    }
+
+    // the view DDL default methods run the terminal ViewBuilder.create()/createOrReplace() outside this class,
+    // so route the whole flow through withAuthRecovery; the retry re-runs getViewBuilder on the rebuilt delegate
+    @Override
+    public boolean createView(String catalogName, ConnectorViewDefinition definition, boolean replace) {
+        return withAuthRecovery(() -> IcebergCatalog.super.createView(catalogName, definition, replace));
+    }
+
+    @Override
+    public boolean alterView(View currentView, ConnectorViewDefinition definition) {
+        return withAuthRecovery(() -> IcebergCatalog.super.alterView(currentView, definition));
     }
 
     @Override
     public boolean dropView(String dbName, String viewName) {
         try {
-            return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+            return withAuthRecovery(() ->
+                    delegate.get().dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName)));
         } catch (RESTException re) {
             LOG.error("Failed to drop view using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
             throw new StarRocksConnectorException("Failed to drop view using REST Catalog",
@@ -336,7 +375,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public View getView(String dbName, String viewName) {
         try {
-            return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
+            return withAuthRecovery(() ->
+                    delegate.get().loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName)));
         } catch (RESTException re) {
             LOG.error("Failed to rename table using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
             throw new StarRocksConnectorException("Failed to rename table using REST Catalog",
@@ -363,13 +403,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     public String toString() {
-        return delegate.toString();
+        return delegate.get().toString();
     }
 
     @Override
     public Map<String, String> loadNamespaceMetadata(Namespace ns) {
         try {
-            return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
+            return ImmutableMap.copyOf(withAuthRecovery(() -> delegate.get().loadNamespaceMetadata(ns)));
         } catch (RESTException re) {
             LOG.error("Failed to load table metadata using REST Catalog, for namespace {}", ns, re);
             throw new StarRocksConnectorException("Failed to load table metadata using REST Catalog/defaultTableLocation",
@@ -383,5 +423,54 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public String defaultTableLocation(Namespace ns, String tableName) {
         // iceberg rest catalog doesn't require location property, and could choose the default location.
         return null;
+    }
+
+    private <T> T withAuthRecovery(Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException e) {
+            if (!causedByNotAuthorized(e) || !tryRecoverAuthSession(e)) {
+                throw e;
+            }
+            return action.get();
+        }
+    }
+
+    private void runWithAuthRecovery(Runnable action) {
+        withAuthRecovery(() -> {
+            action.run();
+            return null;
+        });
+    }
+
+    // the view DDL default methods wrap the 401 in StarRocksConnectorException, so walk the cause chain
+    private static boolean causedByNotAuthorized(RuntimeException failure) {
+        return Throwables.getCausalChain(failure).stream().anyMatch(NotAuthorizedException.class::isInstance);
+    }
+
+    private synchronized boolean tryRecoverAuthSession(RuntimeException cause) {
+        if (!authRecoveryEnabled) {
+            return false;
+        }
+        if (System.currentTimeMillis() - lastAuthRecoveryMillis < AUTH_RECOVERY_MIN_INTERVAL_MS) {
+            // a rebuild ran or failed within the cooldown; retry on the current delegate rather than rebuild again
+            return true;
+        }
+        LOG.warn("REST catalog {} rejected the current OAuth2 token; rebuilding the catalog client to re-authenticate",
+                catalogName, cause);
+        try {
+            RESTCatalog rebuilt = (RESTCatalog) CatalogUtil.loadCatalog(
+                    RESTCatalog.class.getName(), catalogName, restCatalogProperties, conf);
+            // don't close the old delegate: tables it produced may still be cached upstream
+            // (CachingIcebergCatalog holds them up to its table-cache TTL) and use its FileIO; leave it for GC
+            delegate.set(rebuilt);
+            return true;
+        } catch (Exception rebuildError) {
+            LOG.warn("Failed to rebuild REST catalog {} to re-authenticate", catalogName, rebuildError);
+            return false;
+        } finally {
+            // start the cooldown from completion so a slow rebuild doesn't immediately admit another
+            lastAuthRecoveryMillis = System.currentTimeMillis();
+        }
     }
 }
