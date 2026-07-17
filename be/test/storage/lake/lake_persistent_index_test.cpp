@@ -21,7 +21,7 @@
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
-#include "common/config_primary_key_fwd.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"

@@ -38,6 +38,8 @@ struct TabletFileCollections {
     FileSet new_dcg_files;
     FileSet pre_delvec_files;
     FileSet new_delvec_files;
+    FileSet pre_del_files;
+    FileSet new_del_files;
 
     TabletFileCollections() = default;
 
@@ -49,13 +51,19 @@ RowsetIndex build_rowset_index(const TabletMetadataPtr& metadata);
 FileSet collect_sstable_files(const TabletMetadataPtr& metadata);
 FileSet collect_dcg_files(const TabletMetadataPtr& metadata);
 FileSet collect_delvec_files(const TabletMetadataPtr& metadata);
+FileSet collect_del_files(const TabletMetadataPtr& metadata);
+// All current live data filenames from |collections.new_*| (segments + del + sstable + dcg + delvec).
+// Used to build the partition-wide live set that guards deletion: a data file is deleted from external
+// only when no current tablet in the partition references it. Derives from the already-built
+// collections to avoid re-walking the metadata.
+FileSet collect_live_data_files(const TabletFileCollections& collections);
 void collect_schema_ids(const TabletMetadataPtr& metadata, phmap::flat_hash_set<int64_t>& schema_ids);
 void collect_unused_files(const TabletFileCollections& collections, FileSet& unused_data_files,
                           FileSet& pre_bundle_data_files);
 
 TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFileCollections& collections,
                                                FileSet& pre_bundle_data_files,
-                                               phmap::flat_hash_set<std::string>& globally_bound_segments,
+                                               phmap::flat_hash_set<std::string>& globally_bound_files,
                                                UploadSnapshotFilesRequestPB& node_req);
 
 void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t tablet_id, int64_t pre_version,
@@ -67,6 +75,7 @@ void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t t
 
 void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle_data_files, FileSet& unused_data_files,
                                   const FileSet& unused_meta_files, const phmap::flat_hash_set<int64_t>& pre_schema_ids,
-                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files);
+                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files,
+                                  const FileSet& partition_live_files);
 
 } // namespace starrocks::lake

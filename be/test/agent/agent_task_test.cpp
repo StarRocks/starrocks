@@ -283,8 +283,7 @@ TEST_F(AgentTaskTest, get_lake_replicate_file_thread_pool_returns_distinct_pool)
 TEST_F(AgentTaskTest, get_thread_pool_returns_null_for_unsupported_types) {
     auto* agent_server = ExecEnv::GetInstance()->agent_server();
 
-    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::EXTERNAL_CLUSTER_SNAPSHOT,
-                                     TTaskType::NUM_TASK_TYPE, -1};
+    const int unsupported_types[] = {TTaskType::PUSH, TTaskType::REALTIME_PUSH, TTaskType::NUM_TASK_TYPE, -1};
     for (int type : unsupported_types) {
         EXPECT_EQ(nullptr, agent_server->get_thread_pool(type)) << type;
     }

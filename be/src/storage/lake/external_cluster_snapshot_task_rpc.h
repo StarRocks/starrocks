@@ -78,8 +78,8 @@ Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id,
                                    FileSet& pre_bundle_data_files, FileSet& unused_data_files,
                                    FileSet& unused_meta_files, phmap::flat_hash_set<int64_t>& pre_schema_ids,
                                    phmap::flat_hash_set<int64_t>& new_schema_ids,
-                                   phmap::flat_hash_set<std::string>& globally_bound_segments,
-                                   UploadSnapshotFilesRequestPB& node_req);
+                                   phmap::flat_hash_set<std::string>& globally_bound_files,
+                                   FileSet& partition_live_files, UploadSnapshotFilesRequestPB& node_req);
 
 } // namespace lake
 } // namespace starrocks

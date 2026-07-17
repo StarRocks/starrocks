@@ -20,6 +20,7 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/external_cluster_snapshot_task_helper.h"
+#include "storage/lake/external_cluster_snapshot_task_rpc.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_metadata.h"
 #include "test_util.h"
@@ -978,9 +979,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_prepare_unused_files_for_log_with_p
     phmap::flat_hash_set<int64_t> pre_schema_ids = {100, 200};
     phmap::flat_hash_set<int64_t> new_schema_ids = {200};
     FileSet unused_schema_files;
+    FileSet partition_live_files;
 
     prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
-                                 pre_schema_ids, new_schema_ids, unused_schema_files);
+                                 pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
 
     // Bundle files should be added to unused_data_files
     ASSERT_TRUE(unused_data_files.contains("bundle1.dat"));
@@ -1001,9 +1003,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_prepare_unused_files_for_log_with_n
     phmap::flat_hash_set<int64_t> pre_schema_ids = {100};
     phmap::flat_hash_set<int64_t> new_schema_ids = {};
     FileSet unused_schema_files;
+    FileSet partition_live_files;
 
     prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
-                                 pre_schema_ids, new_schema_ids, unused_schema_files);
+                                 pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
 
     // Should return early, no changes
     ASSERT_FALSE(unused_data_files.contains("bundle1.dat"));
@@ -1163,6 +1166,161 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_bundle_files) {
 
     // Bundle files should be collected in pre_bundle_data_files
     run_external_cluster_snapshot_task(request, signature, _exec_env);
+}
+
+// ==================== Reshard-boundary / shared-file tests ====================
+
+// .del files are collected, including from a segmentless delete-only rowset.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_del_files) {
+    int64_t tablet_id = next_id();
+    auto metadata = create_tablet_metadata(tablet_id, 2, 1, {"seg1.dat"});
+    metadata->mutable_rowsets(0)->add_del_files()->set_name("del1.del");
+    auto* del_only = metadata->add_rowsets(); // delete-only rowset (no segments)
+    del_only->set_id(50);
+    del_only->add_del_files()->set_name("del2.del");
+
+    auto files = collect_del_files(metadata);
+    EXPECT_EQ(2, files.size());
+    EXPECT_TRUE(files.contains("del1.del"));
+    EXPECT_TRUE(files.contains("del2.del"));
+
+    EXPECT_TRUE(collect_del_files(nullptr).empty());
+    EXPECT_TRUE(collect_del_files(create_tablet_metadata(next_id(), 2, 1, {"seg.dat"})).empty());
+}
+
+// collect_live_data_files returns every current live data filename across all classes.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_live_data_files) {
+    int64_t tablet_id = next_id();
+    auto metadata = create_tablet_metadata(tablet_id, 2, 1, {"seg.dat"}, {"s.sst"}, {"c.cols"}, {"d.delvec"});
+    metadata->mutable_rowsets(0)->add_del_files()->set_name("x.del");
+    auto collections = TabletFileCollections::collect(nullptr, metadata);
+
+    auto files = collect_live_data_files(collections);
+    EXPECT_EQ(5, files.size());
+    EXPECT_TRUE(files.contains("seg.dat"));
+    EXPECT_TRUE(files.contains("x.del"));
+    EXPECT_TRUE(files.contains("s.sst"));
+    EXPECT_TRUE(files.contains("c.cols"));
+    EXPECT_TRUE(files.contains("d.delvec"));
+    EXPECT_TRUE(collect_live_data_files(TabletFileCollections()).empty());
+}
+
+// .del files are uploaded in FULL (all current), even when also present in pre metadata, so existing
+// snapshots that predate .del tracking are backfilled.
+TEST_F(ExternalClusterSnapshotTaskTest, test_populate_uploads_all_del_files_full) {
+    int64_t tablet_id = next_id();
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"seg1.dat"});
+    pre_metadata->mutable_rowsets(0)->add_del_files()->set_name("shared.del");
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 1, {"seg1.dat"});
+    new_metadata->mutable_rowsets(0)->add_del_files()->set_name("shared.del");
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet globally_bound_files;
+    FileSet pre_bundle_data_files;
+    UploadSnapshotFilesRequestPB node_req;
+    auto* tablet_pb =
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_files, node_req);
+
+    bool found = false;
+    for (const auto& f : tablet_pb->new_data_files()) {
+        if (f == "shared.del") found = true;
+    }
+    EXPECT_TRUE(found); // present in both pre and new, still uploaded (full)
+}
+
+// A shared file referenced by two split children is uploaded at most once per partition cycle.
+TEST_F(ExternalClusterSnapshotTaskTest, test_populate_dedups_shared_sstable_across_tablets) {
+    int64_t t1 = next_id();
+    int64_t t2 = next_id();
+    auto new1 = create_tablet_metadata(t1, 2, 1, {}, {"shared.sst"});
+    auto new2 = create_tablet_metadata(t2, 2, 1, {}, {"shared.sst"});
+    auto coll1 = TabletFileCollections::collect(nullptr, new1);
+    auto coll2 = TabletFileCollections::collect(nullptr, new2);
+
+    FileSet globally_bound_files;
+    FileSet pre_bundle_data_files;
+    UploadSnapshotFilesRequestPB node_req;
+    auto* pb1 = populate_tablet_snapshot(t1, coll1, pre_bundle_data_files, globally_bound_files, node_req);
+    auto* pb2 = populate_tablet_snapshot(t2, coll2, pre_bundle_data_files, globally_bound_files, node_req);
+
+    int count = 0;
+    for (const auto& f : pb1->new_data_files()) {
+        if (f == "shared.sst") count++;
+    }
+    for (const auto& f : pb2->new_data_files()) {
+        if (f == "shared.sst") count++;
+    }
+    EXPECT_EQ(1, count);
+}
+
+// A shared file compacted away by one child is NOT deleted while a sibling still references it: the
+// partition-wide live-file subtraction removes it from the delete candidates. Uses a bundled segment
+// to also confirm subtraction happens after bundle expansion.
+TEST_F(ExternalClusterSnapshotTaskTest, test_shared_file_not_deleted_when_sibling_references) {
+    // Child A drops shared bundle segment F (F in A's pre rowset, gone from A's new).
+    int64_t ta = next_id();
+    auto a_pre = create_tablet_metadata(ta, 1, /*rowset_id=*/1, {"F.dat"});
+    a_pre->mutable_rowsets(0)->mutable_segment_metas(0)->set_bundle_file_offset(0); // bundle file
+    auto a_new = create_tablet_metadata(ta, 2, /*rowset_id=*/2, {"A_own.dat"});
+    auto a_coll = TabletFileCollections::collect(a_pre, a_new);
+
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+    collect_unused_files(a_coll, unused_data_files, pre_bundle_data_files);
+    EXPECT_TRUE(pre_bundle_data_files.contains("F.dat")); // child A dropped F (a bundle file)
+
+    // Partition-wide live set = A's new + sibling B's new; B still references F.
+    int64_t tb = next_id();
+    auto b_new = create_tablet_metadata(tb, 2, 1, {"F.dat"});
+    FileSet partition_live_files = collect_live_data_files(a_coll);
+    for (const auto& f : collect_live_data_files(TabletFileCollections::collect(nullptr, b_new))) {
+        partition_live_files.emplace(f);
+    }
+
+    // prepare_unused_files_for_log folds bundle files into unused, THEN subtracts the live set.
+    FileSet unused_meta_files, unused_schema_files;
+    phmap::flat_hash_set<int64_t> pre_schema_ids, new_schema_ids;
+    prepare_unused_files_for_log(/*pre_version=*/1, pre_bundle_data_files, unused_data_files, unused_meta_files,
+                                 pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
+    EXPECT_FALSE(unused_data_files.contains("F.dat")); // kept: sibling B still references it
+}
+
+// Reshard boundary: a child with no metadata at pre_version does a full re-sync instead of failing.
+TEST_F(ExternalClusterSnapshotTaskTest, test_process_tablet_pre_not_found_full_resync) {
+    int64_t tablet_id = next_id();
+    int64_t pre_version = 3; // below the child's earliest metadata version
+    int64_t new_version = 6; // the reshard publish version
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"seg_new.dat"}, {"s_new.sst"});
+    new_metadata->mutable_rowsets(0)->add_del_files()->set_name("d_new.del");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata)); // pre_version 3 is intentionally absent
+
+    FileSet globally_bound_files, pre_bundle_data_files, unused_data_files, unused_meta_files, partition_live_files;
+    phmap::flat_hash_set<int64_t> pre_schema_ids, new_schema_ids;
+    UploadSnapshotFilesRequestPB node_req;
+
+    auto st = process_tablet_for_snapshot(_tablet_mgr.get(), tablet_id, pre_version, new_version,
+                                          /*is_filebundling=*/false, /*meta_added=*/false, pre_bundle_data_files,
+                                          unused_data_files, unused_meta_files, pre_schema_ids, new_schema_ids,
+                                          globally_bound_files, partition_live_files, node_req);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, node_req.tablet_snapshots_size());
+
+    FileSet uploaded;
+    for (const auto& f : node_req.tablet_snapshots(0).new_data_files()) {
+        uploaded.emplace(f);
+    }
+    EXPECT_TRUE(uploaded.contains("seg_new.dat")); // full re-sync uploads all current data files
+    EXPECT_TRUE(uploaded.contains("s_new.sst"));
+    EXPECT_TRUE(uploaded.contains("d_new.del"));
+
+    bool has_new_meta = false;
+    for (const auto& f : node_req.tablet_snapshots(0).new_metadata_files()) {
+        if (f == tablet_metadata_filename(tablet_id, new_version)) has_new_meta = true;
+    }
+    EXPECT_TRUE(has_new_meta); // new metadata still uploaded
+    // The child never had a {tablet}_{pre_version}.meta, so it must not be queued for deletion.
+    EXPECT_FALSE(unused_meta_files.contains(tablet_metadata_filename(tablet_id, pre_version)));
+    EXPECT_TRUE(partition_live_files.contains("seg_new.dat")); // recorded for deletion safety
 }
 
 } // namespace starrocks::lake
