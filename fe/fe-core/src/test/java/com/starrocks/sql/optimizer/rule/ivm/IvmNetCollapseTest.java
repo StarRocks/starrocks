@@ -16,14 +16,21 @@ package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.collect.Maps;
 import com.starrocks.load.Load;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -103,6 +110,101 @@ public class IvmNetCollapseTest {
         Assertions.assertEquals(List.of(rowId),
                 ((LogicalWindowOperator) window.getOp()).getPartitionExpressions(),
                 "window must partition by __ROW_ID__");
+    }
+
+    @Test
+    public void testJoinDeltaGetsTupleNetCancellation() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        ColumnRefOperator rowId = rowIdCol(factory);
+        ColumnRefOperator valRef = factory.create("v", IntegerType.INT, false);
+        ColumnRefOperator action = actionCol(factory);
+
+        // A join in the plan means the delta branches can emit several rows per __ROW_ID__ with differing
+        // values, so the collapse must cancel equal-tuple pairs before the per-row-id pick.
+        OptExpression left = OptExpression.create(
+                new LogicalValuesOperator(List.of(rowId, valRef), Collections.emptyList()));
+        OptExpression right = OptExpression.create(
+                new LogicalValuesOperator(List.of(action), Collections.emptyList()));
+        OptExpression join = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.INNER_JOIN, null), left, right);
+        Map<ColumnRefOperator, ScalarOperator> rootMap = Maps.newHashMap();
+        rootMap.put(rowId, rowId);
+        rootMap.put(valRef, valRef);
+        rootMap.put(action, action);
+        OptExpression root = OptExpression.create(new LogicalProjectOperator(rootMap), join);
+        deriveLogicalProperty(root);
+
+        OptExpression result = IvmNetCollapse.applyIfRetractable(
+                root, newTaskContext(context), new ColumnRefSet(), action);
+
+        Assertions.assertNotNull(result);
+        OptExpression pickFilter = result.inputAt(0);
+        Assertions.assertTrue(pickFilter.getOp() instanceof LogicalFilterOperator, "rn = 1 filter");
+        OptExpression pickWindow = pickFilter.inputAt(0);
+        Assertions.assertTrue(pickWindow.getOp() instanceof LogicalWindowOperator, "row_number window");
+        OptExpression actionRemap = pickWindow.inputAt(0);
+        Assertions.assertTrue(actionRemap.getOp() instanceof LogicalProjectOperator, "net-sign action re-map");
+        Assertions.assertTrue(((LogicalProjectOperator) actionRemap.getOp()).getColumnRefMap().get(action)
+                        instanceof com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator,
+                "__ACTION__ is re-mapped from the net sign so a negative group emits a delete");
+        OptExpression netFilter = actionRemap.inputAt(0);
+        Assertions.assertTrue(netFilter.getOp() instanceof LogicalFilterOperator, "net != 0 filter");
+        OptExpression netWindow = netFilter.inputAt(0);
+        Assertions.assertTrue(netWindow.getOp() instanceof LogicalWindowOperator, "peer-group SUM window");
+        LogicalWindowOperator sumWindow = (LogicalWindowOperator) netWindow.getOp();
+        Assertions.assertEquals(List.of(rowId), sumWindow.getPartitionExpressions(),
+                "cancellation partitions by __ROW_ID__ only, sharing the pick window's shuffle");
+        Assertions.assertEquals(List.of(valRef),
+                sumWindow.getOrderByElements().stream().map(Ordering::getColumnRef).toList(),
+                "peers tie on the value columns");
+        Assertions.assertEquals(AnalyticWindow.Type.RANGE, sumWindow.getAnalyticWindow().getType());
+        Assertions.assertEquals(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW,
+                sumWindow.getAnalyticWindow().getLeftBoundary().getBoundaryType());
+        Assertions.assertEquals(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW,
+                sumWindow.getAnalyticWindow().getRightBoundary().getBoundaryType());
+        OptExpression sgnProject = netWindow.inputAt(0);
+        Assertions.assertTrue(sgnProject.getOp() instanceof LogicalProjectOperator, "sgn projection");
+        Assertions.assertTrue(((LogicalProjectOperator) sgnProject.getOp()).getColumnRefMap().keySet().stream()
+                        .anyMatch(col -> "sgn".equals(col.getName())),
+                "signed action feeds the peer-group SUM");
+        Assertions.assertSame(root, sgnProject.inputAt(0), "cancellation sits directly on the delta root");
+    }
+
+    @Test
+    public void testAggregateOverJoinSkipsTupleCancellation() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        ColumnRefOperator rowId = rowIdCol(factory);
+        ColumnRefOperator gKey = factory.create("g", IntegerType.INT, false);
+        ColumnRefOperator action = actionCol(factory);
+
+        // An aggregate MV whose recompute joins the affected groups back to the base (the semi-join in
+        // IvmDeltaRetractableAggregateRule) contains a join, but the aggregate collapses each group to one
+        // row id, so the tuple cancellation must not apply -- the pick window is fed the plan directly.
+        OptExpression left = OptExpression.create(
+                new LogicalValuesOperator(List.of(rowId, gKey), Collections.emptyList()));
+        OptExpression right = OptExpression.create(
+                new LogicalValuesOperator(List.of(action), Collections.emptyList()));
+        OptExpression join = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN, null), left, right);
+        OptExpression agg = OptExpression.create(
+                new LogicalAggregationOperator(AggType.GLOBAL, List.of(gKey), Maps.newHashMap()), join);
+        Map<ColumnRefOperator, ScalarOperator> rootMap = Maps.newHashMap();
+        rootMap.put(rowId, rowId);
+        rootMap.put(gKey, gKey);
+        rootMap.put(action, action);
+        OptExpression root = OptExpression.create(new LogicalProjectOperator(rootMap), agg);
+        deriveLogicalProperty(root);
+
+        OptExpression result = IvmNetCollapse.applyIfRetractable(
+                root, newTaskContext(context), new ColumnRefSet(), action);
+
+        Assertions.assertNotNull(result);
+        OptExpression pickWindow = result.inputAt(0).inputAt(0);
+        Assertions.assertTrue(pickWindow.getOp() instanceof LogicalWindowOperator, "row_number window");
+        Assertions.assertSame(root, pickWindow.inputAt(0),
+                "an aggregate plan feeds the pick window directly, with no tuple-cancellation layer");
     }
 
     @Test

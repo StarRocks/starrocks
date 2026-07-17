@@ -20,6 +20,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.load.Load;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,19 +28,24 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -128,6 +134,8 @@ final class IvmNetCollapse {
                                                      ColumnRefSet requiredColumns, TaskContext rootTaskContext,
                                                      ColumnRefOperator actionColumn, ColumnRefOperator rowIdColumn,
                                                      List<ColumnRefOperator> rootOutputColumns) {
+        OptExpression collapseInput = appendJoinTupleNetCancellation(root, factory, actionColumn, rowIdColumn,
+                rootOutputColumns);
         // ROW_NUMBER() OVER (PARTITION BY __ROW_ID__ ORDER BY __ACTION__ ASC): rn=1 is the UPSERT (new) row,
         // or the DELETE (old) row when a group was emptied. A window keeps the value columns as-is, so the
         // insert sink's pre-bound column refs survive; a GROUP BY would replace them with new refs that then
@@ -151,7 +159,7 @@ final class IvmNetCollapse {
                         .setAnalyticWindow(AnalyticWindow.DEFAULT_ROWS_WINDOW)
                         .setEnforceSortColumns(enforceSortColumns)
                         .build(),
-                root);
+                collapseInput);
 
         OptExpression filterExpr = OptExpression.create(
                 new LogicalFilterOperator(
@@ -179,6 +187,117 @@ final class IvmNetCollapse {
         requiredColumns.union(loadOpColumn);
         rootTaskContext.getRequiredColumns().union(loadOpColumn);
         return OptExpression.create(new LogicalProjectOperator(projectMap), filterExpr);
+    }
+
+    /**
+     * A join delta emits {@code Δ(A)⋈B_from ∪ A_to⋈Δ(B)}: when both sides change the same key in one
+     * interval, the branches overlap in an INSERT/DELETE pair of one full tuple plus a stale intermediate
+     * INSERT, and the pick above ties on {@code __ACTION__} without seeing value columns. Cancel
+     * equal-tuple pairs first: a signed count over each tuple's peer group nets to zero exactly for the
+     * overlap pairs. The peer-group frame keeps the partition key {@code __ROW_ID__}, so this window
+     * shares the pick window's shuffle instead of re-hashing by every column.
+     */
+    private static OptExpression appendJoinTupleNetCancellation(OptExpression root, ColumnRefFactory factory,
+                                                                ColumnRefOperator actionColumn,
+                                                                ColumnRefOperator rowIdColumn,
+                                                                List<ColumnRefOperator> rootOutputColumns) {
+        // A join delta is the only shape that emits several rows of one __ROW_ID__ with differing values.
+        // An aggregate collapses each group to one row (row id = group key), so it never has that
+        // multiplicity even when its recompute joins the affected groups back to the base
+        // (IvmDeltaRetractableAggregateRule) -- and its output carries non-orderable state columns the
+        // peer-group ORDER BY below cannot sort. Leave every non-join and every aggregate plan untouched.
+        if (!containsJoin(root) || containsAggregate(root)) {
+            return root;
+        }
+        ColumnRefOperator sgnColumn = factory.create("sgn", IntegerType.BIGINT, false);
+        Map<ColumnRefOperator, ScalarOperator> sgnProjectMap = Maps.newHashMap();
+        for (ColumnRefOperator outputColumn : rootOutputColumns) {
+            sgnProjectMap.put(outputColumn, outputColumn);
+        }
+        sgnProjectMap.put(sgnColumn, new CaseWhenOperator(IntegerType.BIGINT, null,
+                ConstantOperator.createBigint(-1),
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, actionColumn,
+                                ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION)),
+                        ConstantOperator.createBigint(1))));
+        OptExpression sgnProject = OptExpression.create(new LogicalProjectOperator(sgnProjectMap), root);
+
+        List<Ordering> tupleOrdering = new ArrayList<>();
+        for (ColumnRefOperator outputColumn : rootOutputColumns) {
+            if (!outputColumn.equals(actionColumn) && !outputColumn.equals(rowIdColumn)) {
+                tupleOrdering.add(new Ordering(outputColumn, true, true));
+            }
+        }
+        List<Ordering> enforceSortColumns = new ArrayList<>();
+        enforceSortColumns.add(new Ordering(rowIdColumn, true, true));
+        enforceSortColumns.addAll(tupleOrdering);
+
+        Function sumFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Preconditions.checkArgument(sumFunction != null, "IVM net-collapse: sum function not found");
+        ColumnRefOperator netColumn = factory.create("net", IntegerType.BIGINT, true);
+        Map<ColumnRefOperator, CallOperator> netCall = Maps.newHashMap();
+        netCall.put(netColumn,
+                new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, List.of(sgnColumn), sumFunction));
+        // RANGE CURRENT ROW..CURRENT ROW: the frame is exactly the peer group — the rows tying on every
+        // value column.
+        AnalyticWindow peerGroupWindow = new AnalyticWindow(AnalyticWindow.Type.RANGE,
+                new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null),
+                new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
+        OptExpression netWindow = OptExpression.create(
+                new LogicalWindowOperator.Builder()
+                        .setWindowCall(netCall)
+                        .setPartitionExpressions(List.of(rowIdColumn))
+                        .setOrderByElements(tupleOrdering)
+                        .setAnalyticWindow(peerGroupWindow)
+                        .setEnforceSortColumns(enforceSortColumns)
+                        .build(),
+                sgnProject);
+
+        OptExpression netFilter = OptExpression.create(
+                new LogicalFilterOperator(
+                        new BinaryPredicateOperator(BinaryType.NE, netColumn, ConstantOperator.createBigint(0))),
+                netWindow);
+
+        // Emit the action the net sign implies. A group whose net is negative is a delete even if it still
+        // carries a stray INSERT -- a same-tuple update on the surviving side paired with the other side's
+        // delete leaves one INSERT and two DELETEs under one peer group (net = -1). Re-map __ACTION__ from
+        // the net so the pick below emits a DELETE for it instead of tying on __ACTION__ and resurrecting the
+        // row via the INSERT.
+        Map<ColumnRefOperator, ScalarOperator> actionProjectMap = Maps.newHashMap();
+        for (ColumnRefOperator outputColumn : rootOutputColumns) {
+            if (!outputColumn.equals(actionColumn)) {
+                actionProjectMap.put(outputColumn, outputColumn);
+            }
+        }
+        actionProjectMap.put(actionColumn, new CaseWhenOperator(actionColumn.getType(), null,
+                ConstantOperator.createTinyInt(IvmRuleUtils.DELETE_ACTION),
+                List.of(new BinaryPredicateOperator(BinaryType.GT, netColumn, ConstantOperator.createBigint(0)),
+                        ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION))));
+        return OptExpression.create(new LogicalProjectOperator(actionProjectMap), netFilter);
+    }
+
+    private static boolean containsJoin(OptExpression expr) {
+        if (expr.getOp() instanceof LogicalJoinOperator) {
+            return true;
+        }
+        for (OptExpression input : expr.getInputs()) {
+            if (containsJoin(input)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsAggregate(OptExpression expr) {
+        if (expr.getOp() instanceof LogicalAggregationOperator) {
+            return true;
+        }
+        for (OptExpression input : expr.getInputs()) {
+            if (containsAggregate(input)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
