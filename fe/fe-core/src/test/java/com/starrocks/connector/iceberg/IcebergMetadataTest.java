@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -142,6 +143,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
@@ -2229,6 +2231,26 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testRefreshViewInvalidatesCache(@Mocked CachingIcebergCatalog icebergCatalog) {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        // A view is a ConnectorView, not an IcebergTable, so the refresh path must invalidate the cache
+        // by name instead of casting to IcebergTable (which would throw ClassCastException). The catalog
+        // stores the view under its fully-qualified name, so the refresh path must strip the qualifier down
+        // to the simple name the cache is keyed by ("v").
+        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".db.v", new ArrayList<>(),
+                "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
+        metadata.refreshTable("db", view, null, true);
+
+        new Verifications() {
+            {
+                icebergCatalog.invalidateCache("db", "v");
+                times = 1;
+            }
+        };
     }
 
     @Test

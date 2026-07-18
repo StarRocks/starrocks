@@ -22,6 +22,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
@@ -45,6 +46,7 @@ import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.view.View;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -473,6 +475,104 @@ public class CachingIcebergCatalogTest {
         cachingIcebergCatalog.getTable(connectContext, "db2", "tbl2");
         Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
         Assertions.assertEquals(1L, counts.get("Table"));
+    }
+
+    @Test
+    public void testGetViewUsesCache(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+    }
+
+    @Test
+    public void testGetViewInvalidatedOnDrop(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 2;
+
+                icebergCatalog.dropView(connectContext, "db", "v");
+                result = true;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+        cachingIcebergCatalog.dropView(connectContext, "db", "v");
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+    }
+
+    @Test
+    public void testCreateOrReplaceViewInvalidatesStaleCache(@Mocked IcebergCatalog icebergCatalog,
+                                                             @Mocked View view,
+                                                             @Mocked ConnectorViewDefinition definition) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 2;
+
+                definition.getDatabaseName();
+                result = "db";
+                minTimes = 0;
+                definition.getViewName();
+                result = "v";
+                minTimes = 0;
+
+                icebergCatalog.createView(connectContext, CATALOG_NAME, definition, true);
+                result = true;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+        cachingIcebergCatalog.createView(connectContext, CATALOG_NAME, definition, true);
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+    }
+
+    @Test
+    public void testGetViewBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog,
+                                                                  @Mocked View view) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        new Expectations() {
+            {
+                restCatalog.getView(ctx, "db", "v");
+                result = view;
+                times = 2;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+    }
+
+    @Test
+    public void testEstimateCountReflectsViewCache(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db2", "v2");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db2", "v2");
+        Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
+        Assertions.assertEquals(1L, counts.get("View"));
     }
 
     @Test

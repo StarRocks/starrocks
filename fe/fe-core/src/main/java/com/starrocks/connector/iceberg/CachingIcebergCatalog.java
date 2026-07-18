@@ -83,6 +83,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
+    private final com.github.benmanes.caffeine.cache.Cache<IcebergTableName, View> views;
     private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -107,6 +108,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         long tableCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
                 icebergProperties.getIcebergTableCacheMemoryUsageRatio());
         this.databases = newCacheBuilderWithMaximumSize(
+                icebergProperties.getIcebergMetaCacheTtlSec(),
+                NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+        this.views = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 NEVER_CACHE, DEFAULT_CACHE_NUM).build();
         long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
@@ -332,17 +336,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                               String catalogName,
                               ConnectorViewDefinition connectorViewDefinition,
                               boolean replace) {
-        return delegate.createView(connectContext, catalogName, connectorViewDefinition, replace);
+        boolean created = delegate.createView(connectContext, catalogName, connectorViewDefinition, replace);
+        // A create-or-replace can overwrite an existing definition, so we drop any stale cached entry.
+        views.invalidate(new IcebergTableName(connectorViewDefinition.getDatabaseName(),
+                connectorViewDefinition.getViewName()));
+        return created;
     }
 
     @Override
     public boolean alterView(ConnectContext connectContext, View currentView, ConnectorViewDefinition connectorViewDefinition) {
-        return delegate.alterView(connectContext, currentView, connectorViewDefinition);
+        boolean altered = delegate.alterView(connectContext, currentView, connectorViewDefinition);
+        views.invalidate(new IcebergTableName(connectorViewDefinition.getDatabaseName(),
+                connectorViewDefinition.getViewName()));
+        return altered;
     }
 
     @Override
     public boolean dropView(ConnectContext connectContext, String dbName, String viewName) {
-        return delegate.dropView(connectContext, dbName, viewName);
+        boolean dropped = delegate.dropView(connectContext, dbName, viewName);
+        views.invalidate(new IcebergTableName(dbName, viewName));
+        return dropped;
     }
 
     @Override
@@ -351,7 +364,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     public View getView(ConnectContext connectContext, String dbName, String viewName) {
-        return delegate.getView(connectContext, dbName, viewName);
+        IcebergTableName viewKey = new IcebergTableName(dbName, viewName);
+
+        // We do not cache if a per-request auth token is used AND it is a REST Catalog.
+        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+        if (!cacheAllowed) {
+            return delegate.getView(connectContext, dbName, viewName);
+        }
+
+        View cachedView = views.getIfPresent(viewKey);
+        if (cachedView != null) {
+            return cachedView;
+        }
+        View view = delegate.getView(connectContext, dbName, viewName);
+        if (view != null && !shouldOnlyReadCache(connectContext)) {
+            views.put(viewKey, view);
+        }
+        return view;
     }
 
     @Override
@@ -526,6 +556,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     private void invalidateCache(IcebergTableName key) {
         tables.invalidate(key);
+        // Tables and views share a namespace, so drop any cached view under the same identifier.
+        views.invalidate(key);
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         tableLatestAccessTime.remove(key);
@@ -683,6 +715,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         List<List<String>> partitionNames = getAllCachedPartitionNames();
         counter.put("Database", databases.estimatedSize());
         counter.put("Table", tables.estimatedSize());
+        counter.put("View", views.estimatedSize());
         counter.put("TableSnapshot", tables.asMap().values()
                 .stream()
                 .mapToLong(this::countSnapshotsSafe)
@@ -705,6 +738,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public long estimateSize() {
         return Estimator.estimate(tables.asMap(), 10) +
+                Estimator.estimate(views.asMap(), 10) +
                 Estimator.estimate(databases.asMap(), 10) +
                 estimateDataFileCacheSize() +
                 estimateDeleteFileCacheSize() +
