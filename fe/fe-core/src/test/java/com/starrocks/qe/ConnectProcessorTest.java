@@ -505,6 +505,29 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
+    // Verify a pre-execution rejection (here: the per-statement authentication re-check in
+    // validateStmtBeforeExecution) replaces the previous statement's diagnostics the same way a
+    // parse failure does: the statement parses fine but never reaches StmtExecutor.execute(), so
+    // without recording in the rejection path SHOW WARNINGS would return stale entries.
+    @Test
+    public void testPreExecutionRejectionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        Mockito.doReturn(null).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
     @Test
     public void testMultiStatementLargeInPredicateRetriesCurrentStmtOnly() throws Exception {

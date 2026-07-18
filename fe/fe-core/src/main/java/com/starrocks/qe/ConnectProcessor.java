@@ -591,6 +591,7 @@ public class ConnectProcessor {
             if (authenticationProvider == null) {
                 ErrorReport.report("Unknown authentication method");
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                recordPreExecutionFailureDiagnostics();
                 return true;
             }
             authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
@@ -602,6 +603,7 @@ public class ConnectProcessor {
                 ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
             }
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            recordPreExecutionFailureDiagnostics();
             return true;
         } catch (Throwable e) {
             auditStmtFailureForStmt(e, parsedStmt, originStmt);
@@ -712,9 +714,13 @@ public class ConnectProcessor {
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            // executor == null means the failure happened before StmtExecutor.execute() ran
+            // (processOnce resets it per request); execute() records its own failures.
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // if parse failed, audit stmts together once
             if (!parseSucceeded) {
-                recordParseFailureDiagnostics();
                 auditAfterExec(originStmt, null, null, null);
             }
         } catch (Throwable e) {
@@ -724,9 +730,11 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // for safety
             if (!parseSucceeded) {
-                recordParseFailureDiagnostics();
                 auditAfterExec(originStmt, null, null, null);
             }
         } finally {
@@ -738,11 +746,12 @@ public class ConnectProcessor {
         }
     }
 
-    // A statement that fails to parse never reaches StmtExecutor.execute(), which normally clears
-    // the previous statement's diagnostics and records the failure into the session buffer. Do
-    // both here so SHOW WARNINGS does not return stale entries after a syntax error and SHOW
-    // ERRORS mirrors the ERR packet, following MySQL diagnostics-area semantics.
-    private void recordParseFailureDiagnostics() {
+    // A statement rejected before StmtExecutor.execute() (parse failure, explicit-transaction
+    // validation, authentication re-check) never reaches the execute() logic that clears the
+    // previous statement's diagnostics and records the failure into the session buffer. Do both
+    // here so SHOW WARNINGS does not return stale entries after such a failure and SHOW ERRORS
+    // mirrors the ERR packet, following MySQL diagnostics-area semantics.
+    private void recordPreExecutionFailureDiagnostics() {
         ctx.clearWarnings();
         String errorMessage = ctx.getState().getErrorMessage();
         if (errorMessage == null || errorMessage.isEmpty()) {
