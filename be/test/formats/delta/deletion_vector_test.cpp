@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "base/string/base85.h"
 
 namespace starrocks::formats {
@@ -35,7 +37,7 @@ TEST_F(DeletionVectorTest, inlineDeletionVectorTest) {
     ASSERT_TRUE(status.ok());
 
     uint64_t cardinality = skipRowsContext->deletion_bitmap->get_cardinality();
-    vector<uint64_t> bitmap_vector(cardinality);
+    std::vector<uint64_t> bitmap_vector(cardinality);
     skipRowsContext->deletion_bitmap->to_array(bitmap_vector);
     ASSERT_EQ(6, bitmap_vector.size());
     std::stringstream ss;
