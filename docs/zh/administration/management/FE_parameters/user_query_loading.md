@@ -1262,6 +1262,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 集群中每个 Routine Load 任务消耗数据的最大时间。从 v3.1.0 开始，Routine Load 作业在 `job_properties` 中支持一个新的参数 `task_consume_second`。此参数适用于 Routine Load 作业中的单个加载任务，更加灵活。
 - 引入版本: -
 
+### `routine_load_task_ignore_node_num`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在计算 Kafka Routine Load 作业的任务并发数时排除存活执行节点数。此参数为 `false` 时，任务并发数取存活执行节点数、Kafka 分区数、`desired_concurrent_number` 和 `max_routine_load_task_concurrent_num` 的最小值。此参数为 `true` 时，计算过程不再受存活执行节点数限制，但分配到每个节点的任务数仍受 `max_routine_load_task_num_per_be` 限制。仅当执行节点具有充足的 CPU 和内存资源时才建议启用此参数。
+- 引入版本: -
+
 ### `routine_load_task_timeout_second`
 
 - 默认值: 60
