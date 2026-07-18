@@ -127,6 +127,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.exception.TvrAncestryBrokenException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
@@ -5939,16 +5940,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return TvrTableSnapshot.empty();
         }
         OlapTable olapTable = (OlapTable) table;
-        // Sum per-partition version epochs rather than visible versions. The version epoch is a
-        // globally-monotonic GTID (GtidGenerator.nextGtid()) stamped on every committed load and
-        // partition DDL, so the watermark strictly advances on any change AND cannot collide across
-        // partition-shape changes. Summed visible versions can collide: e.g. partitions [2,1] sum to
-        // 3, and after dropping the first partition and loading a new one to [1,2] they sum to 3
-        // again, making MVIVMRefreshProcessor treat the shape change as "no change" and skip refresh.
-        // Epochs are never reused, so a re-added partition always carries a strictly larger epoch.
+        // The watermark is the MAX per-partition version epoch. The version epoch is a cluster-global
+        // GTID (GtidGenerator.nextGtid()) stamped on every non-compaction commit (see
+        // DatabaseTransactionMgr#unprotectedCommitPreparedTransaction), so it is unique and strictly
+        // monotonic across the whole cluster. Taking the max therefore:
+        //   - strictly advances on any load (the committed partition gets a globally-largest epoch,
+        //     which becomes the new max regardless of which partition was written);
+        //   - cannot collide across states (distinct commits carry distinct epochs);
+        //   - cannot overflow (a single GTID is ~4.3e17, far below Long.MAX; summing would overflow
+        //     after ~22 partitions).
+        // This watermark only detects data changes (loads). Partition-shape changes (ADD/DROP/TRUNCATE)
+        // are handled elsewhere: ADD/first-load advances the max; DROP of the max partition regresses
+        // it and surfaces as an ancestry error in listTableDeltaTraits; and MVIVMRefreshProcessor
+        // independently reconciles the base partition set via the PCT layer (syncAndCheckPCTPartitions).
         long watermark = olapTable.getPhysicalPartitions().stream()
                 .mapToLong(PhysicalPartition::getVersionEpoch)
-                .sum();
+                .max()
+                .orElse(0L);
         return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
     }
 
@@ -5964,25 +5972,24 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         long toVersion = toSnapshotInclusive.end()
                 .orElseThrow(() -> new StarRocksConnectorException(
-                        "from snapshot is not a parent ancestor of empty target snapshot"));
-        if (!fromSnapshotExclusive.isEmpty()) {
-            long fromVersion = fromSnapshotExclusive.getSnapshotId();
-            if (fromVersion > toVersion) {
-                throw new StarRocksConnectorException(
-                        "from snapshot %s is not a parent ancestor of end snapshot %s",
-                        fromVersion, toVersion);
-            }
+                        "toSnapshotInclusive must have a valid snapshot ID"));
+        // end() yields the snapshot id for a non-empty snapshot and Optional.empty() for an empty one,
+        // so it unifies the empty-check and id-extraction for the (exclusive) from bound.
+        Optional<Long> fromOpt = fromSnapshotExclusive.end();
+        if (fromOpt.isPresent() && fromOpt.get() > toVersion) {
+            throw new TvrAncestryBrokenException(
+                    "from snapshot %s is not a parent ancestor of end snapshot %s",
+                    fromOpt.get(), toVersion);
         }
-        Optional<Long> fromOpt = fromSnapshotExclusive.isEmpty()
-                ? Optional.empty()
-                : Optional.of(fromSnapshotExclusive.getSnapshotId());
         TvrTableDelta delta = TvrTableDelta.of(fromOpt, Optional.of(toVersion));
         return Collections.singletonList(classifyNativeDelta(delta));
     }
 
     // All native OLAP deltas are conservatively classified as retractable because DELETE
     // predicates are legal on every KeysType, and per-version op-type metadata is unavailable
-    // in the FE. Promote to MONOTONIC in a follow-up once op-type tracking exists.
+    // in the FE.
+    // TODO(IVM Phase 3, upstream #73115): promote to MONOTONIC for append-only loads once
+    // per-version op-type tracking exists, so append-only native IVM can take the cheaper path.
     private static TvrTableDeltaTrait classifyNativeDelta(TvrTableDelta delta) {
         return TvrTableDeltaTrait.ofRetractable(delta);
     }
