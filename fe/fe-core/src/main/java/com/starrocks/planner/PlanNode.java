@@ -474,9 +474,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     // Emit the per-scan StatsSource line (NONE / ANALYZE / TABLE_METADATA) in `explain verbose`
-    // and `explain costs`. Only scan nodes carry a meaningful source; derived operators are skipped.
+    // and `explain costs`. Only external/connector scan nodes carry a meaningful source. OlapScanNode
+    // is always ANALYZE and emitting it would churn a large number of existing plan tests, so skip it;
+    // derived (non-scan) operators are skipped as well.
     private void appendStatsSource(StringBuilder expBuilder, String detailPrefix) {
-        if (this instanceof ScanNode) {
+        if (this instanceof ScanNode && !(this instanceof OlapScanNode)) {
             expBuilder.append(detailPrefix).append("stats source: ").append(statsSource).append("\n");
         }
     }

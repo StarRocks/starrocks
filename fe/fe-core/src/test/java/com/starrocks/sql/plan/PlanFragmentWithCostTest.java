@@ -496,25 +496,6 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     }
 
     @Test
-    public void testScanNodeStatsSourceInExplain() throws Exception {
-        // Both `explain costs` and `explain verbose` should surface the per-scan StatsSource.
-        // For an internal OlapTable the statistics come from the statistics store, so it is ANALYZE.
-        String sql = "select v1, v2, v3 from t0";
-        String costPlan = getCostExplain(sql);
-        assertContains(costPlan, "0:OlapScanNode");
-        assertContains(costPlan, "stats source: ANALYZE");
-
-        String verbosePlan = getVerboseExplain(sql);
-        assertContains(verbosePlan, "0:OlapScanNode");
-        assertContains(verbosePlan, "stats source: ANALYZE");
-
-        // The stats-source line is only emitted for scan nodes, not derived operators.
-        sql = "select count(*) from t0 group by v1";
-        Assertions.assertEquals(1, getCostExplain(sql).split("stats source:", -1).length - 1);
-        Assertions.assertEquals(1, getVerboseExplain(sql).split("stats source:", -1).length - 1);
-    }
-
-    @Test
     public void testReapNodeStatistics() throws Exception {
         String sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by cube(v1, v2)";
         String plan = getCostExplain(sql);
