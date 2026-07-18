@@ -59,7 +59,6 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
@@ -943,10 +942,6 @@ public class DefaultCoordinator extends Coordinator {
 
             if (status.isRemoteFileNotFound()) {
                 throw new RemoteFileNotFoundException(status.getErrorMsg());
-            }
-
-            if (status.isGlobalDictNotMatch()) {
-                throw new GlobalDictNotMatchException(status.getErrorMsg());
             }
 
             if (status.isRpcError()) {

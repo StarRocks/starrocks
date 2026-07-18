@@ -4721,8 +4721,7 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 // Contract test / mock reproducer: MockTempColumnReader's read_range() is
 // append-only (simulating StoredColumnReader).  Without reset, two consecutive
 // reads WITHOUT an intervening finalize accret stale data — this is the
-// production bug that reset_column() in ScalarColumnReader / LowCardColumnReader /
-// LowRowsColumnReader read_range() fixes.
+// production bug that reset_column() in ScalarColumnReader read_range() fixes.
 //
 // This is a contract test; production reset_column() coverage is indirect
 // (integration tests exercise the real reader path).
@@ -4822,7 +4821,7 @@ TEST_F(GroupReaderTest, FinalizeResetsTempPreventingStaleAccretion) {
 
 // ── Logical-column bypass in emit_physical_columns ───────────────────────────
 
-// Mock reader that models LowCardColumnReader's PHYSICAL-vs-LOGICAL identity
+// Mock reader that models a dict-decoding reader's PHYSICAL-vs-LOGICAL identity
 // dispatch in fill_dst_column().  When src is _code_column (PHYSICAL) it
 // decodes; when src is already LOGICAL it swaps directly.
 class MockGlobalDictColumnReader : public ColumnReader {
@@ -4964,9 +4963,9 @@ TEST_F(GroupReaderTest, EmitPhysicalColumnsBypassesFillDstForLogicalSlots) {
     EXPECT_EQ(2u, dst_col->size()) << "LOGICAL lazy column must be emitted with correct row count";
 }
 
-// Covers: active global-dict columns finalized by compound conjunct path
+// Covers: active dict-decoded columns finalized by compound conjunct path
 //         must be marked as logical so emit_physical_columns() bypasses
-//         fill_dst_column().  Without the mark, LowCardColumnReader rejects
+//         fill_dst_column().  Without the mark, a dict-decoding reader rejects
 //         an already-finalized logical column in fill_dst_column().
 TEST_F(GroupReaderTest, ActiveGlobalDictEmitBypassesFillDstAfterCompoundFinalize) {
     auto* param = _create_group_reader_param();

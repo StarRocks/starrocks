@@ -96,19 +96,15 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
             }
         }
 
-        // Iceberg scans. After low-cardinality rewrite the varchar group-by becomes TYPE_INT with
-        // codes in [1, dictSize]; the runtime contract is enforced by GlobalDictNotMatch retry on
-        // the BE side. globalDicts is only populated for parquet scans (gated in
-        // DecodeCollector.visitPhysicalIcebergScan), so non-parquet falls through naturally.
+        // Iceberg scans. Only the numeric/date group-by min-max fallback applies here; external
+        // tables no longer carry global dicts (the Parquet lake low-cardinality optimization was
+        // removed), so there is no dict-encoded group-by key to handle on this branch.
         List<PhysicalScanOperator> icebergScans = Lists.newArrayList();
         Utils.extractOperator(root, icebergScans,
                 op -> OperatorType.PHYSICAL_ICEBERG_SCAN.equals(op.getOpType()));
         for (PhysicalScanOperator scan : icebergScans) {
             PhysicalIcebergScanOperator iceberg = (PhysicalIcebergScanOperator) scan;
             IcebergTable table = (IcebergTable) iceberg.getTable();
-            Map<Integer, ColumnDict> globalDicts = toGlobalDictMap(iceberg.getGlobalDicts());
-            // Dict-encoded group-by keys (shared with the OLAP branch above).
-            collectDictGroupByMinMax(iceberg, groupByRefSets, globalDicts, infos);
             // Fallback to IcebergColumnMinMaxMgr for the remaining numeric/date group-by keys. Take
             // the snapshot from the scan's own TvrVersionRange — analyzer already pinned it — so the
             // cache key matches the exact snapshot BE will read. Null/empty/non-single-snapshot

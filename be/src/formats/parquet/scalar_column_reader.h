@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/global_dict/types.h"
 #include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
@@ -269,113 +268,6 @@ private:
     // in the caller slot at any time — dispatch is by col.get() pointer identity.
     ColumnPtr _code_column = nullptr;
     ColumnPtr _tmp_intermediate_column = nullptr;
-};
-
-class LowCardColumnReader final : public RawColumnReader {
-public:
-    explicit LowCardColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
-            : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
-
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
-
-    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
-                                const std::vector<std::string>& sub_field_path, const size_t& layer) override;
-
-    Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
-                                              const size_t& layer) override {
-        DCHECK_EQ(sub_field_path.size(), layer);
-        return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
-    }
-
-    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
-                              const size_t& layer) override {
-        DCHECK_EQ(sub_field_path.size(), layer);
-        return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
-    }
-
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
-
-    Status finalize_lazy_state(ColumnPtr& col) override;
-
-    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                             const uint64_t rg_num_rows) const override {
-        return _row_group_zone_map_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
-                                          rg_first_row, rg_num_rows);
-    }
-
-    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                           TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
-    }
-
-    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                          const uint64_t rg_num_rows) const override {
-        return _row_group_bloom_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
-                                       rg_first_row, rg_num_rows);
-    }
-
-    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOTypeFlags types, bool active) override;
-
-private:
-    Status _check_current_dict();
-    bool _is_dict_code_column(const ColumnPtr& column) const;
-
-    std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
-
-    const GlobalDictMap* _dict = nullptr;
-    const SlotId _slot_id;
-
-    std::optional<std::vector<int16_t>> _code_convert_map;
-
-    bool _is_physical_column(const ColumnPtr& column) const override { return column.get() == _code_column.get(); }
-    // PHYSICAL column: Parquet dict codes (Int32).  read_range() swaps this
-    // into the slot; fill_dst_column() decodes it to global-dict IDs
-    // (LOGICAL LowCardDictColumn).
-    ColumnPtr _code_column = nullptr;
-};
-
-class LowRowsColumnReader final : public RawColumnReader {
-public:
-    explicit LowRowsColumnReader(const RawColumnReader& reader, const GlobalDictMap* dict, SlotId slot_id)
-            : RawColumnReader(reader), _dict(dict), _slot_id(slot_id) {}
-
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
-
-    Status fill_dst_column(ColumnPtr& dst, ColumnPtr& src) override;
-
-    Status finalize_lazy_state(ColumnPtr& col) override;
-
-    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                             const uint64_t rg_num_rows) const override {
-        return _row_group_zone_map_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
-                                          rg_first_row, rg_num_rows);
-    }
-
-    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                           TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
-    }
-
-    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOTypeFlags types, bool active) override;
-
-private:
-    const GlobalDictMap* _dict = nullptr;
-    const SlotId _slot_id;
-
-    bool _is_physical_column(const ColumnPtr& column) const override {
-        return _raw_string_column != nullptr && column.get() == _raw_string_column.get();
-    }
-    // PHYSICAL column: raw VARCHAR strings read from non-dict-encoded pages.
-    ColumnPtr _raw_string_column = nullptr;
 };
 
 } // namespace starrocks::parquet

@@ -18,7 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.connector.exception.GlobalDictNotMatchException;
+import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -249,8 +249,8 @@ public class StartSchedulingTest extends SchedulerTestBase {
                         return submit(() -> {
                             PExecPlanFragmentResult result = new PExecPlanFragmentResult();
                             StatusPB pStatus = new StatusPB();
-                            pStatus.statusCode = TStatusCode.GLOBAL_DICT_NOT_MATCH.getValue();
-                            pStatus.errorMsgs = Collections.singletonList("test GLOBAL_DICT_NOT_MATCH error message");
+                            pStatus.statusCode = TStatusCode.REMOTE_FILE_NOT_FOUND.getValue();
+                            pStatus.errorMsgs = Collections.singletonList("test REMOTE_FILE_NOT_FOUND error message");
                             result.status = pStatus;
                             return result;
                         });
@@ -263,7 +263,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
         String sql =
                 "select count(1) from lineitem UNION ALL select count(1) from lineitem UNION ALL select count(1) from lineitem";
         DefaultCoordinator scheduler = getScheduler(sql);
-        Assertions.assertThrows(GlobalDictNotMatchException.class, scheduler::exec);
+        Assertions.assertThrows(RemoteFileNotFoundException.class, scheduler::exec);
     }
 
     @Test

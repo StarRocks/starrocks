@@ -75,12 +75,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         try {
             ArrowFlightSqlServiceImpl.submitTask(() -> {
-                final boolean prevUseLowCardOptimizeOnLake = arrowCtx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
                 try {
-                    // The Lake low-cardinality optimization relies on a retry mechanism on the FE side: when the BE discovers at
-                    // execution time that the dictionary cannot be used, it reports this to the FE, and the FE re-plans the query.
-                    // However, with Arrow Flight SQL the client talks directly to the BE, so this retry mechanism is not available.
-                    arrowCtx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
                     arrowCtx.setThreadLocalInfo();
 
                     processOnce();
@@ -91,7 +86,6 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
                     deploymentFinished.completeExceptionally(t);
                     processorFinished.completeExceptionally(t);
                 } finally {
-                    arrowCtx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(prevUseLowCardOptimizeOnLake);
                     arrowCtx.releaseRunningToken();
                 }
             });
@@ -226,18 +220,13 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         try {
             ArrowFlightSqlServiceImpl.submitTask(() -> {
-                final boolean prevUseLowCardinalityOptimizeOnLake =
-                        ctx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
                 try (var scope = ctx.bindScope()) {
-                    ctx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
                     executor.execute();
                     deploymentFinished.complete(null);
                     processorFinished.complete(null);
                 } catch (Exception e) {
                     deploymentFinished.completeExceptionally(e);
                     processorFinished.completeExceptionally(e);
-                } finally {
-                    ctx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(prevUseLowCardinalityOptimizeOnLake);
                 }
             });
 

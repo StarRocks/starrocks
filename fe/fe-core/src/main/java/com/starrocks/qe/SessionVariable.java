@@ -1232,6 +1232,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll")
+            // Parquet global-dict optimization for external/lake tables was removed; keep the
+            // variables accepted-but-ignored so existing SET statements don't error.
+            .add(LOW_CARDINALITY_OPTIMIZE_ON_LAKE)
+            .add(ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE)
             .build();
 
     // Limitations
@@ -1926,9 +1930,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT, flag = VariableMgr.INVISIBLE)
     private boolean alwaysCollectDict = false;
 
-    @VariableMgr.VarAttr(name = ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE, flag = VariableMgr.INVISIBLE)
-    private boolean alwaysCollectDictOnLake = false;
-
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
 
@@ -1940,9 +1941,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
     private boolean useLowCardinalityOptimizeV2 = true;
-
-    @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_ON_LAKE)
-    private boolean useLowCardinalityOptimizeOnLake = false;
 
     @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableArrayLowCardinalityOptimize = true;
@@ -4993,10 +4991,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return alwaysCollectDict;
     }
 
-    public boolean isAlwaysCollectDictOnLake() {
-        return alwaysCollectDictOnLake;
-    }
-
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
     }
@@ -5019,14 +5013,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setUseLowCardinalityOptimizeV2(boolean useLowCardinalityOptimizeV2) {
         this.useLowCardinalityOptimizeV2 = useLowCardinalityOptimizeV2;
-    }
-
-    public boolean isUseLowCardinalityOptimizeOnLake() {
-        return useLowCardinalityOptimizeOnLake;
-    }
-
-    public void setUseLowCardinalityOptimizeOnLake(boolean useLowCardinalityOptimizeOnLake) {
-        this.useLowCardinalityOptimizeOnLake = useLowCardinalityOptimizeOnLake;
     }
 
     public boolean isEnableRewriteGroupingsetsToUnionAll() {

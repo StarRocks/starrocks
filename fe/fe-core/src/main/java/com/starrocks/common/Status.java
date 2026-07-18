@@ -122,10 +122,6 @@ public class Status {
         return isGlobalDictError();
     }
 
-    public boolean isGlobalDictNotMatch() {
-        return this.errorCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
-    }
-
     public void setErrorMsg(String errorMsg) {
         this.errorMsg = errorMsg;
     }

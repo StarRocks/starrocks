@@ -23,15 +23,11 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
-import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -48,11 +44,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -76,11 +69,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
-import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.StructType;
@@ -100,8 +91,6 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /*
  * For compute all string columns that can benefit from low-cardinality optimization by bottom-up
@@ -1161,128 +1150,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             markedAsGlobalDictOpt(info, column, dict.get());
-        }
-
-        if (info.outputStringColumns.isEmpty()) {
-            return DecodeInfo.empty();
-        }
-
-        return info;
-    }
-
-    private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {
-        return column.getType().isArrayType() &&
-                scan.getPredicate() != null && scan.getPredicate().getColumnRefs().contains(column);
-    }
-
-    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(PhysicalScanOperator scan, Table table,
-                                                                         ColumnRefOperator column) {
-        // Condition 1:
-        if (!supportAndEnabledLowCardinalityForScanOperator(column.getType())) {
-            return new Pair<>(false, Optional.empty());
-        }
-
-        // Condition 1.1:
-        if (banArrayColumnWithPredicate(scan, column)) {
-            return new Pair<>(false, Optional.empty());
-        }
-
-        // Condition 2: the varchar column is low cardinality string column
-        ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
-
-        if (!columnStatistic.isUnknown() &&
-                columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
-            LOG.debug("{} isn't low cardinality string column", column.getName());
-            return new Pair<>(false, Optional.empty());
-        }
-
-        boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
-        if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
-            LOG.debug("{} isn't low cardinality string column", column.getName());
-            return new Pair<>(false, Optional.empty());
-        }
-
-        // Condition 3: the varchar column has collected global dict
-        if (!IRelaxDictManager.getInstance().hasGlobalDict(table.getUUID(), column.getName())) {
-            LOG.debug("{} doesn't have global dict", column.getName());
-            return new Pair<>(false, Optional.empty());
-        }
-
-        Optional<ColumnDict> dict = IRelaxDictManager.getInstance().getGlobalDict(table.getUUID(),
-                column.getName());
-        // cache reaches capacity limit, randomly eliminate some keys
-        // then we will get an empty dictionary.
-        if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PERIOD_VERSION_THRESHOLD) {
-            return new Pair<>(false, Optional.empty());
-        }
-        return new Pair<>(true, dict);
-    }
-
-    @Override
-    public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
-        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
-            return DecodeInfo.empty();
-        }
-        PhysicalHiveScanOperator scan = optExpression.getOp().cast();
-        HiveTable table = (HiveTable) scan.getTable();
-
-        // only support parquet
-        if (table.getStorageFormat() == null || !table.getStorageFormat().equals(HiveStorageFormat.PARQUET)) {
-            return DecodeInfo.empty();
-        }
-
-        // check dict column
-        DecodeInfo info = DecodeInfo.create();
-        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-            // don't collect partition columns
-            if (table.getPartitionColumnNames().contains(column.getName())) {
-                continue;
-            }
-
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
-            if (!res.first) {
-                continue;
-            }
-
-            markedAsGlobalDictOpt(info, column, res.second.get());
-        }
-
-        if (info.outputStringColumns.isEmpty()) {
-            return DecodeInfo.empty();
-        }
-
-        return info;
-    }
-
-    @Override
-    public DecodeInfo visitPhysicalIcebergScan(OptExpression optExpression, DecodeInfo context) {
-        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
-            return DecodeInfo.empty();
-        }
-
-        PhysicalIcebergScanOperator scan = optExpression.getOp().cast();
-        IcebergTable table = (IcebergTable) scan.getTable();
-
-        // only support parquet
-        if (!table.getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT).
-                equalsIgnoreCase("parquet")) {
-            return DecodeInfo.empty();
-        }
-
-        // check dict column
-        DecodeInfo info = DecodeInfo.create();
-        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-            if (table.getPartitionColumnNames().contains(column.getName())) {
-                continue;
-            }
-
-            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(scan, table, column);
-            if (!res.first) {
-                continue;
-            }
-
-            markedAsGlobalDictOpt(info, column, res.second.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {

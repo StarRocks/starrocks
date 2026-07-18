@@ -21,7 +21,6 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "column/global_dict/types_fwd_decl.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
 #include "common/object_pool.h"
@@ -1068,33 +1067,12 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     ParquetField field;
     tparquet::ColumnChunk chunk_meta;
     TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    GlobalDictMap dict;
     auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
-
-    // LowCardColumnReader::fill_dst_column: when src is not _code_column
-    // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.
-    {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
-        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
-        ColumnPtr dst = make_int_col();
-        ColumnPtr src = make_int_col();
-        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
-    }
-
-    // LowRowsColumnReader::fill_dst_column: same LOGICAL fallback.
-    {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
-        LowRowsColumnReader reader(base, &dict, /*slot_id=*/1);
-        ColumnPtr dst = make_int_col();
-        ColumnPtr src = make_int_col();
-        EXPECT_TRUE(reader.fill_dst_column(dst, src).ok());
-    }
 
     // RawColumnReader::_restore_physical_column errors when a PHYSICAL column
     // is still the caller-visible column but _logical_dst was lost.
     {
-        ScalarColumnReader base(&field, &chunk_meta, &varchar_type, opts);
-        LowCardColumnReader reader(base, &dict, /*slot_id=*/1);
+        ScalarColumnReader reader(&field, &chunk_meta, &varchar_type, opts);
         ColumnPtr code = make_int_col();
         reader._code_column = code;
         reader._logical_dst = nullptr;

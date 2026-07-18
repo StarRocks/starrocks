@@ -27,7 +27,6 @@
 
 #include "cache/cache_options.h"
 #include "column/column_access_path.h"
-#include "column/global_dict/types.h"
 #include "common/runtime_profile.h"
 #include "compute_env/query/file_scan_split_context.h"
 #include "compute_env/query/scan_conjuncts_manager.h"

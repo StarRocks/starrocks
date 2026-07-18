@@ -24,6 +24,7 @@
 #include "common/runtime_profile.h"
 #include "formats/deletion_bitmap.h"
 #include "formats/file_input_stream.h"
+#include "gutil/endian.h"
 
 namespace starrocks::formats {
 
@@ -164,8 +165,8 @@ StatusOr<std::string> DeletionVector::get_absolute_path(const std::string& table
     }
 }
 
-std::string DeletionVector::assemble_deletion_vector_path(const string& table_location, string&& uuid,
-                                                          const string& prefix) const {
+std::string DeletionVector::assemble_deletion_vector_path(const std::string& table_location, std::string&& uuid,
+                                                          const std::string& prefix) const {
     std::string file_name = fmt::format("deletion_vector_{}.bin", uuid);
     if (prefix.empty()) {
         return fmt::format("{}/{}", table_location, file_name);

@@ -14,14 +14,11 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
-import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
-import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import mockit.Expectations;
 import mockit.Verifications;
@@ -29,7 +26,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -44,11 +40,9 @@ public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
-        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(true);
-        // The lake low-cardinality dict rewrite only runs for queries (DecodeCollector gates the
-        // iceberg/hive scan visitors on isQuery). buildPlan() in the test harness does not go through
-        // the production setIsQuery(...) path, so QueryState defaults to false and the rewrite is
-        // skipped, leaving the group-by key un-encoded and the min-max rule a no-op.
+        // The group-by min-max rule (ApplyMinMaxStatisticRule) only runs for queries. buildPlan() in
+        // the test harness does not go through the production setIsQuery(...) path, so QueryState
+        // defaults to false; force it here so the rule is applied.
         connectContext.getState().setIsQuery(true);
     }
 
@@ -57,36 +51,7 @@ public class IcebergCompressedKeyTest extends ConnectorPlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = false;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
-        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
         connectContext.getState().setIsQuery(false);
-    }
-
-    @Test
-    public void testIcebergDictGroupByEmitsMinMaxRange() throws Exception {
-        IRelaxDictManager dictManager = IRelaxDictManager.getInstance();
-        ColumnDict columnDict = new ColumnDict(
-                ImmutableMap.<ByteBuffer, Integer>builder()
-                        .put(ByteBuffer.wrap("a".getBytes()), 1)
-                        .put(ByteBuffer.wrap("b".getBytes()), 2)
-                        .build(),
-                0, 0);
-
-        new Expectations(dictManager) {
-            {
-                dictManager.hasGlobalDict(anyString, "data");
-                result = true;
-                minTimes = 0;
-
-                dictManager.getGlobalDict(anyString, "data");
-                result = Optional.of(columnDict);
-                minTimes = 0;
-            }
-        };
-
-        String sql = "select count(*) from iceberg0.unpartitioned_db.t0 group by data";
-        String plan = getVerboseExplain(sql);
-        assertContains(plan, "group by min-max stats:");
-        assertContains(plan, "- 0:2");
     }
 
     @Test

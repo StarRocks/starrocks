@@ -37,15 +37,12 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -665,50 +662,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     @Override
-    public OptExpression visitPhysicalHiveScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
-        PhysicalHiveScanOperator scanOperator = (PhysicalHiveScanOperator) optExpression.getOp();
-        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
-
-        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
-        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
-        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
-
-        PhysicalHiveScanOperator.Builder builder = PhysicalHiveScanOperator.builder();
-        builder.withOperator(scanOperator);
-        builder.setColRefToColumnMetaMap(newRefToMetaMap);
-        builder.setScanPredicates(
-                rewriteScanPredicate(
-                        scanOperator.getScanOperatorPredicates(), newRefToMetaMap, info.inputStringColumns));
-        builder.setGlobalDicts(dicts).setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
-
-        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
-        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
-        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
-    }
-
-    @Override
-    public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
-        PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
-        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
-
-        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
-        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
-        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
-
-        PhysicalIcebergScanOperator.Builder builder = PhysicalIcebergScanOperator.builder();
-        builder.withOperator(scanOperator);
-        builder.setColRefToColumnMetaMap(newRefToMetaMap);
-        builder.setScanPredicates(
-                rewriteScanPredicate(
-                        scanOperator.getScanOperatorPredicates(), newRefToMetaMap, info.inputStringColumns));
-        builder.setGlobalDicts(dicts).setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
-
-        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
-        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
-        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
-    }
-
-    @Override
     public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.get(consume);
@@ -796,34 +749,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             collectDictExprChain(dictRef.getId(), dictExprs);
         }
         return dictExprs;
-    }
-
-    private ScanOperatorPredicates rewriteScanPredicate(ScanOperatorPredicates predicates,
-                                                        Map<ColumnRefOperator, Column> newmap, ColumnRefSet inputs) {
-        ScanOperatorPredicates newPredicates = predicates.clone();
-        newPredicates.getNoEvalPartitionConjuncts().clear();
-        newPredicates.getNoEvalPartitionConjuncts().addAll(
-                predicates.getNoEvalPartitionConjuncts().stream().map(x -> rewritePredicate(x, inputs))
-                        .toList());
-        newPredicates.getNonPartitionConjuncts().clear();
-        newPredicates.getNonPartitionConjuncts().addAll(
-                predicates.getNonPartitionConjuncts().stream().map(x -> rewritePredicate(x, inputs))
-                        .toList());
-        newPredicates.getMinMaxConjuncts().clear();
-        newPredicates.getMinMaxConjuncts().addAll(
-                predicates.getMinMaxConjuncts().stream().map(x -> rewritePredicate(x, inputs))
-                        .toList());
-
-        newPredicates.getMinMaxColumnRefMap().clear();
-        for (Map.Entry<ColumnRefOperator, Column> kv : predicates.getMinMaxColumnRefMap().entrySet()) {
-            if (context.stringRefToDictRefMap.containsKey(kv.getKey())) {
-                newPredicates.getMinMaxColumnRefMap().put(context.stringRefToDictRefMap.get(kv.getKey()),
-                        newmap.get(context.stringRefToDictRefMap.get(kv.getKey())));
-            } else {
-                newPredicates.getMinMaxColumnRefMap().put(kv.getKey(), kv.getValue());
-            }
-        }
-        return newPredicates;
     }
 
     private void rewriteColumnRefToMetaMap(PhysicalScanOperator scanOperator,

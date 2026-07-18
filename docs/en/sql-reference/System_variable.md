@@ -1360,12 +1360,10 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 
 ### low_cardinality_optimize_on_lake
 
-* **Default**: true
+* **Default**: false
 * **Type**: Boolean
 * **Unit**: -
-* **Description**: Whether to enable low cardinality optimization on data lake queries. Valid values:
-  * `true` (Default): Enable low cardinality optimization on data lake queries.
-  * `false`: Disable low cardinality optimization on data lake queries.
+* **Description**: Deprecated. The low cardinality (global dictionary) optimization for Parquet data lake queries has been removed. This variable is retained as a no-op so that existing `SET` statements do not error; it no longer has any effect.
 * **Introduced in**: v3.5.0
 
 ### low_cardinality_optimize_v2

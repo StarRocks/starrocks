@@ -1143,12 +1143,10 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### low_cardinality_optimize_on_lake
 
-* 默认值：true
+* 默认值：false
 * 类型：Boolean
 * 单位：-
-* 描述：是否在数据湖查询中启用低基数优化。有效值：
-  * `true`（默认）：在数据湖查询中启用低基数优化。
-  * `false`: 在数据湖查询中禁用低基数优化。
+* 描述：已废弃。针对 Parquet 数据湖查询的低基数（全局字典）优化已被移除。该变量作为空操作（no-op）保留，仅用于兼容已有的 `SET` 语句，不再产生任何效果。
 * 引入版本：v3.5.0
 
 ### low_cardinality_optimize_v2

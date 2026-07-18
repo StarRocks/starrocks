@@ -21,8 +21,6 @@
 #include "cache/datacache.h"
 #endif
 #include "common/config_scan_io_fwd.h"
-#include "compute_env/global_dict/fragment_dict_state.h"
-#include "compute_env/global_dict/parser.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
@@ -581,11 +579,6 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
             _scanner_ctx.format_scan_context.conjuncts.by_slot[slot_id].emplace_back(ctx);
         }
     }
-    // rewrite dict
-    auto* fragment_dict_state = state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    RETURN_IF_ERROR(fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(
-            state, &_scanner_ctx.format_scan_context.conjuncts.scanner_ctxs));
     return Status::OK();
 }
 
@@ -744,38 +737,6 @@ void HiveDataSource::_init_runtime_filter_counters() {
     }
 }
 
-Status HiveDataSource::_init_global_dicts(HdfsScannerContext* ctx) {
-    const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
-    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
-    auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
-    // mapping column id to storage column ids
-    TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
-    DictOptimizeParser::rewrite_descriptor(_runtime_state, {}, {}, &tuple_desc->decoded_slots());
-    for (auto slot : tuple_desc->slots()) {
-        if (!slot->is_materialized()) {
-            continue;
-        }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
-            global_dict->emplace(slot->id(), const_cast<GlobalDictMap*>(&dict_map));
-#ifdef DEBUG
-            std::stringstream ss;
-            ss << "slot_id: " << slot->id() << " global dict: ";
-            for (const auto& kv : dict_map) {
-                ss << "<" << kv.first << " " << kv.second << ">"
-                   << ", ";
-            }
-            LOG(INFO) << ss.str();
-#endif
-        }
-    }
-    ctx->format_scan_context.global_dictmaps = global_dict;
-    return Status::OK();
-}
-
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_scanner_ctx.profile.open_file_timer);
 
@@ -821,7 +782,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             _scanner_ctx.format_scan_context.column_access_paths.clear();
         }
     }
-    RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
     _scanner_ctx.tuple_desc = _tuple_desc;
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table)) {

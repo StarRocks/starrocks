@@ -220,11 +220,11 @@ private:
     //           caller to either hold it for dict-filter or finalize
     //           before expression evaluation.
     //
-    // LOGICAL:  StarRocks native column type (e.g. LowCardDictColumn,
-    //           BinaryColumn).  Once a column is logical it MUST NOT
-    //           re-enter fill_dst_column() — that path expects a
-    //           physical source and will either double-decode or reject
-    //           the column (e.g. LowCardColumnReader checks _is_dict_code_column).
+    // LOGICAL:  StarRocks native column type (e.g. BinaryColumn).  Once a
+    //           column is logical it MUST NOT re-enter fill_dst_column() —
+    //           that path expects a physical source and will either
+    //           double-decode or reject the column (e.g. ScalarColumnReader
+    //           checks _is_dict_code_column).
     //
     // Per-chunk processing order (get_next() iteration):
     //

@@ -203,7 +203,7 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     bool filter = false;
     if (_runtime_filter_scan_range_pruner != nullptr) {
         RETURN_IF_ERROR(_runtime_filter_scan_range_pruner->update_range_if_arrived(
-                _scanner_ctx->global_dictmaps,
+                nullptr,
                 [this, &filter, &group_reader](auto cid, const PredicateList& predicates) {
                     PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
                     for (const auto& pred : predicates) {

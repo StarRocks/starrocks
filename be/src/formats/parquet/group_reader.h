@@ -219,8 +219,6 @@ private:
 
     int64_t _end_offset = 0;
 
-    bool _global_dict_applied_in_group = false;
-
     SparseRange<uint64_t> _range;
     SparseRangeIterator<uint64_t> _range_iter;
 
