@@ -2237,10 +2237,8 @@ public class IcebergMetadataTest extends TableTestBase {
     public void testRefreshViewInvalidatesCache(@Mocked CachingIcebergCatalog icebergCatalog) {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), null);
-        // A view is a ConnectorView, not an IcebergTable, so the refresh path must invalidate the cache
-        // by name instead of casting to IcebergTable (which would throw ClassCastException). The catalog
-        // stores the view under its fully-qualified name, so the refresh path must strip the qualifier down
-        // to the simple name the cache is keyed by ("v").
+        // A view is a ConnectorView, not an IcebergTable, so refresh must invalidate by name, not cast.
+        // The stored name is fully-qualified, so it strips down to the simple key ("v").
         IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".db.v", new ArrayList<>(),
                 "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
         metadata.refreshTable("db", view, null, true);
