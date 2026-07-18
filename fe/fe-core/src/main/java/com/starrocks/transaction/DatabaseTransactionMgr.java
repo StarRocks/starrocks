@@ -1547,9 +1547,10 @@ public class DatabaseTransactionMgr {
                             .getTxnCommitAttachment()).getPartitionVersion());
                     // reset data version to visible version
                     partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
-                    if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
-                    }
+                    // Stamp a fresh version epoch on every INSERT OVERWRITE (a logical data change).
+                    // The epoch is the change watermark consumed by IVM (LocalMetastore.getCurrentTvrSnapshot),
+                    // so it must advance on every commit, not only on TXN_REPLICATION partitions.
+                    partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                 } else {
                     // double write logic partition
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
@@ -1571,8 +1572,11 @@ public class DatabaseTransactionMgr {
                     }
                     // update data version
                     partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
-                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
-                            partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
+                    // Stamp a fresh version epoch on every non-compaction commit so the epoch strictly
+                    // advances on every load. This is the change watermark consumed by IVM
+                    // (LocalMetastore.getCurrentTvrSnapshot). A compaction rewrites files without a
+                    // logical data change, so it must NOT bump the epoch.
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                         partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                     }
                     LOG.debug("set partition {} version to {} in transaction {}",
