@@ -406,6 +406,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
+        appendStatsSource(expBuilder, detailPrefix);
         // Print the children
         if (traverseChildren) {
             expBuilder.append(detailPrefix).append("\n");
@@ -453,9 +454,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
-        if (this instanceof ScanNode) {
-            expBuilder.append(detailPrefix).append("stats source: ").append(statsSource).append("\n");
-        }
+        appendStatsSource(expBuilder, detailPrefix);
         if (!planNodeName.equals("EXCHANGE")) {
             expBuilder.append(detailPrefix).append("column statistics: \n").append(getColumnStatistics(detailPrefix));
         }
@@ -472,6 +471,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             expBuilder.append(children.get(0).getCostExplain(prefix, prefix));
         }
         return expBuilder.toString();
+    }
+
+    // Emit the per-scan StatsSource line (NONE / ANALYZE / TABLE_METADATA) in `explain verbose`
+    // and `explain costs`. Only scan nodes carry a meaningful source; derived operators are skipped.
+    private void appendStatsSource(StringBuilder expBuilder, String detailPrefix) {
+        if (this instanceof ScanNode) {
+            expBuilder.append(detailPrefix).append("stats source: ").append(statsSource).append("\n");
+        }
     }
 
     protected String getColumnStatistics(String prefix) {
