@@ -337,8 +337,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (e instanceof TvrAncestryBrokenException) {
             return true;
         }
-        // Fallback for connectors that still signal a broken ancestry via message text (e.g. Iceberg).
-        // TODO(IVM): migrate those to throw TvrAncestryBrokenException and drop this substring check.
+        // Older connectors (like Iceberg) send this as plain text, not the typed error above.
+        // TODO(IVM): move them to TvrAncestryBrokenException, then delete this text check.
         String message = e.getMessage();
         return message != null && message.contains("is not a parent ancestor");
     }

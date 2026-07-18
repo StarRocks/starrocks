@@ -15,13 +15,9 @@
 package com.starrocks.connector.exception;
 
 /**
- * Thrown by {@code ConnectorMetadata#listTableDeltaTraits} when the requested {@code from} snapshot
- * is not a parent ancestor of the {@code to} snapshot — i.e. the TVR snapshot lineage is broken
- * (typically a partition-shape change such as DROP/TRUNCATE/OVERWRITE that regressed the watermark).
- *
- * <p>This is a typed signal for {@code MVIVMRefreshProcessor}, which treats a broken ancestry as a
- * recoverable "partition-shape change" (drop and recreate the MV) rather than a hard failure. Prefer
- * catching this type over string-matching the exception message.
+ * Means a table's version history is broken, usually because data was dropped or overwritten.
+ * Thrown by {@code listTableDeltaTraits}. {@code MVIVMRefreshProcessor} catches this to show a
+ * clear "drop and recreate the MV" message instead of a raw error.
  */
 public class TvrAncestryBrokenException extends StarRocksConnectorException {
     public TvrAncestryBrokenException(String message) {

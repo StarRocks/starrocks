@@ -5940,19 +5940,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return TvrTableSnapshot.empty();
         }
         OlapTable olapTable = (OlapTable) table;
-        // The watermark is the MAX per-partition version epoch. The version epoch is a cluster-global
-        // GTID (GtidGenerator.nextGtid()) stamped on every non-compaction commit (see
-        // DatabaseTransactionMgr#unprotectedCommitPreparedTransaction), so it is unique and strictly
-        // monotonic across the whole cluster. Taking the max therefore:
-        //   - strictly advances on any load (the committed partition gets a globally-largest epoch,
-        //     which becomes the new max regardless of which partition was written);
-        //   - cannot collide across states (distinct commits carry distinct epochs);
-        //   - cannot overflow (a single GTID is ~4.3e17, far below Long.MAX; summing would overflow
-        //     after ~22 partitions).
-        // This watermark only detects data changes (loads). Partition-shape changes (ADD/DROP/TRUNCATE)
-        // are handled elsewhere: ADD/first-load advances the max; DROP of the max partition regresses
-        // it and surfaces as an ancestry error in listTableDeltaTraits; and MVIVMRefreshProcessor
-        // independently reconciles the base partition set via the PCT layer (syncAndCheckPCTPartitions).
+        // Watermark = highest version epoch across partitions. Each commit stamps a new,
+        // always-bigger epoch, so this number only goes up when data changes. We use max
+        // (not sum) so it never overflows and never repeats a past value.
+        // If every partition is dropped, this returns empty; listTableDeltaTraits below
+        // turns that into a clear "data was dropped" error.
         long watermark = olapTable.getPhysicalPartitions().stream()
                 .mapToLong(PhysicalPartition::getVersionEpoch)
                 .max()
@@ -5971,10 +5963,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return Collections.emptyList();
         }
         long toVersion = toSnapshotInclusive.end()
-                .orElseThrow(() -> new StarRocksConnectorException(
-                        "toSnapshotInclusive must have a valid snapshot ID"));
-        // end() yields the snapshot id for a non-empty snapshot and Optional.empty() for an empty one,
-        // so it unifies the empty-check and id-extraction for the (exclusive) from bound.
+                .orElseThrow(() -> new TvrAncestryBrokenException(
+                        "table has no partitions now, so its history is broken"));
+        // end() gives the version number, or nothing if the snapshot is empty.
         Optional<Long> fromOpt = fromSnapshotExclusive.end();
         if (fromOpt.isPresent() && fromOpt.get() > toVersion) {
             throw new TvrAncestryBrokenException(
@@ -5985,11 +5976,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return Collections.singletonList(classifyNativeDelta(delta));
     }
 
-    // All native OLAP deltas are conservatively classified as retractable because DELETE
-    // predicates are legal on every KeysType, and per-version op-type metadata is unavailable
-    // in the FE.
-    // TODO(IVM Phase 3, upstream #73115): promote to MONOTONIC for append-only loads once
-    // per-version op-type tracking exists, so append-only native IVM can take the cheaper path.
+    // Native tables can always have deletes, so treat every change as "retractable"
+    // (not append-only). Safe, but slower than needed for append-only loads.
+    // TODO(IVM Phase 3, #73115): mark append-only loads as monotonic once we can detect them.
     private static TvrTableDeltaTrait classifyNativeDelta(TvrTableDelta delta) {
         return TvrTableDeltaTrait.ofRetractable(delta);
     }
