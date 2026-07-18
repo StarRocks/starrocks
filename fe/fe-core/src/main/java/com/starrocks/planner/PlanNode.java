@@ -123,6 +123,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
 
+    // Where the statistics used to estimate this node come from; set in computeStatistics().
+    // Only meaningful for scan nodes, printed in `explain costs`.
+    protected Statistics.StatsSource statsSource = Statistics.StatsSource.NONE;
+
     protected Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
     // For vector query engine
@@ -449,6 +453,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 expBuilder.append(detailPrefix + "- " + rf.toExplainString(id.asInt()) + "\n");
             }
         }
+        if (this instanceof ScanNode) {
+            expBuilder.append(detailPrefix).append("stats source: ").append(statsSource).append("\n");
+        }
         if (!planNodeName.equals("EXCHANGE")) {
             expBuilder.append(detailPrefix).append("column statistics: \n").append(getColumnStatistics(detailPrefix));
         }
@@ -584,6 +591,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();
         multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
+        statsSource = statistics.getStatsSource();
     }
 
     public void setHasNullableGenerateChild() {
