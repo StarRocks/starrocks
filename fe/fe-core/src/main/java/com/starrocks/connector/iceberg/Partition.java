@@ -22,10 +22,22 @@ public class Partition implements PartitionInfo {
     private final long modifiedTime;
     private final long version;
     private int specId;
+    // Total live-data-file row count of this partition, read from the Iceberg PARTITIONS metadata table.
+    // -1 means unknown (e.g. the metadata did not carry it). Used by bounded-cost statistics collection to
+    // extrapolate a truncated sample back to the full partition (see ExternalFullStatisticsCollectJob).
+    private long recordCount = -1;
 
     @Override
     public long getModifiedTime() {
         return modifiedTime;
+    }
+
+    public long getRecordCount() {
+        return recordCount;
+    }
+
+    public void setRecordCount(long recordCount) {
+        this.recordCount = recordCount;
     }
 
     @Override

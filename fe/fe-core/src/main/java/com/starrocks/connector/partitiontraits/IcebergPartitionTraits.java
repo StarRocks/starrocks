@@ -25,6 +25,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
@@ -36,7 +37,9 @@ import org.apache.iceberg.Snapshot;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class IcebergPartitionTraits extends DefaultTraits {
@@ -66,6 +69,24 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
+    }
+
+    @Override
+    public Map<String, Long> getPartitionRowCounts(List<String> partitionNames) {
+        // The Iceberg PARTITIONS metadata table carries an exact record_count per partition, so one metadata
+        // scan yields all totals without opening data files (see IcebergCatalog#getPartitions).
+        Map<String, Long> result = new HashMap<>();
+        List<PartitionInfo> partitions = getPartitions(partitionNames);
+        for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
+            PartitionInfo info = partitions.get(i);
+            if (info instanceof Partition) {
+                long recordCount = ((Partition) info).getRecordCount();
+                if (recordCount > 0) {
+                    result.put(partitionNames.get(i), recordCount);
+                }
+            }
+        }
+        return result;
     }
 
     @Override
