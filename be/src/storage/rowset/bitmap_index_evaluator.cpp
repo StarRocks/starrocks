@@ -16,8 +16,8 @@
 
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
-#include "storage/primitive/roaring2range.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/roaring2range.h"
 
 namespace starrocks {
 
@@ -47,6 +47,8 @@ struct BitmapIndexInitializer {
         }
 
         parent->_ctx.is_node_support_bitmap[&node] = true;
+        // A column predicate backed by a bitmap iterator is a fully-covered leaf.
+        parent->_ctx.is_node_fully_covered[&node] = true;
         auto& col_ctx = _get_or_create_column_context(bitmap_iter, cid, parent_node_ctx, parent_type);
         col_ctx.nodes.emplace_back(&node);
         return true;
@@ -58,8 +60,16 @@ struct BitmapIndexInitializer {
         auto& node_ctx = parent->_ctx.compound_node_to_context.emplace(&node, BitmapContext::CompoundNodeContext{})
                                  .first->second;
         bool has_bitmap_index = Type == CompoundNodeType::AND ? false : true;
+        // Fully covered iff every leaf in this subtree can use a bitmap index. Used later to decide whether
+        // predicates below an OR may be erased (only an exact, i.e. fully-covered, subtree is erasable there).
+        bool fully_covered = true;
         for (const auto& child : node.children()) {
             ASSIGN_OR_RETURN(const auto child_has_bitmap_index, child.visit(*this, &node_ctx, Type));
+            const bool child_fully_covered = child.visit([this](const auto& child_node) {
+                const auto it = parent->_ctx.is_node_fully_covered.find(&child_node);
+                return it != parent->_ctx.is_node_fully_covered.end() && it->second;
+            });
+            fully_covered &= child_fully_covered;
             if constexpr (Type == CompoundNodeType::AND) {
                 has_bitmap_index |= child_has_bitmap_index;
             } else {
@@ -70,6 +80,7 @@ struct BitmapIndexInitializer {
             }
         }
         parent->_ctx.is_node_support_bitmap[&node] = has_bitmap_index;
+        parent->_ctx.is_node_fully_covered[&node] = fully_covered;
         return has_bitmap_index;
     }
 
@@ -99,7 +110,10 @@ struct BitmapIndexInitializer {
 struct BitmapIndexSeeker {
     enum class ResultType : uint8_t { ALWAYS_FALSE, ALWAYS_TRUE, NOT_USED, OK };
 
-    StatusOr<ResultType> operator()(const PredicateAndNode& node) {
+    // `erasable` is true when a predicate matched here is guaranteed by the narrowed scan range, so it can be
+    // dropped from the residual tree. AND preserves it (an AND intersects, so each child is mandatory); it is
+    // only downgraded when descending into a not-fully-covered OR.
+    StatusOr<ResultType> operator()(const PredicateAndNode& node, bool erasable) {
         if (!parent->_ctx.is_node_support_bitmap[&node]) {
             return ResultType::NOT_USED;
         }
@@ -145,7 +159,7 @@ struct BitmapIndexSeeker {
         }
 
         for (const auto& child : node.compound_children()) {
-            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this));
+            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this, erasable));
             switch (res_type) {
             case ResultType::ALWAYS_FALSE:
                 parent->_ctx.nodes_to_erase.emplace(&node);
@@ -185,16 +199,23 @@ struct BitmapIndexSeeker {
             return ResultType::NOT_USED;
         }
 
-        parent->_ctx.nodes_to_erase.insert(children_to_erase.begin(), children_to_erase.end());
+        if (erasable) {
+            parent->_ctx.nodes_to_erase.insert(children_to_erase.begin(), children_to_erase.end());
+        }
 
         node_ctx.used = true;
         return ResultType::OK;
     }
 
-    StatusOr<ResultType> operator()(const PredicateOrNode& node) {
+    StatusOr<ResultType> operator()(const PredicateOrNode& node, bool erasable) {
         if (!parent->_ctx.is_node_support_bitmap[&node]) {
             return ResultType::NOT_USED;
         }
+
+        // A predicate below an OR may only be erased if this OR is fully covered by bitmap indexes. Otherwise
+        // the OR's bitmap is a superset (some branch is only partially indexed), and dropping any matched leaf
+        // would lose the per-branch correlation and admit false positives.
+        const bool child_erasable = erasable && parent->_ctx.is_node_fully_covered[&node];
 
         DCHECK(parent->_ctx.compound_node_to_context.find(&node) != parent->_ctx.compound_node_to_context.end());
         auto& node_ctx = parent->_ctx.compound_node_to_context[&node];
@@ -238,7 +259,7 @@ struct BitmapIndexSeeker {
         }
 
         for (const auto& child : node.compound_children()) {
-            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this));
+            ASSIGN_OR_RETURN(const auto res_type, child.visit(*this, child_erasable));
             switch (res_type) {
             case ResultType::ALWAYS_FALSE:
                 children_to_erase.emplace_back(&child);
@@ -278,7 +299,9 @@ struct BitmapIndexSeeker {
             return ResultType::NOT_USED;
         }
 
-        parent->_ctx.nodes_to_erase.insert(children_to_erase.begin(), children_to_erase.end());
+        if (child_erasable) {
+            parent->_ctx.nodes_to_erase.insert(children_to_erase.begin(), children_to_erase.end());
+        }
 
         node_ctx.used = true;
         return ResultType::OK;
@@ -414,6 +437,11 @@ void BitmapIndexEvaluator::close() {
 }
 
 Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
+    close();
+    _closed = false;
+    _ctx = BitmapContext{};
+    _has_bitmap_index = false;
+    _bitmap_index_iterators.clear();
     _bitmap_index_iterators.resize(ChunkSchemaHelper::max_column_id(_schema) + 1, nullptr);
     ASSIGN_OR_RETURN(_has_bitmap_index,
                      _pred_tree.visit(BitmapIndexInitializer{this, supplier}, nullptr, CompoundNodeType::AND));
@@ -426,7 +454,9 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     //  - Seek to the position of predicate's operand within
     //    bitmap index dictionary.
     // ---------------------------------------------------------
-    ASSIGN_OR_RETURN(const auto seek_res, _pred_tree.visit(BitmapIndexSeeker{this}));
+    // The root is an AND whose bitmap is intersected into the scan range, so predicates matched at the top
+    // level are erasable. Erasability is only revoked while descending through a not-fully-covered OR.
+    ASSIGN_OR_RETURN(const auto seek_res, _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true));
     switch (seek_res) {
     case BitmapIndexSeeker::ResultType::ALWAYS_FALSE:
         dst_scan_range.clear();

@@ -127,15 +127,36 @@ public class RoutineLoadJobEditLogTest {
     }
 
     @Test
+    public void testReplayModifyJobPreservesIncludeMetadata() throws Exception {
+        RoutineLoadJob job = createRoutineLoadJob(20L, "meta_job", 1L, 1L);
+        // A desc parsed from a statement carrying the clause (what CREATE/ALTER produces).
+        RoutineLoadDesc desc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "CREATE ROUTINE LOAD meta_job ON test_table "
+                        + "INCLUDE METADATA(PARTITION AS p, HEADERS AS h), COLUMNS(a, b) "
+                        + "PROPERTIES (\"format\"=\"json\") FROM KAFKA (\"kafka_topic\" = \"t\")", 0), null);
+        Assertions.assertNotNull(desc.getMetadata());
+
+        // Follower replay path: applies setRoutineLoadDesc + mergeLoadDescToOriginStatement (no editlog write).
+        job.replayModifyJob(desc, null, null);
+
+        // The job carries the clause in memory after replay...
+        Assertions.assertNotNull(job.getMetadata());
+        Assertions.assertEquals(2, job.getMetadata().getItems().size());
+        // ...and origStmt was regenerated WITH it, so a restart re-parse recovers it (guards the
+        // persistence round-trip: toSql write leg + getLoadDesc read leg through the job).
+        Assertions.assertTrue(job.getOrigStmt().originStmt.contains("INCLUDE METADATA"));
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(job.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed.getMetadata());
+        Assertions.assertEquals(2, reparsed.getMetadata().getItems().size());
+    }
+
+    @Test
     public void testUpdateStateToPausedNormalCase() throws Exception {
         // 1. Prepare test data
         String dbName = "test_db";
         String jobName = "test_routine_load_job";
-        String tableName = "test_table";
         long dbId = 10001L;
         long tableId = 20001L;
-        long partitionId = 30001L;
-        long indexId = 40001L;
         long jobId = 1L;
         
         // Create and add RoutineLoadJob
@@ -182,11 +203,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "test_db_stopped";
         String jobName = "test_routine_load_job_stopped";
-        String tableName = "test_table";
         long dbId = 10002L;
         long tableId = 20002L;
-        long partitionId = 30002L;
-        long indexId = 40002L;
         long jobId = 2L;
         
         // Create and add RoutineLoadJob
@@ -236,11 +254,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "test_db_cancelled";
         String jobName = "test_routine_load_job_cancelled";
-        String tableName = "test_table";
         long dbId = 10003L;
         long tableId = 20003L;
-        long partitionId = 30003L;
-        long indexId = 40003L;
         long jobId = 3L;
         
         // Create and add RoutineLoadJob
@@ -290,11 +305,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "test_db_schedule";
         String jobName = "test_routine_load_job_schedule";
-        String tableName = "test_table";
         long dbId = 10004L;
         long tableId = 20004L;
-        long partitionId = 30004L;
-        long indexId = 40004L;
         long jobId = 4L;
         
         // Create and add RoutineLoadJob
@@ -349,11 +361,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "test_db_running";
         String jobName = "test_routine_load_job_running";
-        String tableName = "test_table";
         long dbId = 10005L;
         long tableId = 20005L;
-        long partitionId = 30005L;
-        long indexId = 40005L;
         long jobId = 5L;
         
         // Create and add RoutineLoadJob
@@ -382,11 +391,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "exception_db";
         String jobName = "exception_routine_load_job";
-        String tableName = "test_table";
         long dbId = 10006L;
         long tableId = 20006L;
-        long partitionId = 30006L;
-        long indexId = 40006L;
         long jobId = 6L;
         
         // Create and add RoutineLoadJob
@@ -434,11 +440,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "exception_db_paused";
         String jobName = "exception_routine_load_job_paused";
-        String tableName = "test_table";
         long dbId = 10007L;
         long tableId = 20007L;
-        long partitionId = 30007L;
-        long indexId = 40007L;
         long jobId = 7L;
         
         // Create a separate RoutineLoadMgr for exception testing
@@ -480,11 +483,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "exception_db_stopped";
         String jobName = "exception_routine_load_job_stopped";
-        String tableName = "test_table";
         long dbId = 10008L;
         long tableId = 20008L;
-        long partitionId = 30008L;
-        long indexId = 40008L;
         long jobId = 8L;
         
         // Create a separate RoutineLoadMgr for exception testing
@@ -530,11 +530,8 @@ public class RoutineLoadJobEditLogTest {
         // 1. Prepare test data
         String dbName = "exception_db_cancelled";
         String jobName = "exception_routine_load_job_cancelled";
-        String tableName = "test_table";
         long dbId = 10009L;
         long tableId = 20009L;
-        long partitionId = 30009L;
-        long indexId = 40009L;
         long jobId = 9L;
         
         // Create a separate RoutineLoadMgr for exception testing
@@ -593,7 +590,6 @@ public class RoutineLoadJobEditLogTest {
         // Get the job from manager
         RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
         Assertions.assertNotNull(job);
-        int originalDesiredConcurrentNum = (int) Deencapsulation.getField(job, "desireTaskConcurrentNum");
 
         // 2. Execute modifyJob operation (master side) - modify job properties
         Map<String, String> jobProperties = new HashMap<>();
@@ -895,7 +891,6 @@ public class RoutineLoadJobEditLogTest {
         // Get the job from manager
         RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
         Assertions.assertNotNull(job);
-        int originalDesiredConcurrentNum = (int) Deencapsulation.getField(job, "desireTaskConcurrentNum");
 
         // 2. Execute modifyJob operation (master side) - modify job properties
         Map<String, String> jobProperties = new HashMap<>();

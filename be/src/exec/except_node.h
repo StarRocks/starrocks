@@ -24,12 +24,12 @@
 #include "column/runtime_type_traits.h"
 #include "common/statusor.h"
 #include "exec/except_hash_set.h"
-#include "exec/olap_common.h"
-#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline_node.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 class DescriptorTbl;

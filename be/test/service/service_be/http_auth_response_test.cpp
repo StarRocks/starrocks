@@ -23,11 +23,11 @@
 #include "common/config_http_fwd.h"
 #include "common/status.h"
 #include "common/system/master_info.h"
-#include "http/ev_http_server.h"
-#include "http/http_handler.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 

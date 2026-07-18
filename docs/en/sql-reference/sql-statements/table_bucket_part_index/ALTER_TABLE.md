@@ -509,6 +509,7 @@ Note:
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
 2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
 3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
+4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
 
 #### Add multiple columns to specified index
 
@@ -542,6 +543,8 @@ Note:
 
 3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
+4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
+
 #### Add a generated column (from v3.1)
 
 Syntax:
@@ -567,6 +570,7 @@ Note:
 
 1. You cannot drop partition column.
 2. If the column is dropped from the base index, it will also be dropped if it is included in the rollup.
+3. On range-distribution tables in shared-data clusters, dropping a key column (a range sort-key column) is supported for Duplicate Key and Aggregate tables (Aggregate only when there is no `REPLACE` or `REPLACE_IF_NOT_NULL` value column), from v4.2 onwards. The operation triggers an online rewrite that re-sorts the data, and re-aggregates it under the reduced key for Aggregate tables. It is not supported for Primary Key or Unique Key tables, for a column that has an index (drop the index first), or for tables that have a rollup or synchronous materialized view.
 
 #### Modify the column type, position, comment, and other properties
 
@@ -587,7 +591,7 @@ Note:
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
 3. While modifying the type, default value, nullability, and position, you must specify the full definition of the column in the statement.
-4. While modifying the comment of the column, you must only specify `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` instead of the full definition. This operation will only change the metadata, and will not initiate Schema Change tasks. It can be applied to Primary Key columns, key columns, and regular columns. Specifying the full definition in the statement will be parsed as modifications to the column definition, and thereby initiate Schema Change tasks.
+4. Modifying only the column comment — whether via `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` or via a full column definition where only the comment differs — changes only the metadata and does not initiate a Schema Change task. This applies to Primary Key columns, key columns, and regular columns. If the full definition also changes any other attribute of the column, the statement initiates a Schema Change task as usual.
 5. The partition column cannot be modified.
 6. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
@@ -737,17 +741,31 @@ Syntax:
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: Support setting timeout time and the default timeout time is one day.
 
+`ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
+
+- The table must be a Duplicate Key or Aggregate table. Primary Key tables are not supported.
+- The table must not be a colocate table and must not contain an AUTO_INCREMENT column.
+- The rollup can be added only when the table has no other rollup or synchronous materialized view.
+
 Example:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+Example: create a rollup with an independent sort key on a range-distribution table in a shared-data cluster.
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### Create rollups in batches

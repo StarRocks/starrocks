@@ -419,7 +419,6 @@ public class MetadataMgr {
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {
-        TableName tableName = new TableName(catalogName, dbName, tblName);
         com.starrocks.sql.ast.QualifiedName qualifiedName = com.starrocks.sql.ast.QualifiedName.of(
                 catalogName != null ? java.util.Arrays.asList(catalogName, dbName, tblName)
                         : java.util.Arrays.asList(dbName, tblName));
@@ -751,7 +750,7 @@ public class MetadataMgr {
                 }
             }
         }
-        return statistics.build();
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -796,7 +795,8 @@ public class MetadataMgr {
                     });
 
                     return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount())
+                            .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     return connectorBasicStats;
                 }

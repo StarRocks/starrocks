@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -33,7 +34,9 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * INSERT-from-FILES pre-split source. Matches only the strict bare
@@ -74,12 +77,35 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
             return null;
         }
         InsertFromFilesScanContext scanContext =
-                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource());
+                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
+                        context.getSessionVariable().getTimeZone());
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
+        List<SecondaryIndexSpec> secondaryIndexSpecs = buildSecondaryIndexSpecs(target);
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
-                sumFileBytes(sourceTable), context.getCurrentComputeResource());
+                sumFileBytes(sourceTable), context.getCurrentComputeResource(), secondaryIndexSpecs);
+    }
+
+    /**
+     * Builds one {@link SecondaryIndexSpec} per visible rollup index of {@code target}
+     * (every visible index except the base), each carrying its own sort key, so the
+     * multi-partition data-tier sampler can project and sample every visible index
+     * alongside the base sort key.
+     *
+     * <p>Package-private (not private) so the unit test can drive it directly without
+     * mocking the full FILES resolution chain that precedes it.
+     */
+    static List<SecondaryIndexSpec> buildSecondaryIndexSpecs(OlapTable target) {
+        List<SecondaryIndexSpec> specs = new ArrayList<>();
+        for (MaterializedIndexMeta meta : target.getVisibleIndexMetas()) {
+            if (meta.getIndexMetaId() == target.getBaseIndexMetaId()) {
+                continue;
+            }
+            specs.add(new SecondaryIndexSpec(meta.getIndexMetaId(),
+                    MetaUtils.getRangeDistributionColumns(target, meta.getIndexMetaId())));
+        }
+        return specs;
     }
 
     /**
@@ -106,19 +132,39 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         if (insertStmt.isColumnMatchByName()) {
             return true;
         }
-        List<Column> targetColumns = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        // The effective target columns are the explicit column list when present
+        // (a partial list omits non-key columns, which are defaulted), otherwise
+        // the full base schema. The load writes FILES column N into effective
+        // target column N by position; requiring name equality at every ordinal
+        // makes the sampler's by-name read of a sort-key column resolve to the
+        // same FILES column the load writes into that key.
+        List<String> targetColumnNames = effectiveTargetColumnNames(insertStmt, targetTable);
         List<Column> sourceColumns = sourceTable.getFullSchema();
-        if (targetColumns.size() != sourceColumns.size()) {
+        if (targetColumnNames.size() != sourceColumns.size()) {
             return false;
         }
-        for (int ordinal = 0; ordinal < targetColumns.size(); ordinal++) {
-            String targetName = targetColumns.get(ordinal).getName();
+        for (int ordinal = 0; ordinal < targetColumnNames.size(); ordinal++) {
+            String targetName = targetColumnNames.get(ordinal);
             String sourceName = sourceColumns.get(ordinal).getName();
             if (!targetName.equalsIgnoreCase(sourceName)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Target column names in INSERT (by-position) order: the explicit target
+     * column list when present, otherwise the base (non-generated) schema names.
+     */
+    private static List<String> effectiveTargetColumnNames(InsertStmt insertStmt, OlapTable targetTable) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames != null && !targetColumnNames.isEmpty()) {
+            return targetColumnNames;
+        }
+        return targetTable.getBaseSchemaWithoutGeneratedColumn().stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
     }
 
     /**

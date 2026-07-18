@@ -39,26 +39,26 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/http_load_params.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_response.h"
 #include "platform/thrift_rpc_helper.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/plan_fragment_executor.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/stream_load/transaction_mgr.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -85,7 +85,8 @@ static TFileFormatType::type parse_stream_load_format(const std::string& format_
     return TFileFormatType::FORMAT_UNKNOWN;
 }
 
-TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env, TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _transaction_mgr(transaction_mgr) {}
 
 TransactionManagerAction::~TransactionManagerAction() = default;
 
@@ -98,7 +99,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
 }
 
 void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(req->param(HTTP_TXN_OP_KEY), st);
@@ -111,7 +112,7 @@ void TransactionManagerAction::handle(HttpRequest* req) {
 
     auto txn_op = req->param(HTTP_TXN_OP_KEY);
     if (boost::iequals(txn_op, TXN_LIST)) {
-        st = _exec_env->transaction_mgr()->list_transactions(req, &resp);
+        st = _transaction_mgr->list_transactions(req, &resp);
         return _send_reply(req, resp);
     }
 
@@ -128,11 +129,11 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     }
 
     if (boost::iequals(txn_op, TXN_BEGIN)) {
-        st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
+        st = _transaction_mgr->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
-        st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
+        st = _transaction_mgr->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
-        st = _exec_env->transaction_mgr()->rollback_transaction(req, &resp);
+        st = _transaction_mgr->rollback_transaction(req, &resp);
     } else {
         return _send_error_reply(req,
                                  Status::InvalidArgument(fmt::format("unsupport transaction operation {}", txn_op)));
@@ -174,12 +175,17 @@ private:
     bool _released{false};
 };
 
-TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+TransactionStreamLoadAction::TransactionStreamLoadAction(
+        ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+        TransactionMgr* transaction_mgr)
+        : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _transaction_mgr(transaction_mgr) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+}
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
 void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     auto str = ctx->to_resp_json(TXN_LOAD, st);
@@ -213,8 +219,8 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     ctx->last_active_ts = MonotonicNanos();
 
     if (!ctx->status.ok()) {
-        if (ctx->need_rollback) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+        if (ctx->need_rollback()) {
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
     }
 
@@ -228,7 +234,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
         ctx->buffer = nullptr;
     }
 
-    auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
+    auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
     _finish_and_reply(req, resp);
 }
 
@@ -296,10 +302,10 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
-            (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
+        if (ctx->need_rollback()) {
+            (void)_transaction_mgr->_rollback_transaction(ctx);
         }
-        auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
+        auto resp = _transaction_mgr->_build_reply(TXN_LOAD, ctx);
         _finish_and_reply(req, resp);
         return -1;
     }
@@ -574,7 +580,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     request.__set_warehouse(ctx->warehouse);
 
     // check reuse
-    return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx);
 }
 
 void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {

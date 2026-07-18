@@ -14,11 +14,11 @@
 
 #include "exec/runtime/schedule/pipeline_driver_observer.h"
 
-#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/schedule/common.h"
 #include "exec/runtime/schedule/event_scheduler.h"
 #include "exec/runtime/schedule/utils.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
 
 namespace starrocks::pipeline {
 

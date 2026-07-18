@@ -96,14 +96,6 @@ public class ConnectorMetricsMgr {
     public static final String COMPACTION_TYPE_MANUAL = "manual";
     public static final String COMPACTION_TYPE_AUTO = "auto";
 
-    // Row-count categories observable from the Iceberg snapshot summary after a
-    // MERGE commit. "matched" = target rows hit by UPDATE/DELETE (position deletes);
-    // "written" = data rows written (UPDATE rewrites + INSERTs). A per-WHEN-clause
-    // breakdown (update vs delete vs insert) needs BE-side op_code counters reported
-    // through TSinkCommitInfo and is left as a follow-up.
-    public static final String MERGE_ROW_TYPE_MATCHED = "matched";
-    public static final String MERGE_ROW_TYPE_WRITTEN = "written";
-
     private static ConnectorMetrics getOrCreate(String connectorType) {
         return METRICS_BY_CONNECTOR.computeIfAbsent(connectorType, k -> new ConnectorMetrics());
     }
@@ -380,13 +372,19 @@ public class ConnectorMetricsMgr {
         }).increase(durationMs);
     }
 
-    public static void increaseIcebergMergeRows(long rows, String rowType) {
+    // Row counts observable from the Iceberg snapshot summary after a MERGE commit,
+    // split by the same file_type dimension as the bytes/files metrics:
+    //   position_delete = target rows hit by UPDATE/DELETE (added position deletes);
+    //   data            = data rows written (UPDATE rewrites + INSERTs).
+    // A per-WHEN-clause breakdown (update vs delete vs insert) needs BE-side op_code
+    // counters reported through TSinkCommitInfo and is left as a follow-up.
+    public static void increaseIcebergMergeRows(long rows, String fileType) {
         ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
-        m.mergeRows.computeIfAbsent(rowType, k -> {
+        m.mergeRows.computeIfAbsent(fileType, k -> {
             LongCounterMetric metric = new LongCounterMetric("iceberg_merge_rows",
                     Metric.MetricUnit.ROWS,
-                    "total rows affected by iceberg merge operations by row type");
-            metric.addLabel(new MetricLabel("row_type", rowType));
+                    "total rows affected by iceberg merge operations by file type");
+            metric.addLabel(new MetricLabel("file_type", fileType));
             MetricRepo.addMetric(metric);
             return metric;
         }).increase(rows);

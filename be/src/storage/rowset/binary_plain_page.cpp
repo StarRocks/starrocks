@@ -33,7 +33,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "gutil/casts.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

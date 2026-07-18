@@ -928,4 +928,47 @@ TEST_F(TabletReshardHelperTest, Reconcile_LeadingAndTrailingGap) {
     expect_window(out[2], 20, 30, true);
 }
 
+TEST_F(TabletReshardHelperTest, set_idg_shared_toggles_all_entries) {
+    IndexDeltaGroupVerPB idg;
+    auto* e0 = idg.add_entries();
+    e0->set_index_file("a.idx");
+    e0->set_shared_file(false);
+    auto* e1 = idg.add_entries();
+    e1->set_index_file("b.idx");
+    e1->set_shared_file(false);
+
+    set_idg_shared(&idg, true);
+    for (const auto& e : idg.entries()) EXPECT_TRUE(e.shared_file());
+
+    set_idg_shared(&idg, false);
+    for (const auto& e : idg.entries()) EXPECT_FALSE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_non_segment_files_shared_marks_idg) {
+    TabletMetadataPB meta;
+    auto& idgs = *meta.mutable_idg_meta()->mutable_idgs();
+    IndexDeltaGroupVerPB idg;
+    idg.add_entries()->set_index_file("c.idx"); // shared_file defaults false
+    idgs[7] = idg;
+
+    set_non_segment_files_shared(&meta);
+    ASSERT_TRUE(meta.idg_meta().idgs().contains(7));
+    for (const auto& e : meta.idg_meta().idgs().at(7).entries()) EXPECT_TRUE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
+    // A cross-published OpAddIndex on a split must have its .idx marked shared so a sibling
+    // cannot later reclaim a file the other child still references.
+    TxnLogPB txn_log;
+    auto* se = txn_log.mutable_op_add_index()->add_segment_entries();
+    se->set_segment_id(3);
+    auto* entry = se->mutable_entry();
+    entry->set_index_file("x.idx");
+    entry->set_shared_file(false);
+
+    set_all_data_files_shared(&txn_log);
+    ASSERT_EQ(1, txn_log.op_add_index().segment_entries_size());
+    EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
+}
+
 } // namespace starrocks::lake

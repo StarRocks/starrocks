@@ -1,0 +1,72 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <functional>
+#include <future>
+#include <memory>
+#include <vector>
+
+namespace starrocks::pipeline {
+class QueryContext;
+using QueryContextPtr = std::shared_ptr<QueryContext>;
+class QueryRuntimeState;
+class FragmentRuntimeState;
+class QueryContextManager;
+class FragmentContext;
+using FragmentContextPtr = std::shared_ptr<FragmentContext>;
+class FragmentContextManager;
+using FragmentContextManagerPtr = std::unique_ptr<FragmentContextManager>;
+using FragmentPromise = std::promise<void>;
+using FragmentFuture = std::future<void>;
+class Pipeline;
+using PipelinePtr = std::shared_ptr<Pipeline>;
+using Pipelines = std::vector<PipelinePtr>;
+using PipelineRawPtr = Pipeline*;
+using PipelineRawPtrs = std::vector<Pipeline*>;
+class PipelineDriver;
+using DriverPtr = std::shared_ptr<PipelineDriver>;
+using DriverRawPtr = PipelineDriver*;
+using DriverConstRawPtr = const PipelineDriver*;
+using Drivers = std::vector<DriverPtr>;
+using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
+class DriverObserver;
+class OperatorFactory;
+using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
+using OpFactories = std::vector<OpFactoryPtr>;
+class SourceOperatorFactory;
+using SourceOperatorFactoryPtr = std::shared_ptr<SourceOperatorFactory>;
+class Operator;
+using OperatorRawPtr = Operator*;
+using OperatorPtr = std::shared_ptr<Operator>;
+using Operators = std::vector<OperatorPtr>;
+class DriverExecutor;
+using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
+class PipelineObserver;
+class Event;
+using EventPtr = std::shared_ptr<Event>;
+class EventScheduler;
+class PipelineTimer;
+class PipelineTimerTask;
+class MorselQueue;
+class MorselQueueFactory;
+class GlobalDriverExecutor;
+class ExecStateReporter;
+class PipelineBuilderContext;
+} // namespace starrocks::pipeline
+
+namespace starrocks {
+using OperatorFactoryPtr = pipeline::OpFactoryPtr;
+}

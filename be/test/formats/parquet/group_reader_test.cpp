@@ -25,7 +25,6 @@
 #include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/parser.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -40,7 +39,7 @@
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/column_expr_predicate.h"
+#include "storage_primitive/column_expr_predicate.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {
@@ -804,8 +803,6 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
 
     // Minimal scanner context so GroupReader::_create_column_readers() can
     // dereference scanner_ctx->options without crashing.
-    auto* scanner_ctx = _pool.add(new HdfsScannerContext());
-
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
     param->read_cols.emplace_back(c2);
@@ -814,7 +811,8 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     param->read_cols.emplace_back(c5);
     param->read_cols.emplace_back(c6);
     param->stats = &g_hdfs_stats;
-    param->scanner_ctx = scanner_ctx;
+    param->scan_ctx = _pool.add(new FormatScanContext());
+    param->scan_ctx->stats = param->stats;
     return param;
 }
 
@@ -2199,7 +2197,6 @@ TEST_F(GroupReaderTest, StructColumnReaderFillDstColumnMissingSubfieldReader) {
 
 TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNullScanRange) {
     auto* param = _create_group_reader_param();
-    param->scan_range = nullptr;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2219,7 +2216,6 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNullScanRange) {
 
 TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNoExtendedColumns) {
     auto* param = _create_group_reader_param();
-    param->scan_range = _pool.add(new THdfsScanRange());
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2239,9 +2235,7 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNoExtendedColumns) {
 
 TEST_F(GroupReaderTest, TestGetExtendedBigIntValueSlotNotFound) {
     auto* param = _create_group_reader_param();
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(std::map<int32_t, TExpr>());
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = std::map<int32_t, TExpr>();
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2267,9 +2261,7 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueEmptyNodes) {
     expr.nodes = std::vector<TExprNode>();
     extended_columns[0] = expr;
 
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(extended_columns);
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = extended_columns;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2297,9 +2289,7 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueWrongNodeType) {
     expr.nodes.push_back(node);
     extended_columns[0] = expr;
 
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(extended_columns);
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = extended_columns;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2330,9 +2320,7 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueSuccess) {
     expr.nodes.push_back(node);
     extended_columns[0] = expr;
 
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(extended_columns);
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = extended_columns;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2376,8 +2364,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2399,8 +2387,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2423,6 +2411,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
 }
 
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
+    // Legacy (non-lineage) GLM lookup: _row_id is the file-local row position. The read range is
+    // file-local, so a row group starting at row 7 must emit 7..10 for its first four rows.
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
@@ -2431,8 +2421,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
             new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(scan_range_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2442,20 +2432,53 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     param->file_metadata = file_meta;
     param->chunk_size = config::vector_chunk_size;
 
-    auto* scan_range = new THdfsScanRange();
-    param->scan_range = _pool.add(scan_range);
-
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7, 7);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
     ASSERT_OK(group_reader->init());
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
-    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(0, 4), nullptr, column));
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
     ASSERT_EQ(4, column->size());
     ASSERT_EQ(7, column->get(0).get_int64());
     ASSERT_EQ(8, column->get(1).get_int64());
     ASSERT_EQ(9, column->get(2).get_int64());
     ASSERT_EQ(10, column->get(3).get_int64());
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
+    // Row lineage (v3): _row_id = scan_range->first_row_id + file-local position. For a row group
+    // that does not start the file (first row 7 here) the base must stay the file-level
+    // first_row_id; a row-group-level base would double-count the row-group start and emit
+    // 1014..1017 instead of 1007..1010.
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    param->scan_ctx->first_row_id = 1000;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
+    ASSERT_OK(group_reader->init());
+
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ(1007, column->get(0).get_int64());
+    ASSERT_EQ(1008, column->get(1).get_int64());
+    ASSERT_EQ(1009, column->get(2).get_int64());
+    ASSERT_EQ(1010, column->get(3).get_int64());
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
@@ -2464,8 +2487,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2477,9 +2500,7 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
     expr.nodes.push_back(node);
     extended_columns[101] = expr;
 
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(extended_columns);
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = extended_columns;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2501,8 +2522,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralR
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2511,9 +2532,7 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralR
     expr.nodes.push_back(node);
     extended_columns[101] = expr;
 
-    auto* scan_range = new THdfsScanRange();
-    scan_range->__set_extended_columns(extended_columns);
-    param->scan_range = _pool.add(scan_range);
+    param->scan_ctx->extended_column_exprs = extended_columns;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2690,7 +2709,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     param->file = file;
     param->file_metadata = file_meta;
     param->chunk_size = config::vector_chunk_size;
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->timezone = "UTC";
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
@@ -2712,8 +2731,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     // Build file metadata WITH physical _row_id column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -2741,8 +2760,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     // Build file metadata WITH physical _last_updated_sequence_number column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -3218,8 +3237,8 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scan_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scan_ctx->timezone = "UTC";
 
     // Build file metadata with both physical iceberg columns
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -4013,7 +4032,7 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) 
     field_arr->children().emplace_back(std::move(offset_0));
     root->children().emplace_back(std::move(field_arr));
     column_access_paths.emplace_back(std::move(root));
-    param->scanner_ctx->column_access_paths = std::move(column_access_paths);
+    param->scan_ctx->column_access_paths = std::move(column_access_paths);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
@@ -5042,7 +5061,7 @@ TEST_F(GroupReaderTest, LateMaterializeSkipRowsCompoundConjunctFiltersAll) {
     std::vector<ExprContext*> scanner_ctxs;
     ASSERT_OK(
             create_int_eq_conjunct_ctxs(&_pool, &runtime_state, param->read_cols[0].slot_id(), 999999, &scanner_ctxs));
-    param->scanner_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
+    param->scan_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -5069,8 +5088,8 @@ TEST_F(GroupReaderTest, LateMaterializeSkipRowsCompoundConjunctFiltersAll) {
 // Covers: HdfsScannerContext::evaluate_all_predicates evaluates
 //         scanner_ctxs when slot-by-slot conjuncts are absent.
 TEST_F(GroupReaderTest, EvaluateAllPredicatesWithScannerCtxs) {
-    auto* scanner_ctx = _pool.add(new HdfsScannerContext());
-    scanner_ctx->format_scan_context.stats = &g_hdfs_stats;
+    auto* scan_ctx = _pool.add(new FormatScanContext());
+    scan_ctx->stats = &g_hdfs_stats;
 
     // Create a BIGINT chunk with 2 rows: values [0, 1].
     auto chunk = std::make_shared<Chunk>();
@@ -5084,9 +5103,9 @@ TEST_F(GroupReaderTest, EvaluateAllPredicatesWithScannerCtxs) {
     RuntimeState runtime_state{TQueryGlobals()};
     std::vector<ExprContext*> scanner_ctxs;
     ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, slot_id, 0, &scanner_ctxs));
-    scanner_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
+    scan_ctx->conjuncts.scanner_ctxs = scanner_ctxs;
 
-    ASSERT_OK(scanner_ctx->evaluate_all_predicates(&chunk));
+    ASSERT_OK(scan_ctx->evaluate_all_predicates(&chunk));
     EXPECT_EQ(1u, chunk->num_rows());
     EXPECT_EQ(0, chunk->get_column_by_slot_id(slot_id)->get(0).get_int64());
 

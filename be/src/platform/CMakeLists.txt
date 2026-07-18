@@ -22,7 +22,21 @@ set(PLATFORM_FILES
   aws/poco_common.cpp
   aws/poco_http_client.cpp
   aws/poco_http_client_factory.cpp
+  fs_broker.cpp
+  broker_mgr.cpp
   download_util.cpp
+  http/ev_http_server.cpp
+  http/http_auth.cpp
+  http/http_channel.cpp
+  http/http_client.cpp
+  http/http_headers.cpp
+  http/http_method.cpp
+  http/http_metrics.cpp
+  http/http_parser.cpp
+  http/http_request.cpp
+  http/http_response.cpp
+  http/http_status.cpp
+  http/http_stream_channel.cpp
   key_cache.cpp
   llm/llm_cache.cpp
   llm/llm_query_service.cpp
@@ -32,6 +46,7 @@ set(PLATFORM_FILES
   path_rw.cpp
   python/env.cpp
   query_timeout_hook.cpp
+  small_file_mgr.cpp
   store_path.cpp
   thrift_rpc_helper.cpp
   udf_downloader.cpp
@@ -42,4 +57,4 @@ ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC HttpCore FSCore IO Types Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC FileSystem IO Types Common Base Gutil StarRocksGen)

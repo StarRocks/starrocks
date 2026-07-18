@@ -85,7 +85,6 @@ public class CaptureVersionFragmentBuilder {
 
         if (!workerId2ScanRanges.isEmpty()) {
             final PlanFragmentId captureVersionFragmentId = new PlanFragmentId(id + 1);
-            final int fid = captureVersionFragmentId.asInt();
             // Just get a tuple id.
             final ArrayList<TupleId> tupleIds = fragments.get(0).getPlanFragment().getPlanRoot().getTupleIds();
             PlanNode dummyNode = new CaptureVersionNode(PlanNodeId.DUMMY_PLAN_NODE_ID, tupleIds);

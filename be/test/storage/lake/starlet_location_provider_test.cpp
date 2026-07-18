@@ -22,9 +22,9 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
-#include "fs/fs_starlet.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 

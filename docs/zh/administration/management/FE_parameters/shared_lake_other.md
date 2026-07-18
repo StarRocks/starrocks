@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## 查看 FE 配置项
@@ -368,8 +370,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 8
 - 类型: Int
 - 单位: -
-- 是否可变: No
-- 描述: 存算分离集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。
+- 是否可变: Yes
+- 描述: 存算分离集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。设置为 `0` 或负数将完全禁用 AutoVacuum。
 - 引入版本: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`
@@ -714,6 +716,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变：Yes
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
+
+<EditonSpecificFEItemSharedLakeOther />
 
 ## 其他
 

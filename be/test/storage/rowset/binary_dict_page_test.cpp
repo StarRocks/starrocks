@@ -48,11 +48,11 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

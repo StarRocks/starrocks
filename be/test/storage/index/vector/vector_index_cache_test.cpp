@@ -30,11 +30,12 @@
 #include "common/status.h"
 #include "fs/fs_memory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
@@ -176,6 +177,56 @@ TEST_F(VectorIndexCacheTest, LookupAndHitCounters_TrackedAcrossPaths) {
     EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/missing.vi"), &h));
     EXPECT_EQ(2u, cache_->lookup_count());
     EXPECT_EQ(1u, cache_->hit_count());
+}
+
+TEST_F(VectorIndexCacheTest, Metrics_UpdatedFromCacheOperations) {
+    MetricRegistry registry("test_registry");
+    VectorIndexCacheMetrics metrics(&registry);
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get(), &metrics);
+    registry.trigger_hook();
+
+    EXPECT_EQ(16 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_usage.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_hit_count.value());
+
+    auto loader = [&]() -> tenann::IndexRef { return make_dummy_ref(2048); };
+    tenann::IndexCacheHandle h;
+    EXPECT_TRUE(cache->GetOrCreate(tenann::CacheKey("/metrics.vi"), loader, &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(16 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(2048, metrics.vector_index_cache_usage.value());
+    EXPECT_DOUBLE_EQ(2048.0 / (16 * 1024), metrics.vector_index_cache_usage_ratio.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_hit_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_hit_count.value());
+
+    EXPECT_TRUE(cache->GetOrCreate(tenann::CacheKey("/metrics.vi"), loader, &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(2, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_hit_count.value());
+    EXPECT_DOUBLE_EQ(0.5, metrics.vector_index_cache_hit_ratio.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_hit_count.value());
+    EXPECT_DOUBLE_EQ(1.0, metrics.vector_index_cache_dynamic_hit_ratio.value());
+
+    EXPECT_TRUE(cache->Lookup(tenann::CacheKey("/metrics.vi"), &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(2, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_hit_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_hit_count.value());
+
+    cache->SetCapacity(8 * 1024);
+    registry.trigger_hook();
+
+    EXPECT_EQ(8 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(2048, metrics.vector_index_cache_usage.value());
+    EXPECT_DOUBLE_EQ(0.25, metrics.vector_index_cache_usage_ratio.value());
 }
 
 TEST_F(VectorIndexCacheTest, GetOrCreate_ConcurrentCallers_SingleFlight) {
@@ -502,8 +553,8 @@ public:
 // Reverting the loader to vector_index_mem_tracker() -> captured == vi -> fails.
 // Dropping the scoped setter entirely -> captured == the ambient query tracker -> fails.
 TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
-    auto* process = GlobalEnv::GetInstance()->process_mem_tracker();
-    auto* vi = GlobalEnv::GetInstance()->vector_index_mem_tracker();
+    auto* process = RuntimeEnv::GetInstance()->process_mem_tracker();
+    auto* vi = RuntimeEnv::GetInstance()->vector_index_mem_tracker();
     ASSERT_NE(nullptr, process);
     ASSERT_NE(nullptr, vi);
 

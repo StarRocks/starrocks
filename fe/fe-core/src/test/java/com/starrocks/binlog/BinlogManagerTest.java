@@ -72,7 +72,7 @@ public class BinlogManagerTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
-        boolean result = binlogManager.tryDisableBinlog(db, table.getId());
+        binlogManager.tryDisableBinlog(db, table.getId());
         Assertions.assertFalse(table.isBinlogEnabled());
     }
 
@@ -82,7 +82,7 @@ public class BinlogManagerTest {
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_test");
         table.setBinlogTxnId(2);
-        long totalNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);
         Assertions.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
 

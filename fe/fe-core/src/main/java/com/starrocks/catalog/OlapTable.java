@@ -1738,6 +1738,26 @@ public class OlapTable extends Table {
         }
 
         lastSchemaUpdateTime = new AtomicLong(-1);
+
+        // Keep the FE metadata of shared-data primary-key tables on the cloud-native persistent
+        // index after an image load (mirrors the BE normalization). See the method for details.
+        normalizeCloudNativePersistentIndex();
+    }
+
+    // Shared-data primary-key tables only support the cloud-native persistent index; the local-disk
+    // and in-memory indexes are deprecated (enforced on CREATE/ALTER by OlapTableFactory and
+    // SchemaChangeHandler, and on the BE by normalize_tablet_metadata_after_load). Upgrade any table
+    // created before that restriction so the FE metadata matches what the BE actually runs, keeping
+    // SHOW CREATE TABLE and FE-driven tablet tasks consistent. Idempotent; touches shared-data
+    // primary-key tables only. Invoked both on image load (gsonPostProcess) and on lake alter-meta
+    // replay (LakeTableAlterMetaJob.updateCatalog), so a legacy alter log cannot leave the table on
+    // a deprecated index type after startup.
+    public void normalizeCloudNativePersistentIndex() {
+        if (tableProperty != null && isCloudNativeTable() && getKeysType() == KeysType.PRIMARY_KEYS
+                && (!enablePersistentIndex() || getPersistentIndexType() != TPersistentIndexType.CLOUD_NATIVE)) {
+            setEnablePersistentIndex(true);
+            setPersistentIndexType(TPersistentIndexType.CLOUD_NATIVE);
+        }
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -3179,35 +3199,40 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
-        // flat json enable
-        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
-        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
-
-            // Only include other flat JSON properties if flat_json.enable is true
-            if (Boolean.parseBoolean(flatJsonEnable)) {
-                // flat json null factor
-                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
-                }
-
-                // flat json sparsity factor
-                String flatJsonSparsityFactor =
-                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
-                }
-
-                // flat json column max
-                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
-                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
-                }
-            }
-        }
+        // flat json
+        appendFlatJsonProperties(properties, tableProperties);
 
         return properties;
+    }
+
+    // Render flat_json.* for SHOW CREATE TABLE; shared with LakeTable.getUniqueProperties()
+    // so both modes stay in sync.
+    protected static void appendFlatJsonProperties(Map<String, String> properties,
+                                                   Map<String, String> tableProperties) {
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (Strings.isNullOrEmpty(flatJsonEnable)) {
+            return;
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+
+        // Only include other flat JSON properties if flat_json.enable is true
+        if (Boolean.parseBoolean(flatJsonEnable)) {
+            String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+            }
+
+            String flatJsonSparsityFactor =
+                    tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+            }
+
+            String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+            if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+            }
+        }
     }
 
     @Override

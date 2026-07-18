@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -363,8 +364,7 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-        ctx.getAuditEventBuilder().setQueriedRelations(
-                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
+        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelationsForAudit(executor, parsedStmt));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
@@ -457,6 +457,35 @@ public class ConnectProcessor {
             return leaderResult.getSql_digest();
         }
         return null;
+    }
+
+    private List<String> getQueriedRelationsFromLeader(StmtExecutor stmtExecutor) {
+        if (stmtExecutor == null || !stmtExecutor.getIsForwardToLeaderOrInit(false)) {
+            return null;
+        }
+        LeaderOpExecutor leaderOpExecutor = stmtExecutor.getLeaderOpExecutor();
+        if (leaderOpExecutor == null) {
+            return null;
+        }
+        TMasterOpResult leaderResult = leaderOpExecutor.getResult();
+        if (leaderResult != null && leaderResult.isSetQueried_relations()) {
+            return leaderResult.getQueried_relations();
+        }
+        return null;
+    }
+
+    // A follower that forwards the statement never analyzes it locally, so its own parse tree
+    // still carries CTE aliases and unqualified names. Prefer the relations the Leader resolved
+    // after analyze (shipped back via TMasterOpResult); only fall back to local collection when
+    // the statement ran locally or the Leader did not provide them (e.g. an older version).
+    // Package-private (would otherwise be private) so ConnectProcessorTest can exercise it directly.
+    @VisibleForTesting
+    List<String> queriedRelationsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt) {
+        List<String> relationsFromLeader = getQueriedRelationsFromLeader(stmtExecutor);
+        if (relationsFromLeader != null) {
+            return relationsFromLeader;
+        }
+        return AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt);
     }
 
     private void setStmtFailure(Throwable e, String auditSql) {
@@ -1332,6 +1361,20 @@ public class ConnectProcessor {
             if (audit != null) {
                 result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
+        }
+
+        // Ship the relations the Leader resolved after analyze so the follower logs accurate
+        // QueriedRelations instead of falling back to its own unanalyzed parse tree (which still holds
+        // CTE aliases / unqualified names). Read from ctx.getExecutor() -- the executor that ran --
+        // rather than the local `executor`, which is null when doProxyExecute threw; this also covers
+        // ArrowFlightSql, which overrides doProxyExecute but reaches it only through this method.
+        // When an executor ran, set the field even if the relation list is empty (collectAll is
+        // null-safe) so an empty result means "leader resolved no relations", distinct from an unset
+        // field -- an older leader, or no executor at all -- which makes the follower fall back.
+        StmtExecutor executedStmt = ctx.getExecutor();
+        if (executedStmt != null) {
+            result.setQueried_relations(AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(
+                    executedStmt.getParsedStmt()));
         }
         return result;
     }

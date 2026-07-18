@@ -4,6 +4,8 @@ hide_table_of_contents: true
 description: "Alphabetical i - p"
 ---
 
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
 # 指标 i 到 p
 
 :::note
@@ -16,6 +18,8 @@ description: "Alphabetical i - p"
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
 
 :::
+
+<MetricsIP />
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -82,6 +86,42 @@ description: "Alphabetical i - p"
   - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
   - `delete_type` (`position` 或 `metadata`)
 - 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
+
+## `iceberg_merge_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的总字节数，按文件类型拆分。`data` 表示新数据文件（更新后的行和插入的行）的大小；`position_delete` 表示标记被命中旧行的位置删除文件大小。
+
+## `iceberg_merge_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积
+- 描述：Iceberg `MERGE INTO` 任务的总执行时间（毫秒）。每个任务的耗时在其结束后累加。
+
+## `iceberg_merge_files`
+
+- 单位：计数
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的文件总数，按文件类型拆分。`data` 统计新数据文件个数，`position_delete` 统计位置删除文件个数。
+
+## `iceberg_merge_rows`
+
+- 单位：行
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务处理的总行数，按文件类型拆分。`position_delete` 统计被 UPDATE 或 DELETE 命中的目标行（写为位置删除）；`data` 统计写入的数据行（更新的行加上插入的行）。
+
+## `iceberg_merge_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+- 描述：目标表为 Iceberg 的 `MERGE INTO` 任务总数。无论任务成功还是失败，每当任务结束时该指标都会加 1。Iceberg MERGE INTO 采用 V2 Merge-On-Read 模型，在单个 snapshot 中原子写入数据文件和位置删除文件。
 
 ## `iceberg_metadata_table_query_total`
 
@@ -234,6 +274,37 @@ description: "Alphabetical i - p"
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `lake_compaction_failed`
+
+- 单位：计数
+- 描述：失败的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_partial_success`
+
+- 单位：计数
+- 描述：部分成功的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_running`
+
+- 单位：计数
+- 描述：当前正在运行的存算分离（lake）压缩作业数量（每个分区一个作业）。
+
+## `lake_compaction_running_tasks`
+
+- 单位：计数
+- 描述：所有正在运行的存算分离（lake）压缩作业中当前正在被压缩的 tablet 数量。该数量与调度器通过 `lake_compaction_max_tasks` 配置进行限流时所用的单位一致，比统计压缩作业数量（每个分区一个）的 `lake_compaction_running` 更细粒度——单个作业会按 tablet 拆分为一个个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_score_at_trigger`
+
+- 单位：分数
+- 类型：Gauge
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的压缩分数，四舍五入为整数。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该 Gauge 不会衰减：在 Leader FE 上，当没有压缩任务运行时，它会保留上一次触发的值（不会重置为 0）。该值是进程本地的（Leader 上的内存计数器，不会持久化），因此当 FE Leader 发生故障切换后，新当选的 Leader 会从 0 开始，并在其首次触发压缩之前一直报告 0——不会继承前一个 Leader 的值。应将其与 `lake_compaction_running > 0` 结合起来设置告警，而非单独读取该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_success`
+
+- 单位：计数
+- 描述：成功的存算分离（lake）压缩任务计数。
 
 ## `lake_vacuum_del_file_batch_size_minute`
 

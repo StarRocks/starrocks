@@ -1,0 +1,47 @@
+-- name: test_flat_json_intermediate_object
+-- Regression for extracting an intermediate (non-leaf) JSON OBJECT from a flat_json table.
+-- On a flat_json.enable=true table the nested object `o` is flattened into leaf sub-columns
+-- (o.inner). With cbo_prune_json_subfield / cbo_json_v2_rewrite on, get_json_string(j,'$.o') is
+-- rewritten into a typed read of the extended column j.o; the segment reader used to find no
+-- sub-column named exactly "o" and return NULL, instead of reconstructing the object from its
+-- o.* leaves.
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+create table t(id int, j json) duplicate key(id)
+  distributed by hash(id) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t select generate_series,
+  parse_json(concat('{"o":{"inner":', generate_series, '},"leaf":', generate_series, '}'))
+  from table(generate_series(1,300));
+-- result:
+-- !result
+select get_json_string(j,'$.o') from t order by id limit 2;
+-- result:
+{"inner": 1}
+{"inner": 2}
+-- !result
+select cast(json_query(j,'$.o') as string) from t order by id limit 2;
+-- result:
+{"inner": 1}
+{"inner": 2}
+-- !result
+select cast(j->'$.o' as string) from t order by id limit 2;
+-- result:
+{"inner": 1}
+{"inner": 2}
+-- !result
+select get_json_int(j,'$.o.inner') from t order by id limit 2;
+-- result:
+1
+2
+-- !result
+select count(*) from t where get_json_string(j,'$.o') is not null;
+-- result:
+300
+-- !result

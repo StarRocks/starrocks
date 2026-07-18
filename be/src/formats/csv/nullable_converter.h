@@ -33,6 +33,11 @@ public:
 
 private:
     std::unique_ptr<Converter> _base_converter;
+    // Scratch storage for unescaping `s` before delegating to `_base_converter`. Reused
+    // across calls (this converter instance is built once per column/nesting position and
+    // invoked once per row thereafter, never reentrantly), so this does not allocate
+    // per-row: the buffer's capacity settles after the first few calls.
+    mutable std::string _unescape_buf;
 };
 
 } // namespace starrocks::csv

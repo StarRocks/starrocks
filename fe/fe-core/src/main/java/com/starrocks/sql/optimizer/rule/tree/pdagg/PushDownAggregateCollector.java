@@ -210,6 +210,15 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                     newWhenThen.add(caseWhen.getThenClause(i));
                 }
 
+                if (caseWhen.hasElse() && caseWhen.getElseClause().isConstant()
+                        && !caseWhen.getElseClause().isConstantNull()) {
+                    // forbid push down: a non-null constant ELSE cannot be pushed below the join.
+                    // PushDownAggregateRewriter.rewriteProject asserts a constant ELSE is NULL, so
+                    // letting it through would trip that checkState (IllegalStateException). Mirror
+                    // the THEN-clause guard above and the IF path's else-branch check.
+                    return visit(optExpression, context);
+                }
+
                 // mock just value case when
                 CaseWhenOperator newCaseWhen = new CaseWhenOperator(caseWhen.getType(), null,
                         caseWhen.hasElse() ? caseWhen.getElseClause() : null, newWhenThen);

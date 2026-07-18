@@ -23,6 +23,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
@@ -34,6 +36,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob {
+    private static final Logger LOG = LogManager.getLogger(ExternalHistogramStatisticsCollectJob.class);
+
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
                     " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), " +
@@ -43,6 +47,9 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                     " where rand() <= $sampleRatio" +
                     " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
+
+    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
+            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName', NULL, $mcv, NOW()";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), " +
@@ -99,6 +106,13 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
             collectStatisticSync(sql, context, analyzeStatus);
+            // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
+            // superseded. The read side no longer depends on this for correctness (it dedups by
+            // update_time), so this is purely storage hygiene - failures are logged, not fatal.
+            if (!statisticExecutor.dropExternalHistogramRawColumn(context, table.getUUID(), columnName)) {
+                LOG.warn("[ExternalStats] failed to clean up stale raw-keyed histogram row | catalog={} db={} table={} " +
+                        "column={}", catalogName, db.getOriginName(), table.getName(), columnName);
+            }
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
@@ -130,16 +144,12 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
-        context.put("tableUUID", table.getUUID());
+        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
         context.put("columnName", quoteColumName);
         context.put("columnNameStr", columnName);
         context.put("catalogName", catalogName);
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
-
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Config.histogram_max_sample_row_count);
 
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
@@ -151,6 +161,15 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         } else {
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
+
+        if (shouldSkipHistogramBuckets(columnType)) {
+            builder.append(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
+            return builder.toString();
+        }
+
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
 
         if (!mostCommonValues.isEmpty()) {
             if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {

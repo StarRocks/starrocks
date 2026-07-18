@@ -54,9 +54,9 @@
 #include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "platform/path_rw.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 
@@ -176,7 +176,5 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
     } while (0)
 
 int caculate_delta_writer_thread_num(int thread_num_from_config);
-
-int64_t parse_data_size(const std::string& value_str);
 
 } // namespace starrocks

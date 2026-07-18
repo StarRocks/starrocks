@@ -102,14 +102,20 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     jvm_arch="aarch64"
 fi
 
+# min jdk version required for jni features
+MIN_JDK_VERSION=17
+# recommended jdk version; versions in [MIN_JDK_VERSION, RECOMMENDED_JDK_VERSION) are deprecated
+RECOMMENDED_JDK_VERSION=21
 if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
     export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
     java_version=$(jdk_version)
-    if [[ $java_version -lt 17 ]]; then
-        echo "[WARNING] jdk versions lower than 17 are not supported"
+    if [[ $java_version -lt $MIN_JDK_VERSION ]]; then
+        echo "[ERROR] JDK $java_version is not supported, please use JDK version $RECOMMENDED_JDK_VERSION or higher"
+    elif [[ $java_version -lt $RECOMMENDED_JDK_VERSION ]]; then
+        echo "[WARNING] JDK $java_version is deprecated and support will be removed in a future release, please upgrade to JDK version $RECOMMENDED_JDK_VERSION or higher"
     fi
 fi
 
@@ -162,7 +168,16 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
         export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+        # Normal mode: take the value from the `jemalloc_conf` config in be.conf/cn.conf so it is
+        # observable via information_schema.be_configs. Fall back to the built-in default when unset.
+        # NOTE: keep this default in sync with CONF_String(jemalloc_conf, ...) in be/src/common/config.h.
+        jemalloc_conf="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+        if [ ${RUN_BE} -eq 1 ]; then
+            read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/be.conf
+        elif [ ${RUN_CN} -eq 1 ]; then
+            read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/cn.conf
+        fi
+        export JEMALLOC_CONF="$jemalloc_conf"
     fi
 fi
 

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <future>
+#include <set>
 #include <unordered_set>
 
 #include "base/debug/trace.h"
@@ -26,9 +27,12 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
@@ -37,9 +41,6 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -47,10 +48,25 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegmentReadState& state) {
+    SegmentReadStateCache cache;
+    if (state.has_pruned_scan_range()) {
+        cache.scan_range = state.pruned_scan_range;
+    }
+    if (state.has_rowid_bounds_cache()) {
+        cache.seek_range_rowid_ranges = &state.seek_ranges_rowid_bounds;
+        cache.tablet_rowid_range = &state.tablet_range_rowid_bounds;
+    }
+    return cache;
+}
 
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
@@ -181,6 +197,21 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
     for (size_t i = 0; i < metadata().next_compaction_offset(); ++i) {
         auto* segment_meta = output_rowset->add_segment_metas();
         segment_meta->CopyFrom(metadata().segment_metas(i));
+        if (already_compacted_segments[i].segment == nullptr) {
+            // A null slot here is only expected when a physically-lost segment was tolerated by
+            // experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug, so fail
+            // loudly instead of silently mis-accounting.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment when collecting compacted segment info, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              _tablet_id, metadata().id(), i));
+            // Its file size is unknown, so drop the file-size info (like the get_data_size failure branch).
+            // Still account its metadata row count so the output rowset's num_rows stays consistent with
+            // the sum of the segment_metas we copied above.
+            clear_file_size_info = true;
+            uncompacted_num_rows += metadata().segment_metas(i).num_rows();
+            continue;
+        }
         StatusOr<int64_t> size_or = already_compacted_segments[i].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
@@ -216,6 +247,21 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
          i < metadata().segment_metas_size(); ++i, ++idx) {
         auto* segment_meta = output_rowset->add_segment_metas();
         segment_meta->CopyFrom(metadata().segment_metas(i));
+        if (uncompacted_segments[idx].segment == nullptr) {
+            // A null slot here is only expected when a physically-lost segment was tolerated by
+            // experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug, so fail
+            // loudly instead of silently mis-accounting.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment when collecting uncompacted segment info, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              _tablet_id, metadata().id(), i));
+            // Its file size is unknown, so drop the file-size info (like the get_data_size failure branch).
+            // Still account its metadata row count so the output rowset's num_rows stays consistent with
+            // the sum of the segment_metas we copied above.
+            clear_file_size_info = true;
+            uncompacted_num_rows += metadata().segment_metas(i).num_rows();
+            continue;
+        }
         StatusOr<int64_t> size_or = uncompacted_segments[idx].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
@@ -240,44 +286,75 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
-    SegmentReadOptions seg_options;
-    if (options.lake_io_opts.fs) {
-        seg_options.fs = options.lake_io_opts.fs;
+    return do_read(schema, options, ReadContext{});
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
+                                                     const std::vector<SegmentPtr>& prepared_segments) {
+    return do_read(schema, options, ReadContext{.prepared_segments = &prepared_segments});
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read_prepared_segment(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+        size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators) {
+    return do_read(schema, options,
+                   ReadContext{.prepared_segments = &prepared_segments,
+                               .target_segment_idx = segment_idx,
+                               .prepared_segment_state = prepared_segment_state.get(),
+                               .reusable_segment_iterators = reusable_segment_iterators});
+}
+
+Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
+                                         const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
+                                         SegmentReadOptions* segment_options) const {
+    if (segment_options == nullptr) {
+        return Status::InvalidArgument("segment read options is null");
+    }
+    if (lake_io_opts.fs) {
+        segment_options->fs = lake_io_opts.fs;
     } else {
         auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-        ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+        ASSIGN_OR_RETURN(segment_options->fs, FileSystemFactory::CreateSharedFromString(root_loc));
     }
-    seg_options.stats = options.stats;
-    seg_options.ranges = options.ranges;
-    seg_options.pred_tree = options.pred_tree;
-    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
-    seg_options.runtime_filter_preds = options.runtime_filter_preds;
-    seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
-    seg_options.has_predicate_above_iterator = options.has_predicate_above_iterator;
-    seg_options.use_page_cache = options.use_page_cache;
-    seg_options.profile = options.profile;
-    seg_options.reader_type = options.reader_type;
-    seg_options.chunk_size = options.chunk_size;
-    seg_options.global_dictmaps = options.global_dictmaps;
-    seg_options.unused_output_column_ids = options.unused_output_column_ids;
-    seg_options.runtime_range_pruner = options.runtime_range_pruner;
-    seg_options.tablet_schema = options.tablet_schema;
-    seg_options.lake_io_opts = options.lake_io_opts;
-    seg_options.asc_hint = options.asc_hint;
-    seg_options.column_access_paths = options.column_access_paths;
-    seg_options.use_vector_index = options.use_vector_index;
-    seg_options.vector_search_option = options.vector_search_option;
-    seg_options.belonged_to_cloud_native = true;
-    seg_options.has_preaggregation = options.has_preaggregation;
-    seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
-    seg_options.tablet_id = tablet_id();
-    seg_options.rowset_id = metadata().id();
-    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
+    segment_options->lake_io_opts.fs = segment_options->fs;
+    segment_options->stats = stats;
+    segment_options->ranges = options.ranges;
+    segment_options->pred_tree = options.pred_tree;
+    segment_options->pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+    segment_options->runtime_filter_preds = options.runtime_filter_preds;
+    segment_options->delete_predicates = delete_predicates;
+    segment_options->enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    segment_options->has_predicate_above_iterator = options.has_predicate_above_iterator;
+    if (options.runtime_state != nullptr) {
+        segment_options->is_cancelled = &options.runtime_state->cancelled_ref();
+    }
+    segment_options->use_page_cache = options.use_page_cache;
+    segment_options->profile = options.profile;
+    segment_options->reader_type = options.reader_type;
+    segment_options->chunk_size = options.chunk_size;
+    segment_options->global_dictmaps = options.global_dictmaps;
+    segment_options->unused_output_column_ids = options.unused_output_column_ids;
+    segment_options->runtime_range_pruner = options.runtime_range_pruner;
+    segment_options->tablet_schema = options.tablet_schema;
+    segment_options->lake_io_opts = lake_io_opts;
+    segment_options->asc_hint = options.asc_hint;
+    segment_options->column_access_paths = options.column_access_paths;
+    segment_options->use_vector_index = options.use_vector_index;
+    segment_options->vector_search_option = options.vector_search_option;
+    segment_options->belonged_to_cloud_native = true;
+    segment_options->has_preaggregation = options.has_preaggregation;
+    segment_options->sample_options = options.sample_options;
+    segment_options->enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    segment_options->tablet_id = tablet_id();
+    segment_options->rowset_id = metadata().id();
+    segment_options->rowsetid = rowset_id();
+    segment_options->dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
-        seg_options.is_primary_keys = true;
-        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
-                _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
-        seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+        segment_options->is_primary_keys = true;
+        segment_options->delvec_loader = std::make_shared<LakeDelvecLoader>(
+                _tablet_mgr, nullptr, segment_options->lake_io_opts.fill_data_cache, segment_options->lake_io_opts);
+        segment_options->dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     }
     // The Index Delta Group (ADD INDEX fast-path) sidecar applies to ALL lake
     // key types, not just PRIMARY_KEYS: CREATE INDEX / SET bloom_filter_columns
@@ -286,39 +363,59 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     // the is_primary_keys block; otherwise non-PK tables get a null idg_loader
     // (and version 0), the .idx is invisible at query time, and the index is
     // silently never applied. delvec/dcg above stay PK-only.
-    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
-    seg_options.version = options.version;
-    if (options.delete_predicates != nullptr) {
-        seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
-    }
-
+    segment_options->idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
+    segment_options->version = options.version;
     if (options.short_key_ranges_option != nullptr) { // logical split.
-        seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
+        segment_options->short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
-    seg_options.reader_type = options.reader_type;
-    seg_options.enable_gin_filter = options.enable_gin_filter;
-    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
-    seg_options.has_preaggregation = options.has_preaggregation;
+    segment_options->enable_gin_filter = options.enable_gin_filter;
+    segment_options->prune_column_after_index_filter = options.prune_column_after_index_filter;
+    segment_options->is_first_split_of_segment = true;
+    return Status::OK();
+}
 
-    std::unique_ptr<Schema> segment_schema_guard;
-    auto* segment_schema = const_cast<Schema*>(&schema);
-    // Append the columns with delete condition to segment schema.
+Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<SeekRange>& shared_segment_range,
+                                        SegmentReadOptions* segment_options) const {
+    if (segment_options == nullptr) {
+        return Status::InvalidArgument("segment read options is null");
+    }
+    segment_options->tablet_range = std::nullopt;
+    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) &&
+        _metadata->segment_metas(segment_idx).shared() && shared_segment_range.has_value()) {
+        segment_options->tablet_range = *shared_segment_range;
+    }
+    return Status::OK();
+}
+
+Schema Rowset::build_segment_schema(const Schema& schema, const RowsetReadOptions& options,
+                                    const DisjunctivePredicates& delete_predicates) const {
+    Schema segment_schema = schema;
     std::set<ColumnId> need_added_column;
-    seg_options.delete_predicates.get_column_ids(&need_added_column);
-
+    delete_predicates.get_column_ids(&need_added_column);
     for (ColumnId cid : need_added_column) {
         const TabletColumn& col = options.tablet_schema->column(cid);
-        if (segment_schema->get_field_by_name(std::string(col.name())) != nullptr) {
+        if (segment_schema.get_field_by_name(std::string(col.name())) != nullptr) {
             continue;
         }
-        // copy on write
-        if (segment_schema == &schema) {
-            segment_schema = new Schema(schema);
-            segment_schema_guard.reset(segment_schema);
-        }
-        auto f = StorageSchemaHelper::convert_field(cid, col);
-        segment_schema->append(std::make_shared<Field>(std::move(f)));
+        segment_schema.append(std::make_shared<Field>(StorageSchemaHelper::convert_field(cid, col)));
     }
+    return segment_schema;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
+                                                        const ReadContext& context) {
+    if (context.target_segment_idx.has_value() && *context.target_segment_idx >= static_cast<size_t>(num_segments())) {
+        return Status::InvalidArgument("target segment index exceeds rowset segment count");
+    }
+
+    const auto delete_predicates = options.delete_predicates != nullptr
+                                           ? options.delete_predicates->get_predicates(_index)
+                                           : DisjunctivePredicates{};
+    SegmentReadOptions seg_options;
+    RETURN_IF_ERROR(
+            init_segment_read_options(options, options.lake_io_opts, delete_predicates, options.stats, &seg_options));
+    auto segment_schema = build_segment_schema(schema, options, delete_predicates);
+    const bool use_projection = segment_schema.num_fields() != schema.num_fields();
 
     // Expose the fully-populated SegmentReadOptions so unit tests can verify the read-options
     // propagation chain (TabletReaderParams -> RowsetReadOptions -> SegmentReadOptions). No-op
@@ -326,7 +423,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     TEST_SYNC_POINT_CALLBACK("Rowset::read::seg_options", &seg_options);
 
     std::vector<ChunkIteratorPtr> segment_iterators;
-
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     // Check if segment metadata filter can be used.
@@ -337,6 +433,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
         for (int i = 0; i < metadata().segment_metas_size() && i < num_segments(); i++) {
+            if (context.target_segment_idx.has_value() && static_cast<size_t>(i) != *context.target_segment_idx) {
+                continue;
+            }
             const auto& segment_meta = metadata().segment_metas(i);
             if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
                                                     *options.tablet_schema)) {
@@ -354,15 +453,36 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
     std::vector<LoadedSegment> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    if (context.prepared_segments != nullptr) {
+        if (context.prepared_segments->size() != static_cast<size_t>(num_segments())) {
+            return Status::InvalidArgument("prepared segment count does not match rowset segment count");
+        }
+    } else {
+        RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    }
 
     // Update segments_read_count after filtering
     if (options.stats) {
-        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+        if (context.target_segment_idx.has_value()) {
+            options.stats->segments_read_count +=
+                    skip_segment_idxs.contains(static_cast<int>(*context.target_segment_idx)) ? 0 : 1;
+        } else {
+            options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+        }
     }
 
-    for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i].segment;
+    const size_t segment_begin = context.target_segment_idx.value_or(0);
+    const size_t segment_count =
+            context.prepared_segments != nullptr ? context.prepared_segments->size() : segments.size();
+    const size_t segment_end = context.target_segment_idx.has_value() ? *context.target_segment_idx + 1 : segment_count;
+    for (size_t i = segment_begin; i < segment_end; i++) {
+        // Prepared segments are indexed by metadata position and are not pre-filtered by load_segments(),
+        // so apply the metadata filter here; the non-prepared path already carries nullptr placeholders
+        // for filtered segments (handled by the nullptr check below).
+        if (context.prepared_segments != nullptr && skip_segment_idxs.contains(static_cast<int>(i))) {
+            continue;
+        }
+        auto& seg_ptr = context.prepared_segments != nullptr ? (*context.prepared_segments)[i] : segments[i].segment;
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
             continue;
@@ -371,13 +491,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             continue;
         }
 
-        seg_options.tablet_range = std::nullopt;
-        // Consult shared() by the segment's true metadata position, recorded at load time. The loaded
-        // position i is NOT the metadata index in segment-range / partial-compaction modes.
-        const int32_t meta_pos = segments[i].segment_meta_pos;
-        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
-            shared_segment_range.has_value()) {
-            seg_options.tablet_range = *shared_segment_range;
+        // Consult shared() by the segment's true metadata position. The loaded position i is NOT the
+        // metadata index in segment-range / partial-compaction modes, so use segment_meta_pos for the
+        // non-prepared path; the prepared-segment vector is already indexed by metadata position.
+        const int32_t meta_pos =
+                context.prepared_segments != nullptr ? static_cast<int32_t>(i) : segments[i].segment_meta_pos;
+        RETURN_IF_ERROR(set_segment_tablet_range(meta_pos, shared_segment_range, &seg_options));
+        // Owner tablet id for .vi naming: a segment shared across tablets after a split must
+        // resolve the same .vi from every reader (see resolve_segment_vector_index_uid). Set only for
+        // vector-indexed segments; the read()/read_prepared_segment() family (all funneling through
+        // do_read -> init_segment_read_options) sets belonged_to_cloud_native -- unlike
+        // get_each_segment_iterator* -- so only their iterators reach the ANN-reader path that consumes this.
+        if (meta_pos < _metadata->segment_metas_size() &&
+            _metadata->segment_metas(meta_pos).vector_index_ids_size() > 0) {
+            seg_options.segment_vector_index_uid = resolve_segment_vector_index_uid(_metadata->segment_metas(meta_pos));
         }
 
         if (options.rowid_range_option != nullptr) { // physical split.
@@ -388,23 +515,49 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             }
             seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+            if (context.prepared_segment_state != nullptr) {
+                seg_options.read_state_cache = make_segment_read_state_cache(*context.prepared_segment_state);
+            }
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {
             seg_options.is_first_split_of_segment = true;
         }
 
-        auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
-        if (res.status().is_end_of_file()) {
-            continue;
-        }
-        if (!res.ok()) {
-            return res.status();
-        }
-        if (segment_schema != &schema) {
-            segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
-        } else {
+        if (context.reusable_segment_iterators != nullptr) {
+            if (context.reusable_segment_iterators->size() <= i) {
+                context.reusable_segment_iterators->resize(i + 1);
+            }
+            const bool reuse_segment_iter = (*context.reusable_segment_iterators)[i] != nullptr;
+            auto res = seg_ptr->new_reusable_iterator(segment_schema, schema, seg_options,
+                                                      &(*context.reusable_segment_iterators)[i]);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            if (options.stats != nullptr) {
+                if (reuse_segment_iter) {
+                    options.stats->lake_reusable_segment_iter_reused++;
+                } else {
+                    options.stats->lake_reusable_segment_iter_created++;
+                }
+            }
             segment_iterators.emplace_back(std::move(res).value());
+        } else {
+            auto res = seg_ptr->new_iterator(segment_schema, seg_options);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            if (use_projection) {
+                segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
+            } else {
+                segment_iterators.emplace_back(std::move(res).value());
+            }
         }
     }
     if (segment_iterators.size() > 1 && !is_overlapped()) {
@@ -422,6 +575,12 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 
     size_t segment_num = 0;
     for (auto& seg_ptr : segments) {
+        // This count is position-agnostic, so a null placeholder slot (e.g. a lost segment dropped by
+        // experimental_lake_ignore_lost_segment) simply contributes no read iterator -- skip it whatever
+        // its cause.
+        if (seg_ptr == nullptr) {
+            continue;
+        }
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -440,8 +599,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    // Size the result up front and write each iterator to its segment's position, so the returned
+    // vector stays positionally aligned with `segments` (and its size always equals num_segments).
+    // Callers index it by position and assert on the size; a segment that produces no iterator -- a
+    // lost segment (experimental_lake_ignore_lost_segment) or an EndOfFile segment -- is left as the
+    // default null in its own slot. Mirrors get_each_segment_iterator_with_delvec.
+    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
@@ -468,6 +631,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
+        if (seg_ptr == nullptr) {
+            // This vector must stay positionally aligned, so a null segment can only be tolerated (its
+            // slot left as the default null placeholder) when experimental_lake_ignore_lost_segment
+            // dropped a physically-lost segment. With the flag off it is an unexpected bug -- fail loudly.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment in get_each_segment_iterator, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              tablet_id(), metadata().id(), i));
+            continue;
+        }
         seg_options.tablet_range = std::nullopt;
         const int32_t meta_pos = segments[i].segment_meta_pos;
         if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
@@ -476,12 +649,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave seg_iterators[i] as the default null placeholder, preserving alignment.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
 }
@@ -521,6 +695,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
+        if (seg_ptr == nullptr) {
+            // This vector must stay positionally aligned (callers derive the rssid from a segment's
+            // position), so a null segment can only be tolerated -- leaving seg_iterators[i] as the
+            // default null placeholder, same as the EOF case -- when experimental_lake_ignore_lost_segment
+            // dropped a physically-lost segment. With the flag off it is an unexpected bug -- fail loudly.
+            RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                                  fmt::format("unexpected null segment in get_each_segment_iterator_with_delvec, "
+                                              "tablet:{} rowset:{} segidx:{}",
+                                              tablet_id(), metadata().id(), i));
+            continue;
+        }
         // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
         // shared stats object; otherwise all segments share `stats`.
         if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
@@ -669,6 +854,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             }
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
+            // Keep the segment vector positionally aligned with metadata: leave a nullptr placeholder
+            // for the lost segment instead of dropping it (mirrors the metadata-filter skip above).
+            // Callers index the result by segment position (to derive rssid) and assert
+            // size == num_segments; a dropped entry would misalign every later segment and trip those
+            // checks. In index-mapping mode the slot is already nullptr from the earlier resize(), so
+            // only the sequential path needs to push the placeholder.
+            if (!use_index_mapping) {
+                segments->emplace_back(LoadedSegment{nullptr, meta_pos});
+            }
         } else {
             return segment_or.status().clone_and_prepend(fmt::format(
                     "load_segments failed tablet:{} rowset:{} segid:{}", _tablet_id, metadata().id(), seg_id));
@@ -729,7 +923,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load segment serially
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

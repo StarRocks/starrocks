@@ -564,8 +564,7 @@ class LakePrimaryIndexSstStatsTest : public testing::Test {};
 
 TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_disabled) {
     LakePrimaryIndex index;
-    // persistent index is disabled by default
-    index.set_enable_persistent_index(false);
+    // No persistent index is built by default (_persistent_index is nullptr).
 
     EXPECT_EQ(0, index.publish_sst_flush_count());
     EXPECT_EQ(0, index.publish_sst_flush_bytes());
@@ -578,9 +577,7 @@ TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_disabled) {
 
 TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_enabled_no_persistent_index) {
     LakePrimaryIndex index;
-    // Enable persistent index but don't actually create one
-    // (the internal _persistent_index will be nullptr or not a LakePersistentIndex)
-    index.set_enable_persistent_index(true);
+    // No LakePersistentIndex is built (the internal _persistent_index is nullptr).
 
     // Should return 0 when persistent_index is not LakePersistentIndex
     EXPECT_EQ(0, index.publish_sst_flush_count());

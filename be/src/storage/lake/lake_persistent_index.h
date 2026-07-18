@@ -70,10 +70,10 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t rowset_id);
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid);
 
-    // Use erase with `rowset_id` instead of this one.
+    // Use erase with `del_rssid` instead of this one.
     Status erase(size_t n, const Slice* keys, IndexValue* old_values) override {
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
@@ -83,9 +83,9 @@ public:
     // |keys|: key array as raw buffer
     // |filter| : used for filter keys that need to skip. `True` means need skip.
     // |version|: version of values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
     Status replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                        uint32_t rowset_id);
+                        uint32_t del_rssid);
 
     // batch replace
     // |n|: size of key/value array
@@ -121,7 +121,7 @@ public:
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(MetaFileBuilder* builder);
+    Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
 
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
@@ -137,6 +137,14 @@ public:
 
     static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
                                         std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
+
+    // Assign the generation version (PersistentIndexSstablePB.generation_version) to each
+    // sstable in |new_meta|: a sstable that already carries a non-zero value is left
+    // untouched; a file present in |prev_meta| keeps its recorded value (a legacy 0 stays 0,
+    // so lake vacuum retention treats it conservatively); a file absent from |prev_meta| is
+    // new this publish and is stamped with |generation_version|.
+    static void assign_generation_versions(PersistentIndexSstableMetaPB* new_meta,
+                                           const PersistentIndexSstableMetaPB& prev_meta, int64_t generation_version);
 
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);

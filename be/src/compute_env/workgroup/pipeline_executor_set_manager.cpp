@@ -16,7 +16,7 @@
 
 #include "common/thread/thread.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 
 namespace starrocks::workgroup {
 

@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "platform/store_path.h"
@@ -38,7 +39,6 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -1136,6 +1136,70 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
+// skip_meta_cache=true must distinguish "durably persisted" from "only in the
+// metacache": a version whose metadata was cached (e.g. during an aggregate
+// publish) but never durably written reads as NotFound.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+
+    // Cache-only: present in the metacache, no durable file.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, metadata);
+
+    // A cache-hitting read sees it...
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    EXPECT_TRUE(res.ok());
+
+    // ...but a skip_meta_cache read reports NotFound.
+    lake::CacheOptions skip_cache_opts{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true};
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+
+    // Same contract on the single-tablet (bundle) read path.
+    res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// With a durable copy present, skip_meta_cache reads it from storage (not the
+// cached copy) and, with fill_meta_cache=true, refreshes the cache with it.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_reads_durable) {
+    constexpr int64_t kDurableCommitTime = 100;
+    constexpr int64_t kStaleCommitTime = 999999;
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    metadata->set_commit_time(kDurableCommitTime);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    // Overwrite the cache entry with a deliberately-different stale copy.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    auto stale = std::make_shared<TabletMetadata>(*metadata);
+    stale->set_commit_time(kStaleCommitTime);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, stale);
+
+    // A cache-hitting read returns the stale copy.
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kStaleCommitTime, res.value()->commit_time());
+
+    // skip_meta_cache returns the durable copy...
+    res = _tablet_manager->get_tablet_metadata(
+            tablet_id, 2,
+            lake::CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kDurableCommitTime, res.value()->commit_time());
+
+    // ...and fill_meta_cache=true refreshed the cache with it.
+    auto cached = _tablet_manager->metacache()->lookup_tablet_metadata(path);
+    ASSERT_TRUE(cached != nullptr);
+    EXPECT_EQ(kDurableCommitTime, cached->commit_time());
+}
+
 TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     // Create a corrupted bundle metadata file with bundle_metadata_size = 0
     std::string serialized_string;
@@ -1146,6 +1210,90 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
     EXPECT_FALSE(res.ok());
     EXPECT_TRUE(res.status().is_corruption());
+}
+
+// Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
+// lack filename, with the real names only in deprecated_segments. put_bundle_tablet_metadata must
+// persist metadata whose segment filename survives (reproduces old-worker -> new-aggregator).
+TEST_F(LakeTabletManagerTest, put_bundle_preserves_legacy_segment_filenames) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    // Legacy-shaped rowset: segment_metas carries only sort-key fields (no filename); the real name
+    // lives only in deprecated_segments.
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(5);
+    rs->add_segment_metas()->set_num_rows(5);
+    rs->add_deprecated_segments("real_seg.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(1, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("real_seg.dat", got->rowsets(0).segment_metas(0).filename());
+}
+
+// Layer C (after_load extend) on the aggregate receive path: a sparse legacy rowset
+// (segment_metas_size() < deprecated_segments_size()) must keep ALL segment names. Without the
+// after_load in put_bundle_tablet_metadata, the no-extend before_save would truncate the tail.
+TEST_F(LakeTabletManagerTest, put_bundle_extends_then_preserves_mismatched_legacy_counts) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(10);
+    rs->add_segment_metas()->set_num_rows(10); // only 1 segment_metas...
+    rs->add_deprecated_segments("s0.dat");     // ...but 2 real segment names
+    rs->add_deprecated_segments("s1.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(2, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("s0.dat", got->rowsets(0).segment_metas(0).filename());
+    EXPECT_EQ("s1.dat", got->rowsets(0).segment_metas(1).filename());
 }
 
 TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {

@@ -55,11 +55,11 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
@@ -292,6 +292,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
     auto compession_level = req.__isset.compression_level ? req.compression_level : -1;
     tablet_metadata_pb->mutable_schema()->set_compression_level(compession_level);
+    // Shared-data primary-key tablets only support the cloud-native persistent index. Normalize
+    // here too (not just on load) so a create request never persists LOCAL/in-memory flags that
+    // downstream cloud-native code paths would then read as stale.
+    force_cloud_native_pk_persistent_index(tablet_metadata_pb.get());
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
@@ -416,6 +420,9 @@ StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet
             }
         }
     }
+    // Shared-data primary-key tablets only support the cloud-native persistent index; keep the
+    // initial metadata consistent with that invariant regardless of what the FE sent.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     // flat json config
     if (meta.__isset.flat_json_config) {
@@ -593,6 +600,12 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     // tablet page and the footer use the same decision, even if the flag is flipped concurrently.
     const bool enable_checksum = config::lake_enable_protobuf_file_checksum;
     for (auto& [tablet_id, meta] : tablet_metas) {
+        // Normalize RPC-received metadata on entry exactly like S3-loaded metadata: after-load
+        // (extend + back-fill segment_metas from the legacy arrays) BEFORE before-save rebuilds those
+        // arrays. During a mixed-version upgrade an old worker can send legacy-shaped metadata whose
+        // segment names live only in deprecated_segments; without this after-load the no-extend
+        // before-save would drop them. Idempotent for already-normalized (new-worker) metadata.
+        normalize_tablet_metadata_after_load(&meta);
         RETURN_IF_ERROR(normalize_tablet_metadata_before_save(&meta));
         meta.clear_schema();
         meta.mutable_historical_schemas()->clear();
@@ -744,9 +757,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, const CacheOptions& cache_opts,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
-        TRACE("got cached tablet metadata");
-        return ptr;
+    if (!cache_opts.skip_meta_cache) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+            TRACE("got cached tablet metadata");
+            return ptr;
+        }
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
@@ -920,8 +935,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
                                                                       int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
     auto tablet_path = tablet_metadata_location(tablet_id, version);
-    if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
-        return ptr;
+    if (!cache_opts.skip_meta_cache) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
+            return ptr;
+        }
     }
     if (version == kInitialVersion) {
         return Status::NotFound("Not found expected tablet metadata");
@@ -1014,6 +1031,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
         item.CopyFrom(schema_it->second);
     }
+
+    // The schema was stripped from the bundle and only restored above, so the earlier
+    // normalize_tablet_metadata_after_load() could not tell this was a primary-key tablet.
+    // Re-apply the cloud-native persistent index normalization now that keys_type is known.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     for (auto& [_, schema_id] : metadata->rowset_to_schema()) {
         schema_it = bundle_metadata->schemas().find(schema_id);
@@ -1151,7 +1173,9 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t versi
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
+DEFINE_FAIL_POINT(put_txn_log_fail);
 Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
+    FAIL_POINT_TRIGGER_RETURN(put_txn_log_fail, Status::InternalError("put_txn_log_fail"));
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
@@ -1229,9 +1253,15 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     }
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
-    // Dual-write the deprecated legacy parallel arrays from the structured fields for rollback compat.
+    // put_combined_txn_log persists txn logs COLLECTED FROM OTHER NODES over RPC (aggregate compaction
+    // and the normal combined-txn write path), so a log can be legacy-shaped if produced by a pre-feature
+    // BE during a mixed-version upgrade. Normalize each received log on entry exactly like a disk-loaded
+    // one (after-load extends + back-fills segment_metas from the legacy arrays), which also makes the
+    // subsequent no-extend before-save safe; before-save then dual-writes the legacy arrays back from the
+    // structured fields for version-rollback compat.
     CombinedTxnLogPB normalized_logs = logs;
     for (auto& log : *normalized_logs.mutable_txn_logs()) {
+        normalize_txn_log_after_load(&log);
         RETURN_IF_ERROR(normalize_txn_log_before_save(&log));
     }
     return save_lake_protobuf(path, normalized_logs);

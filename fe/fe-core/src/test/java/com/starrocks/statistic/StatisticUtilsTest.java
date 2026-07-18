@@ -113,4 +113,21 @@ class StatisticUtilsTest extends PlanTestBase {
             globalDefault.setBigQueryProfileThreshold(savedBigQueryThresholdMs + "ms");
         }
     }
+
+    @Test
+    void hashTableUuidForPkStorageIsDeterministicAndFixedLength() {
+        String tableUuid = "iceberg.udp_abx_etl_db1_datawarehouse.tenant.account_buying_group." +
+                "d6cfa1ed-0000-0000-0000-000000000000";
+        String hash1 = StatisticUtils.hashTableUuidForPkStorage(tableUuid);
+        String hash2 = StatisticUtils.hashTableUuidForPkStorage(tableUuid);
+        Assertions.assertEquals(hash1, hash2, "hash must be deterministic for the same input");
+        Assertions.assertEquals(32, hash1.length(), "murmur3_128 hex-encoded hash must be 32 chars");
+        Assertions.assertTrue(hash1.length() < tableUuid.length(),
+                "hash must be shorter than a realistic long Iceberg table_uuid");
+
+        String otherTableUuid = "iceberg.udp_abx_etl_db1_datawarehouse.tenant.buying_group_member." +
+                "d6cfa1ed-0000-0000-0000-000000000000";
+        Assertions.assertNotEquals(hash1, StatisticUtils.hashTableUuidForPkStorage(otherTableUuid),
+                "different table_uuid values must not collide for realistic inputs");
+    }
 }

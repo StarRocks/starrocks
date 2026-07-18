@@ -490,7 +490,6 @@ public class MetaFunctions {
      */
     @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectTaskRuns() {
-        ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         return ConstantOperator.createVarchar(trm.inspect());

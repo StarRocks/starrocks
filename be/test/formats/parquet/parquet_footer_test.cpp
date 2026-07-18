@@ -18,7 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/parquet/file_reader.h"
 
 namespace starrocks::parquet {
@@ -41,7 +41,7 @@ TEST_F(ParquetFooterTest, TestEmptyParquetFile) {
     auto file = open_file(file_path);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path));
-    Status status = file_reader->init(&ctx);
+    Status status = file_reader->init(&ctx.format_scan_context);
     EXPECT_TRUE(status.is_corruption());
 }
 
@@ -50,7 +50,7 @@ TEST_F(ParquetFooterTest, TestEncryptedParquetFile) {
     auto file = open_file(file_path);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path));
-    Status status = file_reader->init(&ctx);
+    Status status = file_reader->init(&ctx.format_scan_context);
     EXPECT_TRUE(status.is_not_supported());
 }
 
