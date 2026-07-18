@@ -93,8 +93,8 @@ struct RuntimeColumnPredicateBuilder {
                         }
                     }
                     if (dict != nullptr) {
-                        build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
-                                range, minmax, pool, dict);
+                        build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(range, minmax,
+                                                                                                          pool, dict);
                     } else {
                         build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool,
                                                                                               nullptr);
