@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
@@ -30,6 +31,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,6 +40,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -307,6 +310,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             }
             TabletReshardJob.JobState state = latest.getJobState();
             if (state == TabletReshardJob.JobState.FINISHED) {
+                awaitShardSpread(submitted, shouldAbort);
                 return;
             }
             if (state.isFinalState()) {
@@ -320,6 +324,89 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             }
             sleepUntilNextPoll(jobId);
         }
+    }
+
+    /**
+     * After the reshard job reaches FINISHED (metadata committed), the freshly created shards are
+     * placed by StarOS's asynchronous SPREAD scheduler, which is eventually consistent: for a short
+     * window after creation all new shards can still resolve to a single worker. If the triggering
+     * load plans its {@code OlapTableSink} during that window it opens one channel per distinct
+     * destination CN — i.e. a single channel — and writes serially to one node (observed as
+     * {@code LoadChannel ChannelNum=1}, ~3x slower than a fanned-out load). This bounded, best-effort
+     * wait polls the same placement lookup the sink uses ({@link WarehouseManager#getAllComputeNodeIdsAssignToTablets})
+     * until the new shards have spread across {@code min(newShardCount, liveComputeNodes)} distinct
+     * nodes. On timeout it proceeds anyway — the load is still correct, just less parallel.
+     *
+     * <p>Skipped (no wait) when the tunable is 0, the load's compute resource is unknown, or the job
+     * is not a {@link SplitTabletJob}. All lookups are fail-safe: any error just ends the wait and the
+     * load proceeds.
+     */
+    private void awaitShardSpread(TabletReshardJob submitted, BooleanSupplier shouldAbort) {
+        long spreadSeconds = Config.tablet_pre_split_await_shard_spread_seconds;
+        if (spreadSeconds <= 0 || loadComputeResource == null || !(submitted instanceof SplitTabletJob)) {
+            return;
+        }
+        List<Long> newTabletIds = ((SplitTabletJob) submitted).getAllNewTabletIds();
+        if (newTabletIds.size() <= 1) {
+            return;
+        }
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        int liveNodeCount;
+        try {
+            liveNodeCount = warehouseManager.getAliveComputeNodes(loadComputeResource).size();
+        } catch (RuntimeException resolveFailure) {
+            LOG.warn("Sample-Based Tablet Pre-Split: cannot resolve live compute nodes for shard-spread "
+                    + "wait: {}", resolveFailure.getMessage());
+            return;
+        }
+        int targetDistinct = Math.min(newTabletIds.size(), liveNodeCount);
+        if (targetDistinct <= 1) {
+            return;
+        }
+        Instant deadline = clock.instant().plus(Duration.ofSeconds(spreadSeconds));
+        while (true) {
+            if (shouldAbort.getAsBoolean()) {
+                return;
+            }
+            int distinct = countDistinctAssignedNodes(warehouseManager, newTabletIds);
+            if (distinct >= targetDistinct) {
+                LOG.info("Sample-Based Tablet Pre-Split: {} new tablets spread across {} compute nodes "
+                        + "(target {}) — load will fan out", newTabletIds.size(), distinct, targetDistinct);
+                return;
+            }
+            if (clock.instant().isAfter(deadline)) {
+                LOG.warn("Sample-Based Tablet Pre-Split: new shards not spread within {}s ({} of {} target "
+                        + "distinct compute nodes); proceeding, load may open fewer channels",
+                        spreadSeconds, distinct, targetDistinct);
+                return;
+            }
+            try {
+                Thread.sleep(pollInterval.toMillis());
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /** Distinct compute-node ids across all {@code tabletIds}' current shard placement; 0 on any error. */
+    private int countDistinctAssignedNodes(WarehouseManager warehouseManager, List<Long> tabletIds) {
+        Map<Long, List<Long>> assignment;
+        try {
+            assignment = warehouseManager.getAllComputeNodeIdsAssignToTablets(loadComputeResource, tabletIds);
+        } catch (RuntimeException lookupFailure) {
+            LOG.warn("Sample-Based Tablet Pre-Split: shard placement lookup failed during spread wait: {}",
+                    lookupFailure.getMessage());
+            return 0;
+        }
+        if (assignment == null) {
+            return 0;
+        }
+        Set<Long> nodes = new HashSet<>();
+        for (List<Long> nodeIds : assignment.values()) {
+            nodes.addAll(nodeIds);
+        }
+        return nodes.size();
     }
 
     /**

@@ -4696,6 +4696,17 @@ public class Config extends ConfigBase {
             + "set this well below the smallest Broker Load timeout in normal use.")
     public static long tablet_pre_split_post_submit_wait_seconds = 300L;
 
+    @ConfField(mutable = true, comment = "After a Sample-Based Tablet Pre-Split reshard job reaches "
+            + "FINISHED, the triggering load waits up to this many seconds for StarOS to spread the "
+            + "freshly created shards across compute nodes before planning its OlapTableSink. StarOS "
+            + "SPREAD placement is eventually consistent, so a load that plans immediately after the "
+            + "split can find all new shards transiently on a single node and open one load channel "
+            + "(ChannelNum=1), serializing the write to that node. The wait polls the same placement "
+            + "lookup the sink uses until the new shards resolve to min(newShardCount, liveComputeNode) "
+            + "distinct nodes; on expiry it proceeds anyway (the load is still correct, just less "
+            + "parallel). 0 disables the wait. Shared-data mode only.")
+    public static long tablet_pre_split_await_shard_spread_seconds = 60L;
+
     @ConfField(mutable = true, comment = "Soft byte cap on the FE-side accumulation buffer of the "
             + "data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops "
             + "reading once accumulated values exceed this limit. The first row is always admitted "

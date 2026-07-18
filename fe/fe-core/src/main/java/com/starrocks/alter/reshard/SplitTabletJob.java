@@ -111,6 +111,30 @@ public class SplitTabletJob extends TabletReshardJob {
         return reshardingPhysicalPartitions;
     }
 
+    /**
+     * Collect the ids of every new tablet produced by this split (identity reshards excluded).
+     * Used by the pre-split pipeline to wait for StarOS to spread the freshly created shards
+     * across compute nodes before the triggering load plans its sink, so the load fans out across
+     * all CNs instead of serializing to the single node the shards were transiently placed on
+     * right after creation.
+     */
+    public List<Long> getAllNewTabletIds() {
+        List<Long> newTabletIds = new ArrayList<>();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex reshardingIndex
+                    : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
+                    if (splittingTablet == null || splittingTablet.isIdenticalTablet()) {
+                        continue;
+                    }
+                    newTabletIds.addAll(splittingTablet.getNewTabletIds());
+                }
+            }
+        }
+        return newTabletIds;
+    }
+
     public long getTransactionId() {
         return transactionId;
     }
