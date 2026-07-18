@@ -86,9 +86,15 @@ struct RuntimeColumnPredicateBuilder {
             if (minmax) {
                 if constexpr (ltype == TYPE_VARCHAR) {
                     auto cid = parser->column_id(*slot);
-                    if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+                    GlobalDictMap* dict = nullptr;
+                    if (global_dictmaps != nullptr) {
+                        if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
+                            dict = iter->second;
+                        }
+                    }
+                    if (dict != nullptr) {
                         build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
-                                range, minmax, pool, iter->second);
+                                range, minmax, pool, dict);
                     } else {
                         build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool,
                                                                                               nullptr);
