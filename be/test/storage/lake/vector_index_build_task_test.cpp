@@ -305,6 +305,41 @@ TEST_F(VectorIndexBuildTaskTest, test_duplicate_versions_build_all_and_advance_w
 }
 
 // Test that FE-provided built_version in request skips already-built rowsets
+// A single version group with MORE rowsets than the batch limit must be built entirely in ONE
+// cycle. The built-version watermark can advance only once the whole group is done, so splitting
+// the group across cycles would make no progress and re-probe its already-built members with an
+// fs::path_exist (object-store HEAD) every cycle -- an O(k^2/batch) amplification. Group-atomic
+// budgeting builds the whole group and advances past it at once. 4 rowsets at version 2 with
+// batch_limit=2: one execute() must build all 4 and reach built_version 2.
+TEST_F(VectorIndexBuildTaskTest, test_oversized_version_group_builds_in_one_cycle) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto segA, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto segB, write_segment(tablet_schema, 1002, 10));
+    ASSIGN_OR_ABORT(auto segC, write_segment(tablet_schema, 1003, 10));
+    ASSIGN_OR_ABORT(auto segD, write_segment(tablet_schema, 1004, 10));
+
+    create_metadata(schema_pb, 2, {{2, segA}, {2, segB}, {2, segC}, {2, segD}}, /*built_version=*/0);
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    request.set_built_version(0);
+    request.set_max_rowsets_per_batch(2); // group (4) is twice the batch limit
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+
+    // One cycle builds the entire oversized group and advances the watermark past it.
+    ASSERT_EQ(response.new_built_version(), 2);
+    for (const auto& seg : {segA, segB, segC, segD}) {
+        std::string vi = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg, kTabletId, kIndexId));
+        EXPECT_TRUE(fs::path_exist(vi)) << seg;
+    }
+}
+
 TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
     auto schema_pb = create_schema_pb();
     auto tablet_schema = TabletSchema::create(schema_pb);

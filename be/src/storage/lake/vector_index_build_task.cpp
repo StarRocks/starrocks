@@ -97,17 +97,18 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
     std::sort(_rowset_versions.begin(), _rowset_versions.end(),
               [](const auto& a, const auto& b) { return a.version < b.version; });
 
-    // Collect segment work items. The batch budget bounds only candidates that produce
-    // real build work; candidates whose .vi already exist are marked done for free (no
-    // batch cost) and the scan continues, so a version with more rowsets than the batch
-    // limit still converges across cycles (each cycle builds the next unbuilt suffix)
-    // instead of the already-built prefix starving it. Several merged rowsets can share a
-    // version, so mark the first UNPROCESSED matching VI entry (has_vi) to avoid marking
-    // a same-version no-vi entry and stranding this candidate's own vi entry.
-    // Cost note: because the scan must reach already-built candidates to mark them free,
-    // the .vi existence check (fs::path_exist) now runs for every pending candidate above
-    // the watermark this cycle, not just batch_limit of them; max_rowsets_per_batch still
-    // bounds the number of actual builds per cycle, just not the existence checks.
+    // Collect segment work items. The batch budget bounds only candidates that produce real build
+    // work; candidates whose .vi already exist are marked done for free (no batch cost) so an
+    // already-built prefix never starves the unbuilt suffix. Several merged rowsets can share a
+    // version, so mark the first UNPROCESSED matching VI entry (has_vi) to avoid marking a
+    // same-version no-vi entry and stranding this candidate's own vi entry.
+    // The budget is enforced at VERSION-GROUP boundaries, never mid-group: compute_built_version can
+    // advance the watermark only once EVERY rowset at a version is built, so splitting an oversized
+    // group (more rowsets at one version than batch_limit -- e.g. a large multi-source merge) across
+    // cycles would make no progress and re-probe its already-built members with fs::path_exist (an
+    // object-store HEAD) every cycle, an O(k^2/batch) amplification. By finishing each group it
+    // starts and stopping only before the next group, a version group is built in a single cycle and
+    // then skipped next cycle (rv <= built_version), so a large backlog drains in O(N) remote HEADs.
     auto mark_processed = [&](int64_t version) {
         for (auto& rv_info : _rowset_versions) {
             if (rv_info.version == version && rv_info.has_vi && !rv_info.processed) {
@@ -117,7 +118,17 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
         }
     };
     int work_budget = 0;
+    int64_t last_version = -1;
     for (const auto& cand : candidates) {
+        // Budget check at version-group boundaries only (candidates are version-sorted): once enough
+        // real work is queued, stop BEFORE the next group -- but never split a group, so an oversized
+        // group is finished in this cycle and the watermark can advance past it. A later cycle then
+        // skips the now-built prefix (rv <= built_version) instead of re-probing it.
+        if (cand.version != last_version && work_budget >= batch_limit) {
+            break;
+        }
+        last_version = cand.version;
+
         const auto& rowset = *cand.rowset;
         std::vector<SegmentWork> cand_work;
 
@@ -167,10 +178,6 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
         if (cand_work.empty()) {
             // All .vi for this rowset already exist -> done for free, no batch cost.
             mark_processed(cand.version);
-            continue;
-        }
-        if (work_budget >= batch_limit) {
-            // Batch budget exhausted -> defer this rowset (leave unprocessed) to the next cycle.
             continue;
         }
         for (auto& w : cand_work) {
