@@ -43,6 +43,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -305,9 +306,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
         // 3b. Now that the reshard output tablets are visible, proactively enqueue them for async
         // vector-index build (leader-only path; no-op for non-async-vector-index tables).
-        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
-            enqueueReshardOutputForVectorIndexBuild(lockedTable.get(), reshardingPhysicalPartitions.values());
-        }
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
 
         // 3. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
@@ -582,7 +581,7 @@ public class SplitTabletJob extends TabletReshardJob {
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             // vectorIndexBuildInfos is required by the publishVersion signature but intentionally
             // ignored here: reshard output tablets are enqueued for async vector-index build AFTER
-            // they become visible (see enqueueReshardOutputForVectorIndexBuild in runRunningJob),
+            // they become visible (see VectorIndexBuildScheduler.onReshardComplete in runRunningJob),
             // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,

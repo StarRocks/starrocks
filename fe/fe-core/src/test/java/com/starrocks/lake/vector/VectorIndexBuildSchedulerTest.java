@@ -326,6 +326,152 @@ public class VectorIndexBuildSchedulerTest {
         Assertions.assertTrue(getPendingTablets().isEmpty());
     }
 
+    // ========== Reshard completion hook tests ==========
+
+    private void setupReshardExpectations(long dbId, long tableId, LakeTable table) {
+        // getVectorIndexBuildScheduler() returns a Thread subclass JMockit can't auto-mock from an
+        // Expectations block; override it via MockUp (see mockGetScheduler), then record the metastore
+        // lookup the enqueue path performs.
+        mockGetScheduler(scheduler);
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore();
+                result = localMetastore;
+                minTimes = 0;
+                localMetastore.getTable(dbId, tableId);
+                result = table;
+                minTimes = 0;
+            }
+        };
+    }
+
+    // Async-vector-index table: reshard output tablets lagging the partition's visible version are
+    // enqueued at that version; already-built ones are skipped.
+    @Test
+    public void testOnReshardCompleteEnqueuesLaggingOutputTablets() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long partitionId = 40001L;
+        LakeTable table = mockLakeTable(true);
+
+        LakeTablet built = new LakeTablet(2001L);
+        built.setVectorIndexBuiltVersion(9L);
+        LakeTablet lagging = new LakeTablet(2002L);
+        lagging.setVectorIndexBuiltVersion(3L);
+
+        PhysicalPartition partition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(partition.getVisibleVersion()).thenReturn(9L);
+        MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(built, lagging));
+        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Lists.newArrayList(matIndex));
+        Mockito.when(table.getPhysicalPartition(partitionId)).thenReturn(partition);
+
+        setupReshardExpectations(dbId, tableId, table);
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(partitionId));
+
+        ConcurrentHashMap<Long, VectorIndexBuildScheduler.Pending> pending = getPendingTablets();
+        Assertions.assertFalse(pending.containsKey(2001L), "already-built output tablet must not be enqueued");
+        Assertions.assertEquals(9L, pending.get(2002L).latestVersion,
+                "lagging output tablet must be enqueued at the visible version");
+    }
+
+    // Only the resharded partitions passed in are scanned.
+    @Test
+    public void testOnReshardCompleteScopesToGivenPartitions() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long reshardedPartitionId = 40001L;
+        long otherPartitionId = 40002L;
+        LakeTable table = mockLakeTable(true);
+
+        LakeTablet lagging = new LakeTablet(2002L);
+        lagging.setVectorIndexBuiltVersion(3L);
+        PhysicalPartition reshardedPartition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(reshardedPartition.getVisibleVersion()).thenReturn(9L);
+        MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
+        Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(lagging));
+        Mockito.when(reshardedPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Lists.newArrayList(matIndex));
+        Mockito.when(table.getPhysicalPartition(reshardedPartitionId)).thenReturn(reshardedPartition);
+
+        setupReshardExpectations(dbId, tableId, table);
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(reshardedPartitionId));
+
+        Assertions.assertTrue(getPendingTablets().containsKey(2002L));
+        // Only the listed partition id is consulted; unrelated partitions are not scanned.
+        Mockito.verify(table, Mockito.never()).getPhysicalPartition(otherPartitionId);
+    }
+
+    // Non-vector-index table: nothing is enqueued (gated by hasAsyncVectorIndex).
+    @Test
+    public void testOnReshardCompleteSkipsNonAsyncTable() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long partitionId = 40001L;
+        LakeTable table = mockLakeTable(false);
+
+        setupReshardExpectations(dbId, tableId, table);
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(partitionId));
+
+        Assertions.assertTrue(getPendingTablets().isEmpty());
+    }
+
+    // Table dropped concurrently (getTable returns null): no-op, no exception.
+    @Test
+    public void testOnReshardCompleteMissingTableIsNoop() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long partitionId = 40001L;
+
+        setupReshardExpectations(dbId, tableId, null);
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(partitionId));
+
+        Assertions.assertTrue(getPendingTablets().isEmpty());
+    }
+
+    // Partition dropped concurrently (getPhysicalPartition returns null): that id is skipped, no throw.
+    @Test
+    public void testOnReshardCompleteMissingPartitionIsNoop() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long partitionId = 40001L;
+        LakeTable table = mockLakeTable(true);
+        Mockito.when(table.getPhysicalPartition(partitionId)).thenReturn(null);
+
+        setupReshardExpectations(dbId, tableId, table);
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(partitionId));
+
+        Assertions.assertTrue(getPendingTablets().isEmpty());
+    }
+
+    // Best-effort contract: a failure in the lock-free catalog walk must never propagate out of the
+    // hook (the reshard job cannot abort from RUNNING, so a throw would wedge it). The exception is
+    // swallowed; the tablet is recovered by a later publish or the recovery scan.
+    @Test
+    public void testOnReshardCompleteSwallowsEnqueueException() {
+        long dbId = 20001L;
+        long tableId = 30001L;
+        long partitionId = 40001L;
+        LakeTable table = mockLakeTable(true);
+        Mockito.when(table.getPhysicalPartition(partitionId))
+                .thenThrow(new RuntimeException("injected concurrent-DDL failure"));
+
+        setupReshardExpectations(dbId, tableId, table);
+        // Must not throw.
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, Lists.newArrayList(partitionId));
+
+        Assertions.assertTrue(getPendingTablets().isEmpty());
+    }
+
+    // Scheduler not initialized (getVectorIndexBuildScheduler returns null): static entry no-ops.
+    @Test
+    public void testOnReshardCompleteNullSchedulerIsNoop() {
+        mockGetScheduler(null);
+        // Should not throw.
+        VectorIndexBuildScheduler.onReshardComplete(20001L, 30001L, Lists.newArrayList(40001L));
+    }
+
     // ========== checkRunningTasks tests ==========
 
     @Test

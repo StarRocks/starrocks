@@ -25,6 +25,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -264,57 +265,124 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 }
 
                 for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                    long visibleVersion = partition.getVisibleVersion();
-                    if (visibleVersion <= 1) {
-                        continue;
-                    }
-                    // Scan VISIBLE indexes only — never SHADOW. A SHADOW index belongs to an
-                    // in-flight ALTER: its existing data (<= V_snap) is force-inline-built by the
-                    // schema-change conversion, and its incrementally double-written data (> V_snap)
-                    // is enqueued by the conversion's final publish (onPublishComplete at
-                    // commitVersion). Scheduling a shadow tablet here would enqueue it at the
-                    // partition's visibleVersion — a version the shadow tablet has only staged via
-                    // publish_log_version, not applied — so the async build would fail to load that
-                    // metadata. Once the ALTER finishes and the index becomes visible, its tablets
-                    // are picked up here normally (builtVersion < visibleVersion).
-                    for (MaterializedIndex index :
-                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                        for (Tablet tablet : index.getTablets()) {
-                            long builtVersion = 0;
-                            if (tablet instanceof LakeTablet) {
-                                builtVersion = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
-                            }
-                            if (builtVersion < visibleVersion) {
-                                // Conservative recovery after leader switch: the in-memory
-                                // compaction-frontier was lost. merge with any concurrent
-                                // pending entry to avoid clobbering a more advanced state
-                                // already populated by an in-flight publish.
-                                final long v = visibleVersion;
-                                pendingTablets.merge(tablet.getId(),
-                                        Pending.conservativeImmediate(v),
-                                        (existing, scan) -> {
-                                            if (existing.latestVersion > scan.latestVersion) {
-                                                return existing;
-                                            }
-                                            if (existing.latestVersion < scan.latestVersion) {
-                                                return scan;
-                                            }
-                                            // tie on latestVersion: prefer the higher
-                                            // latestCompactionVersion so recovery's
-                                            // conservative-immediate wins over a load-only
-                                            // entry that raced ahead of the scan.
-                                            return existing.latestCompactionVersion
-                                                    >= scan.latestCompactionVersion
-                                                    ? existing : scan;
-                                        });
-                                count++;
-                            }
-                        }
-                    }
+                    count += enqueueUnbuiltTabletsOfPartition(partition);
                 }
             }
         }
         LOG.info("Vector index build recovery scan: {} tablets enqueued", count);
+    }
+
+    /**
+     * Enqueue every VISIBLE-index tablet in {@code partition} whose vector index is not yet built up
+     * to the partition's visible version (builtVersion &lt; visibleVersion), returning the number
+     * enqueued. Shared by {@link #recoveryScan} (whole catalog after a leader switch) and
+     * {@link #onReshardComplete} (the output of a single reshard). Enqueues conservatively (immediate
+     * dispatch) and merges with any concurrent pending entry, so it never clobbers a more-advanced
+     * frontier already populated by an in-flight publish.
+     */
+    private int enqueueUnbuiltTabletsOfPartition(PhysicalPartition partition) {
+        long visibleVersion = partition.getVisibleVersion();
+        if (visibleVersion <= 1) {
+            return 0;
+        }
+        int count = 0;
+        // Scan VISIBLE indexes only — never SHADOW. A SHADOW index belongs to an in-flight ALTER: its
+        // existing data (<= V_snap) is force-inline-built by the schema-change conversion, and its
+        // incrementally double-written data (> V_snap) is enqueued by the conversion's final publish
+        // (onPublishComplete at commitVersion). Scheduling a shadow tablet here would enqueue it at the
+        // partition's visibleVersion — a version the shadow tablet has only staged via
+        // publish_log_version, not applied — so the async build would fail to load that metadata. Once
+        // the ALTER finishes and the index becomes visible, its tablets are picked up normally
+        // (builtVersion < visibleVersion).
+        for (MaterializedIndex index :
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            for (Tablet tablet : index.getTablets()) {
+                long builtVersion = 0;
+                if (tablet instanceof LakeTablet) {
+                    builtVersion = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
+                }
+                if (builtVersion < visibleVersion) {
+                    // merge with any concurrent pending entry to avoid clobbering a more advanced state
+                    // already populated by an in-flight publish (the in-memory compaction-frontier is
+                    // not known here — e.g. lost across a leader switch).
+                    pendingTablets.merge(tablet.getId(),
+                            Pending.conservativeImmediate(visibleVersion),
+                            (existing, scan) -> {
+                                if (existing.latestVersion > scan.latestVersion) {
+                                    return existing;
+                                }
+                                if (existing.latestVersion < scan.latestVersion) {
+                                    return scan;
+                                }
+                                // tie on latestVersion: prefer the higher latestCompactionVersion so the
+                                // conservative-immediate entry wins over a load-only entry that raced
+                                // ahead.
+                                return existing.latestCompactionVersion >= scan.latestCompactionVersion
+                                        ? existing : scan;
+                            });
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    // ========== Reshard completion hook ==========
+
+    /**
+     * After a tablet reshard (split/merge) installed new output tablets for {@code tableId}'s
+     * {@code physicalPartitionIds}, enqueue any whose vector index is not yet built up to the
+     * partition's visible version. Mirrors {@link #onPublishComplete}: a static entry that resolves
+     * the scheduler itself and no-ops if it is not initialized. Runs the same per-partition
+     * enqueue-if-unbuilt logic as the leader-switch {@link #recoveryScan}, scoped to the resharded
+     * partitions — so a quiescent resharded table's output is built promptly instead of waiting for
+     * the next load or the next leader switch. Idempotent with recoveryScan and any concurrent publish
+     * (pending frontiers are merged). Call only from the reshard job's leader path, after the output
+     * tablets are visible (addNewMaterializedIndexes has set the partition visible version and
+     * installed the indexes); never from replay. No-op for non-async-vector-index tables.
+     */
+    public static void onReshardComplete(long dbId, long tableId, Collection<Long> physicalPartitionIds) {
+        VectorIndexBuildScheduler scheduler = GlobalStateMgr.getCurrentState().getVectorIndexBuildScheduler();
+        if (scheduler == null) {
+            return;
+        }
+        // Best-effort optimization, invoked from the reshard job's RUNNING path after the output tablets
+        // are already durably visible. It must never throw back into TabletReshardJob.run(): the job
+        // cannot abort from RUNNING (canAbort() is PENDING-only), so an exception here would leave it
+        // stuck re-running with the partition visible version already advanced (failing the
+        // commitVersion == visibleVersion + 1 precondition on every retry). The lock-free catalog walk
+        // can raise transient errors under concurrent DDL; swallow them — a missed enqueue is recovered
+        // by the next load's publish or the leader-switch recovery scan.
+        try {
+            scheduler.enqueueUnbuiltTablets(dbId, tableId, physicalPartitionIds);
+        } catch (Exception e) {
+            LOG.warn("Vector index build reshard enqueue failed for table {}; will be recovered by a later "
+                    + "publish or the next leader-switch recovery scan", tableId, e);
+        }
+    }
+
+    private void enqueueUnbuiltTablets(long dbId, long tableId, Collection<Long> physicalPartitionIds) {
+        // Resolve the table lock-free + null-safe (like recoveryScan); tolerate a table dropped
+        // concurrently. Gate on hasAsyncVectorIndex: a non-vector-index table's tablets report
+        // builtVersion 0, which would otherwise look "unbuilt" and be wrongly enqueued.
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (!(table instanceof OlapTable)) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (!hasAsyncVectorIndex(olapTable)) {
+            return;
+        }
+        int count = 0;
+        for (Long physicalPartitionId : physicalPartitionIds) {
+            PhysicalPartition partition = olapTable.getPhysicalPartition(physicalPartitionId);
+            if (partition != null) {
+                count += enqueueUnbuiltTabletsOfPartition(partition);
+            }
+        }
+        if (count > 0) {
+            LOG.info("Vector index build reshard enqueue: table {}, {} tablets enqueued", tableId, count);
+        }
     }
 
     // ========== Check running tasks ==========

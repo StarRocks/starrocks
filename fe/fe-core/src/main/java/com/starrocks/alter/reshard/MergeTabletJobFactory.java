@@ -423,7 +423,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             // Carry the async vector-index build watermark forward: the merged tablet inherits the
             // MIN over its source tablets' watermarks (a rowset is only built if built in its own
             // source), mirroring the BE merge_tablet reconciliation. No-op for non-vector tables.
-            long vibv = TabletReshardJob.minVectorIndexBuiltVersion(oldIndex, reshardingTablet.getOldTabletIds());
+            long vibv = TabletReshardUtils.minVectorIndexBuiltVersion(oldIndex, reshardingTablet.getOldTabletIds());
             for (long tabletId : reshardingTablet.getNewTabletIds()) {
                 LakeTablet tablet = new LakeTablet(tabletId, oldTablet.getRange());
                 tablet.setVectorIndexBuiltVersion(vibv);
