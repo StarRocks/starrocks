@@ -97,12 +97,29 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
     std::sort(_rowset_versions.begin(), _rowset_versions.end(),
               [](const auto& a, const auto& b) { return a.version < b.version; });
 
-    // Take first batch_limit candidates and collect segment work items.
-    int processed = 0;
+    // Collect segment work items. The batch budget bounds only candidates that produce
+    // real build work; candidates whose .vi already exist are marked done for free (no
+    // batch cost) and the scan continues, so a version with more rowsets than the batch
+    // limit still converges across cycles (each cycle builds the next unbuilt suffix)
+    // instead of the already-built prefix starving it. Several merged rowsets can share a
+    // version, so mark the first UNPROCESSED matching VI entry (has_vi) to avoid marking
+    // a same-version no-vi entry and stranding this candidate's own vi entry.
+    // Cost note: because the scan must reach already-built candidates to mark them free,
+    // the .vi existence check (fs::path_exist) now runs for every pending candidate above
+    // the watermark this cycle, not just batch_limit of them; max_rowsets_per_batch still
+    // bounds the number of actual builds per cycle, just not the existence checks.
+    auto mark_processed = [&](int64_t version) {
+        for (auto& rv_info : _rowset_versions) {
+            if (rv_info.version == version && rv_info.has_vi && !rv_info.processed) {
+                rv_info.processed = true;
+                break;
+            }
+        }
+    };
+    int work_budget = 0;
     for (const auto& cand : candidates) {
-        if (processed >= batch_limit) break;
-
         const auto& rowset = *cand.rowset;
+        std::vector<SegmentWork> cand_work;
 
         for (const auto& segment_meta : rowset.segment_metas()) {
             if (segment_meta.vector_index_ids_size() == 0) {
@@ -116,8 +133,6 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             std::vector<int64_t> index_ids;
             for (int64_t idx_id : segment_meta.vector_index_ids()) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).
-                // This only runs for segments in the current batch (bounded by
-                // max_rowsets_per_batch), so S3 HEAD cost is minimal.
                 std::string vi_name = gen_vector_index_filename(seg_name, vi_tablet_id, idx_id);
                 std::string vi_path = _tablet_mgr->segment_location(_tablet_id, vi_name);
                 if (fs::path_exist(vi_path)) {
@@ -146,17 +161,23 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             // index_ids is non-empty here; pair the owner with it (see FileInfo's field comment).
             segment_file_info.segment_vector_index_uid = vi_tablet_id;
 
-            _work_items.push_back({cand.version, std::move(segment_file_info), std::move(index_ids)});
+            cand_work.push_back({cand.version, std::move(segment_file_info), std::move(index_ids)});
         }
 
-        // Mark this version as processed in _rowset_versions.
-        for (auto& rv_info : _rowset_versions) {
-            if (rv_info.version == cand.version) {
-                rv_info.processed = true;
-                break;
-            }
+        if (cand_work.empty()) {
+            // All .vi for this rowset already exist -> done for free, no batch cost.
+            mark_processed(cand.version);
+            continue;
         }
-        processed++;
+        if (work_budget >= batch_limit) {
+            // Batch budget exhausted -> defer this rowset (leave unprocessed) to the next cycle.
+            continue;
+        }
+        for (auto& w : cand_work) {
+            _work_items.push_back(std::move(w));
+        }
+        mark_processed(cand.version);
+        work_budget++;
     }
 
     LOG(INFO) << "VectorIndexBuildTask::prepare: tablet=" << _tablet_id << " candidates=" << candidates.size()
@@ -185,21 +206,33 @@ int64_t VectorIndexBuildTask::compute_built_version(const std::vector<Status>& s
         }
     }
 
-    // Walk rowset versions in order. Advance watermark through:
-    //   - no-vi rowsets (don't need building)
-    //   - processed vi rowsets with all segments succeeded
-    // Stop at first unprocessed vi rowset or failed vi rowset.
+    // Walk rowset versions by VERSION GROUP. A version is "done" only when EVERY
+    // _rowset_versions entry at that version is done (no-vi, or processed and not
+    // failed) -- merge can place several rowsets at one version, and advancing the
+    // watermark to a version while one of its rowsets is not yet built would
+    // permanently exclude that rowset next cycle (version <= _built_version). Advance
+    // through fully-done groups; stop at the first incomplete one. (_rowset_versions is
+    // sorted ascending by version, so equal versions are contiguous.)
     int64_t watermark = _built_version;
     bool advanced_through_all = true;
-    for (const auto& info : _rowset_versions) {
-        if (!info.has_vi) {
-            watermark = info.version;
-        } else if (info.processed && failed_versions.count(info.version) == 0) {
-            watermark = info.version;
-        } else {
+    size_t i = 0;
+    while (i < _rowset_versions.size()) {
+        const int64_t v = _rowset_versions[i].version;
+        bool group_done = true;
+        size_t j = i;
+        for (; j < _rowset_versions.size() && _rowset_versions[j].version == v; ++j) {
+            const auto& info = _rowset_versions[j];
+            const bool done = !info.has_vi || (info.processed && failed_versions.count(info.version) == 0);
+            if (!done) {
+                group_done = false;
+            }
+        }
+        if (!group_done) {
             advanced_through_all = false;
             break;
         }
+        watermark = v; // entire version group is built
+        i = j;
     }
 
     if (advanced_through_all && _target_version > watermark) {

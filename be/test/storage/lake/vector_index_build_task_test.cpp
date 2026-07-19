@@ -262,6 +262,48 @@ TEST_F(VectorIndexBuildTaskTest, test_batch_limit) {
     ASSERT_FALSE(fs::path_exist(vi3)); // Not processed yet
 }
 
+// Merge can place several rowsets at the SAME version on one tablet (distinct
+// sibling-exclusive rowsets copied verbatim keep their source version). The build
+// task must (a) build every one of them across cycles even when a version has more
+// rowsets than the batch limit, and (b) never advance the watermark past a version
+// whose rowsets are not all built (which would permanently exclude the unbuilt ones).
+// 3 rowsets at version 2 + 1 at version 3, batch_limit=2 forces multiple cycles: the
+// old code advanced the watermark to 2 after cycle 1 and left the 3rd v2 .vi forever
+// unbuilt while still reaching the target version.
+TEST_F(VectorIndexBuildTaskTest, test_duplicate_versions_build_all_and_advance_watermark) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto segA, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto segB, write_segment(tablet_schema, 1002, 10));
+    ASSIGN_OR_ABORT(auto segC, write_segment(tablet_schema, 1003, 10));
+    ASSIGN_OR_ABORT(auto segD, write_segment(tablet_schema, 1004, 10));
+
+    create_metadata(schema_pb, 4, {{2, segA}, {2, segB}, {2, segC}, {3, segD}}, /*built_version=*/0);
+
+    int64_t bv = 0;
+    for (int cycle = 0; cycle < 6; ++cycle) { // must converge in a few cycles, not loop forever
+        BuildVectorIndexRequest request;
+        request.set_tablet_id(kTabletId);
+        request.set_version(4);
+        request.set_built_version(bv);
+        request.set_max_rowsets_per_batch(2);
+        BuildVectorIndexResponse response;
+
+        VectorIndexBuildTask task(_tablet_mgr.get());
+        ASSERT_OK(task.execute(request, &response));
+        int64_t next = response.new_built_version();
+        ASSERT_GE(next, bv); // never regress
+        bv = next;
+    }
+
+    ASSERT_EQ(bv, 4); // reached _target_version once every version group is fully built
+    for (const auto& seg : {segA, segB, segC, segD}) {
+        std::string vi = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg, kTabletId, kIndexId));
+        EXPECT_TRUE(fs::path_exist(vi)) << seg;
+    }
+}
+
 // Test that FE-provided built_version in request skips already-built rowsets
 TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
     auto schema_pb = create_schema_pb();
