@@ -20,6 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -31,6 +32,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class NormalBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(NormalBackendSelector.class);
@@ -143,7 +146,19 @@ public class NormalBackendSelector implements BackendSelector {
         }
 
         if (useIncrementalScanRanges) {
-            BackendSelector.appendIncrementalScanRangeSentinel(scanNode, workerProvider, assignment);
+            if (scanNode.hasMoreScanRanges() || assignment.isEmpty()) {
+                BackendSelector.appendIncrementalScanRangeSentinel(scanNode, workerProvider, assignment);
+            } else {
+                // The first batch already exhausted the ranges: seal only the workers that
+                // received work. Fanning the has_more=false sentinel out to every warehouse
+                // worker would deploy an empty instance on each idle CN just to have it EOS
+                // immediately, inflating exchange fan-in for small scans on large warehouses.
+                List<ComputeNode> assignedWorkers = assignment.keySet().stream()
+                        .map(workerProvider::getWorkerById)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                BackendSelector.appendIncrementalScanRangeSentinel(scanNode, assignedWorkers, assignment);
+            }
         }
 
         if (LOG.isDebugEnabled()) {

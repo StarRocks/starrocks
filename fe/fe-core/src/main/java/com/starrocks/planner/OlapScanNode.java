@@ -930,6 +930,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         this.reachLimit = true;
     }
 
+    @Override
+    public void prepareRetry() {
+        // Matches the connector scan nodes' contract: a retry that reuses this node must restart
+        // incremental delivery from the first range, or tablets [0, cursor) are silently dropped.
+        incrementalDeliveryCursor = 0;
+        reachLimit = false;
+    }
+
     public void setUsePreparedPhysicalSplitScan(boolean usePreparedPhysicalSplitScan) {
         this.usePreparedPhysicalSplitScan = usePreparedPhysicalSplitScan;
     }

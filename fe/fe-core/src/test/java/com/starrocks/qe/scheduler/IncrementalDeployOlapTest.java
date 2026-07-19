@@ -112,6 +112,26 @@ public class IncrementalDeployOlapTest extends SchedulerTestBase {
         return tabletIds;
     }
 
+    @Test
+    public void testPrepareRetryResetsIncrementalCursor() throws Exception {
+        mockSharedDataLakeScan();
+        connectContext.getSessionVariable().setEnableOlapIncrementalScanRanges(true);
+        connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(4);
+        captureDeployRequests(4);
+        DefaultCoordinator coordinator = startScheduling(SQL);
+
+        OlapScanNode scanNode = (OlapScanNode) coordinator.getExecutionDAG().getScanNodes().iterator().next();
+        // The schedule drained every range.
+        Assertions.assertFalse(scanNode.hasMoreScanRanges());
+        Assertions.assertEquals(0, scanNode.numRemainingScanRanges());
+
+        // A retry that reuses this node must restart delivery from the first range, matching the
+        // connector scan nodes' prepareRetry contract — otherwise tablets [0, cursor) are lost.
+        scanNode.prepareRetry();
+        Assertions.assertTrue(scanNode.hasMoreScanRanges());
+        Assertions.assertEquals(LINEITEM_TABLETS, scanNode.numRemainingScanRanges());
+    }
+
     private List<TExecPlanFragmentParams> runIncremental(int batchSize) throws Exception {
         mockSharedDataLakeScan();
         connectContext.getSessionVariable().setEnableOlapIncrementalScanRanges(true);
