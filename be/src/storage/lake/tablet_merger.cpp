@@ -2925,6 +2925,34 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_prev_garbage_version();
     new_tablet_metadata->set_cumulative_point(0);
 
+    // Reconcile the async vector-index build watermark across ALL merge sources.
+    // The merged tablet contains rowsets from every source, so a rowset is only
+    // guaranteed built if it was built in its OWN source. Inheriting source[0]'s
+    // watermark alone (from the CopyFrom above) could falsely claim another
+    // source's unbuilt rowsets are built, permanently skipping their .vi build.
+    // MIN over sources is the largest value that holds for every merged rowset;
+    // the build task's per-.vi existence check skips already-built ones, so a
+    // conservative (lower) watermark only re-examines, never rebuilds needlessly.
+    {
+        bool any_has_vi_built_version = false;
+        int64_t min_vi_built_version = std::numeric_limits<int64_t>::max();
+        for (const auto& ctx : merge_contexts) {
+            if (ctx.metadata()->has_vector_index_built_version()) {
+                any_has_vi_built_version = true;
+                min_vi_built_version =
+                        std::min(min_vi_built_version, ctx.metadata()->vector_index_built_version());
+            } else {
+                // A source without the watermark guarantees nothing is built.
+                min_vi_built_version = std::min<int64_t>(min_vi_built_version, 0);
+            }
+        }
+        if (any_has_vi_built_version) {
+            new_tablet_metadata->set_vector_index_built_version(min_vi_built_version);
+        } else {
+            new_tablet_metadata->clear_vector_index_built_version();
+        }
+    }
+
     // Phase 1: Prepare rssid offsets and merged range. For each ctx[i],
     // set new_tablet_metadata.next_rowset_id to the watermark of all
     // earlier ctxs[0..i-1]'s projected rowset ids; compute_rssid_offset
