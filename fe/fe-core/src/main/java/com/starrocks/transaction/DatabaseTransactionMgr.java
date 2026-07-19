@@ -1547,9 +1547,8 @@ public class DatabaseTransactionMgr {
                             .getTxnCommitAttachment()).getPartitionVersion());
                     // reset data version to visible version
                     partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
-                    // Stamp a fresh version epoch on every INSERT OVERWRITE (a logical data change).
-                    // The epoch is the change watermark consumed by IVM (LocalMetastore.getCurrentTvrSnapshot),
-                    // so it must advance on every commit, not only on TXN_REPLICATION partitions.
+                    // Give this partition a new epoch. IVM uses epochs to spot changes, so every
+                    // real data change (like this overwrite) needs a fresh one.
                     partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                 } else {
                     // double write logic partition
@@ -1572,10 +1571,8 @@ public class DatabaseTransactionMgr {
                     }
                     // update data version
                     partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
-                    // Stamp a fresh version epoch on every non-compaction commit so the epoch strictly
-                    // advances on every load. This is the change watermark consumed by IVM
-                    // (LocalMetastore.getCurrentTvrSnapshot). A compaction rewrites files without a
-                    // logical data change, so it must NOT bump the epoch.
+                    // Give this partition a new epoch for every real load. Compaction only
+                    // rewrites files without changing data, so skip it.
                     if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                         partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                     }

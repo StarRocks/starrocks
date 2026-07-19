@@ -333,9 +333,9 @@ public class GlobalTransactionMgrTest {
         assertTrue(GlobalStateMgrTestUtil.compareState(masterGlobalStateMgr, slaveGlobalStateMgr));
     }
 
-    // Every non-compaction commit must stamp a fresh, strictly-increasing version epoch. The epoch is
-    // the change watermark IVM reads via LocalMetastore.getCurrentTvrSnapshot; before this fix a normal
-    // (TXN_NORMAL) load left the epoch unchanged, so native IVM would never detect newly loaded data.
+    // A normal load must get a new, bigger version epoch each time it commits. IVM uses this
+    // epoch to notice data changes, so before this fix, a normal load's epoch never moved and
+    // IVM could not tell that new data had arrived.
     @Test
     public void testNormalCommitStampsAdvancingVersionEpoch() throws StarRocksException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
@@ -361,6 +361,29 @@ public class GlobalTransactionMgrTest {
         long epoch2 = fakeEditLog.getTransaction(txnId2).getTableCommitInfo(GlobalStateMgrTestUtil.testTableId1)
                 .getIdToPartitionCommitInfo().values().iterator().next().getVersionEpoch();
         assertTrue(epoch2 > epoch1, "each commit must advance the version epoch (GTIDs are monotonic)");
+    }
+
+    // An INSERT OVERWRITE commit takes a different code path than a normal load, but it must
+    // also stamp a new version epoch.
+    @Test
+    public void testVersionOverwriteCommitStampsVersionEpoch() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        List<TabletCommitInfo> transTablets = Lists.newArrayList(
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId1),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId2),
+                new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
+
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), GlobalStateMgrTestUtil.testTxnLable3,
+                transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        InsertTxnCommitAttachment overwriteAttachment =
+                new InsertTxnCommitAttachment(0, GlobalStateMgrTestUtil.testStartVersion + 5);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, transTablets,
+                Lists.newArrayList(), overwriteAttachment);
+
+        long epoch = fakeEditLog.getTransaction(txnId).getTableCommitInfo(GlobalStateMgrTestUtil.testTableId1)
+                .getIdToPartitionCommitInfo().values().iterator().next().getVersionEpoch();
+        assertTrue(epoch > 0, "an INSERT OVERWRITE commit must stamp a version epoch too");
     }
 
     // commit with only two replicas
