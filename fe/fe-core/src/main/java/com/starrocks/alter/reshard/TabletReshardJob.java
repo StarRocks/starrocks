@@ -15,15 +15,24 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Collection;
+import java.util.List;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -289,4 +298,55 @@ public abstract class TabletReshardJob implements Writable {
     protected abstract void registerReshardingTabletsOnRestart();
 
     public abstract TTabletReshardJobsItem getInfo();
+
+    // Min async vector-index build watermark over a reshard op's source tablets, so a reshard
+    // child/merged tablet inherits the build frontier of its inputs (split: the single parent;
+    // merge: the min across sources; identical: carried over) instead of resetting to 0. This
+    // mirrors the BE merge_tablet reconciliation and keeps the async build scheduler from a
+    // redundant full re-scan. Harmless (0) for non-vector-index tables.
+    static long minVectorIndexBuiltVersion(MaterializedIndex oldIndex, List<Long> oldTabletIds) {
+        long min = Long.MAX_VALUE;
+        for (long oldTabletId : oldTabletIds) {
+            Tablet tablet = oldIndex.getTablet(oldTabletId);
+            long v = (tablet instanceof LakeTablet) ? ((LakeTablet) tablet).getVectorIndexBuiltVersion() : 0L;
+            min = Math.min(min, v);
+        }
+        return min == Long.MAX_VALUE ? 0L : min;
+    }
+
+    // After the reshard output tablets become visible (addNewMaterializedIndexes has set the
+    // partition visible version and installed the new indexes), proactively enqueue them for async
+    // vector-index build. Reshard shares/dedups existing .vi files, but any rowset whose .vi was not
+    // yet built at reshard time (an in-flight build on a source) must still be built on the new
+    // tablet; without this the tablet is only picked up by a later load or the leader-switch recovery
+    // scan, leaving a quiescent table's reshard output brute-forced. Called only from runRunningJob
+    // (leader), never the replay path, and after visibility to avoid the scheduler consuming a
+    // pending entry before its tablet resolves. Idempotent with the recovery scan and any concurrent
+    // publish (addPendingTablet merges frontiers). No-op for non-async-vector-index tables.
+    protected static void enqueueReshardOutputForVectorIndexBuild(
+            OlapTable table, Collection<ReshardingPhysicalPartition> parts) {
+        enqueueReshardOutputForVectorIndexBuild(table, parts,
+                GlobalStateMgr.getCurrentState().getVectorIndexBuildScheduler());
+    }
+
+    // Package-private test seam taking an explicit scheduler, so the gate + enqueue loop can be
+    // unit-tested without mocking the Thread-derived VectorIndexBuildScheduler through GlobalStateMgr.
+    static void enqueueReshardOutputForVectorIndexBuild(OlapTable table,
+            Collection<ReshardingPhysicalPartition> parts, VectorIndexBuildScheduler scheduler) {
+        if (scheduler == null || table == null || !VectorIndexBuildScheduler.hasAsyncVectorIndex(table)) {
+            return;
+        }
+        for (ReshardingPhysicalPartition part : parts) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(part.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long visibleVersion = physicalPartition.getVisibleVersion();
+            for (ReshardingMaterializedIndex reshardingIndex : part.getReshardingIndexes().values()) {
+                for (Tablet tablet : reshardingIndex.getMaterializedIndex().getTablets()) {
+                    scheduler.addPendingTablet(tablet.getId(), visibleVersion, /* fromCompaction= */ false);
+                }
+            }
+        }
+    }
 }
