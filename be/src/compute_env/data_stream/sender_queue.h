@@ -240,6 +240,9 @@ private:
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
     std::atomic<bool> _is_cancelled{false};
+    // Set by close(): the exchange source is done with this queue, so sender registrations
+    // must be rejected instead of silently accepted for a stream nobody will ever drain.
+    std::atomic<bool> _is_closed{false};
     std::atomic<int> _num_remaining_senders;
 
     typedef SpinLock Mutex;

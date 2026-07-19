@@ -177,6 +177,32 @@ TEST_F(ExchangeDynamicSendersTest, cancelled_receiver_is_rejected) {
     ASSERT_FALSE(st.ok()) << st;
 }
 
+TEST_F(ExchangeDynamicSendersTest, unregister_then_late_register_is_rejected) {
+    // Register and unregister are independent RPCs with no ordering guarantee: a compensating
+    // unregister can execute before the delayed register it compensates. The unregister must
+    // tombstone the be_number so the late register cannot add a sender that will never deploy.
+    auto recvr = create_recvr(2);
+    ASSERT_OK(update_senders(7, /*unregister=*/true));
+    Status st = update_senders(7, /*unregister=*/false);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    // Neither leg may have changed the sender count.
+    ASSERT_OK(send_eos(0));
+    ASSERT_FALSE(recvr->is_finished());
+    ASSERT_OK(send_eos(1));
+    ASSERT_TRUE(recvr->is_finished());
+}
+
+TEST_F(ExchangeDynamicSendersTest, register_after_close_is_rejected) {
+    // A register racing receiver close must not be silently accepted for a stream nobody
+    // will ever drain (e.g. LIMIT short-circuit closed the exchange source).
+    auto recvr = create_recvr(1);
+    recvr->close();
+    Status st = recvr->update_senders(5, /*unregister=*/false);
+    ASSERT_FALSE(st.ok()) << st;
+    // Compensation after close stays a quiet no-op.
+    ASSERT_OK(recvr->update_senders(5, /*unregister=*/true));
+}
+
 TEST_F(ExchangeDynamicSendersTest, concurrent_register_and_eos) {
     constexpr int kBaseSenders = 4;
     constexpr int kDynamicSenders = 32;

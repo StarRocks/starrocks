@@ -542,6 +542,7 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
             return;
         }
         _sender_eos_set.insert(be_number);
+        _dynamic_senders.erase(be_number);
         // Decrement under _lock so try_update_senders' reject-at-zero check cannot interleave
         // with the transition to zero (a registration must never resurrect a finished stream).
         _num_remaining_senders--;
@@ -556,6 +557,14 @@ Status DataStreamRecvr::PipelineSenderQueue::try_update_senders(int be_number, b
     std::lock_guard<Mutex> l(_lock);
     if (_is_cancelled) {
         return Status::Cancelled("receiver is cancelled");
+    }
+    if (_is_closed) {
+        // The exchange source already closed this queue (e.g. LIMIT short-circuit). Accepting a
+        // registration would silently drop the new instance's output; compensation is moot.
+        if (unregister) {
+            return Status::OK();
+        }
+        return Status::InternalError("receiver is closed");
     }
     if (!unregister) {
         if (_num_remaining_senders <= 0) {
@@ -582,7 +591,15 @@ Status DataStreamRecvr::PipelineSenderQueue::try_update_senders(int be_number, b
         return Status::OK();
     }
     if (_dynamic_senders.erase(be_number) == 0) {
-        // Unknown sender: the registration never landed here. No-op keeps compensation safe.
+        // Unknown sender: the registration never landed here — or has not landed YET. Register
+        // and unregister are independent RPCs on a multi-threaded pool with no ordering
+        // guarantee, so a compensating unregister can execute before the delayed register it
+        // compensates; without a tombstone that register would then increment the sender count
+        // for an instance that will never deploy, hanging the receiver until query timeout.
+        // Tombstone the be_number (registration rejects be_numbers in _sender_eos_set). Safe:
+        // the coordinator reserves dynamic be_numbers monotonically and never reuses one, so
+        // this cannot shadow a static sender's future EOS.
+        _sender_eos_set.insert(be_number);
         return Status::OK();
     }
     _num_remaining_senders--;
@@ -598,6 +615,12 @@ void DataStreamRecvr::PipelineSenderQueue::cancel() {
 }
 
 void DataStreamRecvr::PipelineSenderQueue::close() {
+    {
+        // Under _lock so an in-flight try_update_senders either fully precedes or fully
+        // follows the close transition.
+        std::lock_guard<Mutex> l(_lock);
+        _is_closed = true;
+    }
     clean_buffer_queues();
 }
 
