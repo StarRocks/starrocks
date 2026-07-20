@@ -272,6 +272,8 @@ void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
 }
 
 void DataStreamRecvr::cancel_stream() {
+    // Stop the peer sink from appending into the shared pass-through buffer.
+    _pass_through_context.set_cancelled();
     auto notify = this->defer_notify();
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->cancel();
@@ -283,6 +285,8 @@ void DataStreamRecvr::close() {
     if (_closed) {
         return;
     }
+    // Stop the peer sink from appending into the shared pass-through buffer.
+    _pass_through_context.set_cancelled();
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
