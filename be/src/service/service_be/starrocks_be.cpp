@@ -77,6 +77,15 @@ DECLARE_bool(socket_keepalive);
 
 } // namespace brpc
 
+namespace bthread {
+
+// Defined in the bundled brpc's timer_thread.cpp (patched in via
+// thirdparty/patches/brpc-1.9.0-timer-reclaim.patch, apache/brpc#3384).
+DECLARE_uint32(brpc_timer_heap_sweep_min_size);
+DECLARE_uint32(brpc_timer_max_wakeup_interval_ms);
+
+} // namespace bthread
+
 namespace starrocks {
 
 StorageEngine* init_storage_engine(RuntimeEnv* runtime_env, std::vector<StorePath> paths, bool as_cn,
@@ -320,6 +329,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_socket_keepalive = config::brpc_socket_keepalive;
 
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
+
+    // Bound the memory held by brpc's TimerThread for unscheduled tasks.
+    bthread::FLAGS_brpc_timer_heap_sweep_min_size = config::brpc_timer_heap_sweep_min_size;
+    bthread::FLAGS_brpc_timer_max_wakeup_interval_ms = config::brpc_timer_max_wakeup_interval_ms;
     auto brpc_server = std::make_unique<brpc::Server>();
 
     auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
