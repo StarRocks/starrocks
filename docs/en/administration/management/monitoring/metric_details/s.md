@@ -507,7 +507,7 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Cumulative
 - Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
-- Description: Cumulative number of statistics cache loads that failed (the loader threw an exception or returned no value). A non-zero, growing value points to problems reading from the statistics tables. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+- Description: Cumulative number of statistics cache loads that failed because the Caffeine loader completed exceptionally. Missing statistics rows are cached as empty results and count as successful loads, not failures. A non-zero, growing value points to errors reading from the statistics tables. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
 
 ## `starrocks_fe_statistics_cache_load_success_count`
 

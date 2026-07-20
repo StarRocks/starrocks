@@ -503,7 +503,7 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 累積
 - ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
-- 説明: 失敗した統計情報キャッシュのロード（ローダーが例外をスローした、または値を返さなかった）の累積数。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りに問題があることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+- 説明: Caffeine ローダーが例外で完了したため失敗した統計情報キャッシュロードの累積数。欠落している統計情報行は空の結果としてキャッシュされ、ロード失敗ではなくロード成功としてカウントされます。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りでエラーが発生していることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_statistics_cache_load_success_count`
 

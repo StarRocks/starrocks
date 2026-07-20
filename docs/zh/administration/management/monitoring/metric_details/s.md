@@ -529,7 +529,7 @@ description: "Alphabetical s"
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存加载失败（加载器抛出异常或未返回值）的累计次数。该值非零且持续增长通常意味着读取统计信息表出现问题。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+- 描述：对应统计信息缓存中因 Caffeine 加载器异常完成而失败的加载累计次数。缺失的统计信息行会以空结果缓存，并计为加载成功，而不是加载失败。该值非零且持续增长通常意味着读取统计信息表时出现错误。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_load_success_count`
 
