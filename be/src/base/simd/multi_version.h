@@ -93,10 +93,9 @@
 #endif
 
 #if !defined(MFV_DEFAULT)
-// Non-x86 fallback: mark as `static` to match the x86 MFV_IMPL linkage, so that
-// helpers defined via MFV_DEFAULT in headers (e.g. base/simd/rle_simd.h,
-// base/simd/delta_decode.h) don't trigger duplicate-definition link errors when
-// included from multiple translation units on aarch64 / other targets.
+// Non-x86 fallback: mark as `static` to match the x86 MFV_IMPL linkage, so that any
+// helper defined via MFV_DEFAULT in a header doesn't trigger duplicate-definition link
+// errors when included from multiple translation units on aarch64 / other targets.
 #define MFV_DEFAULT(...) [[maybe_unused]] static __VA_ARGS__
 #endif
 
