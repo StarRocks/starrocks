@@ -356,6 +356,15 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             txnInfo.combinedTxnLog = false;
             txnInfo.commitTime = System.currentTimeMillis() / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            // A file-bundling table stores each version's tablet metadata in a
+            // single bundle file ({0}_{version}.meta) written by the aggregate
+            // publish path -- exactly like loads and metadata-alter jobs. The
+            // metadata vacuum for such a table only reclaims bundle-named files,
+            // so this fast path must publish the same way; publishing per-tablet
+            // ({tablet}_{version}.meta) instead leaves metadata the bundling
+            // vacuum never cleans up. Keyed on the table's current format,
+            // matching this class's cancel path (lakePublishVersionWithSkip).
+            boolean useAggregatePublish = table.isFileBundling();
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
                 if (pp == null) {
@@ -367,10 +376,22 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 // so every base + rollup + sync-MV tablet has an in-flight alter
                 // task. Publish must mirror that set or non-base indexes get left
                 // on stale visible versions while FE/base advance, eventually
-                // causing read/planning inconsistencies on those indexes.
+                // causing read/planning inconsistencies on those indexes. For a
+                // file-bundling table all of the partition's tablets must land in
+                // ONE aggregate publish: BE truncate-overwrites the bundle, so a
+                // per-index aggregate call would drop earlier indexes' tablets.
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                    if (useAggregatePublish) {
+                        tablets.addAll(idx.getTablets());
+                    } else {
+                        Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
+                                commitVersion, computeResource, false);
+                    }
+                }
+                if (useAggregatePublish) {
+                    Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
+                            commitVersion, computeResource, true);
                 }
             }
             return true;
