@@ -649,11 +649,25 @@ public class CachedStatisticStorageTest {
         }
     }
 
+    private static class TimeoutFuture<T> extends CompletableFuture<T> {
+        private int timedGetCalls;
+        private long timeout;
+        private TimeUnit unit;
+
+        @Override
+        public T get(long timeout, TimeUnit unit) throws TimeoutException {
+            this.timedGetCalls++;
+            this.timeout = timeout;
+            this.unit = unit;
+            throw new TimeoutException("test");
+        }
+    }
+
     @Test
-    @Timeout(5)
     public void testWaitForStatsFutureUsesPerCallTimeoutWithoutQueryBudget() {
+        // GIVEN
         final var storage = new CachedStatisticStorage();
-        final var neverCompletingFuture = new CompletableFuture<>();
+        final var timeoutFuture = new TimeoutFuture<>();
 
         boolean originalEnabled = Config.enable_sync_statistics_load;
         int originalTimeout = Config.sync_statistics_load_timeout_ms;
@@ -666,13 +680,15 @@ public class CachedStatisticStorageTest {
             Config.sync_statistics_load_per_query_budget_ms = 0;
             connectContext.setStatisticsLoadBudget(null);
 
-            long startNanos = System.nanoTime();
-            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
                     (Supplier<String>) () -> "context");
-            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
 
-            Assertions.assertTrue(elapsedMs >= 80);
-            Assertions.assertFalse(neverCompletingFuture.isDone());
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertFalse(timeoutFuture.isDone());
             Assertions.assertNull(connectContext.getStatisticsLoadBudget());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
@@ -685,14 +701,17 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testStatisticsLoadBudgetDefaultUsesPerCallTimeout() {
+        // GIVEN
         int originalTimeout = Config.sync_statistics_load_timeout_ms;
         int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
         try {
             Config.sync_statistics_load_timeout_ms = 123;
             Config.sync_statistics_load_per_query_budget_ms = -1;
 
+            // WHEN
             StatisticsLoadBudget budget = StatisticsLoadBudget.fromConfig();
 
+            // THEN
             Assertions.assertEquals(123, budget.getTotalBudgetMs());
         } finally {
             Config.sync_statistics_load_timeout_ms = originalTimeout;
@@ -701,10 +720,10 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
-    @Timeout(5)
     public void testWaitForStatsFutureSkippedWhenQueryBudgetIsZero() {
+        // GIVEN
         final var storage = new CachedStatisticStorage();
-        final var neverCompletingFuture = new CompletableFuture<>();
+        final var timeoutFuture = new TimeoutFuture<>();
 
         boolean originalEnabled = Config.enable_sync_statistics_load;
         int originalTimeout = Config.sync_statistics_load_timeout_ms;
@@ -718,15 +737,16 @@ public class CachedStatisticStorageTest {
             connectContext.setStatisticsLoadBudget(null);
 
             try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
-                long startNanos = System.nanoTime();
-                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                // WHEN
+                Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
                         (Supplier<String>) () -> "context");
-                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
 
-                Assertions.assertTrue(elapsedMs < 100);
-                Assertions.assertFalse(neverCompletingFuture.isDone());
+                // THEN
+                Assertions.assertEquals(0, timeoutFuture.timedGetCalls);
+                Assertions.assertFalse(timeoutFuture.isDone());
                 Assertions.assertEquals(0, connectContext.getStatisticsLoadBudget().getConsumedBudgetMs());
             }
+            // THEN
             Assertions.assertNull(connectContext.getStatisticsLoadBudget());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
@@ -738,8 +758,8 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
-    @Timeout(5)
     public void testWaitForStatsFutureUsesRemainingQueryBudget() {
+        // GIVEN
         final var storage = new CachedStatisticStorage();
 
         boolean originalEnabled = Config.enable_sync_statistics_load;
@@ -754,21 +774,32 @@ public class CachedStatisticStorageTest {
             connectContext.setStatisticsLoadBudget(null);
 
             try (var ignored = StatisticsLoadBudget.openScope(connectContext)) {
-                final var firstFuture = new CompletableFuture<>();
+                final var firstFuture = new TimeoutFuture<>();
+
+                // WHEN
                 Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", firstFuture,
                         (Supplier<String>) () -> "first");
 
-                Assertions.assertTrue(connectContext.getStatisticsLoadBudget().getRemainingBudgetMs() <= 5);
+                // THEN
+                Assertions.assertEquals(1, firstFuture.timedGetCalls);
+                Assertions.assertEquals(100, firstFuture.timeout);
+                Assertions.assertEquals(TimeUnit.MILLISECONDS, firstFuture.unit);
 
-                final var secondFuture = new CompletableFuture<>();
-                long startNanos = System.nanoTime();
+                // GIVEN
+                connectContext.getStatisticsLoadBudget().recordWait(TimeUnit.MILLISECONDS.toNanos(100));
+                Assertions.assertEquals(0, connectContext.getStatisticsLoadBudget().getRemainingBudgetMs());
+
+                final var secondFuture = new TimeoutFuture<>();
+
+                // WHEN
                 Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", secondFuture,
                         (Supplier<String>) () -> "second");
-                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
 
-                Assertions.assertTrue(elapsedMs < 100);
+                // THEN
+                Assertions.assertEquals(0, secondFuture.timedGetCalls);
                 Assertions.assertFalse(secondFuture.isDone());
             }
+            // THEN
             Assertions.assertNull(connectContext.getStatisticsLoadBudget());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
