@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
@@ -31,6 +32,10 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,9 +49,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
@@ -714,6 +721,206 @@ public class DefaultPreSplitPipelineTest {
         SampleSubqueryExecutor executor = DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.INSERT_FROM_TABLE);
         Assertions.assertInstanceOf(InsertFromTableSampleSubqueryExecutor.class, executor,
                 "INSERT_FROM_TABLE load kind must produce an InsertFromTableSampleSubqueryExecutor");
+    }
+
+    // ---------- awaitFinished: wait for pre-split shards to spread across CNs before load (PR #76562) ----------
+
+    private DefaultPreSplitPipeline newPipelineWithResource(Clock clock, ComputeResource loadComputeResource) {
+        return new DefaultPreSplitPipeline(
+                (r, k) -> BoundaryPlannerResult.NO_SPLIT, r -> SampleSet.EMPTY, tabletReshardJobManager,
+                database, table, singleBaseTarget(), FILE_TOTAL_BYTES,
+                POLL_INTERVAL, clock, loadComputeResource);
+    }
+
+    /** A FINISHED SplitTabletJob mock that reports the given freshly created tablet ids. */
+    private SplitTabletJob finishedSplitJob(long jobId, List<Long> newTabletIds) {
+        SplitTabletJob split = mock(SplitTabletJob.class);
+        when(split.getJobId()).thenReturn(jobId);
+        when(split.getJobState()).thenReturn(TabletReshardJob.JobState.FINISHED);
+        when(split.getAllNewTabletIds()).thenReturn(newTabletIds);
+        when(tabletReshardJobManager.getTabletReshardJob(jobId)).thenReturn(split);
+        return split;
+    }
+
+    private static List<ComputeNode> aliveNodes(int count) {
+        List<ComputeNode> nodes = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            nodes.add(mock(ComputeNode.class));
+        }
+        return nodes;
+    }
+
+    /** Every new tablet resolves to the same node id: the un-spread, single-CN state right after creation. */
+    private static Map<Long, List<Long>> allOnOneNode(List<Long> tabletIds, long nodeId) {
+        Map<Long, List<Long>> placement = new HashMap<>();
+        for (Long tabletId : tabletIds) {
+            placement.put(tabletId, List.of(nodeId));
+        }
+        return placement;
+    }
+
+    /** Each new tablet resolves to a distinct node id: fully spread across CNs. */
+    private static Map<Long, List<Long>> spreadAcrossNodes(List<Long> tabletIds) {
+        Map<Long, List<Long>> placement = new HashMap<>();
+        long nodeId = 100L;
+        for (Long tabletId : tabletIds) {
+            placement.put(tabletId, List.of(nodeId++));
+        }
+        return placement;
+    }
+
+    @Test
+    public void testAwaitShardSpreadReturnsWhenShardsAlreadySpread() throws Exception {
+        List<Long> newTabletIds = List.of(1001L, 1002L, 1003L);
+        SplitTabletJob split = finishedSplitJob(70L, newTabletIds);
+        ComputeResource resource = mock(ComputeResource.class);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.getAliveComputeNodes(resource)).thenReturn(aliveNodes(3));
+        when(warehouseManager.getAllComputeNodeIdsAssignToTablets(eq(resource), any()))
+                .thenReturn(spreadAcrossNodes(newTabletIds));
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 60L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(Clock.systemUTC(), resource);
+            // FINISHED -> awaitShardSpread finds the 3 shards already on 3 distinct nodes and returns at once.
+            Assertions.assertDoesNotThrow(() -> pipeline.awaitFinished(
+                    new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false));
+            verify(warehouseManager).getAllComputeNodeIdsAssignToTablets(eq(resource), any());
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
+    }
+
+    @Test
+    public void testAwaitShardSpreadWaitsUntilShardsConverge() throws Exception {
+        List<Long> newTabletIds = List.of(2001L, 2002L, 2003L);
+        SplitTabletJob split = finishedSplitJob(71L, newTabletIds);
+        ComputeResource resource = mock(ComputeResource.class);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.getAliveComputeNodes(resource)).thenReturn(aliveNodes(3));
+        AtomicInteger polls = new AtomicInteger();
+        // First two polls: shards still on one node; third poll: spread across three.
+        when(warehouseManager.getAllComputeNodeIdsAssignToTablets(eq(resource), any()))
+                .thenAnswer(invocation -> polls.incrementAndGet() < 3
+                        ? allOnOneNode(newTabletIds, 100L)
+                        : spreadAcrossNodes(newTabletIds));
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 60L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(Clock.systemUTC(), resource);
+            Assertions.assertDoesNotThrow(() -> pipeline.awaitFinished(
+                    new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false));
+            Assertions.assertTrue(polls.get() >= 3,
+                    "the wait must keep polling placement until the shards spread (>= 3 polls), was " + polls.get());
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
+    }
+
+    @Test
+    public void testAwaitShardSpreadProceedsOnTimeoutWithoutThrowing() throws Exception {
+        List<Long> newTabletIds = List.of(3001L, 3002L, 3003L);
+        SplitTabletJob split = finishedSplitJob(72L, newTabletIds);
+        ComputeResource resource = mock(ComputeResource.class);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.getAliveComputeNodes(resource)).thenReturn(aliveNodes(3));
+        AdvanceableClock clock = new AdvanceableClock(Instant.parse("2026-01-01T00:00:00Z"));
+        // Shards never spread; each poll pushes the clock past the 5s spread deadline.
+        when(warehouseManager.getAllComputeNodeIdsAssignToTablets(eq(resource), any()))
+                .thenAnswer(invocation -> {
+                    clock.advance(Duration.ofSeconds(6));
+                    return allOnOneNode(newTabletIds, 100L);
+                });
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 5L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(clock, resource);
+            // The bounded wait expires; the load proceeds anyway (still correct, just less parallel) — no throw.
+            Assertions.assertDoesNotThrow(() -> pipeline.awaitFinished(
+                    new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false));
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
+    }
+
+    @Test
+    public void testAwaitShardSpreadDisabledByConfigSkipsPlacementLookup() throws Exception {
+        SplitTabletJob split = finishedSplitJob(73L, List.of(4001L, 4002L, 4003L));
+        ComputeResource resource = mock(ComputeResource.class);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 0L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(Clock.systemUTC(), resource);
+            pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false);
+            // 0 disables the wait: the load plans immediately without consulting shard placement.
+            Mockito.verifyNoInteractions(warehouseManager);
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
+    }
+
+    @Test
+    public void testAwaitShardSpreadSkippedWhenSingleNewTablet() throws Exception {
+        SplitTabletJob split = finishedSplitJob(74L, List.of(5001L));
+        ComputeResource resource = mock(ComputeResource.class);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 60L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(Clock.systemUTC(), resource);
+            pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false);
+            // A single new tablet cannot spread across nodes: nothing to wait for.
+            Mockito.verifyNoInteractions(warehouseManager);
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
+    }
+
+    @Test
+    public void testAwaitShardSpreadSkippedWhenComputeResourceUnknown() throws Exception {
+        SplitTabletJob split = finishedSplitJob(75L, List.of(6001L, 6002L, 6003L));
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+
+        long savedSpread = Config.tablet_pre_split_await_shard_spread_seconds;
+        Config.tablet_pre_split_await_shard_spread_seconds = 60L;
+        try (MockedStatic<GlobalStateMgr> mockedGlobalState = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getWarehouseMgr()).thenReturn(warehouseManager);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            // Null load compute resource (the sink's target is unknown): the wait is skipped even when enabled.
+            DefaultPreSplitPipeline pipeline = newPipelineWithResource(Clock.systemUTC(), null);
+            pipeline.awaitFinished(new PreSplitPipeline.PreparedReshardJob(split), POST_SUBMIT_TIMEOUT, () -> false);
+            Mockito.verifyNoInteractions(warehouseManager);
+        } finally {
+            Config.tablet_pre_split_await_shard_spread_seconds = savedSpread;
+        }
     }
 
     /** A test-only {@link Clock} whose "now" advances only when callers say so. */
