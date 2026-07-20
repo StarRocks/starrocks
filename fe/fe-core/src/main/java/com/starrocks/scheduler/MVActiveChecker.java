@@ -71,7 +71,8 @@ public class MVActiveChecker extends LeaderDaemon {
     private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
-            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING
     );
 
     @Override
