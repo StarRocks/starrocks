@@ -694,10 +694,7 @@ public class CreateTableAnalyzer {
             Map<String, String> properties = stmt.getProperties();
             KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
 
-            boolean enableRangeDistribution = Config.enable_range_distribution;
-            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRangeDistribution()) {
-                enableRangeDistribution = true;
-            }
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(ConnectContext.get());
 
             if (enableRangeDistribution) {
                 if (distributionDesc == null) {

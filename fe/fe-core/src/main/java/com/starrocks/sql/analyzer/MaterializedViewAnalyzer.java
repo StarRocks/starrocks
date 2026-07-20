@@ -1349,32 +1349,35 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            boolean enableRangeDistribution = Config.enable_range_distribution;
-            if (connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution()) {
-                enableRangeDistribution = true;
-            }
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
 
-            if (enableRangeDistribution) {
+            if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                // Primary key MVs must be normalized first, regardless of the range-distribution default:
+                // an incremental MV is forced to hash distribution on all key columns (its row-id/merge
+                // semantics depend on it), while for a non-incremental primary key MV this is a no-op that
+                // returns the given (or absent) distribution.
+                distributionDesc = checkDistributionForPrimaryKey(statement);
+                if (distributionDesc == null && enableRangeDistribution) {
+                    // No distribution specified and range distribution is enabled: use it as the default.
+                    distributionDesc = new RangeDistributionDesc();
+                    statement.setDistributionDesc(distributionDesc);
+                }
+            } else if (enableRangeDistribution) {
                 if (distributionDesc == null) {
                     // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
             } else {
-                // If the key type is primary key, the distribution must be hash distribution.
-                if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                    distributionDesc = checkDistributionForPrimaryKey(statement);
-                } else {
-                    // for non primary key tables, if user not specify distribution, we use hash distribution
-                    if (distributionDesc == null) {
-                        if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
-                            distributionDesc = new HashDistributionDesc(0,
-                                    Lists.newArrayList(mvColumnItems.get(0).getName()));
-                        } else {
-                            distributionDesc = new RandomDistributionDesc();
-                        }
-                        statement.setDistributionDesc(distributionDesc);
+                // for non primary key tables, if user not specify distribution, we use hash distribution
+                if (distributionDesc == null) {
+                    if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
+                        distributionDesc = new HashDistributionDesc(0,
+                                Lists.newArrayList(mvColumnItems.get(0).getName()));
+                    } else {
+                        distributionDesc = new RandomDistributionDesc();
                     }
+                    statement.setDistributionDesc(distributionDesc);
                 }
             }
 

@@ -556,11 +556,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_range_distribution`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为建表启用 Range-based Distribution 语意。
+- 描述: 在创建表或物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_parallel_tablets`

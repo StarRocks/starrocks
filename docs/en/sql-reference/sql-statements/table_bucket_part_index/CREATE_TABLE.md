@@ -340,7 +340,7 @@ Value columns do not need to specify aggregation types when other key type is us
 
 ### Range-based Distribution
 
-From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default; set the configuration to `false` to disable it. It has no effect in shared-nothing mode. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
 
 The range-based distribution semantic is different from the default semantic in the following aspects:
 - If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
@@ -461,7 +461,7 @@ For more information, see [Data distribution](../../../table_design/data_distrib
 
 ## Distribution
 
-StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
+StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default. In shared-data mode, a table that specifies a key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause uses range-based distribution by default instead; see [Range-based Distribution](#range-based-distribution).
 
 - Random bucketing (since v3.1)
 
@@ -509,7 +509,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 - Range-based distribution
 
-  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. For detailed information, see [Range-based distribution](#range-based-distribution).
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default. For detailed information, see [Range-based distribution](#range-based-distribution).
 
 ## Rollup index
 

@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.utframe.StarRocksAssert;
@@ -524,8 +525,9 @@ public class CreateTableAnalyzerTest {
 
     @Test
     public void testPkTableSortKeyOrder() {
-        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
-        Config.enable_range_distribution = true;
+        // Force range distribution via the session variable (ungated by run mode) so the range
+        // sort-key-order validation is exercised regardless of the suite's ambient run mode.
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
             // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
             String sql1 = "CREATE TABLE test_create_table_db.pk_table_wrong_order\n" +
@@ -549,8 +551,8 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql2);
 
-            // enable_range_distribution = false -> Should pass even if order is different
-            Config.enable_range_distribution = false;
+            // range distribution off -> Should pass even if order is different (hash-distributed)
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
             String sql3 = "CREATE TABLE test_create_table_db.pk_table_diff_order_range_off\n" +
                     "(\n" +
                     "    v1 int not null,\n" +
@@ -562,7 +564,7 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql3);
         } finally {
-            Config.enable_range_distribution = oldEnableRangeDistribution;
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
         }
     }
 
@@ -593,10 +595,12 @@ public class CreateTableAnalyzerTest {
                 connectContext.getSessionVariable().setEnableRangeDistribution(false);
             }
 
-            // 3. Set Config to true: should be range distribution even if session variable is false
+            // 3. Set Config to true: the config-driven default only takes effect in shared-data mode
+            // (range distribution is shared-data only), so the outcome tracks the current run mode.
             Config.enable_range_distribution = true;
             CreateTableStmt stmt3 = (CreateTableStmt) analyzeSuccess(sql);
-            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+            Assertions.assertEquals(RunMode.isSharedDataMode(),
+                    stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
 
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;
