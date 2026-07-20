@@ -46,6 +46,7 @@ public class DeltaStatisticProvider {
 
         builder.setOutputRowCount(deltaLakeFileStats.getRecordCount());
         builder.addColumnStatistics(buildColumnStatistics(schema, columnRefOperatorColumnMap, deltaLakeFileStats));
+        builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         return builder.build();
     }
@@ -80,6 +81,7 @@ public class DeltaStatisticProvider {
 
         builder.setOutputRowCount(deltaLakeFileStats.getRecordCount());
         builder.addColumnStatistics(buildColumnStatistics(schema, columnRefOperatorColumnMap, deltaLakeFileStats));
+        builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         return builder.build();
     }
