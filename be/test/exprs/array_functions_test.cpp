@@ -17,10 +17,12 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <unordered_set>
 
 #include "column/const_column.h"
 #include "column/map_column.h"
+#include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
@@ -3180,14 +3182,47 @@ TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
     ASSERT_TRUE(dest_column->get(2).is_null());
 }
 
+// array_difference is a header-only function template; in production it is reached only
+// through the builtin-function registry. Invoke it the same way here so incremental
+// coverage attributes the exercised lines to the product translation unit (array_functions.cpp
+// via ArrayFunctions.inc) instead of only this test object.
+static ColumnPtr call_array_difference(LogicalType input_type, const ColumnPtr& arg) {
+    uint64_t fid = 0;
+    LogicalType result_element = TYPE_BIGINT;
+    switch (input_type) {
+    case TYPE_BOOLEAN:
+        fid = 150160;
+        break;
+    case TYPE_INT:
+        fid = 150163;
+        break;
+    case TYPE_BIGINT:
+        fid = 150164;
+        break;
+    case TYPE_DOUBLE:
+        fid = 150167;
+        result_element = TYPE_DOUBLE;
+        break;
+    default:
+        CHECK(false) << "unsupported array_difference input type " << input_type;
+    }
+    const auto* desc = BuiltinFunctions::find_builtin_function(fid);
+    CHECK(desc != nullptr);
+    // Invoke with a real FunctionContext (as production does) rather than nullptr, so the call
+    // matches the production convention and stays robust if array_difference starts using it.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+            {TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(input_type))},
+            TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(result_element))));
+    return desc->scalar_function(ctx.get(), Columns{arg}).value();
+}
+
 TEST_F(ArrayFunctionsTest, array_difference_boolean) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column->append_datum(DatumArray{(uint8_t)5, (uint8_t)3, (uint8_t)6});
     src_column->append_datum(DatumArray{(uint8_t)2, (uint8_t)3, (uint8_t)7, (uint8_t)8});
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, (uint8_t)1});
 
-    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
@@ -3202,8 +3237,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3229,13 +3263,26 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
 
-    ArrayDifference<LogicalType::TYPE_INT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
     _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
     _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    constexpr int32_t kIntMax = std::numeric_limits<int32_t>::max();
+    constexpr int32_t kIntMin = std::numeric_limits<int32_t>::min();
+    src_column->append_datum(DatumArray{kIntMax, kIntMin});
+    src_column->append_datum(DatumArray{kIntMin, kIntMax});
+
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
+
+    ASSERT_EQ(dest_column->size(), 2);
+    _check_array<int64_t>({0, -4294967295}, dest_column->get(0).get_array());
+    _check_array<int64_t>({0, 4294967295}, dest_column->get(1).get_array());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
@@ -3245,8 +3292,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
     src_column->append_datum(DatumArray{4, 3, 2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_INT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3272,8 +3318,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
 
-    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({(int64_t)0, (int64_t)-2, (int64_t)3}, dest_column->get(0).get_array());
@@ -3288,8 +3333,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3315,8 +3359,7 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
 
-    ArrayDifference<LogicalType::TYPE_DOUBLE> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_DOUBLE, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<double>({(double)0, (double)-2, (double)3}, dest_column->get(0).get_array());
