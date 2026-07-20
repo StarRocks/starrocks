@@ -85,7 +85,11 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                         if (globalDicts.containsKey(column.getId())) {
                             final ConstantOperator min = ConstantOperator.createVarchar("0");
                             final ColumnDict columnDict = globalDicts.get(column.getId());
-                            final ConstantOperator max = ConstantOperator.createVarchar("" + columnDict.getDictSize());
+                            // A value-adding dict-mapping key (e.g. `case when x is null then '-'`)
+                            // can add one code beyond the base dict; reserve it, or the compressed
+                            // group-by key width overflows and decode fails on "key :0".
+                            final ConstantOperator max =
+                                    ConstantOperator.createVarchar("" + (columnDict.getDictSize() + 1));
                             infos.put(entry.getKey().getId(), new Pair<>(min, max));
                         }
                     }
