@@ -80,11 +80,18 @@ Status TantivyInvertedReader::open_compound(TantivyInvertedReader* reader, FileS
                                             int64_t index_id, const std::string& column_name) {
     auto exists = fs->path_exists(bin_path);
     if (!exists.ok()) {
-        return Status::NotFound("compound .idx not present: " + bin_path);
+        return exists;
     }
 
     ASSIGN_OR_RETURN(auto compound_file, CompoundIndexFileReader::open(bin_path, fs));
-    ASSIGN_OR_RETURN(auto layout, compound_file->find_index(CompoundIndexKind::INVERTED_TANTIVY, index_id));
+    auto layout_or = compound_file->find_index(CompoundIndexKind::INVERTED_TANTIVY, index_id);
+    if (!layout_or.ok()) {
+        if (layout_or.status().is_not_found()) {
+            return Status::Corruption(fmt::format("compound .idx is missing Tantivy index {}: {}", index_id, bin_path));
+        }
+        return layout_or.status();
+    }
+    auto layout = std::move(layout_or).value();
 
     std::string file_table_json = "{";
     for (size_t i = 0; i < layout.files.size(); ++i) {
