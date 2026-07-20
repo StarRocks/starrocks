@@ -71,7 +71,10 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage_primitive/column_expr_predicate.h"
 #include "storage_primitive/column_predicate.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/roaring2range.h"
 #include "storage_primitive/schema_helper.h"
 #include "storage_primitive/vector_search_option.h"
 #include "testutil/exprs_test_helper.h"
@@ -1519,6 +1522,82 @@ TEST_F(EvaluatePredTreeBitmapTest, index_only_expr_predicate_not_evaluated_again
     EXPECT_EQ(got.cardinality(), kRows);
 }
 
+// Direct unit tests for evaluate_delete_survivors_to_bitmap, reusing the EvaluatePredTreeBitmapTest
+// fixture (100k rows, c1 = i, c2 = i % 7, iterators for c1/c2/c3). The expected survivor set is derived
+// arithmetically per case, an oracle independent of the helper's own evaluation path.
+
+TEST_F(EvaluatePredTreeBitmapTest, delete_survivors_single_condition) {
+    // Delete rows where c2 == 3 (i % 7 == 3). Survivors from the full range keep every other row.
+    DisjunctivePredicates del;
+    ConjunctivePredicates conj;
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    conj.add(eq.get());
+    del.add(conj);
+
+    ASSIGN_OR_ABORT(auto got, evaluate_delete_survivors_to_bitmap(del, _schema, _iters_by_cid, full_range()));
+    roaring::Roaring expect;
+    for (uint32_t i = 0; i < kRows; i++) {
+        if (i % 7 != 3) {
+            expect.add(i);
+        }
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, delete_survivors_disjunction_of_two_conditions) {
+    // Two independent delete statements ORed: delete (c2 == 3) OR (c1 >= 99990). A row survives only
+    // if it matches NEITHER. Spans multiple batches and two columns.
+    DisjunctivePredicates del;
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99990"));
+    ConjunctivePredicates c_eq;
+    c_eq.add(eq.get());
+    ConjunctivePredicates c_ge;
+    c_ge.add(ge.get());
+    del.add(c_eq);
+    del.add(c_ge);
+
+    // A scattered candidate (not the whole segment) to exercise the pre-narrowed call shape.
+    roaring::Roaring candidate;
+    candidate.addRange(0, 100);
+    candidate.addRange(99980, kRows);
+    ASSIGN_OR_ABORT(auto got, evaluate_delete_survivors_to_bitmap(del, _schema, _iters_by_cid, candidate));
+    roaring::Roaring expect;
+    for (auto it = candidate.begin(); it != candidate.end(); ++it) {
+        const uint32_t i = *it;
+        if (!(i % 7 == 3 || i >= 99990)) {
+            expect.add(i);
+        }
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, delete_survivors_empty_predicates_returns_candidate) {
+    DisjunctivePredicates del; // empty
+    roaring::Roaring candidate;
+    for (uint32_t v : {5u, 100u, 4242u, 99999u}) {
+        candidate.add(v);
+    }
+    ASSIGN_OR_ABORT(auto got, evaluate_delete_survivors_to_bitmap(del, _schema, _iters_by_cid, candidate));
+    EXPECT_TRUE(candidate == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, delete_survivors_unreadable_column_is_error) {
+    // A delete column the segment cannot read is a hard error, never a silent skip (a skipped delete
+    // widens the survivor set and lets a downstream top-k under-return).
+    DisjunctivePredicates del;
+    ConjunctivePredicates conj;
+    std::unique_ptr<ColumnPredicate> eq(new_column_ge_predicate(get_type_info(TYPE_INT), 9, "1"));
+    conj.add(eq.get());
+    del.add(conj);
+    auto st = evaluate_delete_survivors_to_bitmap(del, _schema, _iters_by_cid, full_range());
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.status().is_internal_error());
+    EXPECT_NE(st.status().to_string().find("not readable"), std::string::npos);
+}
+
 #ifdef WITH_TENANN
 // Validates the residual-predicate PRE-filter in SegmentIterator::_get_row_ranges_by_vector_index:
 // with a real HNSW .vi present (use_vector_index=true), a scalar predicate on a column WITHOUT an exact
@@ -1631,6 +1710,9 @@ protected:
         bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
         bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
         bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
+        // Storage delete predicates (DELETE ... WHERE on a DUP table). When set, they must be pre-applied
+        // before the ANN top-k narrowing, so the search ranks live rows only. Empty -> no delete.
+        DisjunctivePredicates delete_predicates;
     };
 
     struct ResidualCaseResult {
@@ -1754,6 +1836,7 @@ protected:
         seg_opts.has_predicate_above_iterator = above_predicate;
         seg_opts.enable_predicate_col_late_materialize = pred_col_late_mat;
         seg_opts.pred_tree = std::move(pred_tree);
+        seg_opts.delete_predicates = cfg.delete_predicates;
 
         // Optionally register an (unarrived) pushdown runtime filter. A runtime filter post-filters the
         // top-k above the per-segment search, so PRE would under-return -- its presence must route AUTO
@@ -1860,6 +1943,23 @@ TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+}
+
+TEST_F(VectorResidualPrefilterTest, delete_predicate_preapplied_before_ann_topk) {
+    // No residual predicate (pure ANN top-k), but a delete predicate removes the rows the search ranks
+    // first. vecs[i] = {i,0,0,0}, query [0,0,0,0] -> dist = i^2, so k=3 nearest are 0,1,2; delete id < 2.
+    // Fixed: the search ranks live rows only -> {2,3,4}. Buggy: it picks {0,1,2}, the read loop drops the
+    // deleted 0,1 afterwards, and only {2} comes back (under-return).
+    std::unique_ptr<ColumnPredicate> del_pred(new_column_lt_predicate(get_type_info(TYPE_BIGINT), 0, "2"));
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0; // no residual constraint on filter_col; assert only the returned id set
+    ConjunctivePredicates conj;
+    conj.add(del_pred.get());
+    cfg.delete_predicates.add(conj);
+
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{2, 3, 4})) << "deleted rows must not starve live rows in the top-k";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {

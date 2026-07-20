@@ -1360,6 +1360,22 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         pre_narrowed = true;
     }
 
+    // Delete predicates (DELETE ... WHERE on dup/agg/unique tables) are applied by the read loop AFTER the
+    // ANN top-k narrowing below, so a deleted row could steal a top-k slot and make the LIMIT under-return.
+    // Pre-apply them so the search, the count gate and the exact rescan rank live rows only. (PK delete
+    // vectors are already in _scan_range via _apply_del_vector; the brute path returns earlier -- it does
+    // not truncate, so the read loop's per-chunk delete filter suffices there.)
+    if (!_opts.delete_predicates.empty()) {
+        ASSIGN_OR_RETURN(auto live,
+                         evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema, _column_iterators,
+                                                             pre_narrowed ? matched : range2roaring(_scan_range)));
+        matched = std::move(live);
+        matched_cardinality = matched.cardinality();
+        _scan_range = roaring2range(matched);
+        RETURN_IF(_scan_range.empty(), Status::OK());
+        pre_narrowed = true;
+    }
+
     // Short-circuit (PRE only): score candidates exactly when the search cannot pay for itself --
     // cardinality <= k, or sparse vs the whole graph (a filtered HNSW walk would be slow and likely
     // under-return). Both paths are exact, top-k and range search alike.
@@ -1568,6 +1584,85 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         }
     }
     return result;
+}
+
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// The read loop applies deletes per-chunk AFTER top-k narrowing, so a caller that truncates by rank (ANN
+// top-k, BM25 WAND) must pre-apply them here -- otherwise a deleted row steals a top-k slot and the LIMIT
+// under-returns. Calls DisjunctivePredicates::evaluate directly (the same evaluator the read loop uses),
+// so the survivor set matches. Self-contained rather than built on evaluate_pred_tree_to_bitmap: delete
+// predicates need none of its dict-code / fallback / index-only machinery, and this cherry-picks cleanly
+// to release branches that predate that helper. An unreadable delete column is a hard error, not a skip.
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        const roaring::Roaring& candidate) {
+    if (candidate.isEmpty() || delete_predicates.empty()) {
+        return candidate;
+    }
+
+    std::set<ColumnId> del_cids;
+    delete_predicates.get_column_ids(&del_cids);
+    if (del_cids.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    struct PredColumn {
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : del_cids) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("delete-survivor bitmap: delete predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        pred_columns.emplace_back(PredColumn{field, column_iterators_by_cid[cid].get()});
+        pred_schema->append(field);
+    }
+
+    // DisjunctivePredicates::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring survivors;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [field, cit] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(cit->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(cit->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Seed 0 = not deleted; evaluate sets 1 for deleted rows, so a survivor stays 0.
+        selection.assign(bn, 0);
+        RETURN_IF_ERROR(delete_predicates.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i] == 0) {
+                survivors.add(r.begin() + i);
+            }
+        }
+    }
+    return survivors;
 }
 
 // Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
