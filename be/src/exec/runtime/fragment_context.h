@@ -175,6 +175,11 @@ public:
     void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
 
     void set_report_when_finish(bool report) { _report_when_finish = report; }
+    // Optional event-driven completion hook. Set only for BE-local synchronous stream
+    // load (see orchestration::StreamLoadOrchestrator): invoked exactly once on the
+    // driver thread when all execution groups finish, so results can be harvested from
+    // runtime_state() without an FE coordinator. Empty for every other fragment.
+    void set_finish_cb(std::function<void(FragmentContext*)> cb) { _finish_cb = std::move(cb); }
 
     // acquire runtime filter from cache
     void acquire_runtime_filters();
@@ -235,6 +240,7 @@ private:
 
     size_t _expired_log_count = 0;
 
+    std::function<void(FragmentContext*)> _finish_cb;
     bool _report_when_finish{};
 };
 } // namespace pipeline
