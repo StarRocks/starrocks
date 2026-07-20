@@ -216,6 +216,7 @@ However, if the difference is excessively large, it could be caused by the follo
 
 - Compaction may be lagging.
 - Vacuum tasks may be backlogged (check queue size).
+- Failed, aborted, or interrupted Primary Key compaction tasks may leave expired, unreferenced `.lcrm` files in object storage. Lake full vacuum reclaims these orphaned files after the expiration window.
 
 You may consider tuning compaction or vacuum thread pools if necessary.
 
