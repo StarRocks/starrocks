@@ -328,10 +328,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     /**
      * After the reshard job reaches FINISHED (metadata committed), the freshly created shards are
-     * placed by StarOS's asynchronous SPREAD scheduler, which is eventually consistent: StarOS
-     * serializes same-group placement and spreads incrementally, so for a short window after creation
-     * the shards can resolve to fewer than the target distinct nodes (still partially placed, or
-     * clustered on one node). If the triggering
+     * placed by StarOS's asynchronous SPREAD scheduler, which is eventually consistent: the new shards
+     * are placed together on a single node, and StarOS's periodic balancer then spreads them across
+     * nodes over the next few seconds, so for a short window after creation they are all still on one
+     * node. If the triggering
      * load plans its {@code OlapTableSink} during that window it opens one channel per distinct
      * destination CN — i.e. a single channel — and writes serially to one node (observed as
      * {@code LoadChannel ChannelNum=1}, ~3x slower than a fanned-out load). This bounded, best-effort
