@@ -15,11 +15,11 @@
 #include "column/fixed_length_column_base.h"
 
 #include "base/hash/hash_util.hpp"
+#include "base/simd/filter.h"
 #include "base/simd/gather.h"
 #include "base/types/decimal12.h"
 #include "base/types/int128.h"
 #include "base/types/int256.h"
-#include "column/column_filter_range.h"
 #include "column/column_sorter_comparator.h"
 #include "column/mysql_row_buffer.h"
 #include "column/raw_data_visitor.h"
@@ -181,7 +181,7 @@ size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from,
     // TODO: FIXME
     const auto src = immutable_data();
     raw::stl_vector_resize_uninitialized(&_data, src.size());
-    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
+    auto size = SIMD::Filter::filter_range(_data.data(), src.data(), filter.data(), from, to);
     _data.resize(size);
     _resource.reset();
     return size;
