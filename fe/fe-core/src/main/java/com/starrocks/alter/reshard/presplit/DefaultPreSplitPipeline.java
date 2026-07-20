@@ -328,8 +328,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     /**
      * After the reshard job reaches FINISHED (metadata committed), the freshly created shards are
-     * placed by StarOS's asynchronous SPREAD scheduler, which is eventually consistent: for a short
-     * window after creation all new shards can still resolve to a single worker. If the triggering
+     * placed by StarOS's asynchronous SPREAD scheduler, which is eventually consistent: StarOS
+     * serializes same-group placement and spreads incrementally, so for a short window after creation
+     * the shards can resolve to fewer than the target distinct nodes (still partially placed, or
+     * clustered on one node). If the triggering
      * load plans its {@code OlapTableSink} during that window it opens one channel per distinct
      * destination CN — i.e. a single channel — and writes serially to one node (observed as
      * {@code LoadChannel ChannelNum=1}, ~3x slower than a fanned-out load). This bounded, best-effort
@@ -364,20 +366,37 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             return;
         }
         Instant deadline = clock.instant().plus(Duration.ofSeconds(spreadSeconds));
+        int pollCount = 0;
+        int firstPollPlaced = -1;
+        int firstPollDistinct = -1;
         while (true) {
             if (shouldAbort.getAsBoolean()) {
                 return;
             }
-            int distinct = countDistinctAssignedNodes(warehouseManager, newTabletIds);
+            pollCount++;
+            Set<Long> nodes = new HashSet<>();
+            int placedTablets = collectPlacement(warehouseManager, newTabletIds, nodes);
+            int distinct = nodes.size();
+            if (firstPollPlaced < 0) {
+                firstPollPlaced = placedTablets;
+                firstPollDistinct = distinct;
+            }
+            // Per-poll trace (DEBUG): distinguishes "not all shards placed yet" (placed < total) from
+            // "all placed but clustered" (placed == total, distinct == 1) as StarOS SPREAD converges.
+            LOG.debug("Sample-Based Tablet Pre-Split shard-spread poll #{}: {}/{} new tablets placed across "
+                    + "{} compute node(s) {}", pollCount, placedTablets, newTabletIds.size(), distinct, nodes);
             if (distinct >= targetDistinct) {
                 LOG.info("Sample-Based Tablet Pre-Split: {} new tablets spread across {} compute nodes "
-                        + "(target {}) — load will fan out", newTabletIds.size(), distinct, targetDistinct);
+                        + "(target {}) after {} poll(s); first poll saw {}/{} tablets placed on {} node(s) "
+                        + "— load will fan out", newTabletIds.size(), distinct, targetDistinct, pollCount,
+                        firstPollPlaced, newTabletIds.size(), firstPollDistinct);
                 return;
             }
             if (clock.instant().isAfter(deadline)) {
                 LOG.warn("Sample-Based Tablet Pre-Split: new shards not spread within {}s ({} of {} target "
-                        + "distinct compute nodes); proceeding, load may open fewer channels",
-                        spreadSeconds, distinct, targetDistinct);
+                        + "distinct compute nodes, {}/{} tablets placed) after {} poll(s); proceeding, load "
+                        + "may open fewer channels", spreadSeconds, distinct, targetDistinct, placedTablets,
+                        newTabletIds.size(), pollCount);
                 return;
             }
             try {
@@ -389,8 +408,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         }
     }
 
-    /** Distinct compute-node ids across all {@code tabletIds}' current shard placement; 0 on any error. */
-    private int countDistinctAssignedNodes(WarehouseManager warehouseManager, List<Long> tabletIds) {
+    /**
+     * Look up the current shard placement of {@code tabletIds}, add every assigned compute-node id to
+     * {@code nodesOut}, and return how many tablets have at least one node assigned. Returns 0 (and
+     * leaves {@code nodesOut} untouched) on any lookup error — the caller treats that as "not spread yet".
+     */
+    private int collectPlacement(WarehouseManager warehouseManager, List<Long> tabletIds, Set<Long> nodesOut) {
         Map<Long, List<Long>> assignment;
         try {
             assignment = warehouseManager.getAllComputeNodeIdsAssignToTablets(loadComputeResource, tabletIds);
@@ -402,11 +425,14 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         if (assignment == null) {
             return 0;
         }
-        Set<Long> nodes = new HashSet<>();
+        int placedTablets = 0;
         for (List<Long> nodeIds : assignment.values()) {
-            nodes.addAll(nodeIds);
+            if (nodeIds != null && !nodeIds.isEmpty()) {
+                placedTablets++;
+                nodesOut.addAll(nodeIds);
+            }
         }
-        return nodes.size();
+        return placedTablets;
     }
 
     /**

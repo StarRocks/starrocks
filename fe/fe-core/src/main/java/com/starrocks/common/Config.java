@@ -4699,11 +4699,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "After a Sample-Based Tablet Pre-Split reshard job reaches "
             + "FINISHED, the triggering load waits up to this many seconds for StarOS to spread the "
             + "freshly created shards across compute nodes before planning its OlapTableSink. StarOS "
-            + "SPREAD placement is eventually consistent, so a load that plans immediately after the "
-            + "split can find all new shards transiently on a single node and open one load channel "
-            + "(ChannelNum=1), serializing the write to that node. The wait polls the same placement "
-            + "lookup the sink uses until the new shards resolve to min(newShardCount, liveComputeNode) "
-            + "distinct nodes; on expiry it proceeds anyway (the load is still correct, just less "
+            + "SPREAD placement is eventually consistent (placed incrementally, same-group shards "
+            + "serialized), so a load that plans immediately after the split can find the new shards "
+            + "not yet spread across nodes (only partially placed, or clustered on one node) and open "
+            + "one load channel (ChannelNum=1), serializing the write to that node. The wait polls the "
+            + "same placement lookup the sink uses until the new shards resolve to "
+            + "min(newShardCount, liveComputeNode) distinct nodes; on expiry it proceeds anyway (the "
+            + "load is still correct, just less "
             + "parallel). 0 disables the wait. Shared-data mode only.")
     public static long tablet_pre_split_await_shard_spread_seconds = 60L;
 
