@@ -71,6 +71,15 @@ final class PreSplitFlow {
 
     private static final Logger LOG = LogManager.getLogger(PreSplitFlow.class);
 
+    // Target total number of weighted (min,max) endpoint pairs the meta-tier multi-partition sampler
+    // emits, apportioned across row groups by row count so the boundary planner's row-quantiles
+    // reflect row DENSITY (not row-group count). Kept in the same order of magnitude as the data-tier
+    // reservoir target so per-partition boundary resolution is comparable.
+    private static final int META_WEIGHTED_ENDPOINT_BUDGET = 40_000;
+    // Per-row-group cap on emitted endpoint copies, so a single dominant row group cannot balloon the
+    // FE-side sample and the pair count stays bounded even for a heavily skewed input.
+    private static final long META_MAX_ENDPOINT_WEIGHT = 2048L;
+
     private PreSplitFlow() {
     }
 
@@ -252,12 +261,22 @@ final class PreSplitFlow {
             if (rowGroups == null || rowGroups.isEmpty()) {
                 return null;
             }
+            long totalRows = 0L;
             List<RowGroupStatistics> usableRowGroups = new ArrayList<>(rowGroups.size());
             for (RowGroupStatistics rowGroup : rowGroups) {
-                if (rowGroup != null && rowGroup.getRowCount() > 0L && !rowGroup.isTruncated()
-                        && rowGroup.getMinTuple() != null && rowGroup.getMaxTuple() != null) {
-                    usableRowGroups.add(rowGroup);
+                if (rowGroup == null || rowGroup.getRowCount() <= 0L) {
+                    // No rows -> nothing to place a boundary from; safe to skip (empty / all-null group).
+                    continue;
                 }
+                if (rowGroup.isTruncated() || rowGroup.getMinTuple() == null || rowGroup.getMaxTuple() == null) {
+                    // A row group that HAS rows but no usable min/max would leave those rows
+                    // unrepresented in the boundaries (they could fall into an unsplit or mis-sized
+                    // partition). Fall back to the data tier -- matching the single-partition meta tier,
+                    // which treats any missing stats on a non-empty row group as meta-unavailable.
+                    return null;
+                }
+                usableRowGroups.add(rowGroup);
+                totalRows += rowGroup.getRowCount();
             }
             if (usableRowGroups.size() < 2) {
                 return null;
@@ -278,10 +297,20 @@ final class PreSplitFlow {
             List<Tuple> sortKeyTuples = new ArrayList<>();
             List<Tuple> partitionSourceTuples = new ArrayList<>();
             for (RowGroupStatistics rowGroup : usableRowGroups) {
-                addRowGroupEndpoint(rowGroup.getMinTuple(), partitionSourceIndexInSortKey,
-                        sortKeyTuples, partitionSourceTuples);
-                addRowGroupEndpoint(rowGroup.getMaxTuple(), partitionSourceIndexInSortKey,
-                        sortKeyTuples, partitionSourceTuples);
+                // Weight each group's endpoints by its share of total rows so the boundary planner's
+                // row-quantiles reflect row DENSITY, not row-group count (the data tier samples actual
+                // rows, density-weighted by construction; unweighted endpoints let a 1M-row group and a
+                // 100-row group each contribute the same two points, under-splitting the dense region).
+                // >= 1 so every group still contributes both ends; capped so one dominant group cannot
+                // balloon the FE-side sample, keeping the total pair count bounded regardless of skew.
+                long weight = Math.min(META_MAX_ENDPOINT_WEIGHT, Math.max(1L, Math.round(
+                        (double) rowGroup.getRowCount() / totalRows * META_WEIGHTED_ENDPOINT_BUDGET)));
+                for (long copy = 0; copy < weight; copy++) {
+                    addRowGroupEndpoint(rowGroup.getMinTuple(), partitionSourceIndexInSortKey,
+                            sortKeyTuples, partitionSourceTuples);
+                    addRowGroupEndpoint(rowGroup.getMaxTuple(), partitionSourceIndexInSortKey,
+                            sortKeyTuples, partitionSourceTuples);
+                }
             }
             if (sortKeyTuples.size() < 2) {
                 // Too few usable endpoints to place any interior boundary; let the data tier try.

@@ -477,8 +477,8 @@ public class PreSplitFlowTest {
 
     @Test
     public void metaTierMultiPartitionEmitsEndpointsWhenOrdered() {
-        // Ordered, non-overlapping row groups (source sorted by the sort key): the meta tier emits a
-        // min + max endpoint per row group (2 per group) as both the sort-key tuples and the parallel
+        // Ordered, non-overlapping row groups (source sorted by the sort key): the meta tier emits
+        // paired min/max endpoints per row group as both the sort-key tuples and the parallel
         // partition-source tuples, with no data scan.
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
         PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
@@ -493,9 +493,57 @@ public class PreSplitFlowTest {
                     table, prepared, LoadKind.INSERT_FROM_FILES);
 
             Assertions.assertNotNull(result, "ordered row groups must stay on the meta tier");
-            Assertions.assertEquals(4, result.getTuples().size(), "2 endpoints per row group");
+            Assertions.assertFalse(result.getTuples().isEmpty(), "ordered row groups must emit endpoints");
+            Assertions.assertEquals(0, result.getTuples().size() % 2, "endpoints are emitted as min/max pairs");
             Assertions.assertEquals(result.getTuples().size(), result.getPartitionSourceTuples().size(),
                     "sort-key and partition-source tuples must stay parallel");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionWeightsEndpointsByRowCount() {
+        // A dense row group must contribute more endpoint copies than a sparse one so the boundary
+        // planner's row-quantiles reflect row density, not row-group count.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> unevenSizes = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 1_000_000L, false),    // dense
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false));        // sparse
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(unevenSizes))) {
+            SampleSet result = PreSplitFlow.runMetaTierMultiPartitionSampler(
+                    table, prepared, LoadKind.INSERT_FROM_FILES);
+
+            Assertions.assertNotNull(result);
+            long denseMinCopies = result.getTuples().stream()
+                    .filter(t -> "0".equals(t.getValues().get(0).getStringValue())).count();
+            long sparseMinCopies = result.getTuples().stream()
+                    .filter(t -> "10".equals(t.getValues().get(0).getStringValue())).count();
+            Assertions.assertTrue(denseMinCopies > sparseMinCopies,
+                    "dense row group copies (" + denseMinCopies + ") must exceed sparse (" + sparseMinCopies + ")");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionFallsBackWhenPositiveRowGroupLacksStats() {
+        // A row group that has rows but no usable min/max (here: truncated stats) would leave those
+        // rows unrepresented in the boundaries -> fall back to the data tier rather than planning from
+        // the remaining groups.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> withBadGroup = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, /*truncated*/ true),
+                new RowGroupStatistics(bigintTuple(20), bigintTuple(29), 100L, false));
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(withBadGroup))) {
+            Assertions.assertNull(
+                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
+                    "a positive-row group without usable stats must fall back to the data tier");
         }
     }
 
