@@ -29,6 +29,7 @@ set(EXEC_PRIMITIVE_TEST_FILES
     pipeline_observer_exec_primitive_test.cpp
     result_to_arrow_converter_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
+    warm_slot_reservation_exec_primitive_test.cpp
 )
 
 set(EXEC_PRIMITIVE_TEST_LINK_LIBS
