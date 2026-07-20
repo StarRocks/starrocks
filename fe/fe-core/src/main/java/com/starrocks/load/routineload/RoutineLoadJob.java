@@ -88,6 +88,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -965,7 +966,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
-    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws StarRocksException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label, long beId)
+            throws StarRocksException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -981,22 +983,84 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
-            StreamLoadPlanner planner =
-                    new StreamLoadPlanner(Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
-            TExecPlanFragmentParams planParams = planner.plan(loadId);
-
-            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
+            TExecPlanFragmentParams planParams = null;
+            Coordinator coord = null;
+            if (Config.enable_pipeline_routine_load && beId != RoutineLoadTaskInfo.INVALID_BE_ID) {
+                // Run this routine load task on the pipeline engine. Reuse LoadPlanner (ROUTINE_LOAD)
+                // pinned to the task's assigned BE (which consumes Kafka/Pulsar into a StreamLoadPipe),
+                // then materialize a single BE-local params blob (params.is_pipeline routes it to the
+                // pipeline engine in StreamLoadOrchestrator). Same mechanism as classic stream load.
+                // On any planning failure (e.g. the pinned BE transiently unavailable) fall back to
+                // the legacy engine below rather than failing the task.
+                try {
+                    ConnectContext loadContext = Load.createLoadConnectContext(db.getFullName());
+                    loadContext.getSessionVariable().setTimeZone(info.getTimezone());
+                    // LoadPlanner/coordinator read the thread-local ConnectContext (unlike StreamLoadPlanner
+                    // which binds internally); the routine load scheduler thread has none, so bind it here.
+                    try (var scope = loadContext.bindScope()) {
+                        // loadJobId = txnId: the StreamLoadTask is not created until planning succeeds
+                        // (see below), so do not depend on its id here.
+                        LoadPlanner loadPlanner = new LoadPlanner(txnId, loadId, txnId, db.getId(),
+                                db.getFullName(), (OlapTable) table, info.isStrictMode(), info.getTimezone(),
+                                info.isPartialUpdate(), loadContext, null,
+                                info.getLoadMemLimit(), info.getExecMemLimit(), info.getNegative(), 1,
+                                info.getColumnExprDescs(), info, label, info.getTimeout());
+                        loadPlanner.setSyncStreamLoad(true);
+                        loadPlanner.setPartialUpdateMode(info.getPartialUpdateMode());
+                        loadPlanner.setSyncStreamLoadBackendId(beId);
+                        loadPlanner.plan();
+                        DefaultCoordinator routineLoadCoord =
+                                (DefaultCoordinator) getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
+                        planParams = routineLoadCoord.buildLocalStreamLoadParams();
+                        // Carry over load-specific query options the LoadPlanner/JobSpec path omits
+                        // (matching legacy StreamLoadPlanner).
+                        planParams.query_options.setLoad_transmission_compression_type(
+                                info.getTransmisionCompressionType());
+                        planParams.query_options.setLog_rejected_record_num(info.getLogRejectedRecordNum());
+                        // Honor table-level load-profile collection with the same collect-interval throttle
+                        // the legacy StreamLoadPlanner applies, so a high-frequency routine load does not
+                        // collect a full profile for every task.
+                        boolean enableLoadProfile = ((OlapTable) table).enableLoadProfile();
+                        if (Config.load_profile_collect_interval_second > 0
+                                && System.currentTimeMillis() - ((OlapTable) table).getLastCollectProfileTime()
+                                        < Config.load_profile_collect_interval_second * 1000) {
+                            enableLoadProfile = false;
+                        }
+                        if (enableLoadProfile) {
+                            planParams.query_options.setEnable_profile(true);
+                            planParams.query_options.setLoad_profile_collect_second(
+                                    Config.stream_load_profile_collect_threshold_second);
+                            ((OlapTable) table).updateLastCollectProfileTime();
+                        }
+                        coord = routineLoadCoord;
+                    }
+                } catch (Exception e) {
+                    LOG.warn("pipeline routine load planning failed for label {}, fall back to legacy engine: {}",
+                            label, e.getMessage());
+                    planParams = null;
+                    coord = null;
+                }
+            }
+            if (planParams == null) {
+                StreamLoadPlanner planner = new StreamLoadPlanner(
+                        Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
+                planParams = planner.plan(loadId);
+                coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
+            }
+
+            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
+
+            // Register the task only after planning succeeded, so a plan failure (schema change in
+            // flight, no available replica, pinned BE unavailable, ...) does not leave an orphan
+            // StreamLoadTask registered in StreamLoadMgr.
             StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, computeResource);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
             streamLoadManager.addLoadTask(streamLoadTask);
-
-            Coordinator coord =
-                    getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
             streamLoadTask.setCoordinator(coord);
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);

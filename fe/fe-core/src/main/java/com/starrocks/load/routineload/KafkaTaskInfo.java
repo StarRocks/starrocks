@@ -249,7 +249,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
-        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
+        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label, getBeId());
         if (tExecPlanFragmentParams.query_options.enable_profile) {
             StreamLoadTask streamLoadTask = (StreamLoadTask) GlobalStateMgr.getCurrentState().
                     getStreamLoadMgr().getTaskByLabel(label);

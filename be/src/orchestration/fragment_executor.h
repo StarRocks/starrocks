@@ -41,6 +41,10 @@ public:
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
 
+    // Exposes the prepared FragmentContext so a BE-local caller (stream load) can
+    // install a finish callback before execute(). Valid only after prepare() succeeds.
+    pipeline::FragmentContextPtr fragment_ctx() const { return _fragment_ctx; }
+
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 

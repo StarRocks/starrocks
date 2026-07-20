@@ -543,6 +543,39 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor;
     }
 
+    // Build a single BE-local TExecPlanFragmentParams for the classic synchronous stream load
+    // (Config.enable_pipeline_stream_load). Assign the fragment instance to a worker WITHOUT any
+    // RPC deploy, then materialize its pipeline-correct params (carrying
+    // node_to_per_driver_seq_scan_ranges so the connector scan gets a morsel). The receiving BE
+    // executes the returned params in-process. Stream load builds exactly one fragment
+    // (ScanNode -> OlapTableSink) with one instance.
+    public TExecPlanFragmentParams buildLocalStreamLoadParams() throws StarRocksException {
+        prepareExec();
+        // BE-local execution runs a single fragment in-process. A multi-fragment (shuffle) plan
+        // cannot be executed this way; fail clearly instead of silently running only the root.
+        if (executionDAG.getFragmentsInCreatedOrder().size() > 1) {
+            throw new StarRocksException("pipeline stream load does not support a multi-fragment "
+                    + "(shuffle) plan; keep eliminate_shuffle_load_by_replicated_storage=true or "
+                    + "disable enable_pipeline_stream_load");
+        }
+        // Build and REGISTER the fragment instance exec state in the executionDAG via the Deployer
+        // with needDeploy=false (no RPC deploy), so the BE exec-state/profile report can land at this
+        // coordinator and the load profile surfaces via StreamLoadTask. Then return the single
+        // instance params for BE-local execution.
+        Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG,
+                coordinatorPreprocessor.getCoordAddress(), this::handleErrorExecution, false);
+        deployer.createFragmentExecStates(executionDAG.getFragmentsInCreatedOrder());
+        // The fragment runs in-process on the BE (no FE deploy); mark instances EXECUTING so their
+        // exec-state/profile reports are accepted, enabling load profile collection.
+        executionDAG.getExecutions().forEach(FragmentInstanceExecState::markLocalExecuting);
+        queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
+        var executions = executionDAG.getExecutions();
+        if (executions.isEmpty()) {
+            throw new StarRocksException("stream load fragment has no instance to execute");
+        }
+        return executions.iterator().next().getRequestToDeploy();
+    }
+
     public List<PlanFragment> getFragments() {
         return jobSpec.getFragments();
     }

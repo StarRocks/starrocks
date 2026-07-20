@@ -32,6 +32,11 @@ public:
     Status execute_plan_fragment(StreamLoadContext* ctx);
 
 private:
+    // Legacy (non-pipeline) BE-local execution via FragmentMgr + PlanFragmentExecutor.
+    Status _execute_plan_fragment_by_legacy(StreamLoadContext* ctx);
+    // Pipeline-engine BE-local execution (gated by FE Config.enable_pipeline_stream_load).
+    Status _execute_plan_fragment_by_pipeline(StreamLoadContext* ctx);
+
     ExecEnv* _exec_env;
     [[maybe_unused]] FragmentMgr* _fragment_mgr;
 };
