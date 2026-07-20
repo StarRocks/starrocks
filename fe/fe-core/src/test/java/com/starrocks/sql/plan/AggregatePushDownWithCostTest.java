@@ -413,4 +413,17 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
                 "     * [v10, v11]-->[ndv=100000]");
         connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
     }
+
+    @Test
+    public void testPushDownAggCaseWhenWithNonNullConstElseDoesNotCrash() throws Exception {
+        // A multi-WHEN CASE with non-constant THENs and a non-null constant ELSE used to trip a
+        // Preconditions.checkState in PushDownAggregateRewriter.rewriteProject (IllegalStateException)
+        // when the aggregate was pushed below a broadcast join (large probe t0, small build t1). The
+        // collector only validated THEN clauses; the non-null ELSE must also forbid push-down.
+        String sql = "select t0.v1, " +
+                "sum(case when t0.v3 > 0 then t0.v2 when t0.v3 < 0 then t0.v2 + 1 else 5 end) " +
+                "from t0 join [broadcast] t1 on t0.v1 = t1.v4 group by t0.v1";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertTrue(plan.contains("t0"), plan);
+    }
 }
