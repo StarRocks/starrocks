@@ -28,6 +28,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -251,12 +252,32 @@ final class PreSplitFlow {
             if (rowGroups == null || rowGroups.isEmpty()) {
                 return null;
             }
+            List<RowGroupStatistics> usableRowGroups = new ArrayList<>(rowGroups.size());
+            for (RowGroupStatistics rowGroup : rowGroups) {
+                if (rowGroup != null && rowGroup.getRowCount() > 0L && !rowGroup.isTruncated()
+                        && rowGroup.getMinTuple() != null && rowGroup.getMaxTuple() != null) {
+                    usableRowGroups.add(rowGroup);
+                }
+            }
+            if (usableRowGroups.size() < 2) {
+                return null;
+            }
+            // Fall back to the data tier when the row groups' sort-key [min,max] ranges overlap too
+            // much: min/max endpoints then cannot place interior boundaries. This happens when the
+            // source is not ordered by the sort key -- every row group spans nearly the whole range,
+            // so the endpoints collapse to a couple of values and the boundary planner produces few,
+            // uneven tablets. Mirrors the single-partition meta tier's overlap gate
+            // (ParquetMetadataSampler + Config.tablet_pre_split_meta_tier_overlap_threshold).
+            double overlapFraction = rowGroupOverlapFraction(usableRowGroups);
+            if (overlapFraction > Config.tablet_pre_split_meta_tier_overlap_threshold) {
+                LOG.info("Pre-split meta tier (multi-partition) row-group overlap {} > threshold {} for "
+                                + "table {} (source likely unordered by sort key); falling back to data tier",
+                        overlapFraction, Config.tablet_pre_split_meta_tier_overlap_threshold, table.getName());
+                return null;
+            }
             List<Tuple> sortKeyTuples = new ArrayList<>();
             List<Tuple> partitionSourceTuples = new ArrayList<>();
-            for (RowGroupStatistics rowGroup : rowGroups) {
-                if (rowGroup == null || rowGroup.getRowCount() == 0L || rowGroup.isTruncated()) {
-                    continue;
-                }
+            for (RowGroupStatistics rowGroup : usableRowGroups) {
                 addRowGroupEndpoint(rowGroup.getMinTuple(), partitionSourceIndexInSortKey,
                         sortKeyTuples, partitionSourceTuples);
                 addRowGroupEndpoint(rowGroup.getMaxTuple(), partitionSourceIndexInSortKey,
@@ -302,5 +323,30 @@ final class PreSplitFlow {
             }
         }
         return -1;
+    }
+
+    /**
+     * Fraction of row groups (sorted by sort-key min) whose min falls below the running max of the
+     * preceding groups — i.e. how much the row groups' sort-key ranges overlap. Near 0 means the
+     * source is well ordered by the sort key (tight, non-overlapping min/max, so endpoint boundaries
+     * are meaningful); near 1 means it is not (every group spans nearly the whole range, so min/max
+     * endpoints cannot place interior boundaries and the caller falls back to the data tier). Same
+     * definition the single-partition meta tier uses in {@link ParquetMetadataSampler}.
+     */
+    private static double rowGroupOverlapFraction(List<RowGroupStatistics> rowGroups) {
+        List<RowGroupStatistics> sorted = new ArrayList<>(rowGroups);
+        sorted.sort(Comparator.comparing(RowGroupStatistics::getMinTuple));
+        Tuple maxSeen = sorted.get(0).getMaxTuple();
+        int overlapping = 0;
+        for (int i = 1; i < sorted.size(); i++) {
+            RowGroupStatistics current = sorted.get(i);
+            if (current.getMinTuple().compareTo(maxSeen) < 0) {
+                overlapping++;
+            }
+            if (current.getMaxTuple().compareTo(maxSeen) > 0) {
+                maxSeen = current.getMaxTuple();
+            }
+        }
+        return (double) overlapping / (sorted.size() - 1);
     }
 }
