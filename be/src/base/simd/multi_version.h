@@ -26,29 +26,19 @@
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wunused-function\"") \
             ATTR static __VA_ARGS__ _Pragma("GCC diagnostic pop")
 
-#if defined(__SSE4_2__)
+// Each variant is defined UNCONDITIONALLY on x86 (no `#if defined(__AVXxxx__)` gate): the
+// per-function `target` attribute makes the compiler emit that ISA for just that function even when
+// the global build targets a lower baseline, so the AVX2/AVX-512 variants exist and can be
+// runtime-dispatched (via IFUNC or __builtin_cpu_supports) regardless of USE_AVX2/USE_AVX512.
+// NOTE: code using these must not rely on the global `-m` flags — any intrinsic header include,
+// lookup table, or helper the variant body touches must be available on the lowest baseline too,
+// and lambdas inside a variant must repeat the attribute (they do not inherit it).
 #define MFV_SSE42(...) MFV_IMPL(__attribute__((target("sse4.2"))), __VA_ARGS__)
-#endif
-
-#if defined(__AVX2__)
 #define MFV_AVX2(...) MFV_IMPL(__attribute__((target("avx2"))), __VA_ARGS__)
-#endif
-
-#if defined(__AVX512F__)
 #define MFV_AVX512F(...) MFV_IMPL(__attribute__((target("avx512f"))), __VA_ARGS__)
-#endif
-
-#if defined(__AVX512BW__)
-#define MFV_AVX512BW(...) MFV_IMPL(__attribute__((target("avx512bw"))), __VA_ARGS__)
-#endif
-
-#if defined(__AVX512VL__)
-#define MFV_AVX512VL(...) MFV_IMPL(__attribute__((target("avx512vl"))), __VA_ARGS__)
-#endif
-
-#if defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VL__)
+#define MFV_AVX512BW(...) MFV_IMPL(__attribute__((target("avx512f,avx512bw"))), __VA_ARGS__)
+#define MFV_AVX512VL(...) MFV_IMPL(__attribute__((target("avx512f,avx512vl"))), __VA_ARGS__)
 #define MFV_AVX512VLBW(...) MFV_IMPL(__attribute__((target("avx512f,avx512vl,avx512bw"))), __VA_ARGS__)
-#endif
 
 // Use this for the "default" version of a function multi-version *family*
 // (same function name as the sibling MFV_SSE42/MFV_AVX2/MFV_AVX512* variants).
