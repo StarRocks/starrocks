@@ -19,6 +19,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -89,8 +90,16 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
+        // skip_meta_cache forces this to read DURABLE storage only: with file bundling a version can sit in
+        // the metacache (its metadata cached during publish) without a durable bundle written yet -- e.g. a
+        // batch publish advanced the primary index and cached the metadata but had not written the bundle,
+        // and is now being retried. A plain cache-hitting read would treat such a version as "exists in
+        // remote", adopt it as the base, and record it as prev_garbage_version, leaving a dangling reference
+        // (NotFound while vacuum walks the chain) once the cache is evicted.
         auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true, gtid);
+        auto res = tablet_mgr->get_tablet_metadata(
+                tablet_id, index_version,
+                CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true}, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
