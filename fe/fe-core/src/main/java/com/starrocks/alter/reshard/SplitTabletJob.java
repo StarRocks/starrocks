@@ -919,6 +919,18 @@ public class SplitTabletJob extends TabletReshardJob {
                     "Missing old MaterializedIndex for range-colocate split");
         }
 
+        // Pre-split (empty source, rowCount == 0) is the case whose following load wants to fan out.
+        // Its new shards must NOT be created into a PACK colocate group here: at PENDING the group's
+        // ColocateRanges are still the OLD/parent ones (the per-bucket ranges are only spliced in
+        // post-publish), so every new shard would resolve to the single parent PACK group. PACK
+        // affinity (+10000) dwarfs the SPREAD penalty (-100), so a batch sharing one PACK group herds
+        // onto a single CN (StarOS #1275) and the following load opens ChannelNum=1. Hoisted above the
+        // loop so addShardPlacementsForTablet can drop the PACK group for pre-split; the correct
+        // per-bucket PACK groups + alignment are still established by the post-publish
+        // applyColocateRangeSplitResult()/reconcile backstop (unchanged). Online split (non-empty)
+        // keeps its PACK grouping (and the WITH_SHARD pin below).
+        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
+
         // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
         // payload follows the ReshardingTablet iteration order; the same batch produced
         // by a leader-switch re-run emits a byte-equivalent payload.
@@ -926,7 +938,7 @@ public class SplitTabletJob extends TabletReshardJob {
         Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
         for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
             addShardPlacementsForTablet(reshardingTablet, oldIndex, newIndex,
-                    colocateRanges, colocateColumnCount,
+                    colocateRanges, colocateColumnCount, spreadNewShards,
                     newToOldShardId, newShardIdToGroupIds);
         }
         if (newToOldShardId.isEmpty()) {
@@ -939,12 +951,10 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-        // Pre-split splits a freshly created EMPTY tablet — there is no warm cache to preserve, so
-        // spread the new shards (drop the WITH_SHARD pin) so the following load is not funneled onto
-        // the source tablet's single worker. An online split (non-empty source) keeps the WITH_SHARD
-        // pin to reuse the source worker's warm cache. Emptiness is the same signal the pre-split
-        // eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
-        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
+        // spreadNewShards (computed above) also drops the WITH_SHARD pin here: pre-split splits a
+        // freshly created EMPTY tablet, so there is no warm cache to preserve and the new shards
+        // should spread rather than pin to the source worker. Online split (non-empty source) keeps
+        // the WITH_SHARD pin to reuse the source worker's warm cache.
         // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
         // otherwise the background warehouse (online split) — unified with the publish path.
         ComputeResource computeResource = resolveComputeResource(table.getId());
@@ -962,6 +972,7 @@ public class SplitTabletJob extends TabletReshardJob {
                                                     MaterializedIndex newIndex,
                                                     List<ColocateRange> colocateRanges,
                                                     int colocateColumnCount,
+                                                    boolean spreadNewShards,
                                                     Map<Long, Long> newToOldShardId,
                                                     Map<Long, List<Long>> newShardIdToGroupIds) {
         long oldTabletId = reshardingTablet.getFirstOldTabletId();
@@ -986,7 +997,14 @@ public class SplitTabletJob extends TabletReshardJob {
             long newTabletId = newTabletIds.get(i);
             List<Long> groupIds = new ArrayList<>(2);
             groupIds.add(newIndex.getShardGroupId()); // SPREAD group is unchanged
-            if (colocateRanges != null) {
+            // Pre-split (spreadNewShards): deliberately omit the PACK colocate group. At this point the
+            // group's registered ColocateRanges are still the OLD/parent ones (the per-bucket ranges are
+            // spliced only post-publish), so every new shard would resolve to the single parent PACK
+            // group and StarOS would herd the whole batch onto one CN (PACK +10000 ≫ SPREAD -100). With
+            // only the SPREAD group the fresh shards spread at creation; the post-publish
+            // applyColocateRangeSplitResult()/reconcile backstop then assigns each shard its correct
+            // per-bucket PACK group. Online split keeps its PACK grouping (its ranges are already final).
+            if (colocateRanges != null && !spreadNewShards) {
                 Range<Tuple> rangeForPackLookup = i < perNewTabletRanges.size()
                         ? perNewTabletRanges.get(i).getRange()
                         : oldTablet.getRange().getRange();

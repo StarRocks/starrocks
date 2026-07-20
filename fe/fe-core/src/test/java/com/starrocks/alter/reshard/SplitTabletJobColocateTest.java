@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.collect.Multimap;
 import com.staros.client.StarClientException;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.PlacementPolicy;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -53,6 +55,8 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -422,6 +426,62 @@ public class SplitTabletJobColocateTest {
                 "boundary child must be removed from the old PACK group at split time");
         Assertions.assertFalse(reassignedAdd.containsKey(belowChild),
                 "the below-boundary child stays in the old PACK group; no reassignment");
+    }
+
+    /**
+     * Root fix for the pre-split single-CN clustering (StarOS #1275): a pre-split (empty source,
+     * rowCount == 0 -> spreadNewShards) must create its new shards with ONLY the SPREAD group, NOT the
+     * parent PACK colocate group. Creating a whole batch into one PACK group makes StarOS herd them
+     * onto a single CN (PACK +10000 dwarfs SPREAD -100), which funnels the following load into
+     * ChannelNum=1. The correct per-bucket PACK groups are established afterwards by the post-publish
+     * reconcile (the Level-1 tests above), so colocation still converges.
+     */
+    @Test
+    public void testPreSplitCreatesShardsWithoutPackGroup() throws Exception {
+        // The freshly created table has an empty source tablet (rowCount == 0), so this is a pre-split
+        // and spreadNewShards is true. Capture the parent PACK group that the old (unsplit) code would
+        // have (wrongly) placed every new shard into.
+        long parentPackGroup = GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                .getColocateRangeMgr().getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+
+        Map<Long, List<Long>> createdGroupsByShard = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Invocation inv,
+                                             Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+                Assertions.assertTrue(spreadNewShards, "empty-source split must request spread");
+                for (Map.Entry<Long, List<Long>> e : newShardIdToGroupIds.entrySet()) {
+                    createdGroupsByShard.put(e.getKey(), new ArrayList<>(e.getValue()));
+                }
+                inv.proceed();  // run the real creation so the rest of the split proceeds
+            }
+        };
+
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+
+        runSplitJob();
+
+        Assertions.assertFalse(createdGroupsByShard.isEmpty(), "createShardsForSplit must have run");
+        for (Map.Entry<Long, List<Long>> e : createdGroupsByShard.entrySet()) {
+            List<Long> groups = e.getValue();
+            Assertions.assertEquals(1, groups.size(),
+                    "pre-split shard " + e.getKey() + " must be created with a single (SPREAD) group, "
+                            + "not two (SPREAD + PACK); got " + groups);
+            Assertions.assertFalse(groups.contains(parentPackGroup),
+                    "pre-split shard " + e.getKey() + " must NOT be created in the parent PACK group "
+                            + parentPackGroup + "; got " + groups);
+        }
     }
 
     /**
