@@ -1163,9 +1163,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
-    /**
-     * Inactive the materialized view and its related materialized views.
-     */
     private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
                                                             boolean isClearVersionMap,
                                                             Set<MvId> visited) {
@@ -1414,6 +1411,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null) {
             return;
         }
+<<<<<<< HEAD
         final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
         // inactive related mv
         mv.setInactiveAndReason(inactiveReason);
@@ -1421,5 +1419,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                 mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
         GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+=======
+        inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
+    // or failover instead of reverting to active until the next refresh re-detects the condition.
+    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log,
+                wal -> mv.setInactiveAndReason(inactiveReason));
+>>>>>>> 9de91b20fb ([BugFix] Inactivate and suspend incremental MV on a non-append-only base change (#76500))
     }
 }
