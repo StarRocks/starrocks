@@ -800,8 +800,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    auto fsOptions =
-            FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+    // Prefer the mid-query refreshed cloud configuration so file opens use a fresh vended token.
+    TCloudConfiguration cloud_config_holder;
+    auto fsOptions = FSOptions(_provider->effective_cloud_configuration(&cloud_config_holder));
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.format_scan_context.column_access_paths.empty()) {
@@ -1080,6 +1081,23 @@ void HiveDataSourceProvider::prepare_scan_ranges(const std::vector<TScanRangePar
         const THdfsScanRange& y = x.hdfs_scan_range;
         _max_file_length = std::max(_max_file_length, y.file_length);
     }
+}
+
+void HiveDataSourceProvider::set_refreshed_cloud_configuration(const TCloudConfiguration& cloud_configuration) {
+    std::lock_guard<std::mutex> l(_refreshed_cloud_config_mutex);
+    _refreshed_cloud_configuration = cloud_configuration;
+    _has_refreshed_cloud_configuration = true;
+}
+
+const TCloudConfiguration* HiveDataSourceProvider::effective_cloud_configuration(TCloudConfiguration* holder) const {
+    {
+        std::lock_guard<std::mutex> l(_refreshed_cloud_config_mutex);
+        if (_has_refreshed_cloud_configuration) {
+            *holder = _refreshed_cloud_configuration;
+            return holder;
+        }
+    }
+    return _hdfs_scan_node.__isset.cloud_configuration ? &_hdfs_scan_node.cloud_configuration : nullptr;
 }
 
 void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {

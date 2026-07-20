@@ -16,7 +16,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -35,11 +37,14 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -55,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -67,7 +73,11 @@ public class IcebergScanNode extends ScanNode {
     protected final IcebergTable icebergTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
-    private CloudConfiguration cloudConfiguration = null;
+    // volatile: written by the refresh timer thread, read by the delivery path.
+    private volatile CloudConfiguration cloudConfiguration = null;
+    // ponytail: 30s cooldown keeps a hot delivery loop from hammering the REST catalog.
+    private static final long VENDED_REFRESH_ATTEMPT_COOLDOWN_MS = 30_000L;
+    private volatile long lastVendedRefreshAttemptMs = 0;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
@@ -255,6 +265,74 @@ public class IcebergScanNode extends ScanNode {
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
         this.cloudConfiguration = cloudConfiguration;
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
+    }
+
+    /**
+     * Re-vend the vended cloud credential once it is within {@code refreshWindowMs} of expiry and
+     * return it as thrift for delivery to the BE, or null when no refresh is needed or available.
+     * A table reload produces the fresh token in the native table's FileIO properties.
+     */
+    public TCloudConfiguration refreshVendedCloudConfigurationIfNearExpiry(long refreshWindowMs) {
+        if (cloudConfiguration == null) {
+            return null;
+        }
+        TCloudConfiguration current = new TCloudConfiguration();
+        cloudConfiguration.toThrift(current);
+        String expiration = current.getCloud_properties() == null ? null
+                : current.getCloud_properties().get(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY);
+        if (expiration == null) {
+            return null;
+        }
+        long expiryMs;
+        try {
+            expiryMs = Long.parseLong(expiration);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        long nowMs = System.currentTimeMillis();
+        if (nowMs + refreshWindowMs < expiryMs) {
+            return null;
+        }
+        // The catalog may re-serve the same token (e.g. Polaris), so rate-limit reload attempts
+        // and only ship a credential that actually changed.
+        if (nowMs - lastVendedRefreshAttemptMs < VENDED_REFRESH_ATTEMPT_COOLDOWN_MS) {
+            return null;
+        }
+        lastVendedRefreshAttemptMs = nowMs;
+        try {
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            metadataMgr.refreshTable(icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
+                    icebergTable, Lists.newArrayList(), false);
+            Table refreshed = metadataMgr.getTable(new ConnectContext(), icebergTable.getCatalogName(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
+            if (!(refreshed instanceof IcebergTable)) {
+                return null;
+            }
+            CloudConfiguration fresh =
+                    IcebergUtil.getVendedCloudConfiguration(icebergTable.getCatalogName(), (IcebergTable) refreshed);
+            this.cloudConfiguration = fresh;
+            TCloudConfiguration result = new TCloudConfiguration();
+            fresh.toThrift(result);
+            if (Objects.equals(current.getCloud_properties(), result.getCloud_properties())) {
+                // Same credential re-served: a no-op on the BE (its filesystem cache keys on the
+                // token value). Compare the whole map — a new token can carry the same expiry.
+                return null;
+            }
+            String newExpiration = result.getCloud_properties() == null ? null
+                    : result.getCloud_properties().get(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY);
+            LOG.info("re-vended cloud credential for table {}: expiry {} -> {}",
+                    icebergTable.getCatalogTableName(), expiration, newExpiration);
+            return result;
+        } catch (Exception e) {
+            // Best-effort: a failed re-vend just leaves the current token; the scan continues.
+            LOG.warn("failed to refresh vended cloud configuration for table {}",
+                    icebergTable.getCatalogTableName(), e);
+            return null;
+        }
     }
 
     public void setUsedForDelete(boolean usedForDelete) {

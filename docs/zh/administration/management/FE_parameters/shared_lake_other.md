@@ -572,6 +572,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
+### `vended_credential_refresh_window_sec`
+
+- 默认值：3000
+- 类型：Long
+- 单位：秒
+- 是否动态：是
+- 描述：对于使用 Catalog 下发（vended）云凭证读取数据文件的 Connector 扫描（例如 Iceberg REST Catalog 下发的 GCS Access Token），当凭证将在该窗口时间内过期时，协调者会重新获取凭证并推送给 BE，避免运行时间超过凭证有效期的扫描因 Token 为空或过期而失败。由于凭证通常在查询早期下发给 BE，而扫描本身可能运行更长时间，该窗口应覆盖预期的扫描时长，而不仅是时钟偏差。
+- 引入版本：-
+
+
 ### `files_enable_insert_push_down_column_type`
 
 - 默认值: true

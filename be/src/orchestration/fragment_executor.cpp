@@ -40,6 +40,7 @@
 #include "data_sink/tablet/olap_table_sink.h"
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
+#include "exec/connector_scan_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_env.h"
@@ -54,6 +55,7 @@
 #include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/runtime/fragment_context_manager.h"
@@ -1065,6 +1067,26 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
+void FragmentExecutor::apply_refreshed_cloud_configurations(
+        pipeline::FragmentContext* fragment_ctx,
+        const std::map<TPlanNodeId, TCloudConfiguration>& node_to_cloud_configuration) {
+    fragment_ctx->iterate_pipeline([&](Pipeline* pipeline) {
+        auto* scan_factory = dynamic_cast<pipeline::ScanOperatorFactory*>(pipeline->source_operator_factory());
+        if (scan_factory == nullptr) {
+            return;
+        }
+        auto cc_iter = node_to_cloud_configuration.find(scan_factory->plan_node_id());
+        if (cc_iter == node_to_cloud_configuration.end()) {
+            return;
+        }
+        auto* connector_scan_node = dynamic_cast<ConnectorScanNode*>(scan_factory->scan_node());
+        if (connector_scan_node == nullptr) {
+            return;
+        }
+        connector_scan_node->data_source_provider()->set_refreshed_cloud_configuration(cc_iter->second);
+    });
+}
+
 Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                         TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
@@ -1152,6 +1174,12 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         if (closed_scan_nodes.size() > 0) {
             response->__set_closed_scan_nodes(closed_scan_nodes);
         }
+    }
+
+    // Apply re-vended cloud credentials to the matching scan providers so subsequent file opens
+    // use the fresh token.
+    if (params.__isset.node_to_cloud_configuration && !params.node_to_cloud_configuration.empty()) {
+        apply_refreshed_cloud_configurations(fragment_ctx.get(), params.node_to_cloud_configuration);
     }
 
     // notify all source
