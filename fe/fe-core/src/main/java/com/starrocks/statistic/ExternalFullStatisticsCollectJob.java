@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -36,6 +37,7 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -93,6 +95,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     protected List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    // Per-partition total row count from connector metadata (Iceberg PARTITIONS table), used to extrapolate a
+    // bounded-cost truncated sample back to the full partition. Empty when no scan budget is active or the
+    // connector cannot supply per-partition row counts - then statistics are stored as raw sample values.
+    private Map<String, Long> partitionTotalRowCounts = Collections.emptyMap();
     // Skip collecting statistics for default partition in iceberg table,
     // because we can not generate partition predicates for it.
     private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
@@ -136,10 +142,34 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 partitionNames.size(), columnNames.size());
         logIfRawKeyWouldExceedPkLimit(jobId);
 
+        // Bounded-cost scan budgets (design 2.4): resolve per-statement PROPERTIES over global Config, then
+        // stash on the session variable so every statistics scan this job triggers inherits them via the
+        // normal query path (read back in IcebergScanNode). Restored in the finally block. All three <= 0
+        // leaves early stop disabled, i.e. the pre-existing full-scan behavior.
+        SessionVariable sessionVariable = context.getSessionVariable();
+        long savedScanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
+        long savedScanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
+        long savedScanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
+        long scanBytesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+                Config.connector_table_analyze_scan_bytes_cap, jobId);
+        long scanFilesCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+                Config.connector_table_analyze_scan_files_cap, jobId);
+        long scanRowsCap = resolveScanCap(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP,
+                Config.connector_table_analyze_scan_rows_cap, jobId);
+        // Fetch per-partition totals up front so a budget-truncated sample can be extrapolated back to the
+        // full partition (see scaleStatisticData). Cheap: one PARTITIONS metadata scan, and only when a
+        // budget is actually active.
+        partitionTotalRowCounts = buildPartitionTotalRowCounts(scanBytesCap, scanFilesCap, scanRowsCap, jobId);
+
         Map<String, String> extendedInfo = new LinkedHashMap<>();
         extendedInfo.put("table_format", table.getType().name().toLowerCase(Locale.ROOT));
         extendedInfo.put("partition_count", String.valueOf(partitionNames.size()));
         extendedInfo.put("column_count", String.valueOf(columnNames.size()));
+        // Surface the resolved scan budgets so operators can see, in SHOW ANALYZE STATUS, whether a run was
+        // bounded-cost and with what caps (the lightweight observability of design 2.7).
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP, String.valueOf(scanBytesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP, String.valueOf(scanFilesCap));
+        extendedInfo.put(StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP, String.valueOf(scanRowsCap));
         extendedInfo.putAll(table.getStatsCollectMetadata());
 
         // Merge into the existing properties map so it surfaces via the Properties column of
@@ -153,6 +183,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
                 jobId, catalogName, db.getOriginName(), table.getName(), extendedInfo);
+
+        sessionVariable.setExternalStatsScanBytesCap(scanBytesCap);
+        sessionVariable.setExternalStatsScanFilesCap(scanFilesCap);
+        sessionVariable.setExternalStatsScanRowsCap(scanRowsCap);
+        LOG.info("[ExternalStats] scan budget | jobId={} catalog={} db={} table={} bytesCap={} filesCap={} rowsCap={}",
+                jobId, catalogName, db.getOriginName(), table.getName(), scanBytesCap, scanFilesCap, scanRowsCap);
 
         String status = "SUCCESS";
         String failureReason = "";
@@ -191,11 +227,86 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             failureReason = e.getMessage();
             throw e;
         } finally {
+            sessionVariable.setExternalStatsScanBytesCap(savedScanBytesCap);
+            sessionVariable.setExternalStatsScanFilesCap(savedScanFilesCap);
+            sessionVariable.setExternalStatsScanRowsCap(savedScanRowsCap);
             LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
                             "durationMs={} partitions={} columns={} reason={}",
                     jobId, catalogName, db.getOriginName(), table.getName(),
                     status, System.currentTimeMillis() - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
+        }
+    }
+
+    // Resolves a scan cap: an explicit ANALYZE ... PROPERTIES value wins over the global Config default;
+    // an absent or unparseable property falls back to the Config value. <= 0 means the dimension is unlimited.
+    private long resolveScanCap(String propertyKey, long configDefault, long jobId) {
+        if (properties != null && properties.containsKey(propertyKey)) {
+            String raw = properties.get(propertyKey);
+            try {
+                return Long.parseLong(raw.trim());
+            } catch (NumberFormatException e) {
+                LOG.warn("[ExternalStats] invalid scan cap property | jobId={} key={} value={} fallbackConfig={}",
+                        jobId, propertyKey, raw, configDefault);
+            }
+        }
+        return configDefault;
+    }
+
+    // Fetches the total row count of each collected partition from connector metadata, so a budget-truncated
+    // sample can be extrapolated back to the full partition. Only meaningful when a budget is active and the
+    // connector exposes exact per-partition row counts cheaply - currently Iceberg (PARTITIONS metadata table).
+    // Other connectors / no-budget runs return empty, and statistics are then stored as raw sample values.
+    private Map<String, Long> buildPartitionTotalRowCounts(long bytesCap, long filesCap, long rowsCap, long jobId) {
+        boolean budgetActive = bytesCap > 0 || filesCap > 0 || rowsCap > 0;
+        if (!budgetActive) {
+            return Collections.emptyMap();
+        }
+        try {
+            // Connector-agnostic: each PartitionTraits decides whether it can supply per-partition totals
+            // (Iceberg does via the PARTITIONS metadata table; others return empty -> no extrapolation).
+            return ConnectorPartitionTraits.build(table).getPartitionRowCounts(partitionNames);
+        } catch (Exception e) {
+            // Never fail collection over missing extrapolation input: fall back to raw sample values.
+            LOG.warn("[ExternalStats] failed to fetch partition row counts for extrapolation | jobId={} " +
+                    "catalog={} db={} table={}", jobId, catalogName, db.getOriginName(), table.getName(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    // Extrapolates one (partition, column) statistics row from the scanned sample to the full partition when
+    // the bounded-cost scan truncated it. row_count is set to the exact metadata total; null_count and
+    // data_size scale by (total / sample) so the derived null-fraction and average-row-size (consumed as
+    // ratios against row_count) stay correct. NDV (the HLL sketch) is NOT scaled - it cannot be cheaply
+    // extrapolated, so it remains a sample undercount (documented degradation). No-op when the partition was
+    // not truncated (sample >= total) or its total is unknown.
+    private ScaledStats scaleStatisticData(TStatisticData data) {
+        return extrapolate(data.getRowCount(), data.getNullCount(), (long) data.getDataSize(),
+                partitionTotalRowCounts.get(data.getPartitionName()));
+    }
+
+    // Package-private for unit testing. Extrapolates one row's (rowCount, nullCount, dataSize) to the full
+    // partition when the sample was truncated (totalRows > sample rowCount); otherwise returns values as-is.
+    static ScaledStats extrapolate(long rowCount, long nullCount, long dataSize, Long totalRows) {
+        if (totalRows != null && rowCount > 0 && totalRows > rowCount) {
+            double scale = (double) totalRows / rowCount;
+            nullCount = Math.min(totalRows, Math.round(nullCount * scale));
+            dataSize = Math.round(dataSize * scale);
+            rowCount = totalRows;
+        }
+        return new ScaledStats(rowCount, nullCount, dataSize);
+    }
+
+    // Holder for the extrapolated (or pass-through) statistics values of one collected row.
+    static final class ScaledStats {
+        final long rowCount;
+        final long nullCount;
+        final long dataSize;
+
+        ScaledStats(long rowCount, long nullCount, long dataSize) {
+            this.rowCount = rowCount;
+            this.nullCount = nullCount;
+            this.dataSize = dataSize;
         }
     }
 
@@ -387,6 +498,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
         for (TStatisticData data : dataList) {
+            // Extrapolate a bounded-cost truncated sample back to the full partition. No-op (scale=1) when the
+            // partition was not truncated or its total is unknown.
+            ScaledStats scaled = scaleStatisticData(data);
+
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
@@ -396,10 +511,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("'" + catalogName + "'");
             params.add("'" + db.getOriginName() + "'");
             params.add("'" + table.getName() + "'");
-            params.add(String.valueOf(data.getRowCount()));
-            params.add(String.valueOf(data.getDataSize()));
+            params.add(String.valueOf(scaled.rowCount));
+            params.add(String.valueOf(scaled.dataSize));
             params.add("hll_deserialize(unhex('mockData'))");
-            params.add(String.valueOf(data.getNullCount()));
+            params.add(String.valueOf(scaled.nullCount));
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
             params.add("now()");
@@ -410,10 +525,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(catalogName));
             row.add(new StringLiteral(db.getOriginName()));
             row.add(new StringLiteral(table.getName()));
-            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(scaled.rowCount, IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral(scaled.dataSize, IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(scaled.nullCount, IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
