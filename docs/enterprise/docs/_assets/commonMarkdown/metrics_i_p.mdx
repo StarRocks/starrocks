@@ -61,12 +61,12 @@
 - Labels: `catalog`
 - Description: Total number of orphan files removed by Iceberg auto metadata maintenance `remove_orphan_files` executions.
 
-## `iceberg_amm_planning_latency_ms`
+## `iceberg_planning_latency_ms`
 
 - Unit: Millisecond
 - Type: Histogram
 - Labels: `catalog`
-- Description: Histogram of Iceberg query split-planning latency per catalog (sourced from Iceberg's own `totalPlanningDuration`, i.e. manifest planning only). Use it to observe the planning performance trend as metadata maintenance takes effect, e.g. `rate(iceberg_amm_planning_latency_ms_sum[5m]) / rate(iceberg_amm_planning_latency_ms_count[5m])` for the time-windowed average. Reflects mainly `rewrite_manifests` effectiveness; incremental-scan planning is not included.
+- Description: Histogram of Iceberg query split-planning latency per catalog (sourced from Iceberg's own `totalPlanningDuration`, i.e. manifest planning only). Recorded for every Iceberg query regardless of whether auto metadata maintenance is enabled. Use it to observe the planning performance trend as metadata maintenance takes effect, e.g. `rate(iceberg_planning_latency_ms_sum[5m]) / rate(iceberg_planning_latency_ms_count[5m])` for the time-windowed average. Reflects mainly `rewrite_manifests` effectiveness; incremental-scan planning is not included.
 
 ## `iceberg_amm_rewrite_manifest_small_files_total_output`
 

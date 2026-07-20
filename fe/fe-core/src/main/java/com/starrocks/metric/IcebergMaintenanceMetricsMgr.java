@@ -24,7 +24,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * All metrics carry a `catalog` label; counters are created lazily on first use.
  *
  * Metric naming: iceberg_amm_{metric}, e.g. iceberg_amm_check_total,
- * iceberg_amm_orphan_file_removed_total, iceberg_amm_planning_latency_ms_avg.
+ * iceberg_amm_orphan_file_removed_total. The planning-latency histogram is the
+ * exception: it is registered as iceberg_planning_latency_ms (no amm prefix)
+ * because it is driven by the query path and covers every catalog, not just the
+ * ones with auto maintenance enabled.
  */
 public class IcebergMaintenanceMetricsMgr {
 
@@ -155,7 +158,7 @@ public class IcebergMaintenanceMetricsMgr {
 
     /**
      * Record one iceberg split planning latency sample into the per-catalog histogram
-     * iceberg_amm_planning_latency_ms (same pattern as catalog_query_latency_ms). The
+     * iceberg_planning_latency_ms (same pattern as catalog_query_latency_ms). The
      * histogram exposes count + quantiles, letting PromQL compute time-windowed
      * averages/percentiles of the planning-latency trend as maintenance takes effect.
      */

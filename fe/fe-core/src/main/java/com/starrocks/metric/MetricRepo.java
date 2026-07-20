@@ -417,10 +417,10 @@ public final class MetricRepo {
 
     public static HistogramMetric getOrCreateIcebergPlanningLatencyHistogram(String catalog) {
         return HISTO_ICEBERG_PLANNING_LATENCY_MAP.computeIfAbsent(catalog, k -> {
-            HistogramMetric histogram = new HistogramMetric("iceberg_amm_planning_latency_ms");
+            HistogramMetric histogram = new HistogramMetric("iceberg_planning_latency_ms");
             histogram.addLabel(new MetricLabel("catalog", catalog));
             METRIC_REGISTER.register(
-                    MetricRegistry.name("iceberg_amm_planning", "latency", "ms", catalog), histogram);
+                    MetricRegistry.name("iceberg_planning", "latency", "ms", catalog), histogram);
             return histogram;
         });
     }
