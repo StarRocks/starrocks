@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TBinaryEncodingFormat;
 import com.starrocks.thrift.TBinaryEncodingLevel;
 import com.starrocks.thrift.TQueryOptions;
@@ -174,5 +175,49 @@ public class SessionVariableTest {
                 () -> sessionVariable.setBinaryEncodingFormat("invalid"));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> sessionVariable.setBinaryEncodingLevel("invalid"));
+    }
+
+    @Test
+    public void testLakeTabletInternalParallelSkewSplitRatioValidation() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // A positive finite ratio is accepted.
+        sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(2.0);
+        Assertions.assertEquals(2.0, sessionVariable.getLakeTabletInternalParallelSkewSplitRatio(), 0.0);
+        // Non-positive or non-finite ratios are rejected: a non-positive value would make every sufficiently
+        // large tablet look skewed (over-splitting), and NaN/Infinity would silently disable the skew override.
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(-1.0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.NaN));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    public void testReplayFromJsonWithAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // alias key in JSON should be resolved
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
+        Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
+
+        // canonical name key should also work
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
+        Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // when both name and alias are present, canonical name takes priority
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
+        Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
 }

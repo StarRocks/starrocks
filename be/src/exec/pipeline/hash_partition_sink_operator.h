@@ -17,7 +17,7 @@
 #include "base/concurrency/race_detect.h"
 #include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 /**
  * HashPartition{Sink/Source}Operator pair is used to reorder the input sequence by

@@ -25,6 +25,6 @@ set(EXEC_FILES
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 ADD_BE_LIB(Script ${EXEC_FILES})
-target_link_libraries(Script PRIVATE Storage StoragePrimitive Runtime RuntimeCore IO Platform Common Base Gutil StarRocksGen)
+target_link_libraries(Script PRIVATE Storage StoragePrimitive Runtime Runtime IO Platform Common Base Gutil StarRocksGen)
 
 target_include_directories(Script PRIVATE ${SRC_DIR}/script ${SRC_DIR}/thirdparty/wren ${SRC_DIR}/thirdparty/wrenbind17)

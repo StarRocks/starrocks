@@ -54,7 +54,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -65,6 +64,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/chunk_aggregator.h"
 
 namespace starrocks {
 

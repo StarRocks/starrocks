@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
@@ -26,6 +27,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -145,15 +147,39 @@ public final class BrokerLoadPreSplitHook {
             PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
             return;
         }
+        // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
+        // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
+        // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
         BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
-                brokerDesc, fileGroups, fileStatuses, computeResource);
+                brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone());
         PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
                 scanContext,
                 MetaUtils.getRangeDistributionColumns(targetTable),
                 targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
                 sumFileBytes(fileStatuses),
-                computeResource);
+                computeResource,
+                buildSecondaryIndexSpecs(targetTable));
         PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
+    }
+
+    /**
+     * Builds one {@link SecondaryIndexSpec} per visible rollup index of {@code targetTable}
+     * (every visible index except the base), each carrying its own sort key, so the
+     * multi-partition data-tier sampler can project and sample every visible index
+     * alongside the base sort key.
+     *
+     * <p>Package-private (not private) so the unit test can drive it directly.
+     */
+    static List<SecondaryIndexSpec> buildSecondaryIndexSpecs(OlapTable targetTable) {
+        List<SecondaryIndexSpec> specs = new ArrayList<>();
+        for (MaterializedIndexMeta meta : targetTable.getVisibleIndexMetas()) {
+            if (meta.getIndexMetaId() == targetTable.getBaseIndexMetaId()) {
+                continue;
+            }
+            specs.add(new SecondaryIndexSpec(meta.getIndexMetaId(),
+                    MetaUtils.getRangeDistributionColumns(targetTable, meta.getIndexMetaId())));
+        }
+        return specs;
     }
 
     private static long sumFileBytes(List<List<TBrokerFileStatus>> fileStatuses) {

@@ -69,6 +69,8 @@ public final class DistributionSpecHelper {
             // Metadata inconsistency (e.g. partial replay); fall back to ANY.
             return null;
         }
+        // Table-level sort key is correct here: range-colocate group membership is defined
+        // on the base table's sort key and does not vary per rollup index.
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
         int colocateCount = groupSchema.getColocateColumnCount();
         if (sortKeyColumns.size() < colocateCount) {
@@ -90,5 +92,20 @@ public final class DistributionSpecHelper {
         EquivalentDescriptor emptyEquiv =
                 new EquivalentDescriptor(tableId, Collections.emptyList());
         return new RangeDistributionSpec(colocateColumns, emptyEquiv);
+    }
+
+    /**
+     * Whether a required distribution property carrying {@code spec} can be satisfied by a colocate
+     * join without a shuffle exchange: a hash-{@code LOCAL} spec (classic colocate) or a
+     * {@link RangeDistributionSpec} (range colocate).
+     */
+    public static boolean supportColocate(DistributionSpec spec) {
+        if (spec instanceof RangeDistributionSpec) {
+            return true;
+        }
+        if (spec instanceof HashDistributionSpec) {
+            return ((HashDistributionSpec) spec).getHashDistributionDesc().isLocal();
+        }
+        return false;
     }
 }

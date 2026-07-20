@@ -123,6 +123,15 @@ public class StreamLoadScanNode extends LoadScanNode {
     private boolean needAssignBE;
 
     private boolean enableBatchWrite = false;
+    // Classic synchronous stream load on the pipeline engine: assign a BE (needAssignBE) so
+    // the scan is morsel-based, but keep the REAL load id and DO NOT set channel_id, so BE reads
+    // the LoadStreamMgr pipe already registered by the HTTP stream-load action instead of creating
+    // a channel pipe that would clobber it. See FrontendServiceImpl.streamLoadPutImpl.
+    private boolean syncStreamLoad = false;
+    // For classic synchronous stream load, the BE that received the HTTP request and owns the
+    // StreamLoadPipe (its LoadStreamMgr holds the load_id pipe). The scan MUST run there, so we
+    // pin the scan-range location to this BE instead of picking one at random. -1 = not pinned.
+    private long syncStreamLoadBackendId = -1;
     private int batchWriteIntervalMs;
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
@@ -183,6 +192,14 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     public void setNeedAssignBE(boolean needAssignBE) {
         this.needAssignBE = needAssignBE;
+    }
+
+    public void setSyncStreamLoad(boolean syncStreamLoad) {
+        this.syncStreamLoad = syncStreamLoad;
+    }
+
+    public void setSyncStreamLoadBackendId(long syncStreamLoadBackendId) {
+        this.syncStreamLoadBackendId = syncStreamLoadBackendId;
     }
 
     public void setBatchWrite(int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
@@ -266,7 +283,8 @@ public class StreamLoadScanNode extends LoadScanNode {
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
                 exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
-                streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
+                streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate(),
+                streamLoadInfo.getRoutineLoadSourceType(), streamLoadInfo.getMetadata());
     }
 
     @Override
@@ -275,7 +293,24 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws StarRocksException {
-        if (enableBatchWrite) {
+        if (syncStreamLoad && syncStreamLoadBackendId > 0) {
+            // Classic synchronous stream load: pin the scan to the BE that received the HTTP
+            // request and owns the StreamLoadPipe, so the connector scan reads that BE's pipe.
+            ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(syncStreamLoadBackendId);
+            if (computeNode == null) {
+                throw new StarRocksException(
+                        String.format("Can't find stream load backend [%s]", syncStreamLoadBackendId));
+            }
+            // Do NOT fail on FE-side heartbeat liveness here: the pinned BE is the one that just
+            // received the load body and owns the StreamLoadPipe, so it is executing regardless of a
+            // transient heartbeat lag. Legacy stream load never consults FE liveness either.
+            if (!computeNode.isAvailable()) {
+                LOG.warn("Pinned stream load backend [{}] is marked not-available by FE heartbeat; " +
+                        "proceeding anyway since it owns the load pipe", syncStreamLoadBackendId);
+            }
+            computeNodes = Lists.newArrayList(computeNode);
+        } else if (enableBatchWrite) {
             computeNodes = Lists.newArrayList();
             for (long backendId : batchWriteBackendIds) {
                 // backendId is assigned by CoordinatorBackendAssignerImpl which have considered to use
@@ -418,7 +453,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     break;
                 case FILE_STREAM:
                     rangeDesc.setPath("Invalid Path");
-                    if (needAssignBE) {
+                    if (needAssignBE && !syncStreamLoad) {
                         rangeDesc.setLoad_id(UUIDUtil.genTUniqueId());
                     } else {
                         rangeDesc.setLoad_id(loadId);
@@ -433,7 +468,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
-            if (needAssignBE) {
+            if (needAssignBE && !syncStreamLoad) {
                 brokerScanRange.setChannel_id(curChannelId++);
                 brokerScanRange.setEnable_batch_write(enableBatchWrite);
                 brokerScanRange.setBatch_write_interval_ms(batchWriteIntervalMs);

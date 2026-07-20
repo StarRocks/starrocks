@@ -57,4 +57,4 @@ ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC FSCore IO Types Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC FileSystem IO Types Common Base Gutil StarRocksGen)

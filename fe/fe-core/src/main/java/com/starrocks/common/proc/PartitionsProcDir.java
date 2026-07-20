@@ -411,7 +411,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                 .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
-        partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
+        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
+                physicalPartition.getBucketNum() : partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
         long storageSize = physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize();
         partitionInfo.add(new ByteSizeValue(storageSize)); // StorageSize

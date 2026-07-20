@@ -28,6 +28,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
@@ -576,10 +577,12 @@ public class MaterializedViewAnalyzerTest {
                 starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
             }
 
-            // 3. Set Config to true: should be range distribution even if session variable is false
+            // 3. Set Config to true: the config-driven default only takes effect in shared-data mode
+            // (range distribution is shared-data only), so the outcome tracks the current run mode.
             Config.enable_range_distribution = true;
             CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+            Assertions.assertEquals(RunMode.isSharedDataMode(),
+                    stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
 
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;

@@ -384,7 +384,13 @@ public class MaterializedViewAnalyzer {
                     statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
-                    // if not ivm, set query statement directly
+                    // AUTO mode swallows the IVM SemanticException and falls back to PCT, but the trial may
+                    // have prepended __ROW_ID__ to the query in place before bailing. Re-parse the pre-trial
+                    // SQL so the PCT MV is built from the original query, not the half-rewritten one.
+                    queryStatement = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
+                            context.getSessionVariable()).get(0);
+                    Analyzer.analyze(queryStatement, context);
+                    statement.setQueryStatement(queryStatement);
                     statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
                 }
             } else {
@@ -1116,7 +1122,6 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column", partitionRefTableExpr.getPos());
                 }
                 Column refPartitionCol = refPartitionColOpt.get();
-                Type partitionExprType = refPartitionCol.getType();
                 // To olap table, determine mv's partition by its ref base table's partition column type:
                 // - if the partition column is string type && no use `str2date`, use list partition.
                 // - otherwise use range partition as before.
@@ -1344,32 +1349,35 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            boolean enableRangeDistribution = Config.enable_range_distribution;
-            if (connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution()) {
-                enableRangeDistribution = true;
-            }
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
 
-            if (enableRangeDistribution) {
+            if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                // Primary key MVs must be normalized first, regardless of the range-distribution default:
+                // an incremental MV is forced to hash distribution on all key columns (its row-id/merge
+                // semantics depend on it), while for a non-incremental primary key MV this is a no-op that
+                // returns the given (or absent) distribution.
+                distributionDesc = checkDistributionForPrimaryKey(statement);
+                if (distributionDesc == null && enableRangeDistribution) {
+                    // No distribution specified and range distribution is enabled: use it as the default.
+                    distributionDesc = new RangeDistributionDesc();
+                    statement.setDistributionDesc(distributionDesc);
+                }
+            } else if (enableRangeDistribution) {
                 if (distributionDesc == null) {
                     // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
             } else {
-                // If the key type is primary key, the distribution must be hash distribution.
-                if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                    distributionDesc = checkDistributionForPrimaryKey(statement);
-                } else {
-                    // for non primary key tables, if user not specify distribution, we use hash distribution
-                    if (distributionDesc == null) {
-                        if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
-                            distributionDesc = new HashDistributionDesc(0,
-                                    Lists.newArrayList(mvColumnItems.get(0).getName()));
-                        } else {
-                            distributionDesc = new RandomDistributionDesc();
-                        }
-                        statement.setDistributionDesc(distributionDesc);
+                // for non primary key tables, if user not specify distribution, we use hash distribution
+                if (distributionDesc == null) {
+                    if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
+                        distributionDesc = new HashDistributionDesc(0,
+                                Lists.newArrayList(mvColumnItems.get(0).getName()));
+                    } else {
+                        distributionDesc = new RandomDistributionDesc();
                     }
+                    statement.setDistributionDesc(distributionDesc);
                 }
             }
 
@@ -1625,13 +1633,11 @@ public class MaterializedViewAnalyzer {
 
     private static @NotNull Column getPartitionColumn(List<Column> columns, SlotRef slotRef) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             throw new SemanticException("Materialized view partition exp column:"
@@ -1771,13 +1777,11 @@ public class MaterializedViewAnalyzer {
      */
     public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");

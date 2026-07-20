@@ -127,8 +127,12 @@ public class ResourceGroupClassifier {
         return planMemCostRange;
     }
 
-    public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
-                               Set<Long> dbIds, double planCpuCost, double planMemCost) {
+    public boolean isSatisfied(Set<Long> candidateResourceGroupIds, String user, List<String> activeRoles,
+                               QueryType queryType, String sourceIp, Set<Long> dbIds, double planCpuCost,
+                               double planMemCost) {
+        if (candidateResourceGroupIds != null && !candidateResourceGroupIds.contains(resourceGroupId)) {
+            return false;
+        }
         if (!isVisible(user, activeRoles, sourceIp)) {
             return false;
         }

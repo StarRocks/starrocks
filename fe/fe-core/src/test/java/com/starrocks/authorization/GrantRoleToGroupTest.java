@@ -333,7 +333,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsPrivilege() throws Exception {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         EditLog editLog = spy(new EditLog(null));
         doNothing().when(editLog).logEdit(anyShort(), any());
         GlobalStateMgr.getCurrentState().setEditLog(editLog);

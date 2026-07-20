@@ -26,8 +26,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/tablet_basic_info.h"
 #include "test_util.h"
 
 namespace starrocks::lake {

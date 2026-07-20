@@ -181,4 +181,13 @@ static inline size_t incomplete_trailing_utf8_len(const char* data, size_t len) 
     return 0;
 }
 
+// UTF-8 aware tolower using ICU
+// DCHECKs on ICU failure - ICU should always be available
+void utf8_tolower(const char* src, size_t src_len, std::string& dst);
+
+// Convenience overload for std::string
+static inline void utf8_tolower(const std::string& src, std::string& dst) {
+    utf8_tolower(src.data(), src.size(), dst);
+}
+
 } // namespace starrocks

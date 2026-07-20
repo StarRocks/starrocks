@@ -50,9 +50,9 @@
 #include <string>
 #include <vector>
 
-#include "exec/pipeline/primitives/block_reason.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/local_parallel_merge_sort_source_operator.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
 
 namespace starrocks::pipeline {
 

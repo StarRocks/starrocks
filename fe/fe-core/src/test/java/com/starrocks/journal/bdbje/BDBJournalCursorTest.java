@@ -533,7 +533,7 @@ public class BDBJournalCursorTest {
 
         try {
             BDBJournalCursor cursor = new BDBJournalCursor(null, null, 0, 0);
-            JournalEntity entity = cursor.deserializeData(entry);
+            cursor.deserializeData(entry);
         } catch (JournalException e) {
             Assertions.assertEquals(OperationType.OP_HEARTBEAT_V2, e.getOpCode());
         }

@@ -88,10 +88,12 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
@@ -205,6 +207,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     //    protected RoutineLoadDesc routineLoadDesc; // optional
     protected PartitionNames partitions; // optional
     protected List<ImportColumnDesc> columnDescs; // optional
+    // INCLUDE METADATA clause; optional. Transient like columnDescs — not GSON-persisted; rebuilt from
+    // origStmt on restart via gsonPostProcess -> getLoadDesc -> setRoutineLoadDesc.
+    protected ImportMetadataStmt metadata; // optional
     protected Expr whereExpr; // optional
     protected ColumnSeparator columnSeparator; // optional
     protected RowDelimiter rowDelimiter; // optional
@@ -483,6 +488,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 columnDescs.addAll(columnsStmt.getColumns());
             }
         }
+        if (routineLoadDesc.getMetadata() != null) {
+            metadata = routineLoadDesc.getMetadata();
+        }
         if (routineLoadDesc.getWherePredicate() != null) {
             whereExpr = routineLoadDesc.getWherePredicate().getExpr();
         }
@@ -630,6 +638,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public List<ImportColumnDesc> getColumnDescs() {
         return columnDescs;
+    }
+
+    public ImportMetadataStmt getMetadata() {
+        return metadata;
     }
 
     public Expr getWhereExpr() {
@@ -954,7 +966,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
-    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws StarRocksException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label, long beId)
+            throws StarRocksException {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -970,22 +983,84 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
-            StreamLoadPlanner planner =
-                    new StreamLoadPlanner(Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
-            TExecPlanFragmentParams planParams = planner.plan(loadId);
-
-            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
+            TExecPlanFragmentParams planParams = null;
+            Coordinator coord = null;
+            if (Config.enable_pipeline_routine_load && beId != RoutineLoadTaskInfo.INVALID_BE_ID) {
+                // Run this routine load task on the pipeline engine. Reuse LoadPlanner (ROUTINE_LOAD)
+                // pinned to the task's assigned BE (which consumes Kafka/Pulsar into a StreamLoadPipe),
+                // then materialize a single BE-local params blob (params.is_pipeline routes it to the
+                // pipeline engine in StreamLoadOrchestrator). Same mechanism as classic stream load.
+                // On any planning failure (e.g. the pinned BE transiently unavailable) fall back to
+                // the legacy engine below rather than failing the task.
+                try {
+                    ConnectContext loadContext = Load.createLoadConnectContext(db.getFullName());
+                    loadContext.getSessionVariable().setTimeZone(info.getTimezone());
+                    // LoadPlanner/coordinator read the thread-local ConnectContext (unlike StreamLoadPlanner
+                    // which binds internally); the routine load scheduler thread has none, so bind it here.
+                    try (var scope = loadContext.bindScope()) {
+                        // loadJobId = txnId: the StreamLoadTask is not created until planning succeeds
+                        // (see below), so do not depend on its id here.
+                        LoadPlanner loadPlanner = new LoadPlanner(txnId, loadId, txnId, db.getId(),
+                                db.getFullName(), (OlapTable) table, info.isStrictMode(), info.getTimezone(),
+                                info.isPartialUpdate(), loadContext, null,
+                                info.getLoadMemLimit(), info.getExecMemLimit(), info.getNegative(), 1,
+                                info.getColumnExprDescs(), info, label, info.getTimeout());
+                        loadPlanner.setSyncStreamLoad(true);
+                        loadPlanner.setPartialUpdateMode(info.getPartialUpdateMode());
+                        loadPlanner.setSyncStreamLoadBackendId(beId);
+                        loadPlanner.plan();
+                        DefaultCoordinator routineLoadCoord =
+                                (DefaultCoordinator) getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
+                        planParams = routineLoadCoord.buildLocalStreamLoadParams();
+                        // Carry over load-specific query options the LoadPlanner/JobSpec path omits
+                        // (matching legacy StreamLoadPlanner).
+                        planParams.query_options.setLoad_transmission_compression_type(
+                                info.getTransmisionCompressionType());
+                        planParams.query_options.setLog_rejected_record_num(info.getLogRejectedRecordNum());
+                        // Honor table-level load-profile collection with the same collect-interval throttle
+                        // the legacy StreamLoadPlanner applies, so a high-frequency routine load does not
+                        // collect a full profile for every task.
+                        boolean enableLoadProfile = ((OlapTable) table).enableLoadProfile();
+                        if (Config.load_profile_collect_interval_second > 0
+                                && System.currentTimeMillis() - ((OlapTable) table).getLastCollectProfileTime()
+                                        < Config.load_profile_collect_interval_second * 1000) {
+                            enableLoadProfile = false;
+                        }
+                        if (enableLoadProfile) {
+                            planParams.query_options.setEnable_profile(true);
+                            planParams.query_options.setLoad_profile_collect_second(
+                                    Config.stream_load_profile_collect_threshold_second);
+                            ((OlapTable) table).updateLastCollectProfileTime();
+                        }
+                        coord = routineLoadCoord;
+                    }
+                } catch (Exception e) {
+                    LOG.warn("pipeline routine load planning failed for label {}, fall back to legacy engine: {}",
+                            label, e.getMessage());
+                    planParams = null;
+                    coord = null;
+                }
+            }
+            if (planParams == null) {
+                StreamLoadPlanner planner = new StreamLoadPlanner(
+                        Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
+                planParams = planner.plan(loadId);
+                coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
+            }
+
+            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
+
+            // Register the task only after planning succeeded, so a plan failure (schema change in
+            // flight, no available replica, pinned BE unavailable, ...) does not leave an orphan
+            // StreamLoadTask registered in StreamLoadMgr.
             StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, computeResource);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
             streamLoadManager.addLoadTask(streamLoadTask);
-
-            Coordinator coord =
-                    getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
             streamLoadTask.setCoordinator(coord);
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
@@ -1409,6 +1484,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return;
         }
 
+        checkMetadataAliasCollision(table, routineLoadDesc.getMetadata());
+
         PartitionRef partitionNames = routineLoadDesc.getPartitionNames();
         if (partitionNames == null) {
             return;
@@ -1423,6 +1500,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // columns will be checked when planing
+    }
+
+    // Rejects an INCLUDE METADATA alias that collides with a destination-table column. The alias becomes
+    // a hidden source column, so a clash would shadow the table column; checked at CREATE and ALTER where
+    // the table is available, so the job fails fast instead of failing every task at planning.
+    private static void checkMetadataAliasCollision(Table table, ImportMetadataStmt metadata) throws DdlException {
+        if (metadata == null || metadata.getItems() == null || !(table instanceof OlapTable)) {
+            return;
+        }
+        for (ImportMetadataStmt.Item item : metadata.getItems()) {
+            if (((OlapTable) table).getColumn(item.getAlias()) != null) {
+                throw new DdlException("INCLUDE METADATA alias '" + item.getAlias()
+                        + "' collides with a column of table " + table.getName());
+            }
+        }
     }
 
     public void updateState(JobState jobState, ErrorReason reason) throws StarRocksException {
@@ -1799,6 +1891,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return sb.toString();
     }
 
+    // Escape a value for embedding in a double-quoted SQL string literal: backslash first, then
+    // double quote. Pairs with the parser's escapeBackSlash() so the emitted DDL parses back to
+    // the original value. escapeJava is unsuitable here: it emits \\uXXXX for non-ASCII chars,
+    // which escapeBackSlash() cannot decode, silently corrupting e.g. CJK jsonpaths.
+    private static String escapeForDoubleQuotedSql(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     public String jobPropertiesToSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
@@ -1827,13 +1927,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(getFormat()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONPATHS).append("\"=\"");
-        sb.append(getJsonPaths()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonPaths())).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
         sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
-        sb.append(getJsonRoot()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonRoot())).append("\",\n");
 
         if (!Strings.isNullOrEmpty(getEnvelope())) {
             sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
@@ -1854,7 +1954,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
-            sb.append(getMergeCondition()).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(getMergeCondition())).append("\",\n");
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
@@ -1907,6 +2007,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
                           OriginStatementInfo originStatement) throws DdlException {
+        // ALTER can replace the COLUMNS / INCLUDE METADATA clauses, so re-validate the metadata against
+        // this job's source and format. A clause omitted by the ALTER keeps the job's existing one, so
+        // collisions are checked against the effective pair. CREATE is validated in CreateRoutineLoadAnalyzer.
+        List<ImportColumnDesc> columnDescsForCheck =
+                (routineLoadDesc != null && routineLoadDesc.getColumnsInfo() != null)
+                        ? routineLoadDesc.getColumnsInfo().getColumns()
+                        : this.columnDescs;
+        ImportMetadataStmt metadataForCheck =
+                (routineLoadDesc != null && routineLoadDesc.getMetadata() != null)
+                        ? routineLoadDesc.getMetadata()
+                        : this.metadata;
+        RoutineLoadMetadata.validateIncludeMetadata(metadataForCheck, columnDescsForCheck, getDataSourceTypeName(),
+                getFormat());
+        // ALTER persists before planning, so check the alias/table-column collision here too (CREATE does
+        // it in unprotectedCheckMeta); otherwise an ALTER adding a colliding alias only fails every task.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            checkMetadataAliasCollision(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId),
+                    metadataForCheck);
+        }
         if (jobProperties != null) {
             checkCommonJobProperties(jobProperties);
         }
@@ -1984,6 +2105,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         if (routineLoadDesc.getPartitionNames() != null) {
             originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
+        }
+        if (routineLoadDesc.getMetadata() != null) {
+            originLoadDesc.setMetadata(routineLoadDesc.getMetadata());
         }
 
         String tableName = null;

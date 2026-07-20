@@ -53,6 +53,7 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -91,22 +92,31 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
     private static final long TABLE_ID = 200L;
     private static final long BASE_INDEX_META_ID = 300L;
 
+    private static final long ROLLUP_INDEX_META_ID = 400L;
+
     private Database database;
     private OlapTable table;
+    private MaterializedIndexMeta baseIndexMeta;
 
     private boolean savedMetricHasInit;
     private LongCounterMetric savedPartitionsTotal;
 
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigReshardMinSplitSize;
 
     @BeforeEach
     public void setUp() {
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         Config.tablet_reshard_target_size = 50L * DebugUtil.MEGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        // These tests exercise per-partition K selection and orchestration at MB scale, not the
+        // min-split-size bound (covered in TabletPreSplitCoordinatorTest). Disable it (1 byte) so
+        // compute-node alignment still drives K as the assertions below expect.
+        Config.tablet_reshard_min_split_size = 1L;
 
         // Wire a fresh PARTITIONS_TOTAL counter; MetricRepo.init() is not run inside unit
         // tests so the static field is otherwise null and a hasInit=true bump would NPE.
@@ -128,13 +138,14 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));
 
         Column sortKey = new Column("k", IntegerType.BIGINT);
-        MaterializedIndexMeta indexMeta = mock(MaterializedIndexMeta.class);
-        when(indexMeta.getSchema()).thenReturn(List.of(sortKey));
-        when(indexMeta.getSortKeyIdxes()).thenReturn(List.of(0));
-        when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(indexMeta);
+        baseIndexMeta = mock(MaterializedIndexMeta.class);
+        when(baseIndexMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(baseIndexMeta.getSchema()).thenReturn(List.of(sortKey));
+        when(baseIndexMeta.getSortKeyIdxes()).thenReturn(List.of(0));
+        when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(baseIndexMeta);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseIndexMeta));
     }
 
     @AfterEach
@@ -143,6 +154,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = savedPartitionsTotal;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
     }
 
     // ---------- Tests ----------
@@ -165,18 +177,18 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, /*activeComputeNodeCount*/ 3, freshConnectContext());
+                    database, table, entries, /*activeComputeNodeCount*/ 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(3, mapCaptor.getValue().size());
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_001L));
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_002L));
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_003L));
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     times(1));
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), times(1))
                     .addTabletReshardJob(combinedJob);
@@ -210,11 +222,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, addPartitionsCalls.get());
@@ -245,11 +257,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, mapCaptor.getValue().size(), "only pGood feeds the combined submit");
@@ -275,11 +287,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenThrow(new StarRocksException("synthetic factory rejection"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), never())
@@ -301,13 +313,13 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
             TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
             doThrow(new StarRocksException("capacity exceeded")).when(mgr).addTabletReshardJob(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
         }
@@ -330,11 +342,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, mapCaptor.getValue().size());
@@ -369,11 +381,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, /*activeComputeNodeCount*/ 12, freshConnectContext());
+                    database, table, entries, /*activeComputeNodeCount*/ 12, freshConnectContext(), null, Set.of());
 
             Map<Long, List<TabletRange>> map = mapCaptor.getValue();
             // K_1 = 24 (ceil(1000MB/50MB)=20 rounded up to a multiple of 12) -> 24 ranges.
@@ -427,11 +439,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                             }).when(mockLocker).unLockTableWithIntensiveDbLock(
                                     any(Long.class), any(Long.class), any(LockType.class));
                         })) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertEquals(3, lockCalls.get(), "one intensive READ lock per partition");
             Assertions.assertEquals(3, unlockCalls.get(), "lock must be released after each partition");
@@ -451,10 +463,10 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.TABLE_NOT_NORMAL);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -478,11 +490,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertEquals(baseline + 3L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL.getValue().longValue(),
@@ -505,11 +517,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenThrow(new IllegalArgumentException("synthetic bad ranges"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), never())
@@ -531,10 +543,10 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -558,11 +570,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(0, addPartitionsCalls.get(),
@@ -587,11 +599,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             // Single entry dropped as PARTITION_NOT_ELIGIBLE_POST_CREATE -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -616,11 +628,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             // Only the single-tablet partition feeds the combined submit.
@@ -646,11 +658,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             // Single non-empty partition dropped -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -669,10 +681,10 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -695,10 +707,10 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -729,11 +741,11 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             // Only pGood feeds the combined submit; pBoom was dropped.
@@ -743,6 +755,368 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
             PreSplitOutcome.SubmittedCombined combined = (PreSplitOutcome.SubmittedCombined) outcome;
             assertSkippedReason(combined.perPartitionResults().get(0), SkipReason.SAMPLE_FAILED);
             Assertions.assertInstanceOf(PreSplitOutcome.Submitted.class, combined.perPartitionResults().get(1));
+        }
+    }
+
+    // ---------- Multi-index (rollup) tests ----------
+
+    @Test
+    public void carriesIdTaggedTuplesAndResolvesAllIndexTablets() throws Exception {
+        // One partition with a base index + one rollup. The entry's rows carry an
+        // id-tagged rollup IndexTuple; resolveUnderReadLock resolves BOTH index
+        // tablets and planOnePartition splits both -> the combined map has the base
+        // tablet AND the rollup tablet.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100,
+                        /*baseCuts*/ true, new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Assertions.assertEquals(2, mapCaptor.getValue().size(), "base + rollup tablets both split");
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(21_001L), "base tablet split");
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(22_001L), "rollup tablet split");
+        }
+    }
+
+    @Test
+    public void splitsEveryIndexPerPartition() throws Exception {
+        // 2 indexes (base + rollup) x 2 partitions -> 4 combined-map entries.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        installPartitionWithIndices("p2", 11_002L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_002L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_002L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)),
+                rollupEntry("p2", 11_002L, 21_002L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(4, map.size(), "2 indexes x 2 partitions -> 4 tablet entries");
+            Assertions.assertTrue(map.keySet().containsAll(List.of(21_001L, 22_001L, 21_002L, 22_002L)));
+        }
+    }
+
+    @Test
+    public void baseNoCutsRollupCuts_rollupOnlyContribution() throws Exception {
+        // Base samples are all equal (no split) but the rollup samples cut -> only the
+        // rollup tablet contributes to the combined map.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100,
+                        /*baseCuts*/ false, new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Assertions.assertEquals(1, mapCaptor.getValue().size());
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(22_001L), "only the rollup tablet split");
+            Assertions.assertFalse(mapCaptor.getValue().containsKey(21_001L), "no-cut base is omitted");
+        }
+    }
+
+    @Test
+    public void allIndexesNoCuts_partitionSkippedNoUsefulCuts() throws Exception {
+        // Both base and rollup samples are all equal -> every index no-cut -> the local
+        // map is empty -> Skipped(NO_USEFUL_CUTS), the factory is never called.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100,
+                        /*baseCuts*/ false, new IndexSampleSpec(ROLLUP_INDEX_META_ID, false)));
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
+                    never());
+        }
+    }
+
+    @Test
+    public void secondaryPlanningThrowsAfterBasePlanned_dropsWholePartition() throws Exception {
+        // pBad: base cuts and is planned into the LOCAL map, then the rollup planning
+        // throws (its rows carry no matching IndexTuple) -> the whole partition is
+        // dropped and the base-only remnant NEVER leaks into the combined map.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("pBad", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        installPartitionWithIndices("pGood", 11_002L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_002L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_002L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                // pBad carries NO secondary tuple, so the rollup buildSampleSet throws.
+                rollupEntry("pBad", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100, /*baseCuts*/ true),
+                rollupEntry("pGood", 11_002L, 21_002L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(2, map.size(), "only pGood's base + rollup feed the combined submit");
+            Assertions.assertTrue(map.containsKey(21_002L));
+            Assertions.assertTrue(map.containsKey(22_002L));
+            Assertions.assertFalse(map.containsKey(21_001L), "pBad base-only remnant must NOT leak");
+            Assertions.assertFalse(map.containsKey(22_001L));
+
+            PreSplitOutcome.SubmittedCombined combined = (PreSplitOutcome.SubmittedCombined) outcome;
+            assertSkippedReason(combined.perPartitionResults().get(0), SkipReason.SAMPLE_FAILED);
+            Assertions.assertInstanceOf(PreSplitOutcome.Submitted.class, combined.perPartitionResults().get(1));
+        }
+    }
+
+    @Test
+    public void projectionOrderDiffersFromCatalogOrder_stillCorrect() throws Exception {
+        // The catalog resolves the rollups in order [rollupA, rollupB], but each row's
+        // IndexTuple list is in the REVERSED order [rollupB, rollupA]. rollupA carries
+        // cutting values, rollupB carries all-equal values. Because matching is by
+        // indexMetaId (not list position), rollupA still splits and rollupB does not; a
+        // positional bug would swap them.
+        long rollupA = ROLLUP_INDEX_META_ID;
+        long rollupB = 500L;
+        wireVisibleRollups(rollupA, rollupB);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(rollupA, List.of(22_001L), 0L),
+                mockMaterializedIndex(rollupB, List.of(23_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100, /*baseCuts*/ true,
+                        new IndexSampleSpec(rollupB, /*cuts*/ false),
+                        new IndexSampleSpec(rollupA, /*cuts*/ true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(rollupA, rollupB));
+
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertTrue(map.containsKey(22_001L), "rollupA (cutting values, id-matched) must split");
+            Assertions.assertFalse(map.containsKey(23_001L), "rollupB (all-equal, id-matched) must not split");
+            Assertions.assertTrue(map.containsKey(21_001L), "base splits too");
+        }
+    }
+
+    @Test
+    public void singleIndexMultiPartition_unchanged() throws Exception {
+        // Base-only entries (empty secondary tuples) with an empty sampled secondary set
+        // exercise the conditional access path and produce today's base-only map.
+        installExistingPartition("p1", 11_001L, 21_001L, 0L);
+        installExistingPartition("p2", 11_002L, 21_002L, 0L);
+        List<PartitionSamples> entries = List.of(
+                existingEntry("p1", 11_001L, 21_001L, 100, 100L * DebugUtil.MEGABYTE),
+                existingEntry("p2", 11_002L, 21_002L, 100, 100L * DebugUtil.MEGABYTE));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
+
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(2, map.size(), "single-index target yields only the base tablets");
+            Assertions.assertTrue(map.keySet().containsAll(List.of(21_001L, 21_002L)));
+        }
+    }
+
+    @Test
+    public void rollupMultiTablet_dropsPartition() throws Exception {
+        // pBad's rollup carries 2 tablets -> resolveVisibleIndexTargets returns null ->
+        // the partition is dropped as PARTITION_NOT_ELIGIBLE_POST_CREATE. pGood's rollup
+        // is single-tablet and still contributes.
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("pBad", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L, 22_009L), 0L)));
+        installPartitionWithIndices("pGood", 11_002L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_002L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_002L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("pBad", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)),
+                rollupEntry("pGood", 11_002L, 21_002L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Assertions.assertEquals(2, mapCaptor.getValue().size(), "only pGood's base + rollup contribute");
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(21_002L));
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(22_002L));
+
+            PreSplitOutcome.SubmittedCombined combined = (PreSplitOutcome.SubmittedCombined) outcome;
+            assertSkippedReason(combined.perPartitionResults().get(0),
+                    SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+        }
+    }
+
+    @Test
+    public void sampledSecondaryIdSetDiffersFromResolved_dropsPartition() throws Exception {
+        // The sampled secondary id set is {rollupA=400}, but the partition currently
+        // resolves rollupB=500 -> the sets differ -> resolveUnderReadLock drops the
+        // partition and the factory is never called.
+        long rollupB = 500L;
+        wireVisibleRollups(rollupB);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(rollupB, List.of(23_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                rollupEntry("p1", 11_001L, 21_001L, 100L * DebugUtil.MEGABYTE, 100, true,
+                        new IndexSampleSpec(ROLLUP_INDEX_META_ID, true)));
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
+
+            assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
+                    never());
+        }
+    }
+
+    @Test
+    public void existingPartitionReResolvedBeforePlanning_staleTargetsRejected() throws Exception {
+        // A concurrent split made pStale's base index multi-tablet between the grouper
+        // snapshot and planning. resolveUnderReadLock re-resolves (the factory does not
+        // enforce one-tablet-per-index) and rejects the stale target; pGood contributes.
+        installPartitionWithTabletCount("pStale", 11_001L, /*tabletCount*/ 2, 0L);
+        installExistingPartition("pGood", 11_002L, 21_002L, 0L);
+        List<PartitionSamples> entries = List.of(
+                existingEntry("pStale", 11_001L, 21_001L, 100, 100L * DebugUtil.MEGABYTE),
+                existingEntry("pGood", 11_002L, 21_002L, 100, 100L * DebugUtil.MEGABYTE));
+
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Assertions.assertEquals(1, mapCaptor.getValue().size(), "only pGood survives the re-resolve");
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(21_002L));
+
+            PreSplitOutcome.SubmittedCombined combined = (PreSplitOutcome.SubmittedCombined) outcome;
+            assertSkippedReason(combined.perPartitionResults().get(0),
+                    SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+        }
+    }
+
+    @Test
+    public void visibleIndexAddedAfterSamplingSnapshot_partitionDropped() throws Exception {
+        // The sample saw a single index (empty sampled secondary set), but a rollup
+        // became visible by resolveUnderReadLock time -> the resolved secondary set
+        // {rollup} differs from {} -> the partition is dropped, NEVER as a base-only
+        // combined entry (the factory is never called).
+        wireVisibleRollups(ROLLUP_INDEX_META_ID);
+        installPartitionWithIndices("p1", 11_001L, List.of(
+                mockMaterializedIndex(BASE_INDEX_META_ID, List.of(21_001L), 0L),
+                mockMaterializedIndex(ROLLUP_INDEX_META_ID, List.of(22_001L), 0L)));
+        List<PartitionSamples> entries = List.of(
+                existingEntry("p1", 11_001L, 21_001L, 100, 100L * DebugUtil.MEGABYTE));
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
+
+            assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
+                    never());
         }
     }
 
@@ -825,11 +1199,14 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
         when(physicalPartition.getId()).thenReturn(physicalPartitionId);
         MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         Tablet tablet = mock(Tablet.class);
         when(tablet.getId()).thenReturn(tabletId);
         when(baseIndex.getTablets()).thenReturn(List.of(tablet));
         when(baseIndex.getRowCount()).thenReturn(rowCount);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);
     }
@@ -845,6 +1222,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
         when(physicalPartition.getId()).thenReturn(physicalPartitionId);
         MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         List<Tablet> tablets = new ArrayList<>(tabletCount);
         for (int i = 0; i < tabletCount; i++) {
             Tablet tablet = mock(Tablet.class);
@@ -854,8 +1232,89 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         when(baseIndex.getTablets()).thenReturn(tablets);
         when(baseIndex.getRowCount()).thenReturn(rowCount);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);
+    }
+
+    /** One index's per-row sample shape: which index the tuple is tagged with, and whether it cuts. */
+    private record IndexSampleSpec(long indexMetaId, boolean cuts) { }
+
+    /**
+     * Build a {@link PartitionSamples} whose rows carry a base sort-key tuple plus
+     * one id-tagged {@link IndexTuple} per {@code secondarySpecs}, in the given
+     * order (which may deliberately differ from catalog order). {@code cuts} rows
+     * carry ascending distinct BIGINT values (the planner produces useful cuts);
+     * otherwise every value is identical (the planner returns NO_SPLIT).
+     */
+    private static PartitionSamples rollupEntry(String name, long partitionId, long oldTabletId,
+                                                long estimatedBytes, int sampleCount, boolean baseCuts,
+                                                IndexSampleSpec... secondarySpecs) {
+        List<SampleRow> rows = new ArrayList<>(sampleCount);
+        for (int i = 0; i < sampleCount; i++) {
+            List<Variant> baseTuple = List.of(Variant.of(IntegerType.BIGINT, baseCuts ? Long.toString(i) : "42"));
+            List<IndexTuple> secondary = new ArrayList<>(secondarySpecs.length);
+            for (IndexSampleSpec spec : secondarySpecs) {
+                secondary.add(new IndexTuple(spec.indexMetaId(),
+                        List.of(Variant.of(IntegerType.BIGINT, spec.cuts() ? Long.toString(i) : "42"))));
+            }
+            rows.add(new SampleRow(baseTuple, List.of(), secondary));
+        }
+        return new PartitionSamples(
+                List.of("v_" + name), name, /*existsInCatalog*/ true,
+                partitionId, oldTabletId, /*analyzedClause*/ null, rows, estimatedBytes);
+    }
+
+    /** Mock a {@link MaterializedIndex} with the given meta id, tablet ids, and row count. */
+    private static MaterializedIndex mockMaterializedIndex(long metaId, List<Long> tabletIds, long rowCount) {
+        MaterializedIndex index = mock(MaterializedIndex.class);
+        when(index.getMetaId()).thenReturn(metaId);
+        List<Tablet> tablets = new ArrayList<>(tabletIds.size());
+        for (Long tabletId : tabletIds) {
+            Tablet tablet = mock(Tablet.class);
+            when(tablet.getId()).thenReturn(tabletId);
+            tablets.add(tablet);
+        }
+        when(index.getTablets()).thenReturn(tablets);
+        when(index.getRowCount()).thenReturn(rowCount);
+        return index;
+    }
+
+    /**
+     * Install a {@link Partition} whose default physical partition exposes the given
+     * visible indices (base index first). {@code resolveUnderReadLock} walks both
+     * {@code getIndex(baseIndexMetaId)} and {@code getLatestMaterializedIndices}.
+     */
+    private void installPartitionWithIndices(String name, long physicalPartitionId, List<MaterializedIndex> indices) {
+        Partition partition = mock(Partition.class);
+        PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
+        when(physicalPartition.getId()).thenReturn(physicalPartitionId);
+        when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(indices.get(0));
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(indices);
+        when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
+        when(table.getPartition(name)).thenReturn(partition);
+    }
+
+    /**
+     * Wire the base index meta plus one {@link MaterializedIndexMeta} per given rollup id
+     * (each with its own scalar sort key) so the real {@code MetaUtils.getRangeDistributionColumns}
+     * resolves every index and {@code table.getVisibleIndexMetas} reports base + rollups.
+     */
+    private void wireVisibleRollups(long... rollupMetaIds) {
+        List<MaterializedIndexMeta> metas = new ArrayList<>();
+        metas.add(baseIndexMeta);
+        for (long rollupMetaId : rollupMetaIds) {
+            Column rollupSortKey = new Column("k" + rollupMetaId, IntegerType.BIGINT);
+            MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+            when(rollupMeta.getIndexMetaId()).thenReturn(rollupMetaId);
+            when(rollupMeta.getSchema()).thenReturn(List.of(rollupSortKey));
+            when(rollupMeta.getSortKeyIdxes()).thenReturn(List.of(0));
+            when(table.getIndexMetaByMetaId(rollupMetaId)).thenReturn(rollupMeta);
+            metas.add(rollupMeta);
+        }
+        when(table.getVisibleIndexMetas()).thenReturn(metas);
     }
 
     /**

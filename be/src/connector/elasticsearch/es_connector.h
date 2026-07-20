@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks {
 

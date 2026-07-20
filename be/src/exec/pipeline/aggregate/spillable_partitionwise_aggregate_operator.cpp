@@ -15,12 +15,12 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 

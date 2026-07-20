@@ -152,6 +152,30 @@ public class SplitTabletJobTest {
     }
 
     @Test
+    public void testRunBumpsOptimisticVersion() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+
+        long beforeSplit = table.lastSchemaUpdateTime.get();
+
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
+        tabletReshardJob.init();
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+
+        // runRunningJob() -> addNewMaterializedIndexes() installs the split-child indexes and changes
+        // the partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
+        // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
+        // "Invalid tablet id ... The tablet may have been dropped". This runs on the RUNNING step.
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+
+        long afterSplit = table.lastSchemaUpdateTime.get();
+        Assertions.assertTrue(afterSplit > beforeSplit,
+                "split must bump lastSchemaUpdateTime (before=" + beforeSplit + ", after=" + afterSplit + ")");
+    }
+
+    @Test
     public void testFallbackToIdenticalTablet() throws Exception {
         installLakeServiceMock(this::addFallbackToIdenticalRanges);
 
@@ -310,6 +334,20 @@ public class SplitTabletJobTest {
             }
         };
 
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+            }
+        };
+
         try {
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
@@ -318,6 +356,20 @@ public class SplitTabletJobTest {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
+    }
+
+    // The job's warehouse defaults to "unset" (null -> background) and is settable by the pre-split
+    // caller (base-class TabletReshardJob#setWarehouseId, also used by the merge job). The
+    // empty-source -> spread / non-empty -> PACK behavior is covered by the end-to-end
+    // external-boundaries flow and StarOSAgentTest#testCreateShardsForSplitSpreadDropsWithShardPin.
+    @Test
+    public void testWarehouseIdDefaultsUnsetAndIsSettable() throws Exception {
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
+        Assertions.assertNull(job.getWarehouseId(),
+                "warehouse defaults to unset (null -> background warehouse)");
+        job.setWarehouseId(12345L);
+        Assertions.assertEquals(Long.valueOf(12345L), job.getWarehouseId(),
+                "caller applies the load's warehouse id");
     }
 
     // -------------------------------------------------------------------------
@@ -359,7 +411,7 @@ public class SplitTabletJobTest {
                 tabletRangeLowerOnly(200));
 
         TabletReshardJob tabletReshardJob = SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTabletId, newTabletRanges);
+                db, table, Map.of(oldTabletId, newTabletRanges));
         Assertions.assertNotNull(tabletReshardJob);
 
         // The SplittingTablet inside the job must carry the FE-supplied
@@ -417,15 +469,15 @@ public class SplitTabletJobTest {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId,
-                        List.of(tabletRange(0, 100))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(oldTabletId, List.of(tabletRange(0, 100)))));
     }
 
     @Test
     public void testForExternalBoundariesRejectsUnknownTablet() {
         Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, /*oldTabletId=*/Long.MAX_VALUE,
-                        List.of(tabletRange(0, 100), tabletRange(100, 200))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(/*oldTabletId=*/Long.MAX_VALUE, List.of(tabletRange(0, 100), tabletRange(100, 200)))));
     }
 
     // external boundaries must respect the tablet_reshard_max_split_count cap that the
@@ -441,7 +493,7 @@ public class SplitTabletJobTest {
             tooMany.add(tabletRange(i * 100, (i + 1) * 100));
         }
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, tooMany));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, Map.of(oldTabletId, tooMany)));
     }
 
     // Installs a MockUp on MockLakeService that intercepts both publishVersion and
@@ -693,7 +745,8 @@ public class SplitTabletJobTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 throw new DdlException("simulated StarOS failure");
             }
         };

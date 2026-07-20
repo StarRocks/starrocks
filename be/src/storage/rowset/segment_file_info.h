@@ -40,14 +40,17 @@ struct SegmentFileInfo : public FileInfo {
     std::vector<VariantTuple> sort_key_samples;
     int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
-    // IDs of vector indexes configured for this segment (one .vi file per id).
+    // IDs of vector indexes whose .vi file belongs to this segment (one .vi file per id).
     std::vector<int64_t> vector_index_ids;
+    // Per-segment vector index uid embedded in this segment's .vi filenames (value = writer tablet id),
+    // (see SegmentMetadataPB::segment_vector_index_uid). -1 when no vector index.
+    int64_t segment_vector_index_uid = -1;
 
     // Serialize this segment's full per-segment metadata into |segment_meta|: the file attributes
     // (filename, size, encryption_meta, bundle_file_offset), the sort-key fields, num_rows,
-    // vector_index_ids, and segment_idx. |segment_idx| is a required input (placed first so callers
-    // cannot forget it): a contiguous positional index at write time, or a sparse one after
-    // compaction/merge.
+    // vector_index_ids, segment_vector_index_uid, and segment_idx. |segment_idx| is a required input
+    // (placed first so callers cannot forget it): a contiguous positional index at write time, or a
+    // sparse one after compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 };
 

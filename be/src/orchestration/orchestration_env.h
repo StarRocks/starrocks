@@ -22,6 +22,7 @@ namespace starrocks {
 
 class ExecEnv;
 class MetricRegistry;
+class StreamLoadExecutor;
 
 namespace orchestration {
 
@@ -38,7 +39,7 @@ public:
     OrchestrationEnv();
     ~OrchestrationEnv();
 
-    Status init(ExecEnv* exec_env, MetricRegistry* metrics);
+    Status init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor);
     void wait_for_finish();
     void stop();
     void destroy();

@@ -63,7 +63,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
@@ -325,7 +324,6 @@ public class RestoreJobTest {
             }
         };
 
-        Locker locker = new Locker();
 
         // gen BackupJobInfo
         jobInfo = new BackupJobInfo();
@@ -513,7 +511,6 @@ public class RestoreJobTest {
                 return true;
             }
         };
-        Locker locker = new Locker();
 
         // gen BackupJobInfo
         jobInfo = new BackupJobInfo();
@@ -689,7 +686,6 @@ public class RestoreJobTest {
                 return true;
             }
         };
-        Locker locker = new Locker();
 
         // gen BackupJobInfo
         jobInfo = new BackupJobInfo();
@@ -805,7 +801,6 @@ public class RestoreJobTest {
         sig2.update("name1".getBytes());
         System.out.println("sig2: " + Math.abs((int) sig2.getValue()));
 
-        Locker locker = new Locker();
 
         OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
@@ -891,7 +886,6 @@ public class RestoreJobTest {
                 return true;
             }
         };
-        Locker locker = new Locker();
 
         // gen BackupJobInfo
         jobInfo = new BackupJobInfo();

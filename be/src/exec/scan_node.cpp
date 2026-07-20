@@ -36,9 +36,9 @@
 
 #include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/morsel_queue_builder.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 #include "storage/query/olap_dynamic_morsel_queue.h"

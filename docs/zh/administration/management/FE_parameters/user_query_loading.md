@@ -362,6 +362,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用谓词列收集。如果禁用，谓词列在查询优化期间将不会被记录。
 - 引入版本: -
 
+### `push_down_non_grouped_aggregate_below_union`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在物理计划中将不带 GROUP BY 的聚合下推到 Union 下方。
+- 引入版本: -
+
 ### `enable_query_queue_v2`
 
 - 默认值: true
@@ -943,6 +952,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
 - 引入版本: v4.0
+
+### `enable_pipeline_routine_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Routine Load 任务是否在 Pipeline 引擎上执行。启用后，每个任务在其分配的 BE 上本地执行（由该 BE 从 Kafka/Pulsar 消费数据），而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Routine Load 使用旧版执行路径，行为与之前完全一致。请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
+
+### `enable_pipeline_stream_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 经典同步 Stream Load 是否在 Pipeline 引擎上执行，而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Stream Load 使用旧版执行路径，行为与之前完全一致。（Routine Load 请使用 `enable_pipeline_routine_load`。）请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
 
 ### `enable_routine_load_lag_metrics`
 

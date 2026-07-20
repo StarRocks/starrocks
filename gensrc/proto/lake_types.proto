@@ -63,10 +63,20 @@ message PersistentIndexSstablePB {
     optional PUniqueId fileset_id = 12;
     // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
     optional int32 rssid_offset = 13 [default = 0];
+    // The tablet metadata version at which this physical sstable file first
+    // became visible -- i.e. the new version of the publish (or reshard) that
+    // produced it. Stamped once when the file is first persisted and never
+    // changed afterward; CopyFrom inherits it across tablet split/merge so a
+    // shared file keeps its original value. A non-zero value is never
+    // overwritten. 0/unset means unknown -- e.g. a file created before this
+    // field existed stays 0, so consumers such as lake vacuum retention must
+    // treat 0 conservatively.
+    optional int64 generation_version = 14;
 }
 
 message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
+    // sstables are ordered by max_rss_rowid ascending (see
+    // LakePersistentIndex::commit and apply_opcompaction), not by any version.
     repeated PersistentIndexSstablePB sstables = 1;
 }
 
@@ -81,6 +91,11 @@ message FileMetaPB {
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
     optional bytes encryption_meta = 4;
+    // The tablet metadata version at which the file was created. Stamped when the file is moved into
+    // orphan_files so lake vacuum can tell whether the file was live at a snapshot-retained version
+    // without reading that version's tablet metadata. Unset (0) means "creation version unknown" and
+    // is treated conservatively (retained under any covering retain version).
+    optional int64 version = 5;
 }
 
 message DelvecMetadataPB {
@@ -178,6 +193,13 @@ message DelfileWithRowsetId {
     optional bytes encryption_meta = 4;
     // Whether this file shared by multiple tablets
     optional bool shared = 5 [default=false];
+    // The tablet metadata version at which this del file was created. Stamped once at creation and
+    // carried verbatim by CopyFrom when the del file is transferred to a compaction output rowset or
+    // inherited across tablet split/merge, so it reflects the ORIGINAL creation version even after
+    // the containing rowset is re-versioned. Lake vacuum uses it to tell whether the del file was
+    // live at a snapshot-retained version. Unset (0) means "creation version unknown" and is treated
+    // conservatively (retained under any covering retain version).
+    optional int64 version = 6;
 }
 
 message SegmentMetadataPB {
@@ -222,6 +244,17 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
+    // Per-segment unique id embedded in this segment's vector index (.vi) filenames
+    // ("<segment_base>_<segment_vector_index_uid>_<index_id>.vi") so that bundle-file segments
+    // sharing one physical file across tablets still get distinct .vi files. Its VALUE is the id of
+    // the tablet that WROTE the segment, used purely as a unique key (do not treat it as a live
+    // tablet reference): it is RECORDED here, instead of using the reading tablet's id, so the name
+    // is stable and reader-agnostic -- carried verbatim by CopyFrom across tablet SPLIT so every
+    // child sharing this segment resolves the same .vi. Always stamped by the writer in the same
+    // step that records vector_index_ids, so a segment carrying vector_index_ids always carries this
+    // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
+    // DCHECK its presence -- there is no fall back to the reading tablet's id.
+    optional int64 segment_vector_index_uid = 13;
 }
 
 message RowsetMetadataPB {
@@ -379,6 +412,23 @@ message TxnLogPB {
         repeated FileMetaPB dels_meta = 19;
         // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
         repeated FileMetaPB rewrite_segments_meta = 20;
+        // Parallel to `dels_meta` (index by del_id): the in-rowset segment index each delete
+        // logically follows, so its rssid is `rowset_id + op_offset`. Used to preserve the
+        // in-transaction upsert/delete order. A UINT32_MAX entry means "not recorded" (e.g.
+        // spill / concurrent flush); readers then fall back to the max segment index (legacy
+        // "all deletes after all upserts"). Empty (size != dels_meta_size) means no del carries
+        // an offset -- the downgrade-safe default until the cluster is fully upgraded
+        // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
+        // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
+        repeated uint32 del_op_offsets = 21;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
     }
 
     message OpCompaction {
@@ -564,6 +614,14 @@ message TxnInfoPB {
     // anchored as op_schema_change@W. W == 1 means the base partition was empty at the watershed
     // (PARTITION_INIT_VERSION == 1), so there is no source op_write and BE synthesizes an empty one.
     optional int64 shadow_rewrite_alter_version = 13;
+    // TXN_SHADOW_REWRITE flip publish: true when the rewrite produced no source op_write because the base
+    // partition was empty at the watershed. FE sets it from the rewrite txn loading zero rows (loadedRows
+    // == 0); it does NOT consult tablet commit infos, which are reset to null at the VISIBLE finish before
+    // FE reads this (see the rewriteSourceEmpty comment in LakeOnlineRewriteJobBase).
+    // When true, BE synthesizes an empty op_schema_change@W for ANY W (no source load), generalizing the
+    // W == 1 empty fast-path to a partition that is empty at W > 1 (e.g. a repeat online rewrite of an
+    // empty range partition). When false, the source op_write MUST exist and is loaded as before.
+    optional bool shadow_rewrite_source_empty = 14;
 }
 
 message SplittingTabletInfoPB {

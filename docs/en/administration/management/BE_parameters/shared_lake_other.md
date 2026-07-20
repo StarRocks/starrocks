@@ -86,6 +86,15 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_pk_preserve_txn_delete_order
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Introduced in: v4.1.4
+
 ### lake_enable_protobuf_file_checksum
 
 - Default: true
@@ -156,6 +165,24 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
+- Introduced in: v4.2
+
+### enable_lake_prepared_split_pre_refinement
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a prepared-physical-split lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
+- Introduced in: v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the prepared-physical-split lake scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
 - Introduced in: v4.2
 
 ### lake_put_txn_log_timeout_guard_ms

@@ -94,13 +94,14 @@ public:
     Int96ToDateTimeConverter() = default;
     ~Int96ToDateTimeConverter() override = default;
 
-    Status init(const std::string& timezone);
+    Status init(const std::string& timezone, bool as_timestamp_ntz);
     // convert column from int96 to timestamp
     Status convert(const Column* src, Column* dst) override;
 
 private:
     int _offset = 0;
     cctz::time_zone _ctz;
+    bool _as_timestamp_ntz = false;
 };
 
 class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
@@ -624,7 +625,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         need_convert = true;
         if (col_type == LogicalType::TYPE_DATETIME) {
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
-            RETURN_IF_ERROR(_converter->init(timezone));
+            RETURN_IF_ERROR(_converter->init(timezone, typeDescriptor.datetime_is_ntz));
             *converter = std::move(_converter);
         }
         break;
@@ -779,7 +780,8 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::init(const std::string& timezone) {
+Status Int96ToDateTimeConverter::init(const std::string& timezone, bool as_timestamp_ntz) {
+    _as_timestamp_ntz = as_timestamp_ntz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
@@ -812,6 +814,12 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 Timestamp timestamp =
                         (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                if (_as_timestamp_ntz) {
+                    // Paimon TIMESTAMP (NTZ): the INT96 stores the wall clock, so keep it as-is
+                    // instead of shifting by the session timezone the way Hive/Spark INT96 needs.
+                    dst_data[i].set_timestamp(timestamp);
+                    continue;
+                }
                 int offset = _offset;
                 if constexpr (!FAST_TZ) {
                     offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);

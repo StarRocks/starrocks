@@ -25,6 +25,8 @@
 #include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/pipeline_fragment_reporter.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/external_scan_orchestrator.h"
@@ -33,8 +35,6 @@
 #include "orchestration/routine_load_task_executor.h"
 #include "orchestration/runtime_filter_worker.h"
 #include "orchestration/stream_load_orchestrator.h"
-#include "runtime/exec_env.h"
-#include "runtime/pipeline_fragment_reporter.h"
 
 namespace starrocks::orchestration {
 
@@ -44,8 +44,9 @@ OrchestrationEnv::~OrchestrationEnv() {
     destroy();
 }
 
-Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
+Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor) {
     DCHECK(exec_env != nullptr);
+    DCHECK(stream_load_executor != nullptr);
     _exec_env = exec_env;
 
     _fragment_mgr = std::make_unique<FragmentMgr>(exec_env, metrics);
@@ -81,7 +82,8 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
 
     _stream_load_orchestrator = std::make_unique<StreamLoadOrchestrator>(exec_env, _fragment_mgr.get());
 
-    _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get());
+    _routine_load_task_executor =
+            std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get(), stream_load_executor);
     RETURN_IF_ERROR(_routine_load_task_executor->init(metrics));
     _routine_load_task_executor_started = true;
 

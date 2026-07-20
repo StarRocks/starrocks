@@ -95,7 +95,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (scalarOperator.isColumnRef()) {
             return new ColumnRefSet(((ColumnRefOperator) scalarOperator).getId());
         }
-        Map<String, ColumnRefOperator> structFieldsData = context.getFieldUseStringRefMap(scalarOperator);
+        Map<String, ColumnRefOperator> structFieldsData = context.structManager.getFieldStringRefMap(scalarOperator);
         if (structFieldsData != null) {
             return new ColumnRefSet(structFieldsData.values());
         }
@@ -278,8 +278,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Projection newProjection = rewriteProjection(join.getProjection(), info.inputStringColumns);
 
         PhysicalHashJoinOperator newJoin = new PhysicalHashJoinOperator(
-                join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate, newProjection,
-                join.getSkewColumn(), join.getSkewValues());
+                join.getJoinType(), newOnPredicate, join.getJoinHint(), join.getLimit(), newPredicate,
+                join.getPredicateCommonOperators(), newProjection, join.getSkewColumn(), join.getSkewValues());
         newJoin.setSkewJoinFriend(join.getSkewJoinFriend().orElse(null));
 
         return rewriteOptExpression(optExpression, newJoin, info.outputStringColumns);
@@ -494,7 +494,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         inputColumns.union(inputColumns.getStream()
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())
-                .map(context::getFieldUseStringRefMap)
+                .map(context.structManager::getFieldStringRefMap)
                 .filter(Objects::nonNull)
                 .flatMap(k -> k.values().stream())
                 .toList());
@@ -555,9 +555,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         List<ColumnRefOperator> newPartitionByColumns = null;
 
         if (topN.getPartitionByColumns() != null) {
-            newPartitionByColumns =
-                    topN.getPartitionByColumns().stream().map(c -> context.stringRefToDictRefMap.getOrDefault(c, c))
-                            .collect(Collectors.toList());
+            // only rewrite to the dict ref when the column still arrives at this TopN in dict
+            // form; a column decoded below (e.g. under a join) must keep its string ref
+            newPartitionByColumns = topN.getPartitionByColumns().stream()
+                    .map(c -> info.inputStringColumns.contains(c.getId())
+                            ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                    .collect(Collectors.toList());
         }
 
         Map<ColumnRefOperator, CallOperator> preAggCall = null;
@@ -709,10 +712,16 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        // Only rewrite the CTE output map to dict refs for columns that still arrive at this
+        // consume in dict form. A column that was decoded inside the CTE producer (e.g. by
+        // lead() with a non-null default) must keep its string ref here; otherwise the consume
+        // references a producer dict slot that the produce fragment no longer emits, and the
+        // query fails at BE with "slot_id N not found".
         Map<ColumnRefOperator, ColumnRefOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
-                        (e) -> new Pair<>(
-                                context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
-                                context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue())))
+                        (e) -> info.inputStringColumns.contains(e.getValue().getId())
+                                ? new Pair<>(context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                        context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue()))
+                                : new Pair<>(e.getKey(), e.getValue()))
                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
         ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
                 .filter(k -> info.inputStringColumns.contains(k.getValue())).map(Map.Entry::getKey).toList());
@@ -767,7 +776,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         for (int sid : fragmentUseDictExprs.getColumnIds()) {
             ColumnRefOperator strRef = factory.getColumnRef(sid);
             if (strRef.getType().isStructType()) {
-                Map<String, ColumnRefOperator> subFields = context.getFieldUseStringRefMap(strRef);
+                Map<String, ColumnRefOperator> subFields = context.structManager.getFieldStringRefMap(strRef);
                 if (subFields != null) {
                     useDictExprs.union(subFields.values());
                 }

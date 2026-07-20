@@ -38,16 +38,16 @@ target_link_libraries(AgentServer
             StarRocksGen
         PRIVATE
             Runtime
-            RuntimeEnv
             DataWorkflows
             Storage
             Cache
             ComputeEnv
+            Exec
             ExecRuntime
             StoragePrimitive
-            RuntimeCore
+            Runtime
             Platform
-            FSCore
+            FileSystem
             IO
             Common
             Base

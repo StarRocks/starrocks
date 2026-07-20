@@ -124,6 +124,13 @@ struct TScalarType {
     // Only set for DECIMAL
     3: optional i32 precision
     4: optional i32 scale
+
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    // as metadata and does NOT affect type identity. Default (false) means the value is a
+    // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
+    // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
+    5: optional bool datetime_is_ntz
 }
 
 // Represents a field in a STRUCT type.
@@ -396,6 +403,9 @@ struct TFunction {
   35: optional string input_type
   36: optional string content
   37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+  // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
+  // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
+  38: optional string service_url
 }
 
 enum TLoadJobState {

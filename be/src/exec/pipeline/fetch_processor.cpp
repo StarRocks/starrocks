@@ -29,11 +29,11 @@
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
 #include "common/system/master_info.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fetch_task.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks::pipeline {
 
@@ -539,11 +539,19 @@ FetchProcessorFactory::FetchProcessorFactory(int32_t target_node_id,
           _nodes_info(std::move(nodes_info)) {}
 
 FetchProcessorPtr FetchProcessorFactory::get_or_create(int32_t driver_sequence) {
-    if (!_processor_map.contains(driver_sequence)) {
-        _processor_map.try_emplace(driver_sequence, std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs,
-                                                                                     _slot_id_to_desc, _nodes_info));
-    }
-    return _processor_map.at(driver_sequence);
+    // Do the get-or-create and the read entirely under the submap lock. Returning
+    // _processor_map.at() would deref a slot reference after the lock is released,
+    // racing with a concurrent try_emplace()/resize() (another driver sequence hashing
+    // into the same submap) that frees the slot array -> heap-use-after-free.
+    FetchProcessorPtr processor;
+    _processor_map.lazy_emplace_l(
+            driver_sequence, [&](FetchProcessorPtr& value) { processor = value; },
+            [&](const auto& ctor) {
+                processor = std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs, _slot_id_to_desc,
+                                                             _nodes_info);
+                ctor(driver_sequence, processor);
+            });
+    return processor;
 }
 
 void FetchProcessorFactory::close_context(RuntimeState* state) {

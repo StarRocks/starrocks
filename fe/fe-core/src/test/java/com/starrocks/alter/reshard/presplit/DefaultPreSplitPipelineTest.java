@@ -14,21 +14,28 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric.MetricUnit;
+import com.starrocks.metric.MetricRepo;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -36,7 +43,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -52,6 +61,11 @@ import static org.mockito.Mockito.when;
 public class DefaultPreSplitPipelineTest {
 
     private static final long OLD_TABLET_ID = 9000L;
+    private static final long ROLLUP_TABLET_ID = 9100L;
+    private static final long BASE_INDEX_META_ID = 1L;
+    private static final long ROLLUP_INDEX_META_ID = 2L;
+    private static final List<Column> BASE_SORT_KEY = List.of(bigintColumn("ts"));
+    private static final List<Column> ROLLUP_SORT_KEY = List.of(bigintColumn("ts2"));
     private static final long FILE_TOTAL_BYTES = 1024L;
     private static final int ACTIVE_COMPUTE_NODES = 3;
     private static final Duration PRE_SUBMIT_TIMEOUT = Duration.ofSeconds(30);
@@ -73,12 +87,16 @@ public class DefaultPreSplitPipelineTest {
         Config.tablet_reshard_max_split_count = 1024;
 
         database = mock(Database.class);
+        when(database.getId()).thenReturn(500L);
         table = mock(OlapTable.class);
         when(table.getName()).thenReturn("t");
+        when(table.getId()).thenReturn(600L);
         tabletReshardJobManager = mock(TabletReshardJobMgr.class);
 
-        Column sortColumn = bigintColumn("ts");
-        sampleRequest = new SampleRequest(DUMMY_CONTEXT, List.of(sortColumn), 16L * DebugUtil.MEGABYTE, 0L);
+        sampleRequest = new SampleRequest(DUMMY_CONTEXT, BASE_SORT_KEY, 16L * DebugUtil.MEGABYTE, 0L);
+        // Default single-index shape (matches singleBaseTarget()); tests covering a base+rollup
+        // target list restub this via stubVisibleIndexMetas.
+        stubVisibleIndexMetas(BASE_INDEX_META_ID);
     }
 
     @AfterEach
@@ -88,10 +106,36 @@ public class DefaultPreSplitPipelineTest {
     }
 
     private DefaultPreSplitPipeline newPipeline(MetaTierSampler metaTierSampler, Sampler dataTierSampler, Clock clock) {
+        return newPipeline(singleBaseTarget(), metaTierSampler, dataTierSampler, clock);
+    }
+
+    private DefaultPreSplitPipeline newPipeline(List<IndexPreSplitTarget> indexTargets,
+            MetaTierSampler metaTierSampler, Sampler dataTierSampler, Clock clock) {
         return new DefaultPreSplitPipeline(
                 metaTierSampler, dataTierSampler, tabletReshardJobManager,
-                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES,
-                POLL_INTERVAL, clock);
+                database, table, indexTargets, FILE_TOTAL_BYTES,
+                POLL_INTERVAL, clock, null);
+    }
+
+    private static List<IndexPreSplitTarget> singleBaseTarget() {
+        return List.of(new IndexPreSplitTarget(BASE_INDEX_META_ID, OLD_TABLET_ID, BASE_SORT_KEY));
+    }
+
+    private static List<IndexPreSplitTarget> baseAndRollupTargets() {
+        return List.of(
+                new IndexPreSplitTarget(BASE_INDEX_META_ID, OLD_TABLET_ID, BASE_SORT_KEY),
+                new IndexPreSplitTarget(ROLLUP_INDEX_META_ID, ROLLUP_TABLET_ID, ROLLUP_SORT_KEY));
+    }
+
+    /** Stubs {@code table.getVisibleIndexMetas()} to the given index-meta ids, base first. */
+    private void stubVisibleIndexMetas(long... indexMetaIds) {
+        List<MaterializedIndexMeta> metas = new ArrayList<>();
+        for (long indexMetaId : indexMetaIds) {
+            MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+            when(meta.getIndexMetaId()).thenReturn(indexMetaId);
+            metas.add(meta);
+        }
+        when(table.getVisibleIndexMetas()).thenReturn(metas);
     }
 
     @Test
@@ -106,7 +150,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -130,7 +174,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -162,7 +206,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, fixedClock);
@@ -368,6 +412,286 @@ public class DefaultPreSplitPipelineTest {
         Assertions.assertTrue(ranges.get(1).getRange().isMaximum());
     }
 
+    // ---------- preSubmit: unified per-index plan ----------
+
+    @Test
+    public void preSubmit_singleIndex_buildsSingleEntryMapJob() throws Exception {
+        // A single-index target list (base only) builds one job from a single-entry
+        // {oldTabletId -> ranges} map.
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isPresent());
+            Assertions.assertSame(fakeJob, prepared.get().payload());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(1, map.size());
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
+        }
+    }
+
+    @Test
+    public void preSubmit_baseAndRollup_splitsBoth() throws Exception {
+        // Both the base and a rollup produce cuts -> the {oldTabletId -> ranges} map has two entries.
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isPresent());
+            Assertions.assertSame(fakeJob, prepared.get().payload());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(2, map.size());
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
+            Assertions.assertTrue(map.containsKey(ROLLUP_TABLET_ID));
+        }
+    }
+
+    @Test
+    public void preSubmit_rollupNoCuts_baseOnly() throws Exception {
+        // The rollup's own sort key yields NO_SPLIT while the base still produces cuts -- the
+        // map ends up with only the base entry (a base-only submit is allowed).
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) ->
+                request.getSortKey().equals(BASE_SORT_KEY) ? metaTierResult : BoundaryPlannerResult.NO_SPLIT;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isPresent(), "base-only cuts must still submit (allowed base-only)");
+            Assertions.assertSame(fakeJob, prepared.get().payload());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(1, map.size());
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
+        }
+    }
+
+    @Test
+    public void preSubmit_baseMetaTierRollupDataTier_bothPlanned() throws Exception {
+        // Per-index tier independence: the base's sort key reaches meta tier, the rollup's own
+        // sort key is meta-tier-unavailable and falls back to data tier -- both still contribute
+        // cuts to the combined map.
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            if (request.getSortKey().equals(BASE_SORT_KEY)) {
+                return metaTierResult;
+            }
+            throw new MetaTierUnavailableException("test: rollup meta tier unavailable");
+        };
+        Sampler dataTier = request -> new SampleSet(
+                List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
+                new Estimates(FILE_TOTAL_BYTES, 4L));
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isPresent());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(2, map.size(),
+                    "per-index tier independence: both base (meta) and rollup (data) must contribute cuts");
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
+            Assertions.assertTrue(map.containsKey(ROLLUP_TABLET_ID));
+        }
+    }
+
+    @Test
+    public void preSubmit_visibleIndexAppearedAfterSnapshot_skips() throws Exception {
+        // The eligibility snapshot only captured the base index, but a rollup has since become
+        // visible on the live table -- the final id-set re-check must detect the mismatch and
+        // skip entirely (never a base-only partial submit).
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isEmpty(), "a visible-index-set mismatch must skip, never a base-only submit");
+            mocked.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void preSubmit_noIndexCuts_returnsEmpty() throws Exception {
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> BoundaryPlannerResult.NO_SPLIT;
+        Sampler dataTier = request -> {
+            throw new AssertionError("data tier must not be invoked when meta tier returns NO_SPLIT");
+        };
+
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            DefaultPreSplitPipeline pipeline = newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+            Assertions.assertTrue(prepared.isEmpty());
+            mocked.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void preSubmit_recordsTierForFirstContributingIndexOnly() throws Exception {
+        // Base yields 1 boundary, rollup yields 2 -- if tier/boundary recording ran per-index
+        // instead of once for the first contributing index, the tier counter would bump by 2 and
+        // the histogram would also record the rollup's 2-boundary sample.
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult baseResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        BoundaryPlannerResult rollupResult = new BoundaryPlannerResult(List.of(bigintTuple(10), bigintTuple(20)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) ->
+                request.getSortKey().equals(BASE_SORT_KEY) ? baseResult : rollupResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        Histogram savedHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+        LongCounterMetric savedSamplerInvocations = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+        MetricRepo.hasInit = true;
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED =
+                new MetricRegistry().histogram("presubmit_records_tier_for_first_contributing_index_test");
+        // recordSamplerInvocation() (called unconditionally at the top of preSubmit) needs this
+        // non-null once hasInit is forced true; MetricRepo.init() is never run in this bare test.
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS =
+                new LongCounterMetric("presubmit_records_tier_for_first_contributing_index_test_invocations",
+                        MetricUnit.REQUESTS, "test-local sampler invocations");
+        try {
+            String tierLabel = DefaultPreSplitPipeline.TIER_LABEL_META_TIER;
+            long baselineTierCount = MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue();
+
+            TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
+                        .thenReturn(fakeJob);
+
+                DefaultPreSplitPipeline pipeline =
+                        newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+                pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
+
+            Assertions.assertEquals(baselineTierCount + 1,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue().longValue(),
+                    "tier_used must be recorded exactly once (first contributing index), not once per index");
+            Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount(),
+                    "boundaries_planned must be recorded exactly once (first contributing index)");
+            Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax(),
+                    "the recorded boundary count must be the base's (1), not the rollup's (2)");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = savedHistogram;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = savedSamplerInvocations;
+        }
+    }
+
+    @Test
+    public void preSubmit_baseNoCutsRollupCuts_recordsTierForRollup() throws Exception {
+        // The base's own sort key yields NO_SPLIT while the rollup still produces cuts -- a
+        // real (rollup-only) job is submitted, and the rollup must be the one recorded as the
+        // first contributing index (not zero recordings, since it is not literally index 0).
+        stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
+        BoundaryPlannerResult rollupResult = new BoundaryPlannerResult(List.of(bigintTuple(10), bigintTuple(20)));
+        MetaTierSampler metaTier = (request, requestedTabletCount) ->
+                request.getSortKey().equals(BASE_SORT_KEY) ? BoundaryPlannerResult.NO_SPLIT : rollupResult;
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        boolean savedHasInit = MetricRepo.hasInit;
+        Histogram savedHistogram = MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+        LongCounterMetric savedSamplerInvocations = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+        MetricRepo.hasInit = true;
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED =
+                new MetricRegistry().histogram("presubmit_base_no_cuts_rollup_cuts_test");
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS =
+                new LongCounterMetric("presubmit_base_no_cuts_rollup_cuts_test_invocations",
+                        MetricUnit.REQUESTS, "test-local sampler invocations");
+        try {
+            String tierLabel = DefaultPreSplitPipeline.TIER_LABEL_META_TIER;
+            long baselineTierCount = MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue();
+
+            TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+            try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+                mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                                eq(database), eq(table), any()))
+                        .thenReturn(fakeJob);
+
+                DefaultPreSplitPipeline pipeline =
+                        newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
+                Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                        pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+
+                Assertions.assertTrue(prepared.isPresent(),
+                        "rollup-only cuts must still submit (allowed base-no-cut/rollup-cut)");
+            }
+
+            Assertions.assertEquals(baselineTierCount + 1,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_TIER_USED.getMetric(tierLabel).getValue().longValue(),
+                    "tier_used must be recorded once for the rollup, the first (and only) contributing index");
+            Assertions.assertEquals(1, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getCount(),
+                    "boundaries_planned must be recorded once for the rollup, not skipped");
+            Assertions.assertEquals(2, MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED.getSnapshot().getMax(),
+                    "the recorded boundary count must be the rollup's (2)");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = savedHistogram;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = savedSamplerInvocations;
+        }
+    }
+
     @Test
     public void forLoadKindInsertFromTableSinglePartitionForcesDataTier() {
         // Unpartitioned OlapTable; forLoadKind with INSERT_FROM_TABLE must install a
@@ -378,7 +702,7 @@ public class DefaultPreSplitPipelineTest {
         when(table.getPartitionInfo()).thenReturn(partitionInfo);
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE);
+                database, table, singleBaseTarget(), FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE, null);
 
         Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> pipeline.getMetaTierSamplerForTest().tryPlan(sampleRequest, 3),

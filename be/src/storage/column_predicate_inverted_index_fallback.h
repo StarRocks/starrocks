@@ -19,7 +19,7 @@
 
 #include "roaring/roaring.hh"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 
@@ -64,9 +64,6 @@ public:
 
     // Access to the wrapped predicate
     const ColumnExprPredicate* wrapped_predicate() const { return _wrapped_predicate; }
-
-    // Forward to wrapped predicate
-    bool is_negated_expr() const;
 
     // Access to the segment-specific bitmap for optimization decisions
     const roaring::Roaring& get_bitmap() const { return _bitmap; }

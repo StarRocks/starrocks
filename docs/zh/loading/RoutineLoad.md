@@ -406,6 +406,99 @@ StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRo
 
 - 每条 Kafka 消息中应仅包含单条 Avro 数据。
 
+### 访问源消息元数据
+
+导入 JSON 或 Avro 格式数据时，您可以使用消息的 Kafka/Pulsar 元数据（topic、partition、offset、timestamp、key、headers）来填充目标列，而不是使用消息体。您在 `INCLUDE METADATA (...)` 子句中声明元数据，将每个元数据键绑定到一个别名；该别名作为普通的源列，可在 `COLUMNS` 中引用。
+
+这适用于审计（行来自哪个 topic/partition/offset）、事件时间处理（使用消息时间戳）以及按 header 值路由。
+
+#### 语法
+
+```SQL
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
+```
+
+`INCLUDE METADATA` 是一个导入属性；将它与其他导入属性（如 `COLUMNS` 和 `WHERE`）一起放置（顺序任意），位于 `PROPERTIES` 和 `FROM` 子句之前。`AS <alias>` 是可选的；如果省略，别名默认为 `<metadata_key>`。别名在子句内必须唯一，且不能与消息体字段、目标表列或保留列名冲突。
+
+#### 元数据键
+
+支持的键取决于数据源。
+
+| 数据源 | 键 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| KAFKA | `TOPIC` | VARCHAR | Topic 名称。 |
+| KAFKA | `PARTITION` | INT | Partition 编号。 |
+| KAFKA | `OFFSET` | BIGINT | 消息在 partition 内的 offset。 |
+| KAFKA | `TIMESTAMP_MS` | BIGINT | 记录时间戳（自纪元以来的毫秒数）。当 broker 未报告时间戳时为 `NULL`。 |
+| KAFKA | `KEY` | VARCHAR | 消息 key 的原始字节。当消息没有 key 时为 `NULL`。 |
+| KAFKA | `HEADERS` | MAP\<VARCHAR, VARCHAR> | 所有 header 组成的 map。键重复时，最后的值生效。 |
+| PULSAR | `TOPIC` | VARCHAR | 作业消费的逻辑 topic（不包含分区 topic 的 `-partition-N` 后缀）。 |
+| PULSAR | `PARTITION` | INT | 从每条消息的 topic 名称解析出的 partition 索引。非分区 topic 时为 `NULL`。 |
+| PULSAR | `KEY` | VARCHAR | 分区 key。当消息没有 key 时为 `NULL`。 |
+| PULSAR | `MESSAGE_ID` | VARCHAR | Message ID。 |
+| PULSAR | `PUBLISH_TIME_MS` | BIGINT | 发布时间（自纪元以来的毫秒数）。 |
+| PULSAR | `EVENT_TIME_MS` | BIGINT | 事件时间（自纪元以来的毫秒数）。当 producer 未设置时为 `NULL`。 |
+| PULSAR | `PROPERTIES` | MAP\<VARCHAR, VARCHAR> | 所有 property 组成的 map。键重复时，最后的值生效。 |
+
+如需读取单个 header/property 值，对 `HEADERS`/`PROPERTIES` map 使用 `element_at(<headers_alias>, '<name>')`：键重复时最后的值生效，键不存在时结果为 `NULL`。header/property 值以原始字节按原样放入 VARCHAR（不做 UTF-8 校验）。
+
+#### 使用说明
+
+- `INCLUDE METADATA` 适用于 `format = json`（Kafka 和 Pulsar）以及 `format = avro`（仅 Kafka；Pulsar Routine Load 不支持 Avro）。不支持 CSV，因为一条消息可能展开为多行，每条消息的元数据会产生歧义。
+- 元数据别名是普通的源列：可在 `COLUMNS` 表达式的任何位置引用。如果消息体字段与元数据键同名，请通过 `AS <alias>` 指定不同的别名以避免歧义。
+- `OFFSET` 仅适用于 Kafka，`MESSAGE_ID` 仅适用于 Pulsar；对数据源使用不支持的键会报错，错误信息会列出该数据源支持的键。
+- `HEADERS`/`PROPERTIES` 的类型是 `MAP\<VARCHAR, VARCHAR>`。源端的 header/property 是一个有序列表，键可能重复；重复键折叠进 map 时最后的值生效（`element_at(map, 'name')` 查找同样是最后值生效，键不存在时返回 `NULL`）。值以原始字节按原样存入 VARCHAR——不做 UTF-8 校验或解码。
+
+#### 示例
+
+将订单消息体字段 `order_id` 与来源 topic、partition、offset、转换为 `DATETIME` 的消息时间戳，以及一个 `trace-id` header 一起导入：
+
+```SQL
+CREATE TABLE example_db.orders_with_meta (
+    order_id      BIGINT,
+    src_topic     VARCHAR(256),
+    src_partition INT,
+    src_offset    BIGINT,
+    msg_time      DATETIME,
+    trace_id      VARCHAR(128)
+)
+ENGINE = OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id);
+
+CREATE ROUTINE LOAD example_db.orders_with_meta_job ON orders_with_meta
+INCLUDE METADATA
+(
+    TOPIC        AS m_topic,
+    PARTITION    AS m_partition,
+    OFFSET       AS m_offset,
+    TIMESTAMP_MS AS m_timestamp,
+    HEADERS      AS m_headers
+),
+COLUMNS
+(
+    order_id,
+    src_topic     = m_topic,
+    src_partition = m_partition,
+    src_offset    = m_offset,
+    msg_time      = from_unixtime(m_timestamp / 1000),
+    trace_id      = element_at(m_headers, 'trace-id')
+)
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.order_id\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "kafka_topic" = "topic_orders",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+元数据别名可用于表达式中（如上面的 `from_unixtime(m_timestamp / 1000)`）；`jsonpaths` 中只列出消息体列。
+
 ## 查看导入作业和任务
 
 ### 查看导入作业

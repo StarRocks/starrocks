@@ -58,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.starrocks.common.ErrorCode.ERR_ROUTINE_LOAD_OFFSET_INVALID;
@@ -192,6 +193,14 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         if ((routineLoadJob).getConfluentSchemaRegistryUrl() != null) {
             tKafkaLoadInfo.setConfluent_schema_registry_url((routineLoadJob).getConfluentSchemaRegistryUrl());
         }
+        // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
+        // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
+        // key/headers are gated more narrowly.
+        Set<RoutineLoadMetadata.StreamMetaKind> metaKinds = RoutineLoadMetadata.collectStreamMetaKinds(
+                routineLoadJob.getMetadata(), routineLoadJob.getDataSourceTypeName());
+        tKafkaLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
+        tKafkaLoadInfo.setNeed_message_key(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.KEY));
+        tKafkaLoadInfo.setNeed_message_headers(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setKafka_load_info(tKafkaLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.KAFKA);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
@@ -240,7 +249,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
-        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
+        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label, getBeId());
         if (tExecPlanFragmentParams.query_options.enable_profile) {
             StreamLoadTask streamLoadTask = (StreamLoadTask) GlobalStateMgr.getCurrentState().
                     getStreamLoadMgr().getTaskByLabel(label);

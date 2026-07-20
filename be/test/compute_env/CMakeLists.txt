@@ -41,6 +41,10 @@ set(COMPUTE_ENV_WORKGROUP_TEST_FILES
 
 set(COMPUTE_ENV_SPILL_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    load_spill/load_chunk_spiller_test.cpp
+    load_spill/load_spill_block_manager_test.cpp
+    load_spill/load_spill_block_merge_executor_test.cpp
     spill/operator_mem_resource_manager_test.cpp
     spill/query_spill_manager_test.cpp
     spill/spill_block_manager_test.cpp
@@ -76,7 +80,11 @@ add_executable(compute_env_test
         load_path_mgr_test.cpp
         profile_report_worker_test.cpp
         query/file_scan_split_context_test.cpp
+        query/fragment_runtime_state_test.cpp
+        query/partition_scan_range_pruner_test.cpp
+        query/query_scan_metrics_test.cpp
         query/query_scan_helpers_test.cpp
+        query/query_runtime_state_test.cpp
         query_cache_test.cpp
         rejected_record_writer_test.cpp
         result_queue_mgr_test.cpp
@@ -89,14 +97,15 @@ target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS})
 
 set(COMPUTE_ENV_SORTING_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
     sorting/sorted_chunks_merger_test.cpp
     sorting/sorting_test.cpp
 )
 
 set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
     ComputeEnv
-    ExprCore
-    RuntimeCore
+    Expr
+    Runtime
     ChunkCore
     ColumnCore
     Types

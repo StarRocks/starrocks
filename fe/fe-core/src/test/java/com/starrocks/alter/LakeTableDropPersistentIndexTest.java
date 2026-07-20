@@ -69,8 +69,10 @@ public class LakeTableDropPersistentIndexTest {
     @Test
     public void test() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t0(c0 INT, c1 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                    "BUCKETS 2 PROPERTIES('persistent_index_type'='LOCAL')");
-        
+                    "BUCKETS 2 PROPERTIES('enable_persistent_index'='true')");
+        // Simulate a legacy LOCAL persistent index table: creating one with LOCAL is no longer allowed.
+        table.setPersistentIndexType(TPersistentIndexType.LOCAL);
+
         List<Tablet> tablets = Lists.newArrayList();
         List<Partition> partitions = Lists.newArrayList();
         List<PhysicalPartition> physicalPartitions = Lists.newArrayList();

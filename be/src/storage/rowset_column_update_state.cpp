@@ -31,7 +31,6 @@
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
@@ -41,6 +40,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 

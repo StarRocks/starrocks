@@ -31,8 +31,6 @@
 #include "exec/pipeline/group_execution/group_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
@@ -42,6 +40,8 @@
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "exec/runtime/pipeline_builder_context.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/event.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline::builder {

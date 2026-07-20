@@ -340,7 +340,10 @@ public abstract class MVRefreshProcessor {
                 continue;
             }
             final TvrVersionRange pinned = TvrTableSnapshot.of(tvr.end());
-            pinnedMap.put(bti.getTableIdentifier(), pinned);
+            // Key by getUUID() — cross-db-unique and identical at every consumer
+            // (MVPCTRefreshPlanBuilder, PartitionDiffer#pinnedRangeFor). A bare table
+            // name would collide across databases.
+            pinnedMap.put(info.getBaseTable().getUUID(), pinned);
 
             if (info instanceof PCTTableSnapshotInfo) {
                 ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);

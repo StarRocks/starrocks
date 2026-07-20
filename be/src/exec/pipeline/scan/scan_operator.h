@@ -19,12 +19,12 @@
 #include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
@@ -128,6 +128,24 @@ protected:
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
+    struct ReusableChunkSourceLookup {
+        ChunkSourcePtr reusable_chunk_source = nullptr;
+        ChunkSourcePtr stale_chunk_source = nullptr;
+    };
+    enum class ReusableChunkSourceEvent { CANDIDATE, HIT, MISS, STALE_CLOSE, FAILURE };
+    virtual bool _can_reuse_chunk_source_for(Morsel& morsel) const { return false; }
+    virtual void _record_reusable_chunk_source_event(ReusableChunkSourceEvent /*event*/) {}
+    virtual bool _is_empty_slot_for_new_morsel(int /*chunk_source_index*/) const { return false; }
+    virtual ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                                                  Morsel& morsel) {
+        return {};
+    }
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
+        if (chunk_source != nullptr) {
+            chunk_source->close(state);
+        }
+    }
 
     virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
 

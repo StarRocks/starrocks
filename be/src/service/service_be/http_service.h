@@ -42,12 +42,15 @@
 namespace starrocks {
 
 class ExecEnv;
+class BatchWriteMgr;
 class DataCache;
 class EvHttpServer;
-class GlobalEnv;
+class RuntimeEnv;
 class HttpHandler;
 class LoadChannelMgr;
 class ProcessMetricsRegistry;
+class StreamLoadExecutor;
+class TransactionMgr;
 class WebPageHandler;
 
 namespace orchestration {
@@ -58,8 +61,9 @@ class OrchestrationEnv;
 class HttpServiceBE {
 public:
     HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
-                  const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
-                  LoadChannelMgr* load_channel_mgr, int port, int num_threads);
+                  const RuntimeEnv& runtime_env, ProcessMetricsRegistry* process_metrics_registry,
+                  LoadChannelMgr* load_channel_mgr, StreamLoadExecutor* stream_load_executor,
+                  TransactionMgr* transaction_mgr, BatchWriteMgr* batch_write_mgr, int port, int num_threads);
     ~HttpServiceBE();
 
     Status start();
@@ -70,9 +74,12 @@ private:
     [[maybe_unused]] DataCache* _cache_env;
     ExecEnv* _env;
     orchestration::OrchestrationEnv* _orchestration_env;
-    const GlobalEnv& _global_env;
+    const RuntimeEnv& _runtime_env;
     ProcessMetricsRegistry* _process_metrics_registry;
     LoadChannelMgr* _load_channel_mgr;
+    StreamLoadExecutor* _stream_load_executor;
+    TransactionMgr* _transaction_mgr;
+    BatchWriteMgr* _batch_write_mgr;
 
     std::unique_ptr<EvHttpServer> _ev_http_server;
     std::unique_ptr<WebPageHandler> _web_page_handler;

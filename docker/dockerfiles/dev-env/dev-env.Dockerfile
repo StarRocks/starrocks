@@ -32,7 +32,7 @@ ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
-FROM starrocks/toolchains-${distro}:main-20260616 as base
+FROM starrocks/toolchains-${distro}:main-20260707 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /

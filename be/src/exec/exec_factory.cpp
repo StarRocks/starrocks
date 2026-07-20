@@ -41,7 +41,7 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
 #include "exec/aggregate/distinct_blocking_node.h"

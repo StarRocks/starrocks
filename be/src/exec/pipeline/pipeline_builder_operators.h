@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "exec/pipeline/exchange/local_exchange.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {

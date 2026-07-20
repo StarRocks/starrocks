@@ -115,6 +115,7 @@ public class TimestampArithmeticExpr extends Expr {
     // Time units supported in timestamp arithmetic.
     public enum TimeUnit {
         YEAR("YEAR"),                               // YEARS
+        QUARTER("QUARTER"),                         // QUARTERS
         MONTH("MONTH"),                             // MONTHS
         WEEK("WEEK"),                               // WEEKS
         DAY("DAY"),                                 // DAYS

@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/exec_env.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
@@ -49,8 +50,7 @@
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/ev_http_server.h"
 #include "platform/http/http_handler.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"
@@ -59,10 +59,10 @@
 namespace starrocks {
 
 // Tests only call required_privilege() / need_auth() — const lookups that don't
-// touch the stored GlobalEnv&. The process-wide singleton is the cheapest valid
+// touch the stored RuntimeEnv&. The process-wide singleton is the cheapest valid
 // reference that won't crash if a future override accidentally dereferences it.
-static const GlobalEnv& fake_global_env() {
-    return *GlobalEnv::GetInstance();
+static const RuntimeEnv& fake_runtime_env() {
+    return *RuntimeEnv::GetInstance();
 }
 
 using Priv = HttpHandler::RequiredPrivilege;
@@ -91,7 +91,7 @@ TEST(BeHandlerPrivilegeTest, compaction_requires_OPERATE_all_subtypes) {
 }
 
 TEST(BeHandlerPrivilegeTest, checksum_requires_OPERATE) {
-    ChecksumAction h(fake_global_env());
+    ChecksumAction h(fake_runtime_env());
     EXPECT_EQ(Priv::OPERATE, h.required_privilege());
 }
 
@@ -204,14 +204,14 @@ TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_are_authn_only) {
     EXPECT_EQ(Priv::NONE, HealthAction(nullptr).required_privilege());
     EXPECT_TRUE(MetricsAction(nullptr).need_auth());
     EXPECT_EQ(Priv::NONE, MetricsAction(nullptr).required_privilege());
-    EXPECT_TRUE(MemoryMetricsAction(fake_global_env()).need_auth());
-    EXPECT_EQ(Priv::NONE, MemoryMetricsAction(fake_global_env()).required_privilege());
+    EXPECT_TRUE(MemoryMetricsAction(fake_runtime_env()).need_auth());
+    EXPECT_EQ(Priv::NONE, MemoryMetricsAction(fake_runtime_env()).required_privilege());
 }
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
     ExecEnv env;
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
+    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -219,11 +219,11 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // Both transaction-management endpoints opt out of the framework Basic-Auth
     // gate — they use a label-bound session model (begin parses Basic, later ops
     // look up the StreamLoadContext by label).
-    TransactionManagerAction txn_mgr(nullptr);
+    TransactionManagerAction txn_mgr(nullptr, nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
     ExecEnv env;
     orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
-    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

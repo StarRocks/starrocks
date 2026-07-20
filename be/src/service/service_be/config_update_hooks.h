@@ -17,9 +17,11 @@
 namespace starrocks {
 
 class ExecEnv;
-class GlobalEnv;
+class BatchWriteMgr;
+class RuntimeEnv;
 class LoadChannelMgr;
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr);
+void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr,
+                                  BatchWriteMgr* batch_write_mgr);
 
 } // namespace starrocks

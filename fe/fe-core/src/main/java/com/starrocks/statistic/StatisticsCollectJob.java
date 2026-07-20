@@ -299,6 +299,12 @@ public abstract class StatisticsCollectJob {
         return sw.toString();
     }
 
+    // Histogram buckets of String/char-family columns are not used in the optimizer currently, so skip the
+    // histogram() bucket aggregate for them and store only MCVs.
+    protected static boolean shouldSkipHistogramBuckets(Type columnType) {
+        return columnType.getPrimitiveType().isCharFamily();
+    }
+
     public static Expr hllDeserialize(byte[] hll) {
         String str = new String(hll, StandardCharsets.UTF_8);
         Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {VarcharType.VARCHAR},

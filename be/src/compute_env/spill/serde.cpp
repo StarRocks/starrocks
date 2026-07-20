@@ -104,6 +104,12 @@ size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
 
 Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const ChunkPtr& chunk,
                                 const SpillOutputDataStreamPtr& output, bool aligned) {
+    // Defense in depth: prepare() must have created the encode context before any serialize()
+    // call. Return an error instead of dereferencing a null context in _get_encode_levels()
+    // (which would crash the process), mirroring the existing null guard in _max_serialized_size().
+    if (_encode_context == nullptr) {
+        return Status::InternalError("ColumnarSerde::serialize() called before prepare(): encode context is null");
+    }
     raw::RawString& serialize_buffer = ctx.serialize_buffer;
     {
         SCOPED_TIMER(_parent->metrics().serialize_timer);

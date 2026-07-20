@@ -365,6 +365,7 @@ struct TQueryOptions {
   171: optional bool enable_parquet_reader_page_index;
   
   180: optional bool lower_upper_support_utf8;
+  181: optional bool ngram_search_support_utf8;
 
   190: optional i64 column_view_concat_rows_limit;
   191: optional i64 column_view_concat_bytes_limit;
@@ -417,6 +418,11 @@ struct TQueryOptions {
   222: optional i64 topn_back_pressure_num_rows = 1024;
   223: optional i64 topn_back_pressure_throttle_time_ms = 8;
   224: optional i64 topn_back_pressure_throttle_time_upper_bound_ms = 100;
+
+  // The lake prepared-physical-split scan treats an oversized tablet as a long-tail straggler (and splits
+  // it even when the scan-range count already reaches pipeline_dop) once its rows exceed this ratio times
+  // the per-driver ideal share. Only affects enable_lake_prepared_physical_split_scan. Default 1.5.
+  225: optional double lake_tablet_internal_parallel_skew_split_ratio = 1.5;
 }
 
 // A scan range plus the parameters needed to execute that scan.

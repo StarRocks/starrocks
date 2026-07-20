@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableFunctionTable;
@@ -31,6 +32,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -121,9 +123,11 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
-                    LoadKind.INSERT_FROM_FILES);
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
+                    LoadKind.INSERT_FROM_FILES, null);
 
             // Drive the partitioned meta-tier sampler directly via reflection over the
             // package-private field. Then verify it raises MetaTierUnavailableException
@@ -159,9 +163,11 @@ public class InsertPreSplitHookFilesPartitionedTest {
             when(globalState.getTabletReshardJobMgr()).thenReturn(mock(TabletReshardJobMgr.class));
             gsm.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
+            List<IndexPreSplitTarget> indexTargets = List.of(
+                    new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 99L, List.of(bigintColumn("ts"))));
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                    database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
-                    LoadKind.INSERT_FROM_FILES);
+                    database, table, indexTargets, /*fileTotalBytes*/ 1024L,
+                    LoadKind.INSERT_FROM_FILES, null);
 
             java.lang.reflect.Field metaField = DefaultPreSplitPipeline.class.getDeclaredField("metaTierSampler");
             metaField.setAccessible(true);
@@ -228,17 +234,56 @@ public class InsertPreSplitHookFilesPartitionedTest {
                         (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
             grouper.when(() -> PartitionSampleGrouper.group(
                             any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
-                            anyLong(), anyLong()))
+                            anyLong(), anyLong(), any()))
                     .thenReturn(List.of(mock(PartitionSamples.class)));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
         }
+    }
+
+    // ---------- Secondary index spec construction ----------
+
+    @Test
+    public void buildSecondaryIndexSpecsIncludesEveryRollupExceptBase() {
+        // A target with a base index (id 1) and one rollup (id 2) must produce exactly
+        // one SecondaryIndexSpec for the rollup, carrying its own (divergent) sort key.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getIndexMetaId()).thenReturn(2L);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
+
+        List<Column> rollupSortKey = List.of(bigintColumn("r"));
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, 2L)).thenReturn(rollupSortKey);
+
+            List<SecondaryIndexSpec> specs = FilesPreSplitSource.buildSecondaryIndexSpecs(table);
+
+            Assertions.assertEquals(1, specs.size(), "exactly one rollup spec expected");
+            Assertions.assertEquals(2L, specs.get(0).indexMetaId());
+            Assertions.assertEquals(rollupSortKey, specs.get(0).sortKey());
+        }
+    }
+
+    @Test
+    public void buildSecondaryIndexSpecsEmptyForSingleIndexTarget() {
+        // A single-index (base only) target must produce no secondary specs.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseIndexMetaId()).thenReturn(1L);
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(1L);
+        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+
+        Assertions.assertTrue(FilesPreSplitSource.buildSecondaryIndexSpecs(table).isEmpty(),
+                "a single-index target must produce no secondary index specs");
     }
 
     /**
@@ -248,7 +293,7 @@ public class InsertPreSplitHookFilesPartitionedTest {
      */
     private static PreSplitFlow.Prepared filesPrepared() {
         InsertFromFilesScanContext scanContext =
-                new InsertFromFilesScanContext(mock(TableFunctionTable.class), mock(ComputeResource.class));
+                new InsertFromFilesScanContext(mock(TableFunctionTable.class), mock(ComputeResource.class), "UTC");
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         List<Column> partitionColumns = List.of(bigintColumn("p_col"));
         return new PreSplitFlow.Prepared(scanContext, sortKey, partitionColumns,

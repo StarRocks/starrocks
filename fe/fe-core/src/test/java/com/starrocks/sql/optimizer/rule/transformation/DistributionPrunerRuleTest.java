@@ -264,7 +264,7 @@ public class DistributionPrunerRuleTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+            public List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId) {
                 return columns;
             }
         };

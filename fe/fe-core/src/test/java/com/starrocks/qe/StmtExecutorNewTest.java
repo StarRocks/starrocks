@@ -52,17 +52,17 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     public void testIsExplainTrace() throws Exception {
         // Test case 1: Normal explain statement without trace
         StatementBase stmt = parse("explain select * from t1");
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainTrace());
 
         // Test case 2: Explain statement with trace
         stmt = parse("trace logs optimizer select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertTrue(stmt.isExplainTrace());
 
         // Test case 3: Normal statement (not explain)
         stmt = parse("select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainTrace());
     }
 
@@ -70,17 +70,17 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     public void testIsExplainAnalyze() throws Exception {
         // Test case 1: Normal explain statement
         StatementBase stmt = parse("explain select * from t1");
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainAnalyze());
 
         // Test case 2: Explain analyze statement
         stmt = parse("explain analyze select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertTrue(stmt.isExplainAnalyze());
 
         // Test case 3: Explain statement with different level
         stmt = parse("explain verbose select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainAnalyze());
     }
 

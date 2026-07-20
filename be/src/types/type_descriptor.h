@@ -44,6 +44,13 @@ struct TypeDescriptor {
     int precision{-1};
     int scale{-1};
 
+    /// Only meaningful for TYPE_DATETIME read from lake formats that distinguish
+    /// timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    /// as metadata and does NOT participate in type identity (operator==, hashing, etc.).
+    /// Default false means "shift a UTC instant into the session timezone" (Hive / Iceberg /
+    /// Paimon LTZ); true means the value is a naive wall clock that must NOT be shifted.
+    bool datetime_is_ntz{false};
+
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 76;
     static const int MAX_SCALE = MAX_PRECISION;

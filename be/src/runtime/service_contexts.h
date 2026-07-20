@@ -20,7 +20,6 @@ namespace starrocks {
 
 class AgentServer;
 class BackendServiceClient;
-class BatchWriteMgr;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
@@ -37,11 +36,10 @@ class RuntimeFilterQueryLifecycle;
 class RuntimeFilterSender;
 class StorePathRegistry;
 class StreamContextMgr;
-class StreamLoadExecutor;
 class TFileBrokerServiceClient;
 class ThreadPool;
-class TransactionMgr;
 class FrontendServiceClient;
+class LoadSpillBlockMergeExecutor;
 class MetricRegistry;
 template <class T>
 class ClientCache;
@@ -79,7 +77,6 @@ struct ExecutionEnv {
     ThreadPool* load_rowset_thread_pool = nullptr;
     ThreadPool* load_segment_thread_pool = nullptr;
     ThreadPool* put_combined_txn_log_thread_pool = nullptr;
-    PriorityThreadPool* udf_call_pool = nullptr;
     PriorityThreadPool* pipeline_prepare_pool = nullptr;
     PriorityThreadPool* pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* query_rpc_pool = nullptr;
@@ -118,9 +115,6 @@ struct RuntimeServices {
     BaseLoadPathMgr* load_path_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;
-    TransactionMgr* transaction_mgr = nullptr;
-    BatchWriteMgr* batch_write_mgr = nullptr;
-    StreamLoadExecutor* stream_load_executor = nullptr;
     RuntimeFilterSender* runtime_filter_sender = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;
@@ -129,6 +123,7 @@ struct RuntimeServices {
     query_cache::CacheManager* cache_mgr = nullptr;
     spill::DirManager* spill_dir_mgr = nullptr;
     spill::GlobalSpillManager* global_spill_manager = nullptr;
+    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor = nullptr;
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor = nullptr;
     DiagnoseDaemon* diagnose_daemon = nullptr;
 };
