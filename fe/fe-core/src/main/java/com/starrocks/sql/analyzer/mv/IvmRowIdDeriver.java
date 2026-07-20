@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer.mv;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -35,11 +36,12 @@ import java.util.List;
  * <ul>
  *   <li>{@link SelectRelation}: a projection / filter forwards the FROM relation's identity.
  *   <li>cloud-native PRIMARY KEY {@link TableRelation}: its primary key columns.
+ *   <li>inner/cross {@link JoinRelation}: both sides' row-id keys concatenated.
  * </ul>
  *
- * <p>Any other shape (join, sub-query, union, aggregate group-by, ...) returns {@code null}: it is not a
- * maintainable retractable shape in this projection/filter foundation, so the analyzer rejects it at CREATE.
- * Those cases are added by the follow-up retraction PRs (aggregate, join, union, derived table).
+ * <p>Any other shape (sub-query, union, outer join, ...) returns {@code null}: it is not a maintainable
+ * retractable shape yet, so the analyzer rejects it at CREATE. Those cases are added by the follow-up
+ * retraction PRs (union, derived table).
  */
 public final class IvmRowIdDeriver {
 
@@ -52,6 +54,9 @@ public final class IvmRowIdDeriver {
         }
         if (relation instanceof TableRelation) {
             return derivePrimaryKeyColumns((TableRelation) relation);
+        }
+        if (relation instanceof JoinRelation) {
+            return deriveJoinKeys((JoinRelation) relation);
         }
         // Any other shape returns null and is rejected at the analyzer gate (see class doc).
         return null;
@@ -77,5 +82,21 @@ public final class IvmRowIdDeriver {
             }
         }
         return keys.isEmpty() ? null : keys;
+    }
+
+    private static List<Expr> deriveJoinKeys(JoinRelation joinRelation) {
+        // Identity of a join row = both sides' row ids concatenated. Only inner/cross are maintainable
+        // (rewriteRelation rejects other join types); a side without a row id (e.g. append-only base) is not.
+        if (!IVMAnalyzer.IVM_SUPPORTED_JOIN_OPS.contains(joinRelation.getJoinOp())) {
+            return null;
+        }
+        List<Expr> leftKeys = deriveRowIdKeys(joinRelation.getLeft());
+        List<Expr> rightKeys = deriveRowIdKeys(joinRelation.getRight());
+        if (leftKeys == null || rightKeys == null) {
+            return null;
+        }
+        List<Expr> keys = new ArrayList<>(leftKeys);
+        keys.addAll(rightKeys);
+        return keys;
     }
 }

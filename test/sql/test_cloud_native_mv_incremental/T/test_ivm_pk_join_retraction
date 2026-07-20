@@ -1,0 +1,258 @@
+-- name: test_ivm_pk_join_retraction @cloud
+-- Top-level inner join of two cloud-native PRIMARY KEY bases, retractable refresh. The MV row id is the
+-- concatenation of both sides' primary keys, so an update on either side re-emits the joined row and a
+-- delete on either side drops the joined rows that row participated in. Oracle: the MV equals a full
+-- recompute of the join, diff=0 both ways.
+CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_ja VALUES (1,10),(2,20),(3,30);
+INSERT INTO pk_jb VALUES (1,100),(2,200),(4,400);
+CREATE MATERIALIZED VIEW mv_pk_join
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_ja a JOIN pk_jb b ON a.id = b.id;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- update a left-side value: the joined row re-emits with the new v
+UPDATE pk_ja SET v = 11 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- update a right-side value: the joined row re-emits with the new w
+UPDATE pk_jb SET w = 222 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- delete a left-side row: its joined row disappears
+DELETE FROM pk_ja WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- insert a right-side row that makes a previously-unmatched left row (id=3) join
+INSERT INTO pk_jb VALUES (3,300);
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- delete that right-side row again: the joined row disappears
+DELETE FROM pk_jb WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- insert a left-side row that matches an existing unmatched right row (id=4)
+INSERT INTO pk_ja VALUES (4,40);
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- oracle: MV equals a full recompute of the join, diff=0 both ways
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_join EXCEPT SELECT a.id,a.v,b.w FROM pk_ja a JOIN pk_jb b ON a.id=b.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_ja a JOIN pk_jb b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_join) t;
+DROP MATERIALIZED VIEW mv_pk_join;
+DROP TABLE pk_ja;
+DROP TABLE pk_jb;
+
+-- name: test_ivm_pk_three_table_join_retraction @cloud
+-- Three-table inner join: the row id concatenates all three primary keys. A delete on the middle table
+-- drops every joined row that used it; a value update on any table re-emits the joined row.
+CREATE TABLE pk_ta (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_tb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_tc (id INT NOT NULL, x BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_ta VALUES (1,10),(2,20);
+INSERT INTO pk_tb VALUES (1,100),(2,200);
+INSERT INTO pk_tc VALUES (1,1000),(2,2000);
+CREATE MATERIALIZED VIEW mv_pk_join3
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw, c.x AS cx
+   FROM pk_ta a JOIN pk_tb b ON a.id = b.id JOIN pk_tc c ON b.id = c.id;
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- delete a middle-table row: every joined row that used it disappears
+DELETE FROM pk_tb WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- update a value on the third table
+UPDATE pk_tc SET x = 2222 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- oracle
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw,cx FROM mv_pk_join3 EXCEPT SELECT a.id,a.v,b.w,c.x FROM pk_ta a JOIN pk_tb b ON a.id=b.id JOIN pk_tc c ON b.id=c.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w,c.x FROM pk_ta a JOIN pk_tb b ON a.id=b.id JOIN pk_tc c ON b.id=c.id EXCEPT SELECT aid,av,bw,cx FROM mv_pk_join3) t;
+DROP MATERIALIZED VIEW mv_pk_join3;
+DROP TABLE pk_ta;
+DROP TABLE pk_tb;
+DROP TABLE pk_tc;
+
+-- name: test_ivm_pk_cross_join_retraction @cloud
+-- Top-level CROSS join (cartesian product) of two cloud-native PRIMARY KEY bases, retractable refresh, with a
+-- filter over the join. The row id concatenates both primary keys, so an update on either side re-emits every
+-- product row that base row produced and a delete drops them. Oracle: the MV equals a full recompute, diff=0.
+CREATE TABLE pk_ca (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_cb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_ca VALUES (1,10),(2,20);
+INSERT INTO pk_cb VALUES (1,100),(2,200);
+CREATE MATERIALIZED VIEW mv_pk_cross
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.id AS bid, b.w AS bw FROM pk_ca a, pk_cb b WHERE a.v > 0;
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- update a left-side value: every product row for that left row re-emits with the new v
+UPDATE pk_ca SET v = 11 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- delete a right-side row: every product row that used it disappears
+DELETE FROM pk_cb WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- insert a left-side row: it forms a product row with every existing right row
+INSERT INTO pk_ca VALUES (3,30);
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- delete a left-side row: its product rows disappear
+DELETE FROM pk_ca WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- oracle: MV equals a full recompute of the filtered cross join, diff=0 both ways
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bid,bw FROM mv_pk_cross EXCEPT SELECT a.id,a.v,b.id,b.w FROM pk_ca a, pk_cb b WHERE a.v>0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.id,b.w FROM pk_ca a, pk_cb b WHERE a.v>0 EXCEPT SELECT aid,av,bid,bw FROM mv_pk_cross) t;
+DROP MATERIALIZED VIEW mv_pk_cross;
+DROP TABLE pk_ca;
+DROP TABLE pk_cb;
+
+-- name: test_ivm_pk_join_multichange_retraction @cloud
+-- Both sides of the join change the same key within one refresh interval. The join delta emits an
+-- intermediate row (new left x old right) alongside the final row under the same __ROW_ID__; net-collapse
+-- must cancel the intermediate so the MV keeps only the final joined value. Oracle: diff=0 both ways.
+CREATE TABLE pk_ma (id INT NOT NULL, v BIGINT, z BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_mb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_ma VALUES (1,10,0),(2,20,0),(3,30,0);
+INSERT INTO pk_mb VALUES (1,100),(2,200),(3,300);
+CREATE MATERIALIZED VIEW mv_pk_mc
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_ma a JOIN pk_mb b ON a.id = b.id;
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- both sides update the same key in one interval: the row must land on the final (11,222), not a stale mix
+UPDATE pk_ma SET v = 11 WHERE id = 1;
+UPDATE pk_mb SET w = 222 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- one side updates while the other deletes the same key: the joined row disappears
+UPDATE pk_ma SET v = 21 WHERE id = 2;
+DELETE FROM pk_mb WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- one side deletes while the other updates the same key: still gone
+DELETE FROM pk_ma WHERE id = 3;
+UPDATE pk_mb SET w = 333 WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- update a NON-projected column on the surviving side while deleting the other side of the same key: the
+-- delta emits one INSERT and two DELETEs under one row id (net -1), and the row must be deleted, not
+-- resurrected by the stray INSERT
+UPDATE pk_ma SET z = 99 WHERE id = 1;
+DELETE FROM pk_mb WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- oracle: MV equals a full recompute of the join, diff=0 both ways
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_mc EXCEPT SELECT a.id,a.v,b.w FROM pk_ma a JOIN pk_mb b ON a.id=b.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_ma a JOIN pk_mb b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_mc) t;
+DROP MATERIALIZED VIEW mv_pk_mc;
+DROP TABLE pk_ma;
+DROP TABLE pk_mb;
+
+-- name: test_ivm_pk_join_dupinsert_retraction @cloud
+-- One side updates a projected value while the other updates only a non-projected column of the same key.
+-- Both join branches then emit the same projected tuple as an INSERT (net +1 over one row id); the duplicate
+-- must collapse to a single UPSERT of the final value. Oracle: diff=0 both ways.
+CREATE TABLE pk_da (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_db (id INT NOT NULL, w BIGINT, q BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_da VALUES (1,10);
+INSERT INTO pk_db VALUES (1,100,0);
+CREATE MATERIALIZED VIEW mv_pk_di
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_da a JOIN pk_db b ON a.id = b.id;
+REFRESH MATERIALIZED VIEW mv_pk_di WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_di ORDER BY aid;
+-- projected update on the left, non-projected update on the right (bw stays 100): the branches duplicate the
+-- final tuple as an INSERT, and the collapse must keep exactly one row
+UPDATE pk_da SET v = 11 WHERE id = 1;
+UPDATE pk_db SET q = 9 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_di WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_di ORDER BY aid;
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_di EXCEPT SELECT a.id,a.v,b.w FROM pk_da a JOIN pk_db b ON a.id=b.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_da a JOIN pk_db b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_di) t;
+DROP MATERIALIZED VIEW mv_pk_di;
+DROP TABLE pk_da;
+DROP TABLE pk_db;
+
+-- name: test_ivm_pk_join_nonpk_key_retraction @cloud
+-- The join key is a non-primary-key column, so updating it moves a row from one partner to another and the
+-- row id (which concatenates both primary keys) changes: the old joined row is deleted and a new one
+-- inserted rather than updated in place. Oracle: diff=0 both ways.
+CREATE TABLE pk_ka (id INT NOT NULL, fk INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_kb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_ka VALUES (1,10,500);
+INSERT INTO pk_kb VALUES (10,100),(20,200);
+CREATE MATERIALIZED VIEW mv_pk_kk
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.id AS bid, b.w AS bw FROM pk_ka a JOIN pk_kb b ON a.fk = b.id;
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+-- move the row to a different partner: the old row id disappears and a new one appears
+UPDATE pk_ka SET fk = 20 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+-- move back while the new partner also updates in the same interval
+UPDATE pk_ka SET fk = 10 WHERE id = 1;
+UPDATE pk_kb SET w = 111 WHERE id = 10;
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bid,bw FROM mv_pk_kk EXCEPT SELECT a.id,a.v,b.id,b.w FROM pk_ka a JOIN pk_kb b ON a.fk=b.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.id,b.w FROM pk_ka a JOIN pk_kb b ON a.fk=b.id EXCEPT SELECT aid,av,bid,bw FROM mv_pk_kk) t;
+DROP MATERIALIZED VIEW mv_pk_kk;
+DROP TABLE pk_ka;
+DROP TABLE pk_kb;
+
+-- name: test_ivm_pk_self_join_retraction @cloud
+-- Self-join: one cloud-native PRIMARY KEY base joined to itself, so a single base row can appear on both
+-- sides of a pair. A change to that row must propagate through both scans of the delta; the row id
+-- concatenates the two primary keys. Oracle: diff=0 both ways.
+CREATE TABLE pk_sj (id INT NOT NULL, fk INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_sj VALUES (1,2,10),(2,2,20),(3,1,30);
+CREATE MATERIALIZED VIEW mv_pk_sj
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, a2.id AS a2id, a2.v AS a2v FROM pk_sj a JOIN pk_sj a2 ON a.fk = a2.id;
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+-- update a row that is both a driving row and a partner of others: every occurrence on either side re-emits
+UPDATE pk_sj SET v = 99 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+-- delete a row used as a partner: every pair that referenced it on either side disappears
+DELETE FROM pk_sj WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,a2id,a2v FROM mv_pk_sj EXCEPT SELECT a.id,a.v,a2.id,a2.v FROM pk_sj a JOIN pk_sj a2 ON a.fk=a2.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,a2.id,a2.v FROM pk_sj a JOIN pk_sj a2 ON a.fk=a2.id EXCEPT SELECT aid,av,a2id,a2v FROM mv_pk_sj) t;
+DROP MATERIALIZED VIEW mv_pk_sj;
+DROP TABLE pk_sj;

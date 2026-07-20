@@ -335,6 +335,7 @@ public class IVMAnalyzer {
         // block already has a row id. A nested input can also make the query row-id-computed.
         boolean hasComputedRowId = rowIdOnOutput | rewriteRelation(innerRelation);
         IvmRetractableAdmission.requirePkBaseHasRowId(selectRelation, rowIdOnOutput);
+        IvmRetractableAdmission.requireOrderableJoinOutput(selectRelation, rowIdOnOutput, isAggregate);
         return hasComputedRowId;
     }
 

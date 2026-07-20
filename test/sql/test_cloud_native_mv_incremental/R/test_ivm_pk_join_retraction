@@ -1,0 +1,519 @@
+-- name: test_ivm_pk_join_retraction @cloud
+CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ja VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+INSERT INTO pk_jb VALUES (1,100),(2,200),(4,400);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_join
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_ja a JOIN pk_jb b ON a.id = b.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+1	10	100
+2	20	200
+-- !result
+UPDATE pk_ja SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+1	11	100
+2	20	200
+-- !result
+UPDATE pk_jb SET w = 222 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+1	11	100
+2	20	222
+-- !result
+DELETE FROM pk_ja WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+2	20	222
+-- !result
+INSERT INTO pk_jb VALUES (3,300);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+2	20	222
+3	30	300
+-- !result
+DELETE FROM pk_jb WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+2	20	222
+-- !result
+INSERT INTO pk_ja VALUES (4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_join ORDER BY aid;
+-- result:
+2	20	222
+4	40	400
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_join EXCEPT SELECT a.id,a.v,b.w FROM pk_ja a JOIN pk_jb b ON a.id=b.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_ja a JOIN pk_jb b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_join) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_join;
+-- result:
+-- !result
+DROP TABLE pk_ja;
+-- result:
+-- !result
+DROP TABLE pk_jb;
+-- result:
+-- !result
+-- name: test_ivm_pk_three_table_join_retraction @cloud
+CREATE TABLE pk_ta (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_tb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_tc (id INT NOT NULL, x BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ta VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_tb VALUES (1,100),(2,200);
+-- result:
+-- !result
+INSERT INTO pk_tc VALUES (1,1000),(2,2000);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_join3
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw, c.x AS cx
+   FROM pk_ta a JOIN pk_tb b ON a.id = b.id JOIN pk_tc c ON b.id = c.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- result:
+1	10	100	1000
+2	20	200	2000
+-- !result
+DELETE FROM pk_tb WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- result:
+2	20	200	2000
+-- !result
+UPDATE pk_tc SET x = 2222 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_join3 WITH SYNC MODE;
+SELECT aid, av, bw, cx FROM mv_pk_join3 ORDER BY aid;
+-- result:
+2	20	200	2222
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw,cx FROM mv_pk_join3 EXCEPT SELECT a.id,a.v,b.w,c.x FROM pk_ta a JOIN pk_tb b ON a.id=b.id JOIN pk_tc c ON b.id=c.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w,c.x FROM pk_ta a JOIN pk_tb b ON a.id=b.id JOIN pk_tc c ON b.id=c.id EXCEPT SELECT aid,av,bw,cx FROM mv_pk_join3) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_join3;
+-- result:
+-- !result
+DROP TABLE pk_ta;
+-- result:
+-- !result
+DROP TABLE pk_tb;
+-- result:
+-- !result
+DROP TABLE pk_tc;
+-- result:
+-- !result
+-- name: test_ivm_pk_cross_join_retraction @cloud
+CREATE TABLE pk_ca (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_cb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ca VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_cb VALUES (1,100),(2,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_cross
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.id AS bid, b.w AS bw FROM pk_ca a, pk_cb b WHERE a.v > 0;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- result:
+1	10	1	100
+1	10	2	200
+2	20	1	100
+2	20	2	200
+-- !result
+UPDATE pk_ca SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- result:
+1	11	1	100
+1	11	2	200
+2	20	1	100
+2	20	2	200
+-- !result
+DELETE FROM pk_cb WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- result:
+1	11	1	100
+2	20	1	100
+-- !result
+INSERT INTO pk_ca VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- result:
+1	11	1	100
+2	20	1	100
+3	30	1	100
+-- !result
+DELETE FROM pk_ca WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_cross WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_cross ORDER BY aid, bid;
+-- result:
+1	11	1	100
+3	30	1	100
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bid,bw FROM mv_pk_cross EXCEPT SELECT a.id,a.v,b.id,b.w FROM pk_ca a, pk_cb b WHERE a.v>0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.id,b.w FROM pk_ca a, pk_cb b WHERE a.v>0 EXCEPT SELECT aid,av,bid,bw FROM mv_pk_cross) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_cross;
+-- result:
+-- !result
+DROP TABLE pk_ca;
+-- result:
+-- !result
+DROP TABLE pk_cb;
+-- result:
+-- !result
+-- name: test_ivm_pk_join_multichange_retraction @cloud
+CREATE TABLE pk_ma (id INT NOT NULL, v BIGINT, z BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_mb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ma VALUES (1,10,0),(2,20,0),(3,30,0);
+-- result:
+-- !result
+INSERT INTO pk_mb VALUES (1,100),(2,200),(3,300);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_mc
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_ma a JOIN pk_mb b ON a.id = b.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+UPDATE pk_ma SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_mb SET w = 222 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- result:
+1	11	222
+2	20	200
+3	30	300
+-- !result
+UPDATE pk_ma SET v = 21 WHERE id = 2;
+-- result:
+-- !result
+DELETE FROM pk_mb WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- result:
+1	11	222
+3	30	300
+-- !result
+DELETE FROM pk_ma WHERE id = 3;
+-- result:
+-- !result
+UPDATE pk_mb SET w = 333 WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- result:
+1	11	222
+-- !result
+UPDATE pk_ma SET z = 99 WHERE id = 1;
+-- result:
+-- !result
+DELETE FROM pk_mb WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_mc WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_mc ORDER BY aid;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_mc EXCEPT SELECT a.id,a.v,b.w FROM pk_ma a JOIN pk_mb b ON a.id=b.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_ma a JOIN pk_mb b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_mc) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_mc;
+-- result:
+-- !result
+DROP TABLE pk_ma;
+-- result:
+-- !result
+DROP TABLE pk_mb;
+-- result:
+-- !result
+-- name: test_ivm_pk_join_dupinsert_retraction @cloud
+CREATE TABLE pk_da (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_db (id INT NOT NULL, w BIGINT, q BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_da VALUES (1,10);
+-- result:
+-- !result
+INSERT INTO pk_db VALUES (1,100,0);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_di
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.w AS bw FROM pk_da a JOIN pk_db b ON a.id = b.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_di WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_di ORDER BY aid;
+-- result:
+1	10	100
+-- !result
+UPDATE pk_da SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_db SET q = 9 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_di WITH SYNC MODE;
+SELECT aid, av, bw FROM mv_pk_di ORDER BY aid;
+-- result:
+1	11	100
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bw FROM mv_pk_di EXCEPT SELECT a.id,a.v,b.w FROM pk_da a JOIN pk_db b ON a.id=b.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.w FROM pk_da a JOIN pk_db b ON a.id=b.id EXCEPT SELECT aid,av,bw FROM mv_pk_di) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_di;
+-- result:
+-- !result
+DROP TABLE pk_da;
+-- result:
+-- !result
+DROP TABLE pk_db;
+-- result:
+-- !result
+-- name: test_ivm_pk_join_nonpk_key_retraction @cloud
+CREATE TABLE pk_ka (id INT NOT NULL, fk INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_kb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ka VALUES (1,10,500);
+-- result:
+-- !result
+INSERT INTO pk_kb VALUES (10,100),(20,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_kk
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, b.id AS bid, b.w AS bw FROM pk_ka a JOIN pk_kb b ON a.fk = b.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+-- result:
+1	500	10	100
+-- !result
+UPDATE pk_ka SET fk = 20 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+-- result:
+1	500	20	200
+-- !result
+UPDATE pk_ka SET fk = 10 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_kb SET w = 111 WHERE id = 10;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_kk WITH SYNC MODE;
+SELECT aid, av, bid, bw FROM mv_pk_kk ORDER BY aid, bid;
+-- result:
+1	500	10	111
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,bid,bw FROM mv_pk_kk EXCEPT SELECT a.id,a.v,b.id,b.w FROM pk_ka a JOIN pk_kb b ON a.fk=b.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,b.id,b.w FROM pk_ka a JOIN pk_kb b ON a.fk=b.id EXCEPT SELECT aid,av,bid,bw FROM mv_pk_kk) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_kk;
+-- result:
+-- !result
+DROP TABLE pk_ka;
+-- result:
+-- !result
+DROP TABLE pk_kb;
+-- result:
+-- !result
+-- name: test_ivm_pk_self_join_retraction @cloud
+CREATE TABLE pk_sj (id INT NOT NULL, fk INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_sj VALUES (1,2,10),(2,2,20),(3,1,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_sj
+DISTRIBUTED BY HASH(aid) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS aid, a.v AS av, a2.id AS a2id, a2.v AS a2v FROM pk_sj a JOIN pk_sj a2 ON a.fk = a2.id;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+-- result:
+1	10	2	20
+2	20	2	20
+3	30	1	10
+-- !result
+UPDATE pk_sj SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+-- result:
+1	10	2	99
+2	99	2	99
+3	30	1	10
+-- !result
+DELETE FROM pk_sj WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sj WITH SYNC MODE;
+SELECT aid, av, a2id, a2v FROM mv_pk_sj ORDER BY aid, a2id;
+-- result:
+3	30	1	10
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT aid,av,a2id,a2v FROM mv_pk_sj EXCEPT SELECT a.id,a.v,a2.id,a2.v FROM pk_sj a JOIN pk_sj a2 ON a.fk=a2.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id,a.v,a2.id,a2.v FROM pk_sj a JOIN pk_sj a2 ON a.fk=a2.id EXCEPT SELECT aid,av,a2id,a2v FROM mv_pk_sj) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_sj;
+-- result:
+-- !result
+DROP TABLE pk_sj;
+-- result:
+-- !result

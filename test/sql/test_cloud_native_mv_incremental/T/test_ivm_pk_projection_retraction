@@ -70,9 +70,6 @@ CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
--- join over PK bases
-CREATE MATERIALIZED VIEW mv_rej_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a JOIN rej_pk2 b ON a.id = b.id;
 -- sub-query (derived table) over a PK base
 CREATE MATERIALIZED VIEW mv_rej_sub DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM rej_pk) t;
@@ -88,6 +85,16 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_p
 -- LIMIT over a PK base: no IVM delta rule for limit, so the CREATE-time trial rewrite rejects it
 CREATE MATERIALIZED VIEW mv_rej_limit DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk LIMIT 1;
+-- non-inner/cross join over PK bases: only inner/cross are maintainable, so the analyzer rejects the join type
+CREATE MATERIALIZED VIEW mv_rej_leftjoin DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a LEFT JOIN rej_pk2 b ON a.id = b.id;
+-- join over PK bases with a non-orderable output column: net-collapse orders by every output column to
+-- cancel cross-base intermediate rows, and JSON has no order, so the join is rejected at CREATE
+CREATE TABLE rej_pk_json (id INT NOT NULL, j JSON)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json a JOIN rej_pk2 b ON a.id = b.id;
+DROP TABLE rej_pk_json;
 DROP TABLE rej_pk;
 DROP TABLE rej_pk2;
 

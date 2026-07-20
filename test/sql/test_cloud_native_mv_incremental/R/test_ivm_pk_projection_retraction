@@ -150,11 +150,6 @@ CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_rej_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a JOIN rej_pk2 b ON a.id = b.id;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer only supports a single-table projection/filter materialized view over a cloud-native PRIMARY KEY base in this version.')
--- !result
 CREATE MATERIALIZED VIEW mv_rej_sub DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM rej_pk) t;
 -- result:
@@ -179,6 +174,23 @@ CREATE MATERIALIZED VIEW mv_rej_limit DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH 
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk LIMIT 1;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Failed to generate IVM refresh plan at CREATE time: Getting analyzing error. Detail message: IVM rewrite failed to fully resolve incremental markers; remaining operators cannot be processed incrementally..')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_leftjoin DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a LEFT JOIN rej_pk2 b ON a.id = b.id;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support join type: LEFT OUTER JOIN.')
+-- !result
+CREATE TABLE rej_pk_json (id INT NOT NULL, j JSON)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json a JOIN rej_pk2 b ON a.id = b.id;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a join materialized view with a non-orderable output column type over a cloud-native PRIMARY KEY base, but got: JSON.')
+-- !result
+DROP TABLE rej_pk_json;
+-- result:
 -- !result
 DROP TABLE rej_pk;
 -- result:

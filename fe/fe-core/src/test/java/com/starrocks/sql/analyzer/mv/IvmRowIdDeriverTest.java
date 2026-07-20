@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer.mv;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SelectRelation;
@@ -33,9 +34,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 /**
- * Tests for {@link IvmRowIdDeriver}: the row id of a retractable projection/filter MV is its base primary key,
- * and every shape this foundation does not maintain (non-PK base, non-cloud-native base, join, sub-query)
- * derives null so the analyzer rejects it at CREATE.
+ * Tests for {@link IvmRowIdDeriver}: the row id of a retractable projection/filter/join MV is built from
+ * its base primary keys (an inner/cross join concatenates both sides), and every shape this foundation does not
+ * maintain (non-PK base, non-cloud-native base, mixed join, non-inner/cross join op, sub-query) derives null so
+ * the analyzer rejects it at CREATE.
  */
 public class IvmRowIdDeriverTest {
 
@@ -149,9 +151,173 @@ public class IvmRowIdDeriverTest {
     }
 
     @Test
-    public void testJoinRelationYieldsNull(@Mocked JoinRelation join) {
-        // Join is not maintained retractably in this foundation; a null row id makes the analyzer reject it.
-        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(join));
+    public void testInnerJoinConcatenatesBothSidesKeys(
+            @Mocked JoinRelation join,
+            @Mocked TableRelation leftRel, @Mocked OlapTable leftTable,
+            @Mocked TableRelation rightRel, @Mocked OlapTable rightTable) {
+        new Expectations() {
+            {
+                join.getJoinOp();
+                result = JoinOperator.INNER_JOIN;
+                minTimes = 0;
+                join.getLeft();
+                result = leftRel;
+                minTimes = 0;
+                join.getRight();
+                result = rightRel;
+                minTimes = 0;
+                leftRel.getTable();
+                result = leftTable;
+                minTimes = 0;
+                leftRel.getResolveTableName();
+                result = new TableName("test_db", "a");
+                minTimes = 0;
+                leftTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                leftTable.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                leftTable.getBaseSchema();
+                result = List.of(keyColumn("a_id"));
+                minTimes = 0;
+                rightRel.getTable();
+                result = rightTable;
+                minTimes = 0;
+                rightRel.getResolveTableName();
+                result = new TableName("test_db", "b");
+                minTimes = 0;
+                rightTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                rightTable.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                rightTable.getBaseSchema();
+                result = List.of(keyColumn("b_id"));
+                minTimes = 0;
+            }
+        };
+        List<Expr> keys = IvmRowIdDeriver.deriveRowIdKeys(join);
+        Assertions.assertNotNull(keys, "an inner join of two PK bases has a concatenated row id");
+        Assertions.assertEquals(2, keys.size(), "both sides' key columns form the join identity");
+        Assertions.assertEquals("a_id", ((SlotRef) keys.get(0)).getColumnName());
+        Assertions.assertEquals("b_id", ((SlotRef) keys.get(1)).getColumnName());
+    }
+
+    @Test
+    public void testMixedJoinYieldsNull(
+            @Mocked JoinRelation join,
+            @Mocked TableRelation leftRel, @Mocked OlapTable leftTable,
+            @Mocked TableRelation rightRel, @Mocked OlapTable rightTable) {
+        // One side is not a cloud-native PK base, so it has no row id; the whole join is unmaintainable.
+        new Expectations() {
+            {
+                join.getJoinOp();
+                result = JoinOperator.INNER_JOIN;
+                minTimes = 0;
+                join.getLeft();
+                result = leftRel;
+                minTimes = 0;
+                join.getRight();
+                result = rightRel;
+                minTimes = 0;
+                leftRel.getTable();
+                result = leftTable;
+                minTimes = 0;
+                leftRel.getResolveTableName();
+                result = new TableName("test_db", "a");
+                minTimes = 0;
+                leftTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                leftTable.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                leftTable.getBaseSchema();
+                result = List.of(keyColumn("a_id"));
+                minTimes = 0;
+                rightRel.getTable();
+                result = rightTable;
+                minTimes = 0;
+                rightTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                rightTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                minTimes = 0;
+            }
+        };
+        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(join),
+                "a join with a non-PK side is not retractably maintainable");
+    }
+
+    @Test
+    public void testCrossJoinConcatenatesBothSidesKeys(
+            @Mocked JoinRelation join,
+            @Mocked TableRelation leftRel, @Mocked OlapTable leftTable,
+            @Mocked TableRelation rightRel, @Mocked OlapTable rightTable) {
+        new Expectations() {
+            {
+                join.getJoinOp();
+                result = JoinOperator.CROSS_JOIN;
+                minTimes = 0;
+                join.getLeft();
+                result = leftRel;
+                minTimes = 0;
+                join.getRight();
+                result = rightRel;
+                minTimes = 0;
+                leftRel.getTable();
+                result = leftTable;
+                minTimes = 0;
+                leftRel.getResolveTableName();
+                result = new TableName("test_db", "a");
+                minTimes = 0;
+                leftTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                leftTable.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                leftTable.getBaseSchema();
+                result = List.of(keyColumn("a_id"));
+                minTimes = 0;
+                rightRel.getTable();
+                result = rightTable;
+                minTimes = 0;
+                rightRel.getResolveTableName();
+                result = new TableName("test_db", "b");
+                minTimes = 0;
+                rightTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                rightTable.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                rightTable.getBaseSchema();
+                result = List.of(keyColumn("b_id"));
+                minTimes = 0;
+            }
+        };
+        List<Expr> keys = IvmRowIdDeriver.deriveRowIdKeys(join);
+        Assertions.assertNotNull(keys, "a cross join of two PK bases has a concatenated row id");
+        Assertions.assertEquals(2, keys.size(), "both sides' key columns form the join identity");
+        Assertions.assertEquals("a_id", ((SlotRef) keys.get(0)).getColumnName());
+        Assertions.assertEquals("b_id", ((SlotRef) keys.get(1)).getColumnName());
+    }
+
+    @Test
+    public void testUnsupportedJoinOpYieldsNull(@Mocked JoinRelation join) {
+        new Expectations() {
+            {
+                join.getJoinOp();
+                result = JoinOperator.LEFT_OUTER_JOIN;
+                minTimes = 0;
+            }
+        };
+        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(join),
+                "a non-inner/cross join op has no maintainable row id");
     }
 
     @Test

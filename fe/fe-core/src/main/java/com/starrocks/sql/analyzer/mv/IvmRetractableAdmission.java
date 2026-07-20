@@ -16,7 +16,9 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import org.apache.commons.collections4.CollectionUtils;
 
 /**
@@ -65,13 +67,34 @@ final class IvmRetractableAdmission {
 
     /**
      * A block retractable only through a nested input carries no {@code __ROW_ID__} on its own output, so its
-     * deletes would be dropped. A PK base thus requires the row id on this block's output; nested PK shapes
-     * (join / union / sub-query) come in later PRs.
+     * deletes would be dropped. A PK base thus requires the row id on this block's output; the remaining nested
+     * PK shapes (union / sub-query) come in later PRs.
      */
     static void requirePkBaseHasRowId(SelectRelation selectRelation, boolean rowIdOnOutput) {
         if (!rowIdOnOutput && IvmBaseTableValidator.hasCloudNativePrimaryKeyBase(selectRelation)) {
             throw new SemanticException("IVMAnalyzer only supports a single-table projection/filter materialized "
                     + "view over a cloud-native PRIMARY KEY base in this version");
+        }
+    }
+
+    /**
+     * A retractable join is maintained by net-collapse, which orders by every output column to cancel the
+     * intermediate rows the two joined deltas emit for one {@code __ROW_ID__} when both sides change the same
+     * key. A non-orderable output type ({@code canOrderBy() == false}, e.g. JSON / BITMAP) has no such order,
+     * so reject it at CREATE instead of failing the first delete/update refresh. An aggregate collapses each
+     * group to one row and is not net-collapsed, so it is exempt.
+     */
+    static void requireOrderableJoinOutput(SelectRelation selectRelation, boolean rowIdOnOutput,
+                                           boolean isAggregate) {
+        if (!rowIdOnOutput || isAggregate || !(selectRelation.getRelation() instanceof JoinRelation)) {
+            return;
+        }
+        for (Expr output : selectRelation.getOutputExpression()) {
+            if (!output.getType().canOrderBy()) {
+                throw new SemanticException("IVMAnalyzer does not support a join materialized view with a "
+                        + "non-orderable output column type over a cloud-native PRIMARY KEY base, but got: "
+                        + output.getType());
+            }
         }
     }
 }
