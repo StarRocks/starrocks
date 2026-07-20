@@ -222,7 +222,8 @@ public:
         return partial_rowset;
     }
 
-    TabletSharedPtr create_tablet_with_gin_index(int64_t tablet_id, int32_t schema_hash) {
+    TabletSharedPtr create_tablet_with_gin_index(int64_t tablet_id, int32_t schema_hash,
+                                                 const std::string& imp_lib = "builtin") {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -256,7 +257,7 @@ public:
         gin_index.__set_index_name("gin_v2");
         gin_index.__set_columns({"v2"});
         gin_index.__set_index_type(TIndexType::GIN);
-        gin_index.__set_common_properties({{"imp_lib", "builtin"}});
+        gin_index.__set_common_properties({{"imp_lib", imp_lib}});
         gin_index.__set_index_properties({{"parser", "none"}});
         request.tablet_schema.__set_indexes({gin_index});
 
@@ -1808,7 +1809,20 @@ static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, i
     RETURN_IF_ERROR(reader.get_segment_iterators(params, &seg_iters));
     int64_t rows = 0;
     for (auto& iter : seg_iters) {
-        auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+        // Chunk column order follows the iterator's output schema, which is not necessarily
+        // keyed by ColumnId; resolve the value column's position by matching the field id.
+        const Schema& out_schema = iter->schema();
+        int value_pos = -1;
+        for (size_t i = 0; i < out_schema.num_fields(); i++) {
+            if (out_schema.field(i)->id() == cid) {
+                value_pos = static_cast<int>(i);
+                break;
+            }
+        }
+        if (value_pos < 0) {
+            return Status::InternalError("value column not present in scan output schema");
+        }
+        auto chunk = ChunkFactory::new_chunk(out_schema, 100);
         while (true) {
             chunk->reset();
             auto st = iter->get_next(chunk.get());
@@ -1817,7 +1831,7 @@ static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, i
             }
             RETURN_IF_ERROR(st);
             for (int r = 0; r < chunk->num_rows(); r++) {
-                if (chunk->columns()[cid]->get(r).get_slice().to_string() != value) {
+                if (chunk->columns()[value_pos]->get(r).get_slice().to_string() != value) {
                     return Status::InternalError("returned row does not match the predicate");
                 }
             }
@@ -1866,6 +1880,47 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_gin_index_check) {
         ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
     }
 }
+
+#ifndef __APPLE__
+// CLucene (the shared-nothing default implementation) is not produced for DCG .cols files.
+// After a column-mode partial update on the indexed column, the base segment's CLucene index
+// is stale, so no index is served for the updated column: ordinary predicates must fall back
+// to evaluating on the fresh data and still return correct results. This exercises the
+// write-side skip (segment_writer.cpp) and the read-side CLucene branch (segment_iterator.cpp).
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_clucene_gin_index_check) {
+    const int N = 100;
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
+    commit_rowsets(tablet, rowsets, version);
+
+    // Base-segment CLucene index accelerates the pre-update read.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
+
+    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
+    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
+    std::vector<int32_t> column_indexes = {0, 2};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
+            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (bool gin_filter : {true, false}) {
+        // Updated rows resolve to the fresh value; the stale CLucene index is not consulted.
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
+        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
+    }
+}
+#endif
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
                          ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},
