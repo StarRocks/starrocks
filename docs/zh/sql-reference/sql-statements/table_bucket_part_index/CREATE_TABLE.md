@@ -353,7 +353,7 @@ DUPLICATE KEY 是默认类型。数据将根据键列进行排序。
 
 ### 基于范围的分布
 
-从 v4.1 起，StarRocks 支持 **基于范围的分布语义**（默认禁用），由 FE 配置 `enable_range_distribution` 控制。数据将根据键列的数据范围进行排序，每个 Tablet 包含来自特定范围的数据。
+从 v4.1 起，StarRocks 支持 **基于范围的分布语义**，由 FE 配置 `enable_range_distribution` 控制。在存算分离模式下默认启用；将该配置设置为 `false` 可将其禁用。该配置在存算一体模式下无效。数据将根据键列的数据范围进行排序，每个 Tablet 包含来自特定范围的数据。
 
 基于范围的分布语义与默认语义在以下方面有所不同：
 
@@ -476,7 +476,7 @@ PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 
 ## 分布
 
-StarRocks 支持 Hash 分桶和随机分桶。如果您不配置分桶，StarRocks 默认使用随机分桶并自动设置分桶数量。
+StarRocks 支持 Hash 分桶和随机分桶。如果您不配置分桶，StarRocks 默认使用随机分桶并自动设置分桶数量。在存算分离模式下，如果表指定了键类型或 `ORDER BY` 子句但未指定 `DISTRIBUTED BY` 子句，则默认改用基于范围的分布；参见[基于范围的分布](#range-based-distribution)。
 
 - 随机分桶（自 v3.1 起）
 
@@ -526,7 +526,7 @@ StarRocks 支持 Hash 分桶和随机分桶。如果您不配置分桶，StarRoc
 
 - 基于范围的分布
 
-  从 v4.1 开始，StarRocks 支持**基于范围的分布语义**（默认禁用），由 FE 配置 `enable_range_distribution` 控制。有关详细信息，请参阅[基于范围的分布](#range-based-distribution)。
+  从 v4.1 开始，StarRocks 支持**基于范围的分布语义**，由 FE 配置 `enable_range_distribution` 控制。在存算分离模式下默认启用。有关详细信息，请参阅[基于范围的分布](#range-based-distribution)。
 
 ## Rollup 索引
 

@@ -556,11 +556,11 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_range_distribution`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the Range-based Distribution semantic for table creation.
+- Description: Whether to use the Range-based Distribution semantic as the default table distribution when a table or materialized view is created without a `DISTRIBUTED BY` clause. This configuration only takes effect in shared-data mode; it has no effect in shared-nothing mode. Set it to `false` to disable this default, so such a table uses the previous default distribution behavior instead (a PRIMARY KEY table defaults to hash, a DUPLICATE KEY table to random, and an AGGREGATE or UNIQUE KEY table requires an explicit `DISTRIBUTED BY` clause).
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_parallel_tablets`

@@ -275,6 +275,37 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_compaction_failed`
+
+- Unit: Count
+- Description: Counter of failed lake compaction jobs.
+
+## `lake_compaction_partial_success`
+
+- Unit: Count
+- Description: Counter of partially successful lake compaction jobs.
+
+## `lake_compaction_running`
+
+- Unit: Count
+- Description: Number of currently running lake compaction jobs.
+
+## `lake_compaction_running_tasks`
+
+- Unit: Count
+- Description: Number of tablets currently being compacted across all running shared-data (lake) compaction jobs. This is the same unit the scheduler caps with the `lake_compaction_max_tasks` config, and is finer-grained than `lake_compaction_running`, which counts compaction jobs (one per partition) — a single job fans out into one tablet-level task per tablet. Carries an `is_leader` label; follower FEs export the metric with `is_leader="false"` and value 0, so dashboards should filter on `is_leader="true"`.
+
+## `lake_compaction_score_at_trigger`
+
+- Unit: Score
+- Type: Gauge
+- Description: Compaction score of the most recent partition that triggered a lake compaction job, rounded to the nearest integer. The value is the partition's *max* tablet-level score (`Quantiles.getMax()`), matching the criterion the scheduler uses to pick partitions for compaction. Updated once per partition per trigger; the gauge holds the value of the most recent update. This gauge does not decay: on the leader FE, when no compactions are running it retains the last trigger's value (it is not reset to 0). The value is process-local (an in-memory counter on the leader, not persisted), so after an FE leader failover the newly promoted leader starts at 0 and reports 0 until its first compaction trigger — it does not inherit the previous leader's value. Alert on it together with `lake_compaction_running > 0` rather than reading it in isolation. Carries an `is_leader` label; follower FEs export `is_leader="false"` and return 0, so dashboards should filter on `is_leader="true"`.
+
+## `lake_compaction_success`
+
+- Unit: Count
+- Description: Counter of successful lake compaction jobs.
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - Unit: Count (files per batch)

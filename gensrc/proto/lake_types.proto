@@ -421,6 +421,14 @@ message TxnLogPB {
         // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
         // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
         repeated uint32 del_op_offsets = 21;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
     }
 
     message OpCompaction {
