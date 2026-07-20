@@ -36,16 +36,21 @@ public class IcebergPartitionRowCountTest {
     }
 
     @Test
-    public void testLowEqualityDeletesSubtracted() {
-        // 8% combined deletes (<= 10% gate): live total = 1000 - 30 - 50.
-        Assertions.assertEquals(920, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 30, 50));
+    public void testAnyEqualityDeletesSkip() {
+        // equality_delete_record_count counts predicates, not rows removed, so a low count is NOT safe:
+        // one predicate can match many rows. Presence of any equality deletes -> skip (-1 -> raw sample),
+        // even at a tiny record ratio.
+        Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 0, 1));
+        Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1_000_000, 0, 10));
+        // Even with acceptable position deletes, any equality delete forces a skip.
+        Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 50, 5));
     }
 
     @Test
-    public void testHighDeleteRatioSkips() {
-        // 20% deletes (> 10% gate): record_count is unreliable as a live total -> skip (-1 -> raw sample).
-        Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 100, 100));
-        // Mostly-deleted partition: definitely skip (this is the catastrophic case the gate protects against).
+    public void testHighPositionDeleteRatioSkips() {
+        // 20% position deletes (> 10% gate): record_count is unreliable as a live total -> skip.
+        Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 200, 0));
+        // Mostly-deleted partition: definitely skip (the catastrophic case the gate protects against).
         Assertions.assertEquals(-1, IcebergPartitionTraits.liveRowCountForExtrapolation(1000, 950, 0));
     }
 

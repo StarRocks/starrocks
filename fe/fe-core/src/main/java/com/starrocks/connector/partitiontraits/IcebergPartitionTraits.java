@@ -72,10 +72,10 @@ public class IcebergPartitionTraits extends DefaultTraits {
     }
 
     // record_count from the PARTITIONS table is pre-delete (live data-file rows), while a MOR read returns
-    // post-delete rows. Above this delete fraction, record_count - COUNT(1) can no longer be attributed to
-    // scan truncation vs. deletes, so extrapolation would corrupt stats; such partitions fall back to raw
-    // sample. Below it, position deletes (exact 1-row each) and equality deletes (approximate) are subtracted
-    // to get a live-row total, and the residual error is bounded by this ratio.
+    // post-delete rows. For POSITION deletes (exactly one row removed per record) a small delete fraction
+    // keeps record_count a trustworthy live-row total; above this fraction the difference can no longer be
+    // attributed to truncation vs. deletes, so the partition falls back to raw sample. EQUALITY deletes are
+    // handled separately: their record count is not a row count, so the ratio is meaningless there.
     private static final double MAX_DELETE_RATIO_FOR_ROW_COUNT = 0.1;
 
     @Override
@@ -100,21 +100,31 @@ public class IcebergPartitionTraits extends DefaultTraits {
     }
 
     // Package-private for unit testing. Returns a trustworthy live-row total for extrapolation, or -1 when it
-    // should not be trusted: unknown record_count, or a delete fraction high enough that record_count - COUNT(1)
-    // can no longer be attributed to truncation rather than deletes. Position deletes are subtracted exactly
-    // (1 row each); equality-delete counts are approximate, so they are subtracted and also gate via the ratio.
+    // should not be trusted, in which case the caller stores the raw sample instead.
+    //
+    // Returns -1 when:
+    //  - record_count is unknown; or
+    //  - any equality deletes are present: equality_delete_record_count counts delete predicates, not rows
+    //    removed - one predicate can match many rows - so it yields neither a trustworthy live total nor a
+    //    trustworthy ratio (a tiny count can still hide a huge deletion). No exact live total is available
+    //    cheaply from metadata, so we bail; or
+    //  - position deletes exceed MAX_DELETE_RATIO_FOR_ROW_COUNT of record_count.
+    //
+    // Otherwise position deletes (exactly one row each) are subtracted to give the live-row total.
     static long liveRowCountForExtrapolation(long recordCount, long positionDeleteRecordCount,
                                              long equalityDeleteRecordCount) {
         if (recordCount <= 0) {
             return -1;
         }
+        if (equalityDeleteRecordCount > 0) {
+            return -1;
+        }
         long posDelete = Math.max(0, positionDeleteRecordCount);
-        long eqDelete = Math.max(0, equalityDeleteRecordCount);
-        double deleteRatio = (double) (posDelete + eqDelete) / recordCount;
+        double deleteRatio = (double) posDelete / recordCount;
         if (deleteRatio > MAX_DELETE_RATIO_FOR_ROW_COUNT) {
             return -1;
         }
-        return Math.max(1, recordCount - posDelete - eqDelete);
+        return Math.max(1, recordCount - posDelete);
     }
 
     @Override

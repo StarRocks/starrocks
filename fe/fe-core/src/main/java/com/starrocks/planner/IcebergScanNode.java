@@ -190,14 +190,15 @@ public class IcebergScanNode extends ScanNode {
                 .collect(Collectors.toList());
 
         // Bounded-cost statistics-scan budgets: the external ANALYZE job stashes these on the session
-        // variable (INVISIBLE) so they ride the normal query path to the connector without a bespoke
-        // ANALYZE->connector channel. All three <= 0 (the default for ordinary queries) is a no-op, so a
-        // plain query never picks up a budget. See design 2.4.
+        // variable so they ride the normal query path to the connector without a bespoke ANALYZE->connector
+        // channel. These variables are INVISIBLE but NOT read-only (the job must set them at runtime), so a
+        // user could SET/SET GLOBAL them; a truncated scan on an ordinary query would silently drop rows.
+        // Only honor the budget inside a statistics-collection context so a plain SELECT can never be capped.
         long scanBytesCap = -1;
         long scanFilesCap = -1;
         long scanRowsCap = -1;
         ConnectContext connectContext = ConnectContext.get();
-        if (connectContext != null) {
+        if (connectContext != null && connectContext.isStatisticsConnection()) {
             SessionVariable sessionVariable = connectContext.getSessionVariable();
             scanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
             scanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
