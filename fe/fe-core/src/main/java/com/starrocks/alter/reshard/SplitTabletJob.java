@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
@@ -967,7 +968,8 @@ public class SplitTabletJob extends TabletReshardJob {
                 spreadNewShards);
     }
 
-    private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,
+    @VisibleForTesting
+    static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,
                                                     MaterializedIndex oldIndex,
                                                     MaterializedIndex newIndex,
                                                     List<ColocateRange> colocateRanges,
