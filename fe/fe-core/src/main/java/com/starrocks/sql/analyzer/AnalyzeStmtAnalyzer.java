@@ -107,10 +107,15 @@ public class AnalyzeStmtAnalyzer {
             Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
                     StatsConstants.HISTOGRAM_MCV_SIZE,
-                    StatsConstants.HISTOGRAM_SAMPLE_RATIO,
-                    StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
-                    StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
-                    StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP)).build();
+                    StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
+
+    // Properties that must parse as a long. Validated with the same parser the collector uses (Long.parseLong),
+    // so accepted-but-unparseable inputs (e.g. "1e9", "1.0", an overflowing integer) are rejected here instead
+    // of silently falling back to the global config default at collection time.
+    private static final List<String> LONG_PROP_KEY_LIST = Lists.newArrayList(
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP);
 
     // Properties that only take effect for external-table statistics collection. Setting them on an internal
     // (OLAP) table has no effect, so we reject them up front instead of silently ignoring the value.
@@ -379,6 +384,16 @@ public class AnalyzeStmtAnalyzer {
             for (String key : NUMBER_PROP_KEY_LIST) {
                 if (properties.containsKey(key) && !NumberUtils.isCreatable(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
+                }
+            }
+
+            for (String key : LONG_PROP_KEY_LIST) {
+                if (properties.containsKey(key)) {
+                    try {
+                        Long.parseLong(properties.get(key).trim());
+                    } catch (NumberFormatException e) {
+                        throw new SemanticException("Property '%s' value must be an integer", key);
+                    }
                 }
             }
 

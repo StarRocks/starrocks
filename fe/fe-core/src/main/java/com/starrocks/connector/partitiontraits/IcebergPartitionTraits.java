@@ -71,22 +71,50 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
     }
 
+    // record_count from the PARTITIONS table is pre-delete (live data-file rows), while a MOR read returns
+    // post-delete rows. Above this delete fraction, record_count - COUNT(1) can no longer be attributed to
+    // scan truncation vs. deletes, so extrapolation would corrupt stats; such partitions fall back to raw
+    // sample. Below it, position deletes (exact 1-row each) and equality deletes (approximate) are subtracted
+    // to get a live-row total, and the residual error is bounded by this ratio.
+    private static final double MAX_DELETE_RATIO_FOR_ROW_COUNT = 0.1;
+
     @Override
     public Map<String, Long> getPartitionRowCounts(List<String> partitionNames) {
-        // The Iceberg PARTITIONS metadata table carries an exact record_count per partition, so one metadata
-        // scan yields all totals without opening data files (see IcebergCatalog#getPartitions).
+        // The Iceberg PARTITIONS metadata table carries per-partition row/delete counts, so one metadata scan
+        // yields all totals without opening data files (see IcebergCatalog#getPartitions).
         Map<String, Long> result = new HashMap<>();
         List<PartitionInfo> partitions = getPartitions(partitionNames);
         for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
             PartitionInfo info = partitions.get(i);
-            if (info instanceof Partition) {
-                long recordCount = ((Partition) info).getRecordCount();
-                if (recordCount > 0) {
-                    result.put(partitionNames.get(i), recordCount);
-                }
+            if (!(info instanceof Partition)) {
+                continue;
+            }
+            Partition partition = (Partition) info;
+            long liveTotal = liveRowCountForExtrapolation(partition.getRecordCount(),
+                    partition.getPositionDeleteRecordCount(), partition.getEqualityDeleteRecordCount());
+            if (liveTotal > 0) {
+                result.put(partitionNames.get(i), liveTotal);
             }
         }
         return result;
+    }
+
+    // Package-private for unit testing. Returns a trustworthy live-row total for extrapolation, or -1 when it
+    // should not be trusted: unknown record_count, or a delete fraction high enough that record_count - COUNT(1)
+    // can no longer be attributed to truncation rather than deletes. Position deletes are subtracted exactly
+    // (1 row each); equality-delete counts are approximate, so they are subtracted and also gate via the ratio.
+    static long liveRowCountForExtrapolation(long recordCount, long positionDeleteRecordCount,
+                                             long equalityDeleteRecordCount) {
+        if (recordCount <= 0) {
+            return -1;
+        }
+        long posDelete = Math.max(0, positionDeleteRecordCount);
+        long eqDelete = Math.max(0, equalityDeleteRecordCount);
+        double deleteRatio = (double) (posDelete + eqDelete) / recordCount;
+        if (deleteRatio > MAX_DELETE_RATIO_FOR_ROW_COUNT) {
+            return -1;
+        }
+        return Math.max(1, recordCount - posDelete - eqDelete);
     }
 
     @Override

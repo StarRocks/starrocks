@@ -22,10 +22,14 @@ public class Partition implements PartitionInfo {
     private final long modifiedTime;
     private final long version;
     private int specId;
-    // Total live-data-file row count of this partition, read from the Iceberg PARTITIONS metadata table.
-    // -1 means unknown (e.g. the metadata did not carry it). Used by bounded-cost statistics collection to
-    // extrapolate a truncated sample back to the full partition (see ExternalFullStatisticsCollectJob).
+    // Row counts from the Iceberg PARTITIONS metadata table. recordCount is the pre-delete live-data-file row
+    // count; the delete counts track rows logically removed by MOR delete files. -1 means unknown (metadata
+    // did not carry it). Used by bounded-cost statistics collection to extrapolate a truncated sample back to
+    // the full partition, and to gate that extrapolation when deletes make record_count unreliable as a
+    // live-row total (see IcebergPartitionTraits#getPartitionRowCounts).
     private long recordCount = -1;
+    private long positionDeleteRecordCount = -1;
+    private long equalityDeleteRecordCount = -1;
 
     @Override
     public long getModifiedTime() {
@@ -38,6 +42,22 @@ public class Partition implements PartitionInfo {
 
     public void setRecordCount(long recordCount) {
         this.recordCount = recordCount;
+    }
+
+    public long getPositionDeleteRecordCount() {
+        return positionDeleteRecordCount;
+    }
+
+    public void setPositionDeleteRecordCount(long positionDeleteRecordCount) {
+        this.positionDeleteRecordCount = positionDeleteRecordCount;
+    }
+
+    public long getEqualityDeleteRecordCount() {
+        return equalityDeleteRecordCount;
+    }
+
+    public void setEqualityDeleteRecordCount(long equalityDeleteRecordCount) {
+        this.equalityDeleteRecordCount = equalityDeleteRecordCount;
     }
 
     @Override

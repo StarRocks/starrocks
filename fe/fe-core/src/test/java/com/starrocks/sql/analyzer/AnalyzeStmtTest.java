@@ -257,9 +257,16 @@ public class AnalyzeStmtTest {
         analyzeFail("analyze full table db.tbl properties('scan_rows_cap' = '10000')",
                 "Property 'scan_rows_cap' is only supported for external tables");
 
-        // Non-numeric value is rejected on external tables too.
+        // Non-long values are rejected up front (same parser the collector uses), so they can't silently fall
+        // back to the config default at collection time.
         analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = 'abc')",
-                "Property 'scan_bytes_cap' value must be numeric");
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1e9')",
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_files_cap' = '1.0')",
+                "Property 'scan_files_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_rows_cap' = '99999999999999999999')",
+                "Property 'scan_rows_cap' value must be an integer");
     }
 
     @Test
