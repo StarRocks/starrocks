@@ -1,0 +1,39 @@
+-- name: test_iceberg_stats_source
+create external catalog iceberg_stats_source_${uuid0} PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_stats_source_${uuid0}/test_iceberg_stats_source/${uuid0}"
+);
+
+create table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 (
+    c1 int,
+    c2 bigint,
+    c3 date
+) partition by c1;
+
+insert into iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 values(1, 2, '2022-01-01'), (2, 3, '2022-02-02'), (3, 4, '2022-03-03');
+
+-- Disable auto analyze so the scan stats can NOT come from ANALYZE, and allow single-table
+-- metadata stats so the row count is read from iceberg manifest metadata (StatsSource=TABLE_METADATA).
+set enable_query_trigger_analyze = false;
+set disable_table_stats_from_metadata_for_single_table = false;
+
+-- Case 1: no analyze -> row count comes from iceberg manifest metadata -> StatsSource is TABLE_METADATA.
+function: assert_stats_source('select * from iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1', 't1', 'TABLE_METADATA')
+
+-- Case 2: after an explicit analyze, the same scan reports ANALYZE instead of TABLE_METADATA.
+[UC] analyze table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1;
+function: assert_stats_source('select * from iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1', 't1', 'ANALYZE')
+
+drop table iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0}.t1 force;
+drop database iceberg_stats_source_${uuid0}.iceberg_stats_source_db_${uuid0};
+drop catalog iceberg_stats_source_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_stats_source_${uuid0}/test_iceberg_stats_source/${uuid0} >/dev/null || echo "exit 0" >/dev/null
