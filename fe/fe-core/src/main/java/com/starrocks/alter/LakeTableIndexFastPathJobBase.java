@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
@@ -64,7 +65,7 @@ import java.util.Optional;
  * column flags) in a single write lock.
  *
  * <p>Subclasses plug in two concrete pieces via the hook methods
- * {@link #populateAlterRequest(AlterReplicaTask)} and
+ * {@link #populateAlterRequest(AlterReplicaTask, long, MaterializedIndexMeta, OlapTable)} and
  * {@link #applyCatalogMutation(OlapTable)}. Everything else — txn watershed,
  * replica task dispatch, timeout, publish, persist/replay — is shared.
  *
@@ -143,7 +144,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      * Flag the task with the appropriate fast-path payload. Called once per
      * AlterReplicaTask before the task is added to the batch.
      */
-    protected abstract void populateAlterRequest(AlterReplicaTask task);
+    protected abstract void populateAlterRequest(AlterReplicaTask task, long indexMetaId,
+                                                 MaterializedIndexMeta indexMeta, OlapTable table);
 
     /**
      * Mutate the FE catalog to reflect the applied index change. Runs
@@ -779,7 +781,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(cn.getId(), dbId, tableId, ppId,
                             indexMetaId, tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
                             /*generatedColumnReq=*/ null, readSchema);
-                    populateAlterRequest(task);
+                    populateAlterRequest(task, indexMetaId, table.getIndexMetaByMetaId(indexMetaId), table);
                     batchTask.addTask(task);
                 }
             }

@@ -225,6 +225,12 @@ struct TAlterTabletReqV2 {
     // compaction time.
     22: optional bool only_drop_index
     23: optional list<TDropIndexInfo> drop_indexes
+
+    // New schema id/version FE allocated for the lake ADD INDEX fast path. BE
+    // stamps them onto the tablet metadata schema (via OpAddIndex) so all by-id
+    // schema caches miss and future loads / compaction build the new index.
+    24: optional i64 new_index_schema_id
+    25: optional i64 new_index_schema_version
 }
 
 // One index removal request used by the DROP INDEX fast-path.
