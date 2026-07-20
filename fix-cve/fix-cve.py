@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 
-io_netty_clean_version = "4.1.135.Final"
+io_netty_clean_version = "4.1.136.Final"
 
 fixed_poms = [
     ("com.fasterxml.jackson.core:jackson-core", "2.21.4"),
