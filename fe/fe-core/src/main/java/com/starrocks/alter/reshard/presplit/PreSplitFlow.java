@@ -332,8 +332,9 @@ final class PreSplitFlow {
      * are meaningful); near 1 means it is not (every group spans nearly the whole range, so min/max
      * endpoints cannot place interior boundaries and the caller falls back to the data tier). Same
      * definition the single-partition meta tier uses in {@link ParquetMetadataSampler}.
+     * Package-private so {@code PreSplitFlowTest} can assert the fraction directly.
      */
-    private static double rowGroupOverlapFraction(List<RowGroupStatistics> rowGroups) {
+    static double rowGroupOverlapFraction(List<RowGroupStatistics> rowGroups) {
         List<RowGroupStatistics> sorted = new ArrayList<>(rowGroups);
         sorted.sort(Comparator.comparing(RowGroupStatistics::getMinTuple));
         Tuple maxSeen = sorted.get(0).getMaxTuple();
