@@ -908,6 +908,70 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
     return metadatas;
 }
 
+StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata_from_bundle_file(const std::string& bundle_file_path,
+                                                                                int64_t tablet_id,
+                                                                                const std::shared_ptr<FileSystem>& fs) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, bundle_file_path));
+    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+
+    auto file_size = serialized_string.size();
+    ASSIGN_OR_RETURN(auto bundle_metadata, parse_bundle_tablet_metadata(bundle_file_path, serialized_string));
+
+    auto meta_it = bundle_metadata->tablet_meta_pages().find(tablet_id);
+    if (meta_it == bundle_metadata->tablet_meta_pages().end()) {
+        return Status::NotFound(
+                strings::Substitute("can not find tablet $0 from bundle metadata $1", tablet_id, bundle_file_path));
+    }
+
+    const PagePointerPB& page_pointer = meta_it->second;
+    auto offset = page_pointer.offset();
+    auto size = page_pointer.size();
+
+    if (file_size < offset + size) {
+        return Status::Corruption(
+                strings::Substitute("deserialized bundle metadata($0) failed, file_size($1) too small($2/$3)",
+                                    bundle_file_path, file_size, offset, size));
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+
+    auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_id);
+    if (crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second) {
+        return Status::Corruption(strings::Substitute("mismatched checksum of tablet $0 metadata in bundle metadata $1",
+                                                      tablet_id, bundle_file_path));
+    }
+
+    if (!metadata->ParseFromArray(metadata_str.data(), size)) {
+        return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed from bundle $1",
+                                                      tablet_id, bundle_file_path));
+    }
+
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
+    if (schema_id != bundle_metadata->tablet_to_schema().end()) {
+        auto schema_it = bundle_metadata->schemas().find(schema_id->second);
+        if (schema_it != bundle_metadata->schemas().end()) {
+            metadata->mutable_schema()->CopyFrom(schema_it->second);
+            auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
+            item.CopyFrom(schema_it->second);
+        }
+    }
+
+    for (auto& [_, rowset_schema_id] : metadata->rowset_to_schema()) {
+        auto schema_it = bundle_metadata->schemas().find(rowset_schema_id);
+        if (schema_it != bundle_metadata->schemas().end()) {
+            auto& item = (*metadata->mutable_historical_schemas())[rowset_schema_id];
+            item.CopyFrom(schema_it->second);
+        }
+    }
+
+    return metadata;
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {

@@ -536,12 +536,22 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
     auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
-    if (!src_tablet_meta_or.ok()) {
-        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
-        return src_tablet_meta_or;
+    if (src_tablet_meta_or.ok()) {
+        return src_tablet_meta_or.value();
     }
-    return src_tablet_meta_or.value();
+    if (src_tablet_meta_or.status().is_not_found()) {
+        auto bundle_file_name = tablet_metadata_filename(0, version);
+        auto bundle_file_path = join_path(meta_dir, bundle_file_name);
+        auto bundle_result =
+                _tablet_manager->get_tablet_metadata_from_bundle_file(bundle_file_path, src_tablet_id, shared_src_fs);
+        if (bundle_result.ok()) {
+            LOG(INFO) << "Lake replicate storage task, found source tablet meta from bundle: " << bundle_file_path;
+            return bundle_result;
+        }
+    }
+    VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+            << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
+    return src_tablet_meta_or;
 }
 
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(

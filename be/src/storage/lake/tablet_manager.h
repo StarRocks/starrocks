@@ -122,6 +122,10 @@ public:
                                                            const CacheOptions& cache_opts, int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
 
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_from_bundle_file(const std::string& bundle_file_path,
+                                                                     int64_t tablet_id,
+                                                                     const std::shared_ptr<FileSystem>& fs);
+
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
