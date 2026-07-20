@@ -29,26 +29,35 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/lake/lake_connector.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/vector_search_option.h"
 
@@ -266,6 +275,116 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(data_source_provider.could_split_physically());
     ASSERT_TRUE(builder->has_more_from_split());
     ASSERT_GT(builder->max_degree_of_parallelism(), 0);
+}
+
+// The prepared-physical-split skew gate: a single oversized (skewed) lake tablet is split even when the
+// scan-range count already reaches pipeline_dop -- which the plain count gate treats as "enough parallelism,
+// no split". The override is gated on enable_lake_prepared_physical_split_scan; with it off the original
+// count gate is kept verbatim.
+TEST_F(LakeDataSourceTest, could_tablet_internal_parallel_skew_gate) {
+    // get_tablet_num_rows sums rowset num_rows from metadata, so a rowset carrying only set_num_rows()
+    // (no real segments) is enough to drive this row-count-based decision.
+    auto make_tablet = [&](int64_t num_rows) {
+        auto meta = std::make_unique<TabletMetadata>();
+        meta->set_id(next_id());
+        meta->set_version(2);
+        *meta->mutable_schema() = _tablet_metadata->schema();
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(num_rows);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*meta));
+        return meta;
+    };
+
+    // Shrink the split granularity so these modest tablets clear the "big enough to split" threshold
+    // (max_tablet_rows >= splitted_scan_rows * lake_tablet_rows_splitted_ratio). Restored on scope exit.
+    auto saved_min_rows = config::tablet_internal_parallel_min_splitted_scan_rows;
+    auto saved_cap_rows = config::lake_prepared_split_max_splitted_scan_rows;
+    auto saved_bytes = config::tablet_internal_parallel_max_splitted_scan_bytes;
+    config::tablet_internal_parallel_min_splitted_scan_rows = 1;
+    config::lake_prepared_split_max_splitted_scan_rows = 4;
+    config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
+    DeferOp restore([&]() {
+        config::tablet_internal_parallel_min_splitted_scan_rows = saved_min_rows;
+        config::lake_prepared_split_max_splitted_scan_rows = saved_cap_rows;
+        config::tablet_internal_parallel_max_splitted_scan_bytes = saved_bytes;
+    });
+
+    auto runtime_state = create_runtime_state_for_test(); // skew_split_ratio accessor defaults to 1.5
+    const int pipeline_dop = 2; // equals the scan-range count, so the count gate says "no split"
+    const auto mode = TTabletInternalParallelMode::type::AUTO;
+
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    int64_t scan_parallelism = 0;
+    int64_t splitted_scan_rows = 0;
+
+    // Skewed: one 100-row tablet dwarfs a 2-row tablet; the per-driver ideal share is 51, so 100 > 51 * 1.5.
+    auto big = make_tablet(100);
+    auto small = make_tablet(2);
+    auto skewed_ranges = create_scan_ranges({big.get(), small.get()});
+
+    // (1) Optimization ON: the skewed big tablet overrides the count gate -> split.
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_on,
+                    provider._could_tablet_internal_parallel(skewed_ranges, pipeline_dop, skewed_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_TRUE(could_when_on);
+    // splitted_scan_rows is capped by lake_prepared_split_max_splitted_scan_rows under the optimization.
+    EXPECT_EQ(config::lake_prepared_split_max_splitted_scan_rows, splitted_scan_rows);
+
+    // (2) Optimization OFF: same skew, but the count gate holds -> no split (verbatim original behavior).
+    provider._enable_lake_prepared_physical_split_scan = false;
+    ASSIGN_OR_ABORT(auto could_when_off,
+                    provider._could_tablet_internal_parallel(skewed_ranges, pipeline_dop, skewed_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_off);
+
+    // (3) Optimization ON but uniform tablets (50/50): no skew, so the count gate still holds -> no split.
+    auto uniform_a = make_tablet(50);
+    auto uniform_b = make_tablet(50);
+    auto uniform_ranges = create_scan_ranges({uniform_a.get(), uniform_b.get()});
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_uniform,
+                    provider._could_tablet_internal_parallel(uniform_ranges, pipeline_dop, uniform_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_uniform);
+
+    // (4) Group-execution / colocate scope: convert_scan_range_to_morsel_queue_builder runs once per driver
+    // sequence, so the slice passed here is a single big tablet while num_total_scan_ranges is the
+    // fragment-wide total (four such driver sequences). The per-driver ideal share must be derived from the
+    // slice (scan_ranges.size()), not the global total: with the slice-scoped denominator the lone tablet is
+    // its own whole share (100 vs 100 * 1.5) and is NOT flagged as skewed, so the count gate holds and there
+    // is no split. Were the denominator the global total (min(4, dop=2)=2), the ideal share would drop to 50
+    // and 100 > 50 * 1.5 would spuriously flag this uniform layout as skewed.
+    auto ge_slice = create_scan_ranges({big.get()});
+    const size_t fragment_wide_scan_ranges = 4; // > pipeline_dop, mimics 4 driver sequences
+    provider._enable_lake_prepared_physical_split_scan = true;
+    ASSIGN_OR_ABORT(auto could_when_ge_uniform,
+                    provider._could_tablet_internal_parallel(ge_slice, pipeline_dop, fragment_wide_scan_ranges, mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_when_ge_uniform);
+
+    // (5) Optimization OFF with fewer scan ranges than pipeline_dop (num_total_scan_ranges < pipeline_dop):
+    // the early count gate does not fire, so the row-sum path runs -- byte-for-byte the pre-optimization
+    // behavior. With the skew override disabled (opt off), the decision is driven solely by scan_parallelism
+    // vs the dop / min_scan_dop thresholds (the skew term is a no-op), so a couple of small tablets that do
+    // not reach those thresholds yield no split. This pins the opt-off path where the count gate is NOT the
+    // deciding factor, complementing case (2) where it is.
+    auto low_a = make_tablet(4);
+    auto low_b = make_tablet(4);
+    auto low_ranges = create_scan_ranges({low_a.get(), low_b.get()});
+    const int low_dop = 4; // > the 2 scan ranges, so the count gate does not short-circuit
+    provider._enable_lake_prepared_physical_split_scan = false;
+    ASSIGN_OR_ABORT(auto could_off_lowdop,
+                    provider._could_tablet_internal_parallel(low_ranges, low_dop, low_ranges.size(), mode,
+                                                             &scan_parallelism, &splitted_scan_rows));
+    EXPECT_FALSE(could_off_lowdop);
 }
 
 TEST_F(LakeDataSourceTest, get_tablet_schema) {
@@ -685,6 +804,10 @@ TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
     ASSERT_FALSE(connector::has_all_pk_columns_selected(nullptr, {}));
 }
 
+// clang-format-10 (the version CI enforces) mis-parses the #ifdef USE_STAROS block in this
+// pre-existing test once the file grows and reflows it into invalid indentation; keep the
+// hand-formatting so `clang-format-changed` stays clean.
+// clang-format off
 TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
     // Case 1: Non-PK table → skip warmup
     { ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr)); }
@@ -797,6 +920,575 @@ TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
         ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
     }
 #endif
+}
+// clang-format on
+
+// ---------------------------------------------------------------------------
+// Unit tests for the late-runtime-filter reinit decision (P3b connector wiring).
+//
+// These exercise LakeDataSource::needs_late_runtime_filter_reinit in isolation:
+// pure logic over the observed-vs-current RuntimeFilterSnapshots, no open(), no
+// reader, no tablet IO. connector_lake_test is compiled with -fno-access-control
+// (be/test/connector/CMakeLists.txt), so the private nested RuntimeFilterSnapshot(s)
+// types and the _observed_runtime_filter_snapshots member are directly accessible.
+//
+// A late reinit is needed when a non-stream-build runtime filter has meaningfully
+// changed since the seed prune was captured (newly arrived, version increased,
+// appeared, disappeared, or a descriptor/stream-build attribute flipped). Stream
+// -build filters never trigger a reinit.
+// ---------------------------------------------------------------------------
+TEST_F(LakeDataSourceTest, needs_late_runtime_filter_reinit_matrix) {
+    // The ctor merely copies scan_range.internal_scan_range and stores the provider
+    // pointer, so a minimal provider + default scan range is safe here.
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+    connector::LakeDataSourceProvider provider(plan_node);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    using Snapshot = connector::LakeDataSource::RuntimeFilterSnapshot;
+    using Snapshots = connector::LakeDataSource::RuntimeFilterSnapshots;
+    auto snap = [](bool has_descriptor, bool stream_build, bool arrived, size_t version) {
+        Snapshot s;
+        s.has_descriptor = has_descriptor;
+        s.stream_build = stream_build;
+        s.arrived = arrived;
+        s.version = version;
+        return s;
+    };
+
+    struct Case {
+        std::string name;
+        Snapshots observed;
+        Snapshots current;
+        bool expected;
+    };
+
+    const std::vector<Case> cases = {
+            // current empty: reinit iff observed has any non-stream-build filter.
+            {"A_empty_current_nonstream_observed", {{1, snap(true, false, true, 3)}}, {}, true},
+            {"A_empty_current_empty_observed", {}, {}, false},
+            {"A_empty_current_all_stream_observed", {{1, snap(true, true, true, 3)}}, {}, false},
+            // current entry without a descriptor always forces a reinit.
+            {"B_current_missing_descriptor", {}, {{1, snap(false, false, false, 0)}}, true},
+            // a filter present in current but not observed: stream-build is ignored, others trigger.
+            {"C_new_stream_filter_ignored", {}, {{2, snap(true, true, false, 0)}}, false},
+            {"C_new_nonstream_filter", {}, {{2, snap(true, false, false, 0)}}, true},
+            // descriptor / stream-build attribute flips trigger.
+            {"D_has_descriptor_flip", {{1, snap(false, false, false, 0)}}, {{1, snap(true, false, false, 0)}}, true},
+            {"D_stream_build_flip", {{1, snap(true, true, false, 0)}}, {{1, snap(true, false, false, 0)}}, true},
+            // matched stream-build filter: arrival/version changes are ignored.
+            {"E_stream_match_arrival_and_version_ignored",
+             {{1, snap(true, true, false, 0)}},
+             {{1, snap(true, true, true, 5)}},
+             false},
+            // matched non-stream filter: arrival flip or version increase triggers.
+            {"F_arrived_flip", {{1, snap(true, false, false, 0)}}, {{1, snap(true, false, true, 0)}}, true},
+            {"F_version_increase", {{1, snap(true, false, true, 3)}}, {{1, snap(true, false, true, 5)}}, true},
+            // strict '>' comparison: equal version does not trigger.
+            {"F_version_equal_no_reinit", {{1, snap(true, false, true, 5)}}, {{1, snap(true, false, true, 5)}}, false},
+            {"F_not_arrived_match_no_reinit",
+             {{1, snap(true, false, false, 0)}},
+             {{1, snap(true, false, false, 0)}},
+             false},
+            // a non-stream filter that disappeared from current triggers; a stream one does not.
+            {"G_nonstream_observed_dropped",
+             {{1, snap(true, false, true, 3)}, {2, snap(true, false, true, 1)}},
+             {{1, snap(true, false, true, 3)}},
+             true},
+            {"G_stream_observed_dropped_ignored",
+             {{1, snap(true, false, true, 3)}, {2, snap(true, true, true, 1)}},
+             {{1, snap(true, false, true, 3)}},
+             false},
+    };
+
+    for (const auto& c : cases) {
+        ds._observed_runtime_filter_snapshots = c.observed;
+        EXPECT_EQ(ds.needs_late_runtime_filter_reinit(c.current), c.expected) << "case: " << c.name;
+    }
+}
+
+TEST_F(LakeDataSourceTest, stream_build_rf_never_triggers_late_reinit) {
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+    connector::LakeDataSourceProvider provider(plan_node);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    using Snapshot = connector::LakeDataSource::RuntimeFilterSnapshot;
+    using Snapshots = connector::LakeDataSource::RuntimeFilterSnapshots;
+    auto snap = [](bool has_descriptor, bool stream_build, bool arrived, size_t version) {
+        Snapshot s;
+        s.has_descriptor = has_descriptor;
+        s.stream_build = stream_build;
+        s.arrived = arrived;
+        s.version = version;
+        return s;
+    };
+
+    // A stream-build RF that arrives (false -> true) and bumps its version (0 -> 5)
+    // must NOT trigger a late reinit.
+    ds._observed_runtime_filter_snapshots = {{1, snap(true, true, false, 0)}};
+    EXPECT_FALSE(ds.needs_late_runtime_filter_reinit(Snapshots{{1, snap(true, true, true, 5)}}));
+
+    // The same evolution on a non-stream-build RF DOES trigger, as a control.
+    ds._observed_runtime_filter_snapshots = {{1, snap(true, false, false, 0)}};
+    EXPECT_TRUE(ds.needs_late_runtime_filter_reinit(Snapshots{{1, snap(true, false, true, 5)}}));
+
+    // current empty + observed entirely stream-build: nothing to reinit.
+    ds._observed_runtime_filter_snapshots = {{1, snap(true, true, true, 3)}};
+    EXPECT_FALSE(ds.needs_late_runtime_filter_reinit(Snapshots{}));
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests for the split-context dispatch (apply_child_split_context) and the
+// reuse gating (reusable_child_context). Pure logic over a stack LakeSplitContext
+// + prepared read state; no open(), no reader. connector_lake_test is compiled
+// with -fno-access-control, so the private methods / members / TEST_params() are
+// directly reachable.
+// ---------------------------------------------------------------------------
+namespace {
+using RRS = pipeline::LakeSplitContext::RowidRangeSource;
+
+connector::LakeDataSourceProvider make_split_provider(bool could_split_physically) {
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider._could_split_physically = could_split_physically; // protected, -fno-access-control
+    return provider;
+}
+
+// Build a LakeSplitContext with a non-null rowid_range and (optionally) prepared
+// tablet/segment read state. publish_bounds makes has_rowid_bounds_cache() true.
+pipeline::LakeSplitContext make_split_context(RRS source, bool with_prepared, bool publish_bounds) {
+    pipeline::LakeSplitContext ctx;
+    ctx.rowid_range_source = source;
+    ctx.rowid_range = std::make_shared<RowidRangeOption>();
+    ctx.rowset_index = 0;
+    ctx.segment_index = 0;
+    if (with_prepared) {
+        ctx.prepared_tablet_read_state = std::make_shared<lake::PreparedTabletReadState>();
+        ctx.prepared_segment_read_state = std::make_shared<lake::PreparedSegmentReadState>();
+        if (publish_bounds) {
+            ctx.prepared_segment_read_state->publish_rowid_bounds_cache({}, std::nullopt);
+        }
+    }
+    return ctx;
+}
+} // namespace
+
+TEST_F(LakeDataSourceTest, apply_child_split_context_physical_matrix) {
+    auto provider = make_split_provider(/*could_split_physically=*/true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    // REGULAR + use_prepared_state=true + prepared present: no morsel counter, prepared state
+    // preserved (can reuse: has context and not a pre-refinement coarse split), not a refine task.
+    {
+        auto ctx = make_split_context(RRS::REGULAR, /*with_prepared=*/true, /*publish_bounds=*/false);
+        ds.apply_child_split_context(ctx, /*use_prepared_state=*/true);
+        EXPECT_EQ(ds._lake_prerefinement_coarse_splits, 0);
+        EXPECT_EQ(ds._lake_initial_coarse_splits, 0);
+        EXPECT_EQ(ds._lake_refined_splits, 0);
+        EXPECT_EQ(ds.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
+        EXPECT_EQ(ds.TEST_params().prepared_segment_read_state, ctx.prepared_segment_read_state);
+        EXPECT_FALSE(ds.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
+        EXPECT_EQ(ds.TEST_params().rowid_range_option, ctx.rowid_range); // REGULAR: not trimmed
+    }
+    // INITIAL_COARSE + reusable prepared: counter++, prepared preserved, refine task requested.
+    {
+        connector::LakeDataSource ds2(&provider, scan_range);
+        auto ctx = make_split_context(RRS::INITIAL_COARSE, true, false);
+        ds2.apply_child_split_context(ctx, true);
+        EXPECT_EQ(ds2._lake_initial_coarse_splits, 1);
+        EXPECT_TRUE(ds2.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
+        EXPECT_EQ(ds2.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
+    }
+    // REFINED + prepared: refined counter++, prepared preserved, no refine task.
+    {
+        connector::LakeDataSource ds3(&provider, scan_range);
+        auto ctx = make_split_context(RRS::REFINED, true, false);
+        ds3.apply_child_split_context(ctx, true);
+        EXPECT_EQ(ds3._lake_refined_splits, 1);
+        EXPECT_FALSE(ds3.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
+        EXPECT_EQ(ds3.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
+    }
+    // PRE_REFINEMENT_COARSE + rowid-bounds cache ready: reusable, prerefinement counter++.
+    {
+        connector::LakeDataSource ds4(&provider, scan_range);
+        auto ctx = make_split_context(RRS::PRE_REFINEMENT_COARSE, true, /*publish_bounds=*/true);
+        ds4.apply_child_split_context(ctx, true);
+        EXPECT_EQ(ds4._lake_prerefinement_coarse_splits, 1);
+        EXPECT_EQ(ds4.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
+    }
+    // PRE_REFINEMENT_COARSE + rowid-bounds cache NOT ready: not reusable -> prepared state cleared.
+    {
+        connector::LakeDataSource ds5(&provider, scan_range);
+        auto ctx = make_split_context(RRS::PRE_REFINEMENT_COARSE, true, /*publish_bounds=*/false);
+        ds5.apply_child_split_context(ctx, true);
+        EXPECT_EQ(ds5._lake_prerefinement_coarse_splits, 1);
+        EXPECT_EQ(ds5.TEST_params().prepared_tablet_read_state, nullptr);
+        EXPECT_EQ(ds5.TEST_params().prepared_segment_read_state, nullptr);
+        EXPECT_FALSE(ds5.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
+    }
+    // use_prepared_state=false: prepared state always cleared, rowid range left untrimmed.
+    {
+        connector::LakeDataSource ds6(&provider, scan_range);
+        auto ctx = make_split_context(RRS::REGULAR, true, false);
+        ds6.apply_child_split_context(ctx, /*use_prepared_state=*/false);
+        EXPECT_EQ(ds6.TEST_params().prepared_tablet_read_state, nullptr);
+        EXPECT_EQ(ds6.TEST_params().prepared_segment_read_state, nullptr);
+        EXPECT_EQ(ds6.TEST_params().rowid_range_option, ctx.rowid_range);
+    }
+}
+
+TEST_F(LakeDataSourceTest, apply_child_split_context_logical_branch) {
+    auto provider = make_split_provider(/*could_split_physically=*/false);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    auto ctx = make_split_context(RRS::REGULAR, /*with_prepared=*/true, false);
+    ctx.short_key_range =
+            std::make_shared<ShortKeyRangesOption>(std::vector<ShortKeyRangeOptionPtr>{}, /*is_first_split=*/false);
+    ds.apply_child_split_context(ctx, /*use_prepared_state=*/true);
+
+    // Logical split branch: rowid range cleared, short-key range forwarded, prepared state cleared.
+    EXPECT_EQ(ds.TEST_params().rowid_range_option, nullptr);
+    EXPECT_EQ(ds.TEST_params().short_key_ranges_option, ctx.short_key_range);
+    EXPECT_EQ(ds.TEST_params().prepared_tablet_read_state, nullptr);
+    EXPECT_EQ(ds.TEST_params().prepared_segment_read_state, nullptr);
+    EXPECT_FALSE(ds.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
+}
+
+TEST_F(LakeDataSourceTest, reusable_child_context_matrix) {
+    auto provider = make_split_provider(true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    auto build_morsel = [&](RRS source, bool with_prepared, int64_t from_version) {
+        auto ctx = std::make_unique<pipeline::LakeSplitContext>(make_split_context(source, with_prepared, false));
+        auto morsel = std::make_unique<pipeline::ScanMorsel>(0, scan_range);
+        morsel->set_split_context(std::move(ctx));
+        morsel->set_from_version(from_version);
+        return morsel;
+    };
+
+    // Happy path: REFINED + prepared physical split + from_version == 0 -> returns the split context.
+    {
+        auto morsel = build_morsel(RRS::REFINED, /*with_prepared=*/true, /*from_version=*/0);
+        EXPECT_NE(ds.reusable_child_context(*morsel), nullptr);
+    }
+    // from_version != 0 -> not reusable.
+    {
+        auto morsel = build_morsel(RRS::REFINED, true, /*from_version=*/5);
+        EXPECT_EQ(ds.reusable_child_context(*morsel), nullptr);
+    }
+    // Non-REFINED source -> not reusable.
+    {
+        auto morsel = build_morsel(RRS::INITIAL_COARSE, true, 0);
+        EXPECT_EQ(ds.reusable_child_context(*morsel), nullptr);
+    }
+    // Missing prepared state (not a prepared physical split) -> not reusable.
+    {
+        auto morsel = build_morsel(RRS::REFINED, /*with_prepared=*/false, 0);
+        EXPECT_EQ(ds.reusable_child_context(*morsel), nullptr);
+    }
+    // No split context at all -> not reusable.
+    {
+        auto morsel = std::make_unique<pipeline::ScanMorsel>(0, scan_range);
+        EXPECT_EQ(ds.reusable_child_context(*morsel), nullptr);
+    }
+}
+
+// can_reuse_with gates an existing reader's reuse on: a reusable reader key is present, the
+// incoming morsel is itself a reusable child (REFINED + from_version==0 + prepared physical
+// split), and its prepared tablet read state matches the one the reader was opened against.
+TEST_F(LakeDataSourceTest, can_reuse_with_matrix) {
+    auto provider = make_split_provider(true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    auto make_refined_morsel = [&](lake::PreparedTabletReadStatePtr tablet_state, int64_t from_version) {
+        auto ctx = std::make_unique<pipeline::LakeSplitContext>(
+                make_split_context(RRS::REFINED, /*with_prepared=*/true, false));
+        ctx->prepared_tablet_read_state = std::move(tablet_state); // pin the state we compare against
+        auto morsel = std::make_unique<pipeline::ScanMorsel>(0, scan_range);
+        morsel->set_split_context(std::move(ctx));
+        morsel->set_from_version(from_version);
+        return morsel;
+    };
+
+    auto state_a = std::make_shared<lake::PreparedTabletReadState>();
+    auto state_b = std::make_shared<lake::PreparedTabletReadState>();
+
+    // No reusable reader key yet -> nothing can be reused.
+    EXPECT_FALSE(ds.can_reuse_with(*make_refined_morsel(state_a, 0)));
+
+    ds._reusable_reader_key.prepared_tablet_read_state = state_a;
+    // Matching prepared tablet read state + reusable child -> reusable.
+    EXPECT_TRUE(ds.can_reuse_with(*make_refined_morsel(state_a, 0)));
+    // A different prepared tablet read state -> not reusable (would read the wrong snapshot).
+    EXPECT_FALSE(ds.can_reuse_with(*make_refined_morsel(state_b, 0)));
+    // Matching state but not a reusable child (from_version != 0) -> not reusable.
+    EXPECT_FALSE(ds.can_reuse_with(*make_refined_morsel(state_a, 7)));
+}
+
+// has_reusable_state requires BOTH an initialized reader and a reusable reader key.
+TEST_F(LakeDataSourceTest, has_reusable_state_requires_reader_and_key) {
+    auto provider = make_split_provider(true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    // Fresh data source: no reader, no key.
+    EXPECT_FALSE(ds.has_reusable_state());
+
+    // Key without a reader is still not reusable.
+    ds._reusable_reader_key.prepared_tablet_read_state = std::make_shared<lake::PreparedTabletReadState>();
+    EXPECT_FALSE(ds.has_reusable_state());
+
+    // A sentinel non-null reader (has_reusable_state only checks the pointer, never derefs it)
+    // plus the key -> reusable.
+    ds._reader =
+            std::shared_ptr<lake::TabletReader>(reinterpret_cast<lake::TabletReader*>(0x1), [](lake::TabletReader*) {});
+    EXPECT_TRUE(ds.has_reusable_state());
+
+    // Reader without a key -> not reusable.
+    ds._reusable_reader_key.prepared_tablet_read_state = nullptr;
+    EXPECT_FALSE(ds.has_reusable_state());
+
+    ds._reader = nullptr; // drop the sentinel before teardown
+}
+
+// A PRE_REFINEMENT_COARSE child, when applied with use_prepared_state, must have its coarse
+// rowid range trimmed down to the seed's pruned scan range (the coarse range is a superset;
+// the pruned range subtracts the pages the seed already ruled out). Bare Rowset/Segment are
+// enough: trim only does pointer bookkeeping + a SparseRange intersection, no disk read.
+TEST_F(LakeDataSourceTest, apply_child_split_context_trims_coarse_by_pruned_range) {
+    auto provider = make_split_provider(/*could_split_physically=*/true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* col = schema_pb.add_column();
+    col->set_unique_id(0);
+    col->set_name("c0");
+    col->set_type("INT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    col->set_length(4);
+    col->set_index_length(4);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    RowsetMetadataPB rowset_meta; // must outlive the bare Rowset below
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("/tmp/p3b_trim"));
+    auto rowset = std::make_shared<lake::Rowset>(/*tablet_mgr=*/nullptr, /*tablet_id=*/10001, &rowset_meta,
+                                                 /*index=*/0, tablet_schema);
+    auto segment = std::make_shared<Segment>(fs, FileInfo{"/tmp/p3b_trim/0.dat"}, /*seg_id=*/0, tablet_schema,
+                                             /*tablet_manager=*/nullptr);
+
+    auto tablet_state = std::make_shared<lake::PreparedTabletReadState>();
+    tablet_state->rowsets = {rowset};
+    tablet_state->rowset_segments = {{segment}};
+    auto segment_state = std::make_shared<lake::PreparedSegmentReadState>();
+    // Seed published a pruned scan range of [0, 50) for this segment.
+    auto pruned = std::make_shared<SparseRange<>>();
+    pruned->add(Range<>(0, 50));
+    segment_state->publish_pruned_scan_range(pruned);
+
+    // The coarse split covers [0, 100) of the segment.
+    auto rowid_range = std::make_shared<RowidRangeOption>();
+    auto coarse = std::make_shared<SparseRange<>>();
+    coarse->add(Range<>(0, 100));
+    rowid_range->add(rowset.get(), segment.get(), coarse, /*is_first_split_of_segment=*/true);
+
+    pipeline::LakeSplitContext ctx;
+    ctx.rowid_range_source = RRS::PRE_REFINEMENT_COARSE;
+    ctx.rowid_range = rowid_range;
+    ctx.prepared_tablet_read_state = tablet_state;
+    ctx.prepared_segment_read_state = segment_state;
+    ctx.rowset_index = 0;
+    ctx.segment_index = 0;
+
+    ds.apply_child_split_context(ctx, /*use_prepared_state=*/true);
+
+    // [0,100) trimmed by [0,50) -> [0,50), span 50.
+    auto trimmed = ds.TEST_params().rowid_range_option;
+    ASSERT_NE(trimmed, nullptr);
+    auto split = trimmed->get_segment_rowid_range(rowset.get(), segment.get());
+    ASSERT_NE(split.row_id_range, nullptr);
+    EXPECT_EQ(split.row_id_range->span_size(), 50u);
+}
+
+// ---------------------------------------------------------------------------
+// Batch 3: init_counter registration, reopen_reader guard, capture_runtime_filter_snapshots.
+// Pure logic; connector_lake_test is -fno-access-control so private methods /
+// members / the private RuntimeFilterSnapshot fields are reachable.
+// ---------------------------------------------------------------------------
+TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
+    auto provider = make_split_provider(/*could_split_physically=*/false);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent);
+    auto rs = create_runtime_state_for_test();
+    ds.init_counter(rs.get());
+
+    RuntimeProfile* profile = ds._runtime_profile;
+    ASSERT_NE(profile, nullptr);
+    EXPECT_NE(profile->get_counter("LakePreparedSplit"), nullptr);
+    for (const auto* name : {"PreparedRowsets", "PreparedSegments", "PreparedScanRows", "PreparedScanRanges",
+                             "PreRefinementCoarseMorsels", "InitialCoarseMorsels", "RefinedMorsels",
+                             "ReusableSegmentIterCreated", "ReusableSegmentIterReused", "LateRuntimeFilterReinit"}) {
+        auto* c = profile->get_counter(name);
+        EXPECT_NE(c, nullptr) << name;
+        if (c != nullptr) {
+            EXPECT_EQ(c->value(), 0) << name;
+        }
+    }
+}
+
+TEST_F(LakeDataSourceTest, reopen_reader_requires_initialized_reader) {
+    auto provider = make_split_provider(/*could_split_physically=*/true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+    auto rs = create_runtime_state_for_test();
+
+    // _reader / _prj_iter are null on a fresh data source: reopen must fail early
+    // rather than dereferencing them.
+    auto st = ds.reopen_reader(rs.get());
+    EXPECT_FALSE(st.ok());
+    EXPECT_NE(st.to_string().find("reader is initialized"), std::string::npos) << st.to_string();
+}
+
+TEST_F(LakeDataSourceTest, capture_runtime_filter_snapshots_fields) {
+    auto provider = make_split_provider(/*could_split_physically=*/false);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+
+    ObjectPool pool;
+    auto* coll = pool.add(new RuntimeFilterProbeCollector());
+
+    // d1: non-stream, runtime filter arrived, version 7.
+    auto* d1 = pool.add(new RuntimeFilterProbeDescriptor());
+    d1->_filter_id = 1;
+    d1->_is_stream_build_filter = false;
+    auto* rf1 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<true>(&pool, 10, /*is_close_interval=*/true);
+    rf1->_rf_version = 7;
+    d1->set_runtime_filter(rf1);
+    coll->add_descriptor(d1);
+
+    // d2: stream-build, not yet arrived.
+    auto* d2 = pool.add(new RuntimeFilterProbeDescriptor());
+    d2->_filter_id = 2;
+    d2->_is_stream_build_filter = true;
+    coll->add_descriptor(d2);
+
+    // d3: a null descriptor entry exercises the has_descriptor == false branch.
+    coll->descriptors().emplace(3, nullptr);
+
+    ds.set_runtime_filters(coll);
+    auto snaps = ds.capture_runtime_filter_snapshots();
+
+    ASSERT_EQ(snaps.size(), 3u);
+    EXPECT_TRUE(snaps[1].has_descriptor);
+    EXPECT_FALSE(snaps[1].stream_build);
+    EXPECT_TRUE(snaps[1].arrived);
+    EXPECT_EQ(snaps[1].version, 7u);
+    EXPECT_TRUE(snaps[2].has_descriptor);
+    EXPECT_TRUE(snaps[2].stream_build);
+    EXPECT_FALSE(snaps[2].arrived);
+    EXPECT_FALSE(snaps[3].has_descriptor);
+
+    // No runtime filters attached -> empty snapshot map.
+    connector::LakeDataSource ds_empty(&provider, scan_range);
+    EXPECT_TRUE(ds_empty.capture_runtime_filter_snapshots().empty());
+}
+
+// The FE flag (session var -> OlapScanNode -> thrift use_prepared_physical_split_scan)
+// only takes effect after LakeDataSourceProvider::init reads it. Verify the isset/value
+// plumbing so a missing __isset or a false value both leave the feature disabled.
+TEST_F(LakeDataSourceTest, provider_reads_prepared_split_flag) {
+    ObjectPool pool;
+    auto rs = create_runtime_state_for_test();
+
+    auto make_provider = [&](std::optional<bool> flag) {
+        TPlanNode plan_node;
+        plan_node.__set_node_id(0);
+        TLakeScanNode lake_scan_node;
+        lake_scan_node.__set_tuple_id(0);
+        if (flag.has_value()) {
+            lake_scan_node.__set_use_prepared_physical_split_scan(*flag);
+        }
+        plan_node.__set_lake_scan_node(lake_scan_node);
+        auto provider = std::make_unique<connector::LakeDataSourceProvider>(plan_node);
+        provider->set_lake_tablet_manager(_tablet_mgr);
+        CHECK_OK(provider->init(&pool, rs.get()));
+        return provider;
+    };
+
+    // Flag set to true -> feature enabled.
+    EXPECT_TRUE(make_provider(true)->_enable_lake_prepared_physical_split_scan);
+    // Flag explicitly false -> disabled.
+    EXPECT_FALSE(make_provider(false)->_enable_lake_prepared_physical_split_scan);
+    // Flag never set (__isset false) -> disabled, matching an old FE that does not send it.
+    EXPECT_FALSE(make_provider(std::nullopt)->_enable_lake_prepared_physical_split_scan);
+}
+
+// get_split_tasks forwards to the tablet reader, but the reader is null until the data
+// source is opened. A fresh data source must treat the call as a no-op rather than
+// dereferencing the null reader (the split-source morsel path may query it early).
+TEST_F(LakeDataSourceTest, get_split_tasks_null_reader_is_safe) {
+    auto provider = make_split_provider(/*could_split_physically=*/true);
+    TScanRange scan_range;
+    connector::LakeDataSource ds(&provider, scan_range);
+    ASSERT_EQ(ds._reader, nullptr);
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    ds.get_split_tasks(&split_tasks); // must not crash on the null reader
+    EXPECT_TRUE(split_tasks.empty());
+}
+
+// disable_runtime_filter_dependent_cache must be flag-only: a late runtime filter can disable the
+// shared prepared cache while sibling split readers are still borrowing it (shared_ptr copy + a raw
+// pointer into the rowid-bounds vector) during iterator init without a lock. Disabling must flip the
+// cache to "not available" (so future readers re-prune) WITHOUT resetting/clearing the underlying
+// data, so those in-flight borrows stay valid instead of racing / dangling.
+TEST_F(LakeDataSourceTest, disable_runtime_filter_dependent_cache_is_flag_only) {
+    lake::PreparedSegmentReadState state;
+    auto pruned = std::make_shared<SparseRange<>>();
+    pruned->add(Range<>(0, 50));
+    state.publish_pruned_scan_range(pruned);
+    std::vector<std::optional<Range<rowid_t>>> bounds;
+    bounds.emplace_back(Range<rowid_t>(0, 50));
+    state.publish_rowid_bounds_cache(std::move(bounds), std::nullopt);
+    ASSERT_TRUE(state.has_pruned_scan_range());
+    ASSERT_TRUE(state.has_rowid_bounds_cache());
+
+    // Mirror how make_segment_read_state_cache borrows the published data on the read path.
+    auto borrowed_range = state.pruned_scan_range;                 // shared_ptr copy
+    const auto* borrowed_bounds = &state.seek_ranges_rowid_bounds; // raw pointer into the vector
+
+    state.disable_runtime_filter_dependent_cache();
+
+    // Future readers see the caches as unavailable and will re-prune with the late filter.
+    EXPECT_FALSE(state.has_pruned_scan_range());
+    EXPECT_FALSE(state.has_rowid_bounds_cache());
+    // But the underlying data is NOT reset/cleared, so the in-flight borrow is still valid.
+    EXPECT_EQ(state.pruned_scan_range, borrowed_range);
+    ASSERT_NE(borrowed_range, nullptr);
+    EXPECT_EQ(borrowed_range->span_size(), 50u);
+    EXPECT_FALSE(state.seek_ranges_rowid_bounds.empty());
+    EXPECT_EQ(borrowed_bounds->size(), 1u);
 }
 
 } // namespace starrocks::lake

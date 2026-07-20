@@ -304,6 +304,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
     public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
+
+    public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
+            "enable_lake_prepared_physical_split_scan";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
@@ -414,6 +417,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
+
+    public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
+            "lake_tablet_internal_parallel_skew_split_ratio";
 
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
@@ -1333,6 +1339,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
 
+    // A lake tablet whose row count exceeds this ratio times the per-driver ideal share is treated as a
+    // skewed straggler and split under the prepared-physical-split scan even when the scan-range count
+    // already reaches pipeline_dop. Only affects enable_lake_prepared_physical_split_scan.
+    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
+    private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
+
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
     @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
@@ -1636,6 +1648,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Deprecated: Use connector_sink_shuffle_mode instead
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
+
+    // Lake prepared physical split scan: seed prunes each segment once and shares the prepared read state
+    // across split children. Default off; a per-scan decision in PlanFragmentBuilder gates it further.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN)
+    private boolean enableLakePreparedPhysicalSplitScan = false;
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_MODE)
     private String connectorSinkShuffleMode = ConnectorSinkShuffleMode.AUTO.modeName();
@@ -2440,6 +2457,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
+    }
+
+    public boolean isEnableLakePreparedPhysicalSplitScan() {
+        return enableLakePreparedPhysicalSplitScan;
+    }
+
+    public void setEnableLakePreparedPhysicalSplitScan(boolean enableLakePreparedPhysicalSplitScan) {
+        this.enableLakePreparedPhysicalSplitScan = enableLakePreparedPhysicalSplitScan;
     }
 
     public long getSplitTopNAggLimit() {
@@ -4757,6 +4782,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
     }
 
+    public double getLakeTabletInternalParallelSkewSplitRatio() {
+        return lakeTabletInternalParallelSkewSplitRatio;
+    }
+
+    public void setLakeTabletInternalParallelSkewSplitRatio(double ratio) {
+        // The BE multiplies the per-driver ideal share by this ratio to decide has_skewed_big_tablet;
+        // a non-positive value would flag every sufficiently large tablet as skewed (over-splitting),
+        // while NaN/Infinity would silently disable the skew override. Require a positive finite number.
+        if (!Double.isFinite(ratio) || ratio <= 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO, ratio, "a positive finite number");
+        }
+        this.lakeTabletInternalParallelSkewSplitRatio = ratio;
+    }
+
     public boolean isEnableResourceGroup() {
         return true;
     }
@@ -6607,6 +6647,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+        tResult.setLake_tablet_internal_parallel_skew_split_ratio(lakeTabletInternalParallelSkewSplitRatio);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));

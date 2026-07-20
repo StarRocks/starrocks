@@ -53,10 +53,8 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CON
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -152,7 +150,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -176,7 +174,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -208,7 +206,7 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), eq(OLD_TABLET_ID), any()))
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, fixedClock);
@@ -417,9 +415,9 @@ public class DefaultPreSplitPipelineTest {
     // ---------- preSubmit: unified per-index plan ----------
 
     @Test
-    public void preSubmit_singleIndex_usesSingleTabletFactory() throws Exception {
-        // A single-index target list (base only, matching the pre-existing shape) must still
-        // route through forExternalBoundaries, never forExternalBoundariesMultiTablet.
+    public void preSubmit_singleIndex_buildsSingleEntryMapJob() throws Exception {
+        // A single-index target list (base only) builds one job from a single-entry
+        // {oldTabletId -> ranges} map.
         BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
         MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
         Sampler dataTier = request -> {
@@ -428,7 +426,10 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
@@ -437,14 +438,15 @@ public class DefaultPreSplitPipelineTest {
 
             Assertions.assertTrue(prepared.isPresent());
             Assertions.assertSame(fakeJob, prepared.get().payload());
-            mocked.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()), never());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(1, map.size());
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
         }
     }
 
     @Test
-    public void preSubmit_baseAndRollup_splitsBothViaMultiTablet() throws Exception {
-        // Both the base and a rollup produce cuts -> the {oldTabletId -> ranges} map has two
-        // entries -> forExternalBoundariesMultiTablet, never the single-tablet factory.
+    public void preSubmit_baseAndRollup_splitsBoth() throws Exception {
+        // Both the base and a rollup produce cuts -> the {oldTabletId -> ranges} map has two entries.
         stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
         BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
         MetaTierSampler metaTier = (request, requestedTabletCount) -> metaTierResult;
@@ -456,7 +458,7 @@ public class DefaultPreSplitPipelineTest {
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                             eq(database), eq(table), mapCaptor.capture()))
                     .thenReturn(fakeJob);
 
@@ -470,15 +472,13 @@ public class DefaultPreSplitPipelineTest {
             Assertions.assertEquals(2, map.size());
             Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
             Assertions.assertTrue(map.containsKey(ROLLUP_TABLET_ID));
-            mocked.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), anyLong(), any()), never());
         }
     }
 
     @Test
-    public void preSubmit_rollupNoCuts_usesSingleTabletFactoryForBase() throws Exception {
+    public void preSubmit_rollupNoCuts_baseOnly() throws Exception {
         // The rollup's own sort key yields NO_SPLIT while the base still produces cuts -- the
-        // map ends up with only the base entry, so the single-tablet factory is used (a
-        // base-only submit is allowed).
+        // map ends up with only the base entry (a base-only submit is allowed).
         stubVisibleIndexMetas(BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID);
         BoundaryPlannerResult metaTierResult = new BoundaryPlannerResult(List.of(bigintTuple(50)));
         MetaTierSampler metaTier = (request, requestedTabletCount) ->
@@ -489,7 +489,10 @@ public class DefaultPreSplitPipelineTest {
 
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(eq(database), eq(table), eq(OLD_TABLET_ID), any()))
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                            eq(database), eq(table), mapCaptor.capture()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(baseAndRollupTargets(), metaTier, dataTier, Clock.systemUTC());
@@ -498,7 +501,9 @@ public class DefaultPreSplitPipelineTest {
 
             Assertions.assertTrue(prepared.isPresent(), "base-only cuts must still submit (allowed base-only)");
             Assertions.assertSame(fakeJob, prepared.get().payload());
-            mocked.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()), never());
+            Map<Long, List<TabletRange>> map = mapCaptor.getValue();
+            Assertions.assertEquals(1, map.size());
+            Assertions.assertTrue(map.containsKey(OLD_TABLET_ID));
         }
     }
 
@@ -523,7 +528,7 @@ public class DefaultPreSplitPipelineTest {
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
-            mocked.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                             eq(database), eq(table), mapCaptor.capture()))
                     .thenReturn(fakeJob);
 
@@ -610,7 +615,7 @@ public class DefaultPreSplitPipelineTest {
 
             TabletReshardJob fakeJob = mock(TabletReshardJob.class);
             try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
-                mocked.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+                mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                         .thenReturn(fakeJob);
 
                 DefaultPreSplitPipeline pipeline =
@@ -661,7 +666,7 @@ public class DefaultPreSplitPipelineTest {
             TabletReshardJob fakeJob = mock(TabletReshardJob.class);
             try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
                 mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(
-                                eq(database), eq(table), eq(ROLLUP_TABLET_ID), any()))
+                                eq(database), eq(table), any()))
                         .thenReturn(fakeJob);
 
                 DefaultPreSplitPipeline pipeline =
@@ -671,7 +676,6 @@ public class DefaultPreSplitPipelineTest {
 
                 Assertions.assertTrue(prepared.isPresent(),
                         "rollup-only cuts must still submit (allowed base-no-cut/rollup-cut)");
-                mocked.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()), never());
             }
 
             Assertions.assertEquals(baselineTierCount + 1,

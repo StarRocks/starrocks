@@ -370,8 +370,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 8
 - 类型: Int
 - 单位: -
-- 是否可变: No
-- 描述: 存算分离集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。
+- 是否可变: Yes
+- 描述: 存算分离集群中可同时进行 AutoVacuum 的分区最大数量。AutoVacuum 是 Compactions 后的垃圾回收。设置为 `0` 或负数将完全禁用 AutoVacuum。
 - 引入版本: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`

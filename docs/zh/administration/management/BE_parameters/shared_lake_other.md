@@ -164,6 +164,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### enable_lake_prepared_split_pre_refinement
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：prepared-physical-split lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 segment 范围的 coarse-range morsel，让原本空闲的 driver 先忙起来，直到裁剪后的 refined 范围就绪。关闭它不会丢失数据（coarse 范围始终是 refined 范围从中相减的超集），只是用提前并行换取更少的冗余 coarse 扫描。
+- 引入版本：v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：仅在开启 prepared physical split scan（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 split morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 split morsel 拆得更细（把大 Tablet 切成更多子范围 morsel 以填充原本空闲的 driver），不会更粗。仅在存算分离集群中生效。
+- 引入版本：v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - 默认值：-1

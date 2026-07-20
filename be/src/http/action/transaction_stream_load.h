@@ -24,6 +24,8 @@
 
 namespace starrocks {
 
+class TransactionMgr;
+
 class ExecEnv;
 class Status;
 class StreamLoadContext;
@@ -35,7 +37,7 @@ class StreamLoadOrchestrator;
 
 class TransactionManagerAction : public HttpHandler {
 public:
-    explicit TransactionManagerAction(ExecEnv* exec_env);
+    TransactionManagerAction(ExecEnv* exec_env, TransactionMgr* transaction_mgr);
     ~TransactionManagerAction() override;
 
     void handle(HttpRequest* req) override;
@@ -50,11 +52,13 @@ private:
     void _send_error_reply(HttpRequest* req, const Status& st);
 
     ExecEnv* _exec_env;
+    TransactionMgr* _transaction_mgr;
 };
 
 class TransactionStreamLoadAction : public HttpHandler {
 public:
-    TransactionStreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator);
+    TransactionStreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+                                TransactionMgr* transaction_mgr);
     ~TransactionStreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -82,6 +86,7 @@ private:
 
     ExecEnv* _exec_env;
     orchestration::StreamLoadOrchestrator* _stream_load_orchestrator;
+    TransactionMgr* _transaction_mgr;
 };
 
 } // namespace starrocks

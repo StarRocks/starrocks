@@ -29,6 +29,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -52,7 +53,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -65,6 +68,27 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionSchedulerTest {
+    // Config.enable_metric_calculator is JVM-global; MetricRepo.init() schedules a fixed-rate timer
+    // when it is true. Save the original value here so @AfterAll can restore it and the toggle does
+    // not leak into other FE tests.
+    private static boolean savedEnableMetricCalculator;
+
+    @BeforeAll
+    public static void initMetrics() {
+        // CompactionScheduler dereferences MetricRepo.COUNTER_LAKE_COMPACTION_* and
+        // GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER guarded by MetricRepo.hasInit. Initialise the repo
+        // once so tests that drive runOneCycle()/scheduleNewCompaction() exercise the metric paths
+        // instead of short-circuiting. MetricRepo.init() is idempotent (guarded by hasInit).
+        savedEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+    }
+
+    @AfterAll
+    public static void restoreConfig() {
+        Config.enable_metric_calculator = savedEnableMetricCalculator;
+    }
+
     @Mocked
     private GlobalStateMgr globalStateMgr;
     @Mocked
@@ -317,12 +341,12 @@ public class CompactionSchedulerTest {
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
                 PhysicalPartition partition1 = new PhysicalPartition(123, 123, new MaterializedIndex());
                 PhysicalPartition partition2 = new PhysicalPartition(124, 124, new MaterializedIndex());
-                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "");
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "", null);
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                 }
-                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "");
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "", null);
                 r.put(partitionIdentifier1, job1);
                 r.put(partitionIdentifier2, job2);
                 return r;
@@ -332,6 +356,31 @@ public class CompactionSchedulerTest {
         List<CompactionRecord> list = compactionScheduler.getHistory();
         Assertions.assertEquals(2, list.size());
         Assertions.assertTrue(list.get(0).getStartTs() <= list.get(1).getStartTs());
+    }
+
+    @Test
+    public void testSetScoreAfter() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        Database db = new Database();
+        Table table = new LakeTable();
+        PhysicalPartition partition = new PhysicalPartition(3, 3, new MaterializedIndex());
+        PartitionIdentifier partitionId = new PartitionIdentifier(1, 2, 3);
+        CompactionJob job = new CompactionJob(db, table, partition, 100, false, WarehouseManager.DEFAULT_RESOURCE, "wh", null);
+        compactionScheduler.getRunningCompactions().put(partitionId, job);
+
+        Assertions.assertNull(job.getScoreAfter());
+
+        // set scoreAfter for an existing partition
+        Quantiles scoreAfter = new Quantiles(1.0, 1.0, 2.0);
+        compactionScheduler.setScoreAfter(partitionId, scoreAfter);
+        Assertions.assertEquals(scoreAfter, job.getScoreAfter());
+
+        // set scoreAfter for a non-existing partition should not throw
+        PartitionIdentifier nonExistent = new PartitionIdentifier(1, 2, 999);
+        compactionScheduler.setScoreAfter(nonExistent, scoreAfter);
     }
 
     @Test
@@ -405,7 +454,7 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
-                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName, null);
             }
         };
         new MockUp<WarehouseManager>() {
@@ -608,7 +657,8 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
-                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+                CompactionJob job = new CompactionJob(db, table, partition, 100, false,
+                        info.computeResource, info.warehouseName, null);
                 return job;
             }
         };
@@ -870,5 +920,142 @@ public class CompactionSchedulerTest {
         List<MaterializedIndex> loadedIndexes = txnState.getPartitionLoadedIndexes(tableId, physicalPartition);
         Assertions.assertEquals(1, loadedIndexes.size());
         Assertions.assertEquals(indexId, loadedIndexes.get(0).getId());
+    }
+
+    /**
+     * Drive runOneCycle through scheduleNewCompaction and assert that
+     * GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER is updated when a compaction job lands in
+     * runningCompactions. The gauge holds the rounded score of the most recent trigger, so after
+     * two partitions are scheduled it equals one of {42, 99} — whichever ran last. Uses
+     * the same pattern as testCompactionWarehouseLimit but threads a real Quantiles through
+     * to the CompactionJob so the score-before getter is non-null and the score update
+     * path is exercised.
+     */
+    @Test
+    public void testScoreGaugeUpdatedWhenJobStarts() {
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+
+        compactionManager.handleLoadingFinished(partition1, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(42d)));
+        compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
+                                                Quantiles.compute(Lists.newArrayList(99d)));
+
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        mockedWarehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(c1, c2));
+
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
+                    CompactionWarehouseInfo info) {
+                Database db = new Database();
+                Table table = new LakeTable();
+                long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
+                PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
+                // Thread the real Quantiles through so the histogram update site has a non-null
+                // scoreBefore to read from.
+                return new CompactionJob(db, table, partition, 100, false,
+                        info.computeResource, info.warehouseName,
+                        partitionStatisticsSnapshot.getCompactionScore());
+            }
+        };
+        new MockUp<CompactionJob>() {
+            @Mock
+            public int getNumTabletCompactionTasks() {
+                return 1;
+            }
+        };
+
+        compactionScheduler.runOneCycle();
+        Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
+        // The two partitions feed Quantiles(42d) and Quantiles(99d); max() of a one-element
+        // list is that element, so the rounded score must be 42 or 99 depending on which
+        // partition the scheduler scheduled last in this cycle.
+        long gaugeAfter = MetricRepo.GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER.getValueLeader();
+        Assertions.assertTrue(gaugeAfter == 42L || gaugeAfter == 99L,
+                "Gauge should hold the rounded score of the most recent trigger; actual=" + gaugeAfter);
+    }
+
+    /**
+     * Verify the two running gauges report DISTINCT quantities through CompactionMgr:
+     * - GAUGE_LAKE_COMPACTION_RUNNING (`lake_compaction_running`, #71201) = job count
+     *   (one per partition) via getRunningCompactionCount().
+     * - GAUGE_LAKE_COMPACTION_RUNNING_TASKS (`lake_compaction_running_tasks`) = total running
+     *   tablet-level tasks via getRunningCompactionTaskCount() (sum of
+     *   CompactionJob.getNumTabletCompactionTasks() over running jobs).
+     * Seed 3 jobs, each carrying one not-done task of 2 tablets, so the gauges read 3 and 6.
+     */
+    @Test
+    public void testRunningCompactionGaugesReadFromCompactionMgr() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        compactionManager.setCompactionScheduler(scheduler);
+
+        // Pre-seed three running compactions, each with one not-done task covering 2 tablets, so
+        // the job gauge reads 3 and the tablet-task gauge reads 6 (distinct values). CompactionTask
+        // is mocked because its test-only constructor leaves request == null, which would NPE
+        // inside getNumTabletCompactionTasks() -> tabletCount().
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                Database db = new Database();
+                Table table = new LakeTable();
+                for (int i = 0; i < 3; i++) {
+                    PartitionIdentifier id = new PartitionIdentifier(1, 2, 100 + i);
+                    PhysicalPartition partition = new PhysicalPartition(100 + i, 100 + i, new MaterializedIndex());
+                    CompactionJob job = new CompactionJob(db, table, partition, 100 + i, false, null, "", null);
+                    // Use a real anonymous CompactionTask instead of Mockito.mock: the FOR-TEST
+                    // 1-arg ctor leaves responseFuture null, so isDone() is already false; only
+                    // tabletCount() must be overridden (its request is null and would NPE). This
+                    // keeps the class on JMockit alone and avoids a JMockit+Mockito instrumentation
+                    // clash that can error this test and drop the whole class's coverage.
+                    CompactionTask task = new CompactionTask(100 + i) {
+                        @Override
+                        public int tabletCount() {
+                            return 2;
+                        }
+                    };
+                    job.setTasks(Lists.newArrayList(task));
+                    r.put(id, job);
+                }
+                return r;
+            }
+        };
+
+        final CompactionMgr finalMgr = compactionManager;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public CompactionMgr getCompactionMgr() {
+                return finalMgr;
+            }
+        };
+
+        Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING.getValueLeader());
+        Assertions.assertEquals(6L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
     }
 }

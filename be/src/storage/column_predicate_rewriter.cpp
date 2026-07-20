@@ -317,8 +317,11 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
     if (PredicateType::kGinFallback == pred->type()) {
         const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);
+        // The bitmap is the set of rows for which the predicate is TRUE (negation
+        // and NULLs already folded in), so an empty bitmap means the predicate
+        // holds for no row regardless of whether it was negated.
         if (fallback_pred->get_bitmap().isEmpty()) {
-            return fallback_pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
+            return RewriteStatus::ALWAYS_FALSE;
         }
         return RewriteStatus::UNCHANGED;
     }

@@ -177,7 +177,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -188,7 +188,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_001L));
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_002L));
             Assertions.assertTrue(mapCaptor.getValue().containsKey(21_003L));
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     times(1));
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), times(1))
                     .addTabletReshardJob(combinedJob);
@@ -222,7 +222,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -257,7 +257,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -287,7 +287,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenThrow(new StarRocksException("synthetic factory rejection"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -313,7 +313,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
             TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
             doThrow(new StarRocksException("capacity exceeded")).when(mgr).addTabletReshardJob(combinedJob);
@@ -342,7 +342,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -381,7 +381,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -439,7 +439,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                             }).when(mockLocker).unLockTableWithIntensiveDbLock(
                                     any(Long.class), any(Long.class), any(LockType.class));
                         })) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -466,7 +466,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.TABLE_NOT_NORMAL);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -490,7 +490,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -517,7 +517,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()))
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenThrow(new IllegalArgumentException("synthetic bad ranges"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -546,7 +546,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -570,7 +570,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -603,7 +603,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
 
             // Single entry dropped as PARTITION_NOT_ELIGIBLE_POST_CREATE -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -628,7 +628,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -662,7 +662,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
 
             // Single non-empty partition dropped -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -684,7 +684,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -710,7 +710,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -741,7 +741,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -780,7 +780,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -815,7 +815,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -845,7 +845,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -878,7 +878,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -907,7 +907,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -952,7 +952,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -981,7 +981,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -1017,7 +1017,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -1056,7 +1056,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of(ROLLUP_INDEX_META_ID));
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }
@@ -1078,7 +1078,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
             ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
-            factory.when(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
@@ -1115,7 +1115,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
-            factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
         }
     }

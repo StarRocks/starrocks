@@ -301,12 +301,6 @@ set(EXEC_RUNTIME_COMPAT_FILES
     exec_env.cpp
     pipeline/pipeline_fragment_reporter.cpp
     runtime_compat/runtime_state_helper.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_executor.cpp
-    batch_write/isomorphic_batch_write.cpp
-    batch_write/batch_write_mgr.cpp
-    batch_write/batch_write_util.cpp
-    batch_write/txn_state_cache.cpp
     runtime_filter_compat/runtime_filter_merger.cpp
     runtime_filter_compat/runtime_filter_port.cpp
     runtime_filter_compat/runtime_filter_rpc.cpp

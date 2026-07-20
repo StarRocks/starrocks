@@ -18,6 +18,7 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -467,6 +468,81 @@ public class CreateLakeTableTest {
 
         }
     }
+
+    @Test
+    public void testRangeDistributionDefault() throws Exception {
+        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        Assertions.assertTrue(Config.enable_range_distribution);
+        boolean savedConfig = Config.enable_range_distribution;
+        try {
+            // Default on: a bare CREATE (no DISTRIBUTED BY) defaults to RANGE for every keys type
+            // except a derived DUPLICATE key with no ORDER BY (the common "t(k, v)" case).
+            createTable("create table lake_test.rd_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_pk").isRangeDistribution());
+
+            createTable("create table lake_test.rd_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup").isRangeDistribution());
+
+            createTable("create table lake_test.rd_derived_dup (c0 int, c1 int) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "rd_derived_dup").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.rd_dup_orderby (c0 int, c1 int) order by(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup_orderby").isRangeDistribution());
+
+            createTable("create table lake_test.rd_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_agg").isRangeDistribution());
+
+            createTable("create table lake_test.rd_uniq (c0 int, c1 int) unique key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_uniq").isRangeDistribution());
+
+            // Kill switch: disabling the config reverts to the previous per-keys-type default.
+            Config.enable_range_distribution = false;
+
+            createTable("create table lake_test.ks_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.HASH,
+                    getLakeTable("lake_test", "ks_pk").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.ks_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "ks_dup").getDefaultDistributionInfo().getType());
+
+            // AGG/UNIQUE without a DISTRIBUTED BY clause have no default distribution when range is off.
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                            "properties('replication_num' = '1');"));
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_uniq (c0 int, c1 int) unique key(c0) " +
+                            "properties('replication_num' = '1');"));
+        } finally {
+            Config.enable_range_distribution = savedConfig;
+        }
+    }
+
+    @Test
+    public void testRangeDistributionDefaultWithRollup() throws Exception {
+        Assertions.assertTrue(Config.enable_range_distribution);
+        // A bare CREATE (no DISTRIBUTED BY) with a ROLLUP defaults the base index to RANGE and still
+        // creates the rollup index.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.rd_table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        LakeTable lakeTable = getLakeTable("lake_test", "rd_table_with_rollup");
+        Assertions.assertTrue(lakeTable.isRangeDistribution());
+        Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+    }
+
     @Test
     public void testRestoreColumnUniqueId() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
