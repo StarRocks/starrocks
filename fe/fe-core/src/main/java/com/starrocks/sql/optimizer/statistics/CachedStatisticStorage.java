@@ -797,19 +797,29 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         final var timeoutMs = hasStatisticsLoadBudget ?
                 statisticsLoadBudget.getRemainingTimeoutMs(desiredTimeoutMs) : desiredTimeoutMs;
         if (timeoutMs <= 0) {
-            SYNC_STATS_BUDGET_EXCEEDED.increase(1L);
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
             return;
         }
 
         long startNanos = System.nanoTime();
+        boolean isTimeout = false;
         try {
             future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            SYNC_STATS_BUDGET_EXCEEDED.increase(1L);
+            isTimeout = true;
         } finally {
             if (hasStatisticsLoadBudget) {
                 statisticsLoadBudget.recordWait(System.nanoTime() - startNanos);
             }
+        }
+        if (isTimeout) {
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
+        }
+    }
+
+    private void increaseSyncStatsBudgetExceededIfBudgetExhausted(StatisticsLoadBudget statisticsLoadBudget) {
+        if (statisticsLoadBudget != null && statisticsLoadBudget.getRemainingBudgetMs() <= 0) {
+            SYNC_STATS_BUDGET_EXCEEDED.increase(1L);
         }
     }
 

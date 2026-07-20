@@ -60,6 +60,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_BUDGET_EXCEEDED;
+
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
@@ -663,6 +665,20 @@ public class CachedStatisticStorageTest {
         }
     }
 
+    private static class FixedWaitStatisticsLoadBudget extends StatisticsLoadBudget {
+        private final long waitMsToRecord;
+
+        private FixedWaitStatisticsLoadBudget(long totalBudgetMs, long waitMsToRecord) {
+            super(totalBudgetMs);
+            this.waitMsToRecord = waitMsToRecord;
+        }
+
+        @Override
+        public synchronized void recordWait(long elapsedNanos) {
+            super.recordWait(TimeUnit.MILLISECONDS.toNanos(waitMsToRecord));
+        }
+    }
+
     @Test
     public void testWaitForStatsFutureUsesPerCallTimeoutWithoutQueryBudget() {
         // GIVEN
@@ -674,6 +690,7 @@ public class CachedStatisticStorageTest {
         int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
         ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
         StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
         try {
             Config.enable_sync_statistics_load = true;
             Config.sync_statistics_load_timeout_ms = 100;
@@ -690,12 +707,83 @@ public class CachedStatisticStorageTest {
             Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
             Assertions.assertFalse(timeoutFuture.isDone());
             Assertions.assertNull(connectContext.getStatisticsLoadBudget());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_BUDGET_EXCEEDED.getValue());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
             ConnectContext.exchangeThreadLocalInfo(previousContext);
             Config.enable_sync_statistics_load = originalEnabled;
             Config.sync_statistics_load_timeout_ms = originalTimeout;
             Config.sync_statistics_load_per_query_budget_ms = originalQueryBudget;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureDoesNotReportBudgetExceededWhenPerCallTimeoutExpiresWithBudgetRemaining() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+        final var budget = new FixedWaitStatisticsLoadBudget(1000, 100);
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+            connectContext.setStatisticsLoadBudget(budget);
+
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                    (Supplier<String>) () -> "context");
+
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertEquals(900, budget.getRemainingBudgetMs());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_BUDGET_EXCEEDED.getValue());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    public void testWaitForStatsFutureReportsBudgetExceededAfterTimedWaitExhaustsBudget() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var timeoutFuture = new TimeoutFuture<>();
+        final var budget = new FixedWaitStatisticsLoadBudget(100, 100);
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
+        StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
+        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 1000;
+            connectContext.setStatisticsLoadBudget(budget);
+
+            // WHEN
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", timeoutFuture,
+                    (Supplier<String>) () -> "context");
+
+            // THEN
+            Assertions.assertEquals(1, timeoutFuture.timedGetCalls);
+            Assertions.assertEquals(100, timeoutFuture.timeout);
+            Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
+            Assertions.assertEquals(0, budget.getRemainingBudgetMs());
+            Assertions.assertEquals(beforeMetric + 1, SYNC_STATS_BUDGET_EXCEEDED.getValue());
+        } finally {
+            connectContext.setStatisticsLoadBudget(previousBudget);
+            ConnectContext.exchangeThreadLocalInfo(previousContext);
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
         }
     }
 
