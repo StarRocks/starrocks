@@ -45,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -225,6 +226,16 @@ public abstract class ConnectorPartitionTraits {
 
     public List<PartitionInfo> getPartitions(List<String> names) {
         throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
+    }
+
+    /**
+     * Total row count per partition, when the connector can supply it cheaply from metadata (e.g. the Iceberg
+     * PARTITIONS metadata table). Used by bounded-cost external statistics collection to extrapolate a
+     * budget-truncated sample back to the full partition. Default: empty - the connector does not expose it,
+     * so statistics are stored as raw sample values.
+     */
+    public Map<String, Long> getPartitionRowCounts(List<String> names) {
+        return Collections.emptyMap();
     }
 
     /**
