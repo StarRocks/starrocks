@@ -1368,12 +1368,13 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     int64_t total_files = 0;
     int64_t total_bytes = 0;
     const auto now = std::time(nullptr);
-    RETURN_IF_ERROR_WITH_WARN(
-            ignore_not_found(fs->iterate_dir2(segment_root_location,
-                                              [&](DirEntry entry) {
-                                                  total_files++;
-                                                  total_bytes += entry.size.value_or(0);
+    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(
+                                      segment_root_location,
+                                      [&](DirEntry entry) {
+                                          total_files++;
+                                          total_bytes += entry.size.value_or(0);
 
+<<<<<<< HEAD
                                                   // should consider segment files, sst, del file, delvector
                                                   if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                                       !is_delvec(entry.name) && !is_del(entry.name)) {
@@ -1383,13 +1384,48 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                       LOG(WARNING) << "Fail to get modified time of " << entry.name;
                                                       return true;
                                                   }
+=======
+                                          // should consider segment files, sst, del file, delvector, vector index, idx, lcrm
+                                          // NOTE: .idx files are produced by the ADD INDEX fast path (Index
+                                          // Delta Group). Active .idx files are referenced from
+                                          // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
+                                          // MetaFileBuilder::apply_drop_index. Any .idx file that is older
+                                          // than the expire window and not referenced by any live metadata is
+                                          // a candidate here and reclaimed by the existing orphan scan logic.
+                                          // NOTE: .lcrm files are the Lake Compaction Rows Mapper files produced
+                                          // by (parallel and serial) PK compaction. They are referenced only from
+                                          // the transaction log (OpCompaction.lcrm_file / OpParallelCompaction
+                                          // subtask/orphan lcrm), never from any live TabletMetadataPB field --
+                                          // on a successful publish they are consumed and deleted by
+                                          // RowsMapperIterator, and superseded ones enter orphan_files. So an
+                                          // .lcrm left behind by an aborted/failed/crashed compaction is
+                                          // referenced by nothing durable and, before this filter included it,
+                                          // could never be reclaimed by any GC path. An in-flight .lcrm is
+                                          // protected here identically to the output segments the same
+                                          // compaction wrote: the production full-vacuum path keeps any file
+                                          // whose txn-id filename prefix is >= min_active_txn_id (see
+                                          // vacuum_orphaned_datafiles, which runs this scan with
+                                          // expired_seconds=0), and the offline datafile_gc tool keeps files
+                                          // within its mtime expire window. So exposing .lcrm here only ever
+                                          // reclaims a truly-orphaned mapper, never a live one.
+                                          if (!is_segment(entry.name) && !is_sst(entry.name) &&
+                                              !is_delvec(entry.name) && !is_del(entry.name) &&
+                                              !is_vector_index(entry.name) && !is_idx(entry.name) &&
+                                              !is_lcrm(entry.name)) {
+                                              return true;
+                                          }
+                                          if (!entry.mtime.has_value()) {
+                                              LOG(WARNING) << "Fail to get modified time of " << entry.name;
+                                              return true;
+                                          }
+>>>>>>> 2ba061b1bd ([BugFix] Reclaim orphaned .lcrm files in lake full vacuum (#76522))
 
-                                                  if (now >= entry.mtime.value() + expired_seconds) {
-                                                      data_files.emplace(entry.name, entry);
-                                                  }
-                                                  return true;
-                                              })),
-            "Failed to list " + segment_root_location);
+                                          if (now >= entry.mtime.value() + expired_seconds) {
+                                              data_files.emplace(entry.name, entry);
+                                          }
+                                          return true;
+                                      })),
+                              "Failed to list " + segment_root_location);
     LOG(INFO) << segment_root_location << ": Listed all data files, total files: " << total_files
               << ", total bytes: " << total_bytes << ", candidate files: " << data_files.size();
     return data_files;
