@@ -24,6 +24,7 @@
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
 #include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/scan/warm_slot_reservation.h"
 #include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
@@ -278,17 +279,12 @@ protected:
     bool _is_finished = false;
 
     std::atomic<int> _num_running_io_tasks = 0;
-    // Footer warm tasks (connector scans) run on their own counter so they fill spare io-task slots
-    // (data + warm <= the per-instance cap) without perturbing the adaptive governor or the data
-    // re-submit gate, which read _num_running_io_tasks (data only). pending_finish() waits on it.
-    std::atomic<int> _num_running_warm_tasks = 0;
-    // Set once in set_finishing() to reject any warm reservation that races operator teardown. A warm
-    // submit can be triggered from a data io-task completion (_finish_chunk_source_task) that runs on
-    // an executor thread after the driver already observed _num_running_warm_tasks == 0 via
-    // pending_finish(); without this the operator could re-arm warm after teardown began. try_submit
-    // increments the warm counter then rejects if this flag is set, so either the driver sees the
-    // increment (waits) or the submit rolls back -- never both zero-and-proceeding.
-    std::atomic<bool> _warm_disabled = false;
+    // Footer warm tasks (connector scans) reserve slots here, separate from _num_running_io_tasks
+    // (data only), so warm fills spare io-task slots without perturbing the adaptive governor or
+    // the data re-submit gate. pending_finish() waits on it; set_finishing() disables it. The
+    // teardown-race contract (no warm re-arm after the driver observed a zero count) lives in
+    // WarmSlotReservation.
+    WarmSlotReservation _warm_slots;
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;

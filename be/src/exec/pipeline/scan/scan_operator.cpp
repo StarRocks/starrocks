@@ -328,7 +328,7 @@ bool ScanOperator::pending_finish() const {
     // forced set_finished of the cancel path and (b) still not defer close() there. pending_finish()
     // is the designed post-set_finished async-work gate and holds the driver in PENDING_FINISH (both
     // normal and cancel) until warm drains. 0 for non-connector scans, so their behavior is unchanged.
-    return _num_running_warm_tasks > 0;
+    return _warm_slots.running() > 0;
 }
 
 bool ScanOperator::is_finished() const {
@@ -392,10 +392,10 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
-    // Reject any warm reservation from here on (paired with the post-increment check in
-    // try_submit_metadata_prefetch) so a warm task cannot re-arm after the driver observes a zero
-    // warm count via pending_finish(). Store before reading the warm count downstream.
-    _warm_disabled.store(true);
+    // Reject any warm reservation from here on so a warm task cannot re-arm after the driver
+    // observes a zero warm count via pending_finish() (see WarmSlotReservation). Store before
+    // reading the warm count downstream.
+    _warm_slots.disable();
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
     set_buffer_finished();
@@ -548,7 +548,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // scans) and the feature is armed.
     try_submit_metadata_prefetch(state);
 
-    _peak_io_tasks_counter->set(_num_running_io_tasks + _num_running_warm_tasks);
+    _peak_io_tasks_counter->set(_num_running_io_tasks + _warm_slots.running());
     return Status::OK();
 }
 

@@ -497,8 +497,8 @@ void ConnectorScanOperator::_stash_reusable_chunk_source(RuntimeState* state, in
 void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     // Stop feeding warm once the pushed-down LIMIT is reached: otherwise a small-LIMIT query whose
     // downstream stopped consuming keeps is_buffer_full() true, and the warm self-re-submit loop
-    // would drain the entire lead window of footers before is_finished() (which waits on
-    // _num_running_warm_tasks) can report done -- a large teardown latency on the cheapest queries.
+    // would drain the entire lead window of footers before pending_finish() (which waits on the
+    // warm count) can drain -- a large teardown latency on the cheapest queries.
     // Bailing here leaves only the already-in-flight warm tasks (<= connector_footer_prefetch_max_inflight)
     // to drain, so the operator finishes promptly. reach_limit() reads MorselQueue's atomic flag (set
     // on the pull thread), so this is race-free -- unlike the non-atomic _is_finished, which
@@ -526,32 +526,22 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     TQueryType::type query_type = state->query_options().query_type;
 
     // Warm fills the io-task slots the data scan leaves spare so footers are read ahead of the scan
-    // cursor. They run on _num_running_warm_tasks, separate from data's _num_running_io_tasks: the
-    // adaptive governor and the data re-submit gate read data only and so are not perturbed by warm,
-    // while pending_finish() waits on _num_running_warm_tasks (keeping `this` alive until they drain).
-    // Reserve within two bounds: at most connector_footer_prefetch_max_inflight concurrent warm tasks
-    // per instance, and data + warm <= the per-instance cap (data side bounded by max(current data,
-    // target) so in-flight data from before a throttle-down still cannot be exceeded). fetch_add then
-    // validate-or-rollback so concurrent reservers (driver, io-finish, self-retrigger) do not overshoot.
+    // cursor. Slots come from _warm_slots, separate from data's _num_running_io_tasks: the adaptive
+    // governor and the data re-submit gate read data only and so are not perturbed by warm, while
+    // pending_finish() waits on the warm count (keeping `this` alive until tasks drain). Two bounds:
+    // at most connector_footer_prefetch_max_inflight concurrent warm tasks per instance, and
+    // data + warm <= the per-instance cap (data side bounded by max(current data, target) so
+    // in-flight data from before a throttle-down still cannot be exceeded). The teardown race
+    // against set_finishing() is handled inside WarmSlotReservation.
     const int max_warm_inflight = config::connector_footer_prefetch_max_inflight;
     while (true) {
-        int prev_warm = _num_running_warm_tasks.fetch_add(1);
-        // Reject if teardown began (set_finishing set _warm_disabled). Checked AFTER the fetch_add so
-        // it linearizes with pending_finish()'s warm-count read: a data io-task completion on an
-        // executor thread can reach here after the driver observed a zero warm count, and this makes
-        // sure such a late reservation either is seen by the driver (count > 0 -> wait) or rolls back.
-        if (_warm_disabled.load()) {
-            _num_running_warm_tasks.fetch_sub(1);
-            break;
-        }
         int data_reserved = std::max<int>(_num_running_io_tasks.load(), current_io_task_target());
-        if (prev_warm + 1 > max_warm_inflight || data_reserved + prev_warm + 1 > _io_tasks_per_scan_operator) {
-            _num_running_warm_tasks.fetch_sub(1);
+        if (!_warm_slots.try_reserve(max_warm_inflight, data_reserved, _io_tasks_per_scan_operator)) {
             break;
         }
         FooterPrefetchItem item;
         if (!fp->try_take_next(&item)) {
-            _num_running_warm_tasks.fetch_sub(1);
+            _warm_slots.release();
             break;
         }
         workgroup::ScanTask task(wg, [wp = query_ctx(), this, state, fp, item](workgroup::YieldContext&) {
@@ -563,9 +553,9 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
                 // must not spend a remote footer read once the scan will no longer consume it, so
                 // pending_finish() drains promptly instead of waiting on wasted reads. Three signals,
                 // cheapest/promptest first: fragment cancel/finish (state->is_cancelled()), operator-
-                // local finish (_warm_disabled, set by set_finishing() even without a fragment cancel),
-                // and factory close (fp->cancelled(), the latest).
-                if (!state->is_cancelled() && !_warm_disabled.load() && !fp->cancelled()) {
+                // local finish (_warm_slots disabled by set_finishing() even without a fragment
+                // cancel), and factory close (fp->cancelled(), the latest).
+                if (!state->is_cancelled() && !_warm_slots.disabled() && !fp->cancelled()) {
                     connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
                     fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
                 }
@@ -575,7 +565,7 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
                 if (is_buffer_full()) {
                     try_submit_metadata_prefetch(state);
                 }
-                _num_running_warm_tasks--;
+                _warm_slots.release();
             }
         });
         task.task_group = task_group;
@@ -587,7 +577,7 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
         task.priority = 0;
         if (!executor->submit(std::move(task))) {
             fp->untake(item.key); // give the file back; the task never ran
-            _num_running_warm_tasks--;
+            _warm_slots.release();
             break;
         }
     }
