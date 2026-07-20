@@ -3432,11 +3432,6 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Build a {@link LakeTableAddIndexJob} from a CreateIndexClause-only alter.
-     * Returns null on any unexpected failure so the caller can fall back to the
-     * regular schema-change path (safer than throwing).
-     */
-    /**
      * Admission guards for the lake index fast path, mirroring the legacy
      * path's under-lock checks (finalAnalyze's state re-check plus the
      * per-clause insert-overwrite / temp-partition guards). Must be evaluated
@@ -3451,6 +3446,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 && !olapTable.existTempPartitions();
     }
 
+    /**
+     * Build a {@link LakeTableAddIndexJob} from a CreateIndexClause-only alter.
+     * Returns null on any unexpected failure so the caller can fall back to the
+     * regular schema-change path (safer than throwing).
+     */
     private AlterJobV2 tryBuildLakeAddIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
         boolean stateSet = false;
         try {
