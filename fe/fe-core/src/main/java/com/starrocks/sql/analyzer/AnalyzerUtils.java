@@ -60,6 +60,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
@@ -164,6 +165,23 @@ import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
     private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
+
+    /**
+     * Whether a table/materialized view created without an explicit {@code DISTRIBUTED BY} clause
+     * should default to range distribution.
+     * <p>
+     * Range distribution (with dynamic tablet split/merge) is only functional in shared-data mode,
+     * so the {@code enable_range_distribution} config default only takes effect there; it has no
+     * effect in shared-nothing mode. The INVISIBLE session variable is an explicit per-session
+     * opt-in that can still enable range distribution in any run mode (and even when the config is
+     * turned off).
+     */
+    public static boolean isEnableRangeDistribution(ConnectContext connectContext) {
+        if (Config.enable_range_distribution && RunMode.isSharedDataMode()) {
+            return true;
+        }
+        return connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution();
+    }
 
     // The partition format supported by date_trunc
     public static final Set<String> DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =

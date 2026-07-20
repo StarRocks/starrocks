@@ -45,6 +45,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -253,6 +254,38 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         starRocksAssert.dropMaterializedView("mv1");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+    }
+
+    @Test
+    public void testRangeDistributionMvDefault() throws Exception {
+        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        Assertions.assertTrue(Config.enable_range_distribution);
+        boolean savedConfig = Config.enable_range_distribution;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        try {
+            // Default on: an async MV without a DISTRIBUTED BY clause defaults to RANGE.
+            starRocksAssert.withMaterializedView("create materialized view rd_mv_default\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView rangeMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_mv_default");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANGE,
+                    rangeMv.getDefaultDistributionInfo().getType());
+            starRocksAssert.dropMaterializedView("rd_mv_default");
+
+            // Kill switch: with the config disabled, it falls back to the previous default (RANDOM).
+            Config.enable_range_distribution = false;
+            starRocksAssert.withMaterializedView("create materialized view rd_mv_killswitch\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView randomMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "rd_mv_killswitch");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    randomMv.getDefaultDistributionInfo().getType());
+            starRocksAssert.dropMaterializedView("rd_mv_killswitch");
+        } finally {
+            Config.enable_range_distribution = savedConfig;
+        }
     }
 
     @Test
