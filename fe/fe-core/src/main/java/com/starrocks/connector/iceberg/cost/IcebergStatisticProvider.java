@@ -107,6 +107,7 @@ public class IcebergStatisticProvider {
         Statistics.Builder statisticsBuilder = Statistics.builder();
         statisticsBuilder.setOutputRowCount(Math.max(rowCount, 1));
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         return statisticsBuilder.build();
     }
 
