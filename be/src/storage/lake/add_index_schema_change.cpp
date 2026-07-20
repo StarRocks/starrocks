@@ -75,21 +75,51 @@ static void fill_slice_buffer(const BinaryT& bin, size_t start_row, size_t run_l
 // variable-length string columns materialize a local Slice[] because the
 // writer expects a Slice-stride array for string CppTypes.
 template <typename Writer>
-Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size) {
+Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size,
+                              size_t char_pad_len = 0) {
     if (run_len == 0) return Status::OK();
 
     // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
     // Slice array anchored at start_row.
     std::vector<Slice> slice_buf;
+    // Backing store for CHAR re-padding; must outlive the writer->add_values()
+    // calls below, so it lives at function scope.
+    std::string pad_storage;
+    // For a CHAR column the on-disk page decoder strnlen-trims the trailing
+    // '\0' padding when reading values back (BinaryPlainPageDecoder<TYPE_CHAR>
+    // / BinaryDictPageDecoder<TYPE_CHAR>), so the Slices materialized here are
+    // UNPADDED (e.g. "guangzhou", size=9). The standard segment-write index
+    // path builds its dictionary from the in-memory column padded to the
+    // declared column width, and the query predicate pads CHAR literals the
+    // same way — so an unpadded fast-path dictionary/bloom would never match at
+    // query time (bitmap over-prunes to an empty result; bloom yields false
+    // negatives / missing rows). Re-pad each slice back to `char_pad_len` bytes
+    // with '\0' so the fast-path index is byte-identical to the standard path.
+    // char_pad_len is 0 for non-CHAR columns (VARCHAR is variable-length and is
+    // not trimmed by the decoder), leaving those paths untouched.
+    auto repad_char = [&]() {
+        if (char_pad_len == 0) return;
+        pad_storage.assign(run_len * char_pad_len, '\0');
+        for (size_t i = 0; i < run_len; ++i) {
+            const size_t sz = std::min<size_t>(slice_buf[i].size, char_pad_len);
+            if (sz > 0) {
+                memcpy(pad_storage.data() + i * char_pad_len, slice_buf[i].data, sz);
+            }
+            slice_buf[i].data = pad_storage.data() + i * char_pad_len;
+            slice_buf[i].size = char_pad_len;
+        }
+    };
     auto get_pdata = [&](const Column& data_col) -> StatusOr<const uint8_t*> {
         if (auto* bin = dynamic_cast<const BinaryColumn*>(&data_col); bin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*bin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         if (auto* lbin = dynamic_cast<const LargeBinaryColumn*>(&data_col); lbin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*lbin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         RawDataVisitor data_visitor;
@@ -395,6 +425,11 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bitmap dictionary matches the
+    // standard-path dictionary and the query predicate (see
+    // feed_index_from_column). 0 = no padding (non-CHAR).
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
     while (true) {
         col->reset_column();
         size_t n = kBatch;
@@ -403,7 +438,7 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
             break;
         }
         if (!st.ok()) return st;
-        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size));
+        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size, char_pad_len));
     }
 
     // Write the bitmap blob to the shared target file and emit the
@@ -529,6 +564,10 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
 
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     const size_t type_size = type_info->size();
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bloom matches the standard-path bloom and
+    // the query predicate (see feed_index_from_column). 0 = no padding.
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
     for (int32_t page = 0; page < num_pages; ++page) {
         // [first_ordinal, last_ordinal] is the inclusive row range of data page
         // `page` — exactly what the read path will resolve for read_bloom_filter(page).
@@ -547,7 +586,7 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
             // with BitmapIndexWriter; reuse the common feeder so Binary / string
             // columns get the Slice-buffer treatment automatically. Multiple
             // next_batch calls accumulate into the SAME pending bloom filter.
-            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
+            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size, char_pad_len));
             remaining -= n;
         }
         // Emit exactly one bloom filter for this data page (mirrors

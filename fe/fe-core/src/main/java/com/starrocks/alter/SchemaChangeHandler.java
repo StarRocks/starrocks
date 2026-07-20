@@ -2520,7 +2520,19 @@ public class SchemaChangeHandler extends AlterHandler {
         // payloads on BE without rewriting segment data. On any unexpected
         // construction error we fall through to the regular path to stay
         // safe.
-        if (SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(olapTable, alterClauses)) {
+        //
+        // Admission guards, mirroring the legacy path's under-lock checks
+        // (finalAnalyze's state re-check and the per-clause insert-overwrite /
+        // temp-partition guards below): the entry-point state check in
+        // AlterJobExecutor is lock-free, so a concurrent ALTER can pass it and
+        // reach here after this table already entered SCHEMA_CHANGE. Skipping
+        // the fast path here lets the legacy path raise its canonical error
+        // instead of admitting a second live job on the same table.
+        boolean fastPathAdmissible = isLakeIndexFastPathAdmissible(olapTable);
+        if (!fastPathAdmissible) {
+            LOG.info("lake index fast path not admissible for table {} (state={}); "
+                    + "falling through to regular path", olapTable.getName(), olapTable.getState());
+        } else if (SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(olapTable, alterClauses)) {
             AlterJobV2 fastPathJob = tryBuildLakeAddIndexJob(db, olapTable, alterClauses);
             if (fastPathJob != null) {
                 LOG.info("ADD INDEX fast path selected for table {}", olapTable.getName());
@@ -2546,6 +2558,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (bfDelta != null) {
                 AlterJobV2 fastPathJob = null;
                 if (bfDelta.isPureAdd()) {
+                    // A column may carry at most one of {plain bloom filter, ngram
+                    // bloom filter}. The regular schema-change path enforces this
+                    // via IndexAnalyzer.analyseBfWithNgramBf; the fast path must
+                    // too, otherwise SET ("bloom_filter_columns"=...) on a column
+                    // that already has an NGRAMBF index is silently accepted.
+                    Set<ColumnId> addedBfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    for (String columnName : bfDelta.added) {
+                        Column bfColumn = olapTable.getColumn(columnName);
+                        if (bfColumn != null) {
+                            addedBfColumnIds.add(bfColumn.getColumnId());
+                        }
+                    }
+                    IndexAnalyzer.analyseBfWithNgramBf(olapTable, new HashSet<>(olapTable.getIndexes()),
+                            addedBfColumnIds);
                     fastPathJob = tryBuildLakeAddBloomFilterJob(db, olapTable, bfDelta.added);
                 } else if (bfDelta.isPureDrop()) {
                     fastPathJob = tryBuildLakeDropBloomFilterJob(db, olapTable, bfDelta.dropped);
@@ -3861,6 +3887,21 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
+     * Admission guards for the lake index fast path, mirroring the legacy
+     * path's under-lock checks (finalAnalyze's state re-check plus the
+     * per-clause insert-overwrite / temp-partition guards). Must be evaluated
+     * under the table write lock — the entry-point state check in
+     * AlterJobExecutor is lock-free, so without this a racing ALTER could
+     * admit a second live fast-path job on the same table.
+     */
+    static boolean isLakeIndexFastPathAdmissible(OlapTable olapTable) {
+        return olapTable.getState() == OlapTable.OlapTableState.NORMAL
+                && !GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr()
+                        .hasRunningOverwriteJob(olapTable.getId())
+                && !olapTable.existTempPartitions();
+    }
+
+    /**
      * Build a {@link LakeTableAddIndexJob} from a CreateIndexClause-only alter.
      * Returns null on any unexpected failure so the caller can fall back to the
      * regular schema-change path (safer than throwing).
@@ -3884,6 +3925,23 @@ public class SchemaChangeHandler extends AlterHandler {
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
             LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), timeoutMs, newIndexes, thriftIndexes);
+            // Allocate a fresh schema id/version per affected index meta (base +
+            // any rollup / sync-MV index) so subsequent loads and compaction on
+            // each index pick up its indexed schema (the fast path reuses the
+            // schema_id but changes its content; every by-id schema cache would go
+            // stale). Per-index keeps FE/BE schema ids aligned across all the
+            // tablets the job dispatches to (dispatch covers every visible index).
+            // Only metas that actually gain an index are bumped: a rollup /
+            // sync-MV whose schema lacks the indexed column(s) receives a no-op
+            // task (no index, no schema change), so its schema id must stay put.
+            for (Long affectedIndexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
+                MaterializedIndexMeta affectedMeta = olapTable.getIndexMetaByMetaId(affectedIndexMetaId);
+                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta, olapTable).isEmpty()) {
+                    continue;
+                }
+                job.putNewSchema(affectedIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),
+                        affectedMeta.getSchemaVersion() + 1);
+            }
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             // Move table to SCHEMA_CHANGE so concurrent alters are blocked.
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -4006,6 +4064,19 @@ public class SchemaChangeHandler extends AlterHandler {
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
             LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), timeoutMs, new ArrayList<>(), thriftIndexes, addBfColumnNames);
+            // Allocate a fresh schema id/version per affected index meta so
+            // subsequent loads and compaction pick up the schema with the new
+            // bloom-filter column (see above). Per-index keeps FE/BE aligned across
+            // every visible index the job dispatches to. Metas whose schema lacks
+            // every bloom column receive a no-op task and keep their schema id.
+            for (Long affectedIndexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
+                MaterializedIndexMeta affectedMeta = olapTable.getIndexMetaByMetaId(affectedIndexMetaId);
+                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta, olapTable).isEmpty()) {
+                    continue;
+                }
+                job.putNewSchema(affectedIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),
+                        affectedMeta.getSchemaVersion() + 1);
+            }
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             stateSet = true;

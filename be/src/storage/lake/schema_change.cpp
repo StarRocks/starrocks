@@ -660,19 +660,27 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // alter, not silently land in an unsupported fallback shape.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
     StorageMetrics::instance()->lake_add_index_requests_total.increment(1);
-    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
-        // The fast-path request shape (base_tablet_id == new_tablet_id, no
-        // tablet_schema diff) is incompatible with the legacy rewrite path:
-        // delegating here would self-targeted "rewrite" the tablet and
-        // append duplicate rowsets. FE's classifier guarantees this branch
-        // is unreachable in practice, so fail loudly instead of falling
-        // back.
-        StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
-        return Status::InvalidArgument("ADD INDEX fast path called with empty indexes_to_add");
-    }
     if (!request.__isset.txn_id) {
         StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
         return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
+    }
+    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
+        // Explicit no-op: FE sends an EMPTY index set for a materialized index
+        // (rollup / sync MV) whose schema does not carry the indexed column(s) —
+        // the index is only built on the metas that contain the columns,
+        // mirroring the legacy path which only builds on the base index. This
+        // tablet still needs a txn log so the reserved alter version publishes
+        // on every tablet of the partition; apply_add_index on an empty op is a
+        // pure version advance. (The legacy-rewrite fallback stays forbidden:
+        // the fast-path request shape base_tablet_id == new_tablet_id would
+        // make it re-process the tablet against itself and duplicate rows.)
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(request.new_tablet_id);
+        txn_log->set_txn_id(request.txn_id);
+        txn_log->mutable_op_add_index()->set_alter_version(request.alter_version);
+        LOG(INFO) << "ADD INDEX fast path no-op (no applicable index for this materialized index): tablet="
+                  << request.new_tablet_id << " txn_id=" << request.txn_id;
+        return _tablet_manager->put_txn_log(std::move(txn_log));
     }
 
     const int64_t alter_version = request.alter_version;
@@ -700,28 +708,37 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         if (!tix.__isset.index_type) {
             return Status::InvalidArgument("TOlapTableIndex has no index_type");
         }
-        TabletIndexPB pb;
-        if (tix.__isset.index_id) pb.set_index_id(tix.index_id);
-        if (tix.__isset.index_name) pb.set_index_name(tix.index_name);
-        auto converted = TabletIndex::convert_index_type_from_thrift(tix.index_type);
-        if (!converted.ok()) return converted.status();
-        pb.set_index_type(*converted);
         if (!tix.__isset.columns || tix.columns.empty()) {
-            return Status::InvalidArgument(strings::Substitute("index $0 has no columns", pb.index_name()));
+            return Status::InvalidArgument(
+                    strings::Substitute("index $0 has no columns", tix.__isset.index_name ? tix.index_name : ""));
         }
+        // Validate every indexed column exists in new_schema *before* delegating to
+        // TabletIndex::init_from_thrift, whose field_index() lookup is unchecked and
+        // would read out of bounds on a missing column. A missing column must fail
+        // fast here rather than fall back to do_process_alter_tablet — the fast-path
+        // request shape (same tablet for base/new) would make the legacy rewrite
+        // re-process the tablet against itself and duplicate rows.
         for (const auto& col_name : tix.columns) {
             auto ordinal = new_schema->field_index(col_name);
             if (ordinal >= new_schema->num_columns()) {
-                // See note above: do not fall back to do_process_alter_tablet
-                // — the request shape would cause the legacy path to
-                // re-write the tablet against itself and duplicate rows.
                 StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
                 return Status::InternalError(
                         strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
                                             col_name, request.new_tablet_id));
             }
-            pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
         }
+        // Build TabletIndexPB via TabletIndex so every field is populated exactly like
+        // the standard (segment-rewrite) write path: index id/name/type, the
+        // schema-resolved column unique ids, AND the serialized common/index/search
+        // property maps. The previous manual construction copied only
+        // id/name/type/col_unique_id and dropped index_properties, so NGRAMBF lost
+        // gram_num/case_sensitive (and plain bloom lost bloom_filter_fpp); the fast
+        // path then built the index with wrong defaults (e.g. gram_num=4) that never
+        // matched the query-side predicate ngrams, yielding empty/incorrect results.
+        TabletIndex tablet_index;
+        RETURN_IF_ERROR(tablet_index.init_from_thrift(tix, *new_schema));
+        TabletIndexPB pb;
+        tablet_index.to_schema_pb(&pb);
         indexes_to_build.push_back(std::move(pb));
     }
 
@@ -730,6 +747,16 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     txn_log->set_tablet_id(request.new_tablet_id);
     txn_log->set_txn_id(request.txn_id);
     auto* op_add_index = txn_log->mutable_op_add_index();
+    // Carry the FE-allocated new schema id/version so apply_add_index stamps them
+    // onto the tablet metadata schema — this invalidates every by-id schema cache
+    // so data loaded after the index (and compaction output) build the new index
+    // instead of reusing the cached pre-index schema.
+    if (request.__isset.new_index_schema_id) {
+        op_add_index->set_new_schema_id(request.new_index_schema_id);
+    }
+    if (request.__isset.new_index_schema_version) {
+        op_add_index->set_new_schema_version(request.new_index_schema_version);
+    }
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
                             alter_version, _lake_schema_change_pool);
