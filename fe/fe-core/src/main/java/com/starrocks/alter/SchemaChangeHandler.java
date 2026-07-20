@@ -3481,7 +3481,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // task (no index, no schema change), so its schema id must stay put.
             for (Long affectedIndexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
                 MaterializedIndexMeta affectedMeta = olapTable.getIndexMetaByMetaId(affectedIndexMetaId);
-                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta).isEmpty()) {
+                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta, olapTable).isEmpty()) {
                     continue;
                 }
                 job.putNewSchema(affectedIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),
@@ -3616,7 +3616,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // every bloom column receive a no-op task and keep their schema id.
             for (Long affectedIndexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
                 MaterializedIndexMeta affectedMeta = olapTable.getIndexMetaByMetaId(affectedIndexMetaId);
-                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta).isEmpty()) {
+                if (LakeTableAddIndexJob.applicableIndexes(thriftIndexes, affectedMeta, olapTable).isEmpty()) {
                     continue;
                 }
                 job.putNewSchema(affectedIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),

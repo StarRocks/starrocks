@@ -128,7 +128,7 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
 
     @Override
     protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId,
-                                        com.starrocks.catalog.MaterializedIndexMeta indexMeta) {
+                                        com.starrocks.catalog.MaterializedIndexMeta indexMeta, OlapTable table) {
         task.setOnlyDropIndex(dropInfos);
     }
 

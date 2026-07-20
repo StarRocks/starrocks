@@ -242,7 +242,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
             // Base meta (100L): full index set + schema-id stamp.
             AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
-            job.populateAlterRequest(baseTask, 100L, table.getIndexMetaByMetaId(100L));
+            job.populateAlterRequest(baseTask, 100L, table.getIndexMetaByMetaId(100L), table);
             ArgumentCaptor<List<com.starrocks.thrift.TOlapTableIndex>> baseCap =
                     ArgumentCaptor.forClass(List.class);
             verify(baseTask).setOnlyAddIndex(baseCap.capture());
@@ -252,7 +252,7 @@ public class SchemaChangeHandlerLakeIndexFastPathTest {
 
             // Rollup meta (200L): empty index set, no stamp (no schema-id bump).
             AlterReplicaTask rollupTask = mock(AlterReplicaTask.class);
-            job.populateAlterRequest(rollupTask, 200L, rollupMeta);
+            job.populateAlterRequest(rollupTask, 200L, rollupMeta, table);
             ArgumentCaptor<List<com.starrocks.thrift.TOlapTableIndex>> rollupCap =
                     ArgumentCaptor.forClass(List.class);
             verify(rollupTask).setOnlyAddIndex(rollupCap.capture());

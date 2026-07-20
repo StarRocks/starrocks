@@ -249,12 +249,12 @@ public class LakeTableIndexFastPathJobTest {
         job.putNewSchema(500L, 900L, 7);
 
         AlterReplicaTask stamped = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(stamped, 500L, null);
+        job.populateAlterRequest(stamped, 500L, null, null);
         verify(stamped).setOnlyAddIndex(any());
         verify(stamped).setNewIndexSchema(900L, 7L);
 
         AlterReplicaTask unstamped = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(unstamped, 999L, null); // no per-index entry
+        job.populateAlterRequest(unstamped, 999L, null, null); // no per-index entry
         verify(unstamped).setOnlyAddIndex(any());
         verify(unstamped, never()).setNewIndexSchema(anyLong(), anyLong());
     }
@@ -274,7 +274,7 @@ public class LakeTableIndexFastPathJobTest {
         MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
         when(baseMeta.getSchema()).thenReturn(List.of(new Column("c1", IntegerType.BIGINT)));
         AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(baseTask, 500L, baseMeta);
+        job.populateAlterRequest(baseTask, 500L, baseMeta, null);
         ArgumentCaptor<List<TOlapTableIndex>> baseCap = ArgumentCaptor.forClass(List.class);
         verify(baseTask).setOnlyAddIndex(baseCap.capture());
         assertEquals(1, baseCap.getValue().size());
@@ -283,11 +283,44 @@ public class LakeTableIndexFastPathJobTest {
         MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
         when(rollupMeta.getSchema()).thenReturn(List.of(new Column("k9", IntegerType.BIGINT)));
         AlterReplicaTask rollupTask = mock(AlterReplicaTask.class);
-        job.populateAlterRequest(rollupTask, 501L, rollupMeta);
+        job.populateAlterRequest(rollupTask, 501L, rollupMeta, null);
         ArgumentCaptor<List<TOlapTableIndex>> rollupCap = ArgumentCaptor.forClass(List.class);
         verify(rollupTask).setOnlyAddIndex(rollupCap.capture());
         assertTrue(rollupCap.getValue().isEmpty());
         verify(rollupTask, never()).setNewIndexSchema(anyLong(), anyLong());
+    }
+
+    @Test
+    public void testApplicableIndexes_MatchesByColumnIdNotName() {
+        // A rollup / sync-MV that carries the indexed column under a RENAMED
+        // output but the SAME ColumnId must still be considered applicable —
+        // applicableIndexes matches by ColumnId (via the base table), not by
+        // name, mirroring OlapTable.getIndexesBySchema. A name-based check would
+        // wrongly skip it and leave the FE/BE schema id diverged.
+        TOlapTableIndex thrift = new TOlapTableIndex();
+        thrift.setIndex_type(TIndexType.BITMAP);
+        thrift.setColumns(Collections.singletonList("v")); // base column name
+
+        OlapTable table = mock(OlapTable.class);
+        Column baseV = new Column("v", IntegerType.BIGINT); // ColumnId = "v"
+        when(table.getColumn("v")).thenReturn(baseV);
+
+        // Meta carries the same column id "v" but under a renamed output "w".
+        Column renamed = new Column("w", IntegerType.BIGINT);
+        renamed.setColumnId(ColumnId.create("v"));
+        MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+        when(meta.getSchema()).thenReturn(List.of(renamed));
+
+        List<TOlapTableIndex> applicable = LakeTableAddIndexJob.applicableIndexes(
+                Collections.singletonList(thrift), meta, table);
+        assertEquals(1, applicable.size()); // matched by id despite the name differing
+
+        // Sanity: a meta that carries neither the id nor the name is excluded.
+        Column other = new Column("k9", IntegerType.BIGINT);
+        MaterializedIndexMeta otherMeta = mock(MaterializedIndexMeta.class);
+        when(otherMeta.getSchema()).thenReturn(List.of(other));
+        assertTrue(LakeTableAddIndexJob.applicableIndexes(
+                Collections.singletonList(thrift), otherMeta, table).isEmpty());
     }
 
     // -----------------------------------------------------------------

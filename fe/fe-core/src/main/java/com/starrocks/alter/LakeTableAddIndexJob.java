@@ -26,6 +26,7 @@ import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,25 +121,43 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     }
 
     /**
-     * Returns the subset of {@code indexes} whose columns are ALL present in the
-     * given materialized index meta's schema. Mirrors the legacy path's
-     * {@code OlapTable.getIndexesBySchema} rule: an index is built on every
-     * materialized index whose schema carries all of the index's columns (base
-     * plus any qualifying rollup / sync-MV); a meta that projects an indexed
-     * column away gets an empty (no-op) task instead of failing the alter. A
-     * null meta (defensive) applies every index.
+     * Returns the subset of {@code indexes} whose columns are ALL carried by the
+     * given materialized index meta's schema, matched by {@link ColumnId} to
+     * mirror the authoritative legacy rule {@code OlapTable.getIndexesBySchema}.
+     * An index is built on every materialized index whose schema carries all of
+     * the index's columns (base plus any qualifying rollup / sync-MV); a meta
+     * that projects an indexed column away gets an empty (no-op) task instead of
+     * failing the alter. Matching by ColumnId (not name) is required so a rollup
+     * / sync-MV that keeps the indexed column's ColumnId under a renamed output
+     * is still indexed — otherwise its FE schema (which includes the index) and
+     * BE tablet (never stamped) would diverge. The index's columns are resolved
+     * to their base-table ColumnId via {@code table}; when {@code table} or
+     * {@code meta} is null (defensive), every index applies.
      */
-    static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta) {
+    static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta,
+                                                   OlapTable table) {
         if (indexes == null || indexes.isEmpty() || meta == null) {
             return indexes;
         }
-        Set<String> metaColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        Set<ColumnId> metaColumnIds = new HashSet<>();
         for (Column column : meta.getSchema()) {
-            metaColumnNames.add(column.getName());
+            metaColumnIds.add(column.getColumnId());
         }
         List<TOlapTableIndex> applicable = new ArrayList<>();
         for (TOlapTableIndex ix : indexes) {
-            if (ix.getColumns() != null && metaColumnNames.containsAll(ix.getColumns())) {
+            if (ix.getColumns() == null) {
+                continue;
+            }
+            boolean allCarried = true;
+            for (String columnName : ix.getColumns()) {
+                Column baseColumn = table != null ? table.getColumn(columnName) : null;
+                ColumnId columnId = baseColumn != null ? baseColumn.getColumnId() : ColumnId.create(columnName);
+                if (!metaColumnIds.contains(columnId)) {
+                    allCarried = false;
+                    break;
+                }
+            }
+            if (allCarried) {
                 applicable.add(ix);
             }
         }
@@ -146,12 +165,14 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     }
 
     @Override
-    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId, MaterializedIndexMeta indexMeta) {
+    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId, MaterializedIndexMeta indexMeta,
+                                        OlapTable table) {
         // A materialized index (rollup / sync MV) whose schema projects away an
         // indexed column must not build that index: send it only the indexes
-        // whose columns its schema carries. An empty list makes BE write a no-op
-        // txn log so the reserved alter version still publishes on its tablets.
-        task.setOnlyAddIndex(applicableIndexes(indexesToAdd, indexMeta));
+        // whose columns its schema carries (matched by ColumnId via the base
+        // table). An empty list makes BE write a no-op txn log so the reserved
+        // alter version still publishes on its tablets.
+        task.setOnlyAddIndex(applicableIndexes(indexesToAdd, indexMeta, table));
         // Each affected index meta got its OWN new schema id/version; stamp this
         // tablet with its index's id so BE bumps that index's schema, and
         // applyCatalogMutation bumps the same meta. Keeps FE and BE schema ids
