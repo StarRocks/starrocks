@@ -757,6 +757,13 @@ RowsetId Rowset::rowset_id() const {
 }
 
 StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    // Thread-safety contract: this lazy-init is intentionally lock-free, so _segments and
+    // _segments_loaded are read/written without synchronization. Callers must serialize calls on a
+    // given Rowset. All current callers do: the physical/logical split morsel queues call it under
+    // their _mutex, and lake Rowset objects are created per-reader over immutable metadata (never
+    // shared across threads). We deliberately do NOT use std::call_once: on a transient failure we
+    // must leave _segments_loaded false so a later call retries the load, whereas call_once would
+    // mark the one-shot init done even on failure and defeat the retry (issue #75203).
     if (_segments_loaded) {
         return _segments;
     }
