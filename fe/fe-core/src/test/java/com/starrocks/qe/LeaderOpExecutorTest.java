@@ -164,7 +164,7 @@ public class LeaderOpExecutorTest {
     }
 
     @Test
-    public void testForwardReturnsLeaderResultWhenFollowerReplayTimeout(
+    public void testForwardThrowsWhenFollowerReplayTimeout(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked JournalObservable journalObservable) throws Exception {
         int oldThriftTimeoutMs = Config.thrift_rpc_timeout_ms;
@@ -212,8 +212,11 @@ public class LeaderOpExecutorTest {
                     RedirectStatus.FORWARD_WITH_SYNC,
                     false);
 
-            Assertions.assertDoesNotThrow(executor::execute);
-            Assertions.assertEquals(MysqlStateType.OK, context.getState().getStateType());
+            // FORWARD_WITH_SYNC must fail loudly when local replay does not catch up in time, rather than return
+            // success while this FE is still behind (the same session's next statement could then miss the write
+            // it just forwarded).
+            DdlException e = Assertions.assertThrows(DdlException.class, executor::execute);
+            Assertions.assertTrue(e.getMessage().contains("mock replay timeout"));
         } finally {
             Config.thrift_rpc_timeout_ms = oldThriftTimeoutMs;
         }
