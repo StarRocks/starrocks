@@ -1709,6 +1709,7 @@ protected:
         double vector_range = -1.0;       // >= 0 makes it a range query (l2: keep dist <= range)
         int result_order = 0;             // 0 = ascending (l2), 1 = descending (cosine)
         int min_filter_col = 4;           // every returned row must satisfy filter_col >= this
+        double k_factor = 1.0;            // multiplies k; fractional values can truncate k to 0 (must clamp to 1)
         bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
         bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
         bool tag_global_dict = false;     // activate a global dictionary on tag (cid 3) so _rewrite_predicates
@@ -1724,7 +1725,8 @@ protected:
         std::vector<float> distances; // appended ANN distance column values, when present
         int64_t search_ns = -1;
         int64_t raw_rows_read = -1;
-        int64_t del_pruned = -1; // rows the delete-predicate zone-map prune skipped from row-level eval
+        int64_t del_pruned = -1;   // rows the delete-predicate zone-map prune skipped from row-level eval
+        int64_t del_filtered = -1; // rows the delete pre-apply actually removed (rows_del_filtered)
     };
 
     // L2 and cosine disagree on this data: row 6 is cosine-best (1.0) but l2-worst; row 7 ~0.707.
@@ -1828,7 +1830,7 @@ protected:
         vs->use_vector_index = true;
         vs->query_vector = cfg.query;
         vs->k = 3;
-        vs->k_factor = 1.0;
+        vs->k_factor = cfg.k_factor;
         vs->vector_distance_column_name = "__vector_approx_l2_distance";
         vs->vector_column_id = rschema->num_columns();
         vs->vector_slot_id = 100;
@@ -1941,6 +1943,7 @@ protected:
         // loop actually fetched: the deterministic marker for brute pre-narrowing.
         result->raw_rows_read = static_cast<int64_t>(stats.raw_rows_read);
         result->del_pruned = stats.rows_del_predicate_zone_map_pruned;
+        result->del_filtered = stats.rows_del_filtered;
     }
 };
 
@@ -1976,6 +1979,9 @@ TEST_F(VectorResidualPrefilterTest, delete_predicate_preapplied_before_ann_topk)
     ResidualCaseResult res;
     run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{2, 3, 4})) << "deleted rows must not starve live rows in the top-k";
+    // The pre-apply removed rows 0 and 1; they must be attributed to rows_del_filtered (DeleteFilterRows in
+    // the profile) even though the read loop's per-chunk delete filter is skipped on this path.
+    EXPECT_EQ(res.del_filtered, 2) << "delete pre-apply must count the rows it removed";
 }
 
 TEST_F(VectorResidualPrefilterTest, delete_preapplied_short_circuit_bounds_topk) {
@@ -2039,6 +2045,7 @@ TEST_F(VectorResidualPrefilterTest, delete_zone_map_prunes_scan) {
     run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
     EXPECT_EQ(res.del_pruned, 8) << "zone map must prune the whole page from the row-level delete scan";
+    EXPECT_EQ(res.del_filtered, 0) << "nothing was deleted, so no rows are attributed to rows_del_filtered";
 }
 
 TEST_F(VectorResidualPrefilterTest, delete_multi_column_conjunct_preapplied) {
@@ -2060,6 +2067,17 @@ TEST_F(VectorResidualPrefilterTest, delete_multi_column_conjunct_preapplied) {
     run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}))
             << "multi-column conjunct must delete only rows matching all its columns";
+}
+
+TEST_F(VectorResidualPrefilterTest, fractional_k_factor_clamps_k_to_one) {
+    // k * k_factor truncates to 0 here (3 * 0.3 = 0.9 -> 0); the ctor clamps k to >= 1 so the search still
+    // returns the single nearest row instead of an empty result. Pure ANN, no residual/delete.
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    cfg.k_factor = 0.3;
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0})) << "clamped k=1 must return the nearest row, not an empty set";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
@@ -2126,6 +2144,28 @@ static PredicateTree make_tag_tree(std::unique_ptr<ColumnPredicate>& pred, bool 
     pred.reset(eq ? new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, value)
                   : new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 3, value));
     return single_node_tree(pred.get());
+}
+
+TEST_F(VectorResidualPrefilterTest, exact_rescan_nonfinite_distance_ranked_worst) {
+    // filter_col >= 6 -> candidates {6,7}, cardinality 2 <= k -> short-circuit exact rescan through
+    // _brute_force_distance_column. Row 6's huge component makes its squared L2 distance overflow to +Inf --
+    // a non-finite distance that would poison the raw-float top-k heap. The guard maps it to the sentinel so
+    // every returned distance is finite. (A finite-but-huge value is used instead of NaN so the .vi build,
+    // which indexes every row, does not have to tolerate NaN; the short-circuit bypasses the HNSW search.)
+    ResidualCaseResult res;
+    ResidualCaseConfig cfg;
+    cfg.vecs.assign(8, {});
+    for (int i = 0; i < 8; i++) {
+        cfg.vecs[i] = {static_cast<float>(i), 0.f, 0.f, 0.f};
+    }
+    cfg.vecs[6] = {1e20f, 0.f, 0.f, 0.f}; // (1e20)^2 = 1e40 > FLT_MAX -> Inf distance
+    std::unique_ptr<ColumnPredicate> pred;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.search_ns, 0) << "cardinality <= k must short-circuit into the exact rescan";
+    ASSERT_FALSE(res.distances.empty());
+    for (float d : res.distances) {
+        EXPECT_TRUE(std::isfinite(d)) << "a non-finite distance leaked into the exact-rescan result";
+    }
 }
 
 TEST_F(VectorResidualPrefilterTest, cardinality_below_k_short_circuits_search) {
