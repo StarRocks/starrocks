@@ -662,6 +662,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Double
 * **導入バージョン**: v4.2
 
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **説明**: 同一クエリ内で 2 つ以上の scan オペレータによってスキャンされるクラウドネイティブ（レイク）テーブル（セルフジョインや、複数回参照されるテーブルなど）に対して、prepared physical split scan を許可するかどうか。`false`（デフォルト）の場合、そのような重複スキャンは通常のスキャンにフォールバックします。この最適化が scan ごとに再利用する prepared read state を、同一テーブルの兄弟 scan 間で共有することは安全ではないためです。`true` に設定すると、それらのスキャンを最適化に再度組み込みます。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * **説明**: 共有データクラスタ内のクラウドネイティブテーブルに対する並列スキャンを有効にするかどうか。
