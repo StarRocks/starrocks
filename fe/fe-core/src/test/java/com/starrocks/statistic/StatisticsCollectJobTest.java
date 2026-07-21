@@ -1544,8 +1544,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Columns split into groups of max(2, parallelism) per partition: 3 cols / 2-per-scan = 2 groups
+        // x 10 partitions = 20 queries.
         List<List<String>> lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(30, lists.size());
+        Assertions.assertEquals(20, lists.size());
 
         //test partition is null
         collectJob = (ExternalFullStatisticsCollectJob)
@@ -1556,8 +1558,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Single partition, 3 cols / 2-per-scan = 2 groups.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(3, lists.size());
+        Assertions.assertEquals(2, lists.size());
 
         //test unpartitioned table
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "paimon0", "pmn_db1",
@@ -1571,8 +1574,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Unpartitioned, 2 cols / 2-per-scan = 1 group.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(2, lists.size());
+        Assertions.assertEquals(1, lists.size());
     }
 
     @Test
