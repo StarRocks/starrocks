@@ -159,6 +159,10 @@ public class StarMgrMetaSyncerTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                GlobalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
 
@@ -195,6 +199,12 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getColocateTableIndex();
                 minTimes = 0;
                 result = colocateTableIndex;
+
+                // StarMgrMetaSyncer.runAfterLeaseValid() only runs the destructive shard/worker deletion when
+                // the captured leader lease is still valid; keep it valid so tests exercise that path.
+                globalStateMgr.isLeaderLeaseValid((com.starrocks.server.LeaderLease) any);
+                minTimes = 0;
+                result = true;
             }
         };
 

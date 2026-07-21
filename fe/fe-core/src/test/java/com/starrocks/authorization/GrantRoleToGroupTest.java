@@ -18,7 +18,6 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -42,24 +41,33 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class GrantRoleToGroupTest {
 
+    @BeforeEach
+    public void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory. Per-test
+        // (not @BeforeAll) so testPersist()'s replayNextJournal sees only its own ops on a freshly cleared queue.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+
     @Test
     public void testAlterAndDrop() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -119,9 +127,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testSerDer() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -166,8 +171,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testPersist() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -226,15 +229,10 @@ public class GrantRoleToGroupTest {
         Assertions.assertTrue(roleIds.contains(r1Id));
         roleIds = newObject.getRoleIdListByGroup("g3");
         Assertions.assertEquals(0, roleIds.size());
-
-        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testShowGrants() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -273,9 +271,6 @@ public class GrantRoleToGroupTest {
     @Test
     public void testPrivilege() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();
@@ -333,9 +328,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsPrivilege() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
         ConnectContext ctx = new ConnectContext();
 
         String createUserSql = "create user u_grant";
@@ -353,9 +345,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsForExternalGroup() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -441,9 +430,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testGrantAndRevokeExternalGroup() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

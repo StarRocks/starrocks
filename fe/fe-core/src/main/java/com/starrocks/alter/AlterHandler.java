@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -211,6 +212,16 @@ public abstract class AlterHandler extends LeaderDaemon {
             executor = newExecutor();
         }
         super.start();
+    }
+
+    @VisibleForTesting
+    public void rebuildExecutorForTest() {
+        // UT helpers stop the background loop via setStop() so they can drive alter jobs manually.
+        // setStop() runs the LeaderDaemon worker through onStopped(), which shuts the executor down
+        // (demotion cleanup); rebuild it so a manually driven alterJob.run() can still submit tasks.
+        if (executor == null || executor.isShutdown()) {
+            executor = newExecutor();
+        }
     }
 
     @Override

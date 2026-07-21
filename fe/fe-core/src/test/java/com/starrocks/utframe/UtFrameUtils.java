@@ -1733,5 +1733,9 @@ public class UtFrameUtils {
                 throw new Exception("stopping SchemaChangeHandler is interrupted");
             }
         }
+        // setStop() drives the LeaderDaemon worker through onStopped(), which shuts the executor down as
+        // part of the demotion cleanup. Rebuild it so tests can keep submitting AlterReplicaTasks while
+        // driving jobs manually (the pre-LeaderDaemon setStop() left the executor alive).
+        schemaChangeHandler.rebuildExecutorForTest();
     }
 }
