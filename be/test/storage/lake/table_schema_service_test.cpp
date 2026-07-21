@@ -1024,8 +1024,13 @@ TEST_F(TableSchemaServiceTest, build_initial_metadata) {
 
         ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
         ASSERT_TRUE(metadata->has_range());
-        ASSERT_TRUE(metadata->range().lower_bound_included());
-        ASSERT_FALSE(metadata->range().upper_bound_included());
+        // The TTabletRange carried inclusivity flags but no bounds (a fully unbounded Range.all).
+        // convert_t_range_to_pb_range persists an inclusivity flag only alongside a present bound, so the
+        // persisted range keeps neither a bound nor a stray inclusivity flag.
+        ASSERT_FALSE(metadata->range().has_lower_bound());
+        ASSERT_FALSE(metadata->range().has_upper_bound());
+        ASSERT_FALSE(metadata->range().has_lower_bound_included());
+        ASSERT_FALSE(metadata->range().has_upper_bound_included());
     }
 
     // Case 4: tablet_ranges set but does not contain this tablet
