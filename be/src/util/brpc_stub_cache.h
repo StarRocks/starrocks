@@ -38,16 +38,6 @@
 #include <mutex>
 #include <vector>
 
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
-=======
-#include "base/brpc/brpc.h"
-#include "base/concurrency/spinlock.h"
-#include "base/network/network_util.h"
-#include "base/time/time.h"
-#include "common/brpc/internal_service_recoverable_stub.h"
-#include "common/bthread_timer.h"
-#include "common/logging.h"
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
@@ -67,11 +57,7 @@ constexpr int TIMER_TASK_RUNNING = 1;
 class ExecEnv;
 
 template <typename StubCacheT>
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
 class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
-=======
-class EndpointCleanupTask : public BthreadTimerTask {
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
 public:
     // ttl_seconds is the cache-wide expire window (config::brpc_stub_expire_s).
     EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint, int64_t ttl_seconds)
@@ -92,8 +78,8 @@ public:
         }
         int64_t now_us = butil::gettimeofday_us();
         if (now_us >= _deadline) {
-            LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for " << (now_us - _deadline) / 1000
-                      << "ms past deadline";
+            LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for "
+                      << (now_us - _deadline) / 1000 << " ms past deadline";
             _cache->_stub_map.erase(_endpoint);
             return;
         }
@@ -103,7 +89,7 @@ public:
             return;
         }
         timespec tm = butil::microseconds_to_timespec(_deadline);
-        auto status = _cache->_timer->schedule(new_task.get(), tm);
+        auto status = _cache->_pipeline_timer->schedule(new_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to reschedule brpc cleanup task: " << _endpoint;
             // Drop the entry; the next get_*_stub() will recreate it with a fresh task.
@@ -137,15 +123,10 @@ public:
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
 
 private:
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
-=======
     friend class EndpointCleanupTask<BrpcStubCache>;
 
     template <typename CacheT, typename ExtractFn>
     friend void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract);
-
-    template <typename CacheT>
-    friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
     bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
                                       const EndpointCleanupTask<BrpcStubCache>* task) const {
@@ -156,8 +137,6 @@ private:
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
 
-    struct Metrics;
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
     struct StubPool {
         StubPool();
         ~StubPool();
@@ -170,13 +149,8 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
     pipeline::PipelineTimer* _pipeline_timer;
-=======
-    BthreadTimer* _timer;
-    std::unique_ptr<Metrics> _metrics;
     bool _stopping{false};
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
 };
 
 class HttpBrpcStubCache {
@@ -190,22 +164,11 @@ private:
     HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
     ~HttpBrpcStubCache();
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
 
-    SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
-                                              std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>>>
-            _stub_map;
-    pipeline::PipelineTimer* _pipeline_timer;
-=======
-    void bind_timer(BthreadTimer* timer);
     friend class EndpointCleanupTask<HttpBrpcStubCache>;
 
     template <typename CacheT, typename ExtractFn>
     friend void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract);
-
-    template <typename CacheT>
-    friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
     bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
                                       const EndpointCleanupTask<HttpBrpcStubCache>* task) const {
@@ -223,9 +186,8 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubEntry> _stub_map;
-    BthreadTimer* _timer;
+    pipeline::PipelineTimer* _pipeline_timer;
     bool _stopping{false};
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
 };
 
 #ifndef __APPLE__
@@ -240,22 +202,11 @@ private:
     LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
     LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
     ~LakeServiceBrpcStubCache();
-<<<<<<< HEAD:be/src/util/brpc_stub_cache.h
 
-    SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<LakeService_RecoverableStub>,
-                                              std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>>>
-            _stub_map;
-    pipeline::PipelineTimer* _pipeline_timer;
-=======
-    void bind_timer(BthreadTimer* timer);
     friend class EndpointCleanupTask<LakeServiceBrpcStubCache>;
 
     template <typename CacheT, typename ExtractFn>
     friend void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract);
-
-    template <typename CacheT>
-    friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
     bool is_cleanup_task_owner_locked(const butil::EndPoint& endpoint,
                                       const EndpointCleanupTask<LakeServiceBrpcStubCache>* task) const {
@@ -273,9 +224,8 @@ private:
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubEntry> _stub_map;
-    BthreadTimer* _timer;
+    pipeline::PipelineTimer* _pipeline_timer;
     bool _stopping{false};
->>>>>>> 2bbca67281 ([BugFix] Fix bRPC stub cache clean timer leak (#75973)):be/src/common/brpc/brpc_stub_cache.h
 };
 #endif
 
