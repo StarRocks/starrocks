@@ -144,7 +144,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
     public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
@@ -207,6 +207,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
+
+    private boolean usePreparedPhysicalSplitScan = false;
 
     boolean enableTopnFilterBackPressure = false;
     long backPressureThrottleTimeUpperBound = -1;
@@ -327,47 +329,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     }
 
     @Override
-    public int getBucketNums() {
-        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
-        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-            return getRangeDistributionBucketNums(distInfo);
-        }
-        // HASH path.
-        int bucketNum = distInfo.getBucketNum();
-        if (getSelectedPartitionIds().size() <= 1) {
-            for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
-            }
-        }
-        return bucketNum;
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeq2locations;
     }
 
-    private int getRangeDistributionBucketNums(DistributionInfo distInfo) {
-        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
-        if (dispatch != null) {
-            // getBucketNums() is invoked from ExecutionFragment.getOrCreateColocatedAssignment
-            // only when BackendSelectorFactory has chosen a colocate-dispatch path. Verify
-            // alignment HERE, after the dispatch decision: a misaligned ColocateRangeMgr
-            // would silently produce wrong join results under colocate dispatch.
-            // Non-colocate scans go through NormalBackendSelector and never reach this point.
-            //
-            // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
-            // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
-            // The second check closes the fill-vs-dispatch TOCTOU: the bucketSeq fill falls back to a
-            // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
-            // still works); if the group then re-aligns before this guard runs, comparing the built
-            // assignment against the aligned mapping catches the stale position pairing that would
-            // otherwise reach the colocate join and silently return wrong results.
-            //
-            // Invariant: the bucketSeq fill (getScanRangeLocations, optimizer or legacy path) always runs
-            // before backend selection reaches this guard, so tabletId2BucketSeq holds the whole scan's
-            // built assignment here — an empty map would itself be a not-built/stale state and fails closed.
-            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId, tabletId2BucketSeq);
-            return dispatch.bucketCount();
-        }
-        // Range distribution without a colocate group: RangeDistributionInfo always
-        // reports 1 (one tablet per partition by design).
-        return distInfo.getBucketNum();
+    @Override
+    public int getBucketNums() {
+        return computeBucketNums(olapTable, index.indexMetaId, getSelectedPartitionIds(),
+                getSelectedPhysicalPartitions(), tabletId2BucketSeq);
     }
 
     /**
@@ -860,11 +829,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
-        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
-        RangeColocateScanDispatch dispatch = null;
-        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-            dispatch = RangeColocateScanDispatch.forTable(olapTable);
-        }
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -885,37 +850,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds);
+                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
-        }
-    }
-
-    /**
-     * Populates {@link #tabletId2BucketSeq} for one {@link MaterializedIndex}.
-     * Range-colocate scans use the bucket sequence supplied by the dispatch
-     * facade when alignment holds; everything else (HASH, range non-colocate,
-     * or transiently unaligned range colocate) falls back to position-based
-     * bucketSeq. The dispatch-time alignment guard fires later in
-     * {@link #getBucketNums()} for the colocate-dispatch path.
-     */
-    private void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
-                                          MaterializedIndex selectedIndex,
-                                          List<Long> allTabletIds) {
-        if (dispatch != null) {
-            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
-            if (rangeColocateMap != null) {
-                tabletId2BucketSeq.putAll(rangeColocateMap);
-                return;
-            }
-            // Range-colocate but transiently unaligned: fall back to position-based bucketSeq so a
-            // non-colocate scan of this table still works. getBucketNums() fails closed on the
-            // colocate-dispatch path by validating this built assignment against the aligned mapping.
-        }
-        for (int i = 0; i < allTabletIds.size(); i++) {
-            tabletId2BucketSeq.put(allTabletIds.get(i), i);
         }
     }
 
@@ -953,6 +892,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return result;
+    }
+
+    public void setUsePreparedPhysicalSplitScan(boolean usePreparedPhysicalSplitScan) {
+        this.usePreparedPhysicalSplitScan = usePreparedPhysicalSplitScan;
     }
 
     @Override
@@ -1112,6 +1055,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("MaterializedView: true\n");
         }
 
+        if (usePreparedPhysicalSplitScan) {
+            output.append(prefix).append("Prepared Physical Split Scan: true\n");
+        }
+
         if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
             output.append(prefix).append("Short Circuit Scan: true\n");
         }
@@ -1213,6 +1160,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             if (topnFilterBackPressureDisabled) {
                 msg.lake_scan_node.setTopn_filter_back_pressure_disabled(true);
+            }
+            if (usePreparedPhysicalSplitScan) {
+                msg.lake_scan_node.setUse_prepared_physical_split_scan(true);
             }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));

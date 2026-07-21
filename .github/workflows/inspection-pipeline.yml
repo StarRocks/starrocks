@@ -1,13 +1,15 @@
 name: INSPECTION PIPELINE
 
 on:
-  # Scheduled inspection runs disabled 2026-07-08: the runs are not currently
-  # meaningful. Kept here (commented) for easy re-enable. Manual dispatch stays.
-  # schedule:
-  #   - cron: "0 0 * * 1-5"
-  #   - cron: "30 4 * * 1-5"
-  #   - cron: "0 11 * * 1,3,5"
-  #   - cron: "0 11 * * 2,4"
+  # Re-enabled 2026-07-15: unstable-case-review deploys the periodic inspection
+  # build (per-branch, keyed by commit sha) and OSS auto-deletes those packages
+  # after 3 days, so the schedule must run to keep a fresh package available for
+  # each reviewed branch (main, branch-4.0.x, branch-4.1.x).
+  schedule:
+    - cron: "0 0 * * 1-5"
+    - cron: "30 4 * * 1-5"
+    - cron: "0 11 * * 1,3,5"
+    - cron: "0 11 * * 2,4"
   workflow_dispatch:
     inputs:
       BRANCH:

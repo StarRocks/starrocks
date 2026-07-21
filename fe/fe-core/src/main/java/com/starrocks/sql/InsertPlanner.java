@@ -847,15 +847,30 @@ public class InsertPlanner {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Optional<Column> optOriginColumn = outputFullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
+                if (optOriginColumn.isPresent()) {
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
 
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
+                    ColumnRefOperator columnRefOperator = columnRefFactory.create(
+                            targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
 
-                outputColumns.add(columnRefOperator);
-                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                    outputColumns.add(columnRefOperator);
+                    columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                } else {
+                    // No same-named origin in the output schema. This is legitimate ONLY for a genuinely
+                    // new added column (e.g. a range ADD-key column); a MODIFY-COLUMN shadow always retains
+                    // its origin and takes the branch above. Preserve the invariant the original code
+                    // asserted (optOriginColumn.isPresent()) by materializing a default only when no
+                    // committed base column has this name -- otherwise a MODIFY shadow that lost its origin
+                    // would silently emit a wrong DEFAULT instead of failing fast.
+                    boolean genuinelyNewColumn =
+                            outputBaseSchema.stream().noneMatch(c -> c.nameEquals(originName, false));
+                    Preconditions.checkState(genuinelyNewColumn,
+                            "shadow column %s has no same-named origin but exists in the base schema",
+                            targetColumn.getName());
+                    // Materialize its CONST/NULL default instead of the origin-cast above.
+                    materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
+                }
                 continue;
             }
 
@@ -915,25 +930,46 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ScalarOperator scalarOperator = null;
-                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL) {
-                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
-                } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
-                } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                    throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
-                            + targetColumn.getDefaultExpr().getExpr());
-                }
-                ColumnRefOperator col = columnRefFactory
-                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                outputColumns.add(col);
-                columnRefMap.put(col, scalarOperator);
+                materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    /**
+     * Materialize {@code targetColumn}'s CONST/NULL default as a fresh {@link ColumnRefOperator}, appended to
+     * {@code outputColumns} and mapped in {@code columnRefMap}. Used by {@link #fillShadowColumns} both for a
+     * plain new-add schema-change column and for a {@code __starrocks_shadow_}-prefixed column with no
+     * same-named origin (a genuinely new added column, e.g. a range ADD-key column).
+     */
+    private void materializeShadowColumnDefault(ColumnRefFactory columnRefFactory, List<ColumnRefOperator> outputColumns,
+                                                Map<ColumnRefOperator, ScalarOperator> columnRefMap, Column targetColumn) {
+        ScalarOperator scalarOperator;
+        Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.NULL) {
+            scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+        } else if (defaultValueType == Column.DefaultValueType.CONST) {
+            // calculatedDefaultValue() evaluates a time-function default (e.g. CURRENT_TIMESTAMP) to the
+            // transaction time and returns a scalar literal's string, but it returns null for a complex
+            // expr-object default (ARRAY/MAP/STRUCT literal); getDefaultValue() renders that via toSql().
+            // Take whichever is non-null so a bundled non-key value column with a complex constant default
+            // is materialized as a VARCHAR constant (cast to the column type downstream) rather than NPEing.
+            String defaultValueStr = targetColumn.calculatedDefaultValue();
+            if (defaultValueStr == null) {
+                defaultValueStr = targetColumn.getDefaultValue();
+            }
+            scalarOperator = ConstantOperator.createVarchar(defaultValueStr);
+        } else {
+            // VARY (variable expr, e.g. uuid()) -- not materializable as a constant for the shadow rewrite.
+            throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                    + targetColumn.getDefaultExpr().getExpr());
+        }
+        ColumnRefOperator col = columnRefFactory
+                .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+        outputColumns.add(col);
+        columnRefMap.put(col, scalarOperator);
     }
 
     private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,

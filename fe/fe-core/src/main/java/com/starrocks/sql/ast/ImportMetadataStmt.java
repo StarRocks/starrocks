@@ -19,10 +19,10 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-// The INCLUDE METADATA (<key> AS <alias>, ...) clause of a routine-load statement. Each item binds a
+// The INCLUDE METADATA (<key> [AS <alias>], ...) clause of a routine-load statement. Each item binds a
 // source-metadata key (KEY, PARTITION, OFFSET, TIMESTAMP_MS, HEADERS, MESSAGE_ID, ...) to a hidden
-// source column named <alias> that COLUMNS exprs reference. The key is the raw text; it is validated
-// against the data source and mapped to a metadata kind in the analyzer
+// source column that COLUMNS exprs reference. When AS <alias> is omitted, the alias defaults to the key.
+// The key is the raw text; it is validated against the data source and mapped to a metadata kind in the analyzer
 // (see RoutineLoadMetadata.validateIncludeMetadata).
 public class ImportMetadataStmt extends StatementBase {
     public static class Item {
@@ -64,7 +64,7 @@ public class ImportMetadataStmt extends StatementBase {
         return items;
     }
 
-    // Renders the clause as it appears in CREATE ROUTINE LOAD, e.g. INCLUDE METADATA(KEY AS `k`, ...).
+    // Renders the clause with explicit aliases, e.g. INCLUDE METADATA(KEY AS `k`, ...).
     // Both RoutineLoadDesc.toSql (origStmt persistence) and SHOW CREATE ROUTINE LOAD render through this
     // single helper so the persisted and shown forms cannot drift. Keys are validated keywords emitted
     // as-is; the alias is rendered with the shared ParseUtil.backquote helper, so a reserved-word alias

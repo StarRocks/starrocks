@@ -25,7 +25,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -40,7 +42,9 @@ import java.util.function.BooleanSupplier;
  *   <li>{@link #dispatch} — partitioned-vs-unpartitioned routing, including the
  *       automatic-partition gate that conservatively skips manually
  *       list/range-partitioned targets (those cannot pre-create partitions from
- *       sampled values).</li>
+ *       sampled values), and the INSERT-from-table rollup descope (a rollup's sort
+ *       key cannot be remapped to source columns, so a multi-index target skips
+ *       before sampling for that load kind only).</li>
  *   <li>{@link #runSinglePartitionFlow} — resolve the unique partition + base
  *       tablet, build a {@link DefaultPreSplitPipeline}, submit via
  *       {@link TabletPreSplitCoordinator#submitAsynchronously}, then sync-await
@@ -70,15 +74,31 @@ final class PreSplitFlow {
      * Source-resolved inputs the flow needs. sortKeyColumns / partitionColumns are TARGET
      * columns (boundary planning + per-row partition projection); estimatedBytes sizes the
      * requested tablet count; computeResource sizes the active CN count; scanContext carries
-     * the source-specific scan inputs.
+     * the source-specific scan inputs; secondaryIndexSpecs names every OTHER visible index
+     * (rollup) whose sort key the multi-partition data-tier sampler should project alongside
+     * the base sort key -- empty for single-index targets and for INSERT-from-table (descoped).
      */
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
-                    ComputeResource computeResource) {
+                    ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
+
+        /**
+         * Backward-compatible constructor for callers with no rollup to project;
+         * defaults secondaryIndexSpecs to empty.
+         */
+        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
+                List<Column> partitionColumns, long estimatedBytes, ComputeResource computeResource) {
+            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource, List.of());
+        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
+        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.getVisibleIndexMetas().size() > 1) {
+            // INSERT-from-table cannot remap a divergent rollup sort key to source columns (descoped).
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return;
+        }
         if (target.getPartitionInfo().isPartitioned()) {
             // Manually list/range-partitioned targets do not support pre-creating partitions
             // from sampled values; skip conservatively, let the load proceed.
@@ -97,9 +117,16 @@ final class PreSplitFlow {
         if (target == null) {
             return;
         }
+        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.indexTargets().size() > 1) {
+            // Authoritative re-check on the resolved index set: a rollup that became visible after the
+            // dispatch-time descope gate must not be sampled with the base-only INSERT-from-table source
+            // mapping. Skip pre-split (load proceeds) -- INSERT-from-table with a rollup is out of scope.
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return;
+        }
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                target.database(), target.olapTable(), target.oldTabletId(), prepared.estimatedBytes(), loadKind,
+                target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,
                 prepared.computeResource());
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
                 target.database(), target.olapTable(), target.partitionId(), prepared.scanContext(),
@@ -119,13 +146,19 @@ final class PreSplitFlow {
         if (samples == null) {
             return;
         }
+        // The authoritative secondary index-id set the sampler projected. The grouper drops any
+        // partition whose currently-resolved rollup set differs, and the coordinator re-checks the
+        // same set immediately before planning each partition.
+        Set<Long> sampledSecondaryIndexMetaIds = new HashSet<>(samples.getSecondaryIndexMetaIds());
         List<PartitionSamples> groups = PartitionSampleGrouper.group(
-                samples, table, context, database.getId(), prepared.estimatedBytes());
+                samples, table, context, database.getId(), prepared.estimatedBytes(),
+                sampledSecondaryIndexMetaIds);
         if (groups.isEmpty()) {
             return;
         }
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                database, table, groups, activeComputeNodeCount, context, prepared.computeResource());
+                database, table, groups, activeComputeNodeCount, context, prepared.computeResource(),
+                sampledSecondaryIndexMetaIds);
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
@@ -137,8 +170,8 @@ final class PreSplitFlow {
     static SampleSet runDataTierSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
         try {
             SampleRequest request = new SampleRequest(
-                    prepared.scanContext(), prepared.sortKeyColumns(), prepared.partitionColumns(),
-                    Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    prepared.scanContext(), prepared.sortKeyColumns(), prepared.secondaryIndexSpecs(),
+                    prepared.partitionColumns(), Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
             Sampler sampler = new ReservoirSampler(DefaultPreSplitPipeline.sampleSubqueryExecutorFor(loadKind));
             return sampler.sample(request);

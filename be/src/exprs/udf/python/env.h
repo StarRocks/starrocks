@@ -41,16 +41,33 @@ void lock_free_call_once(std::atomic<bool>& once, Callable&& func) {
     }
 }
 
+// A Python UDF worker the call stub talks to over Arrow Flight: either a local worker process that
+// PyWorkerManager spawns and pools, or a connection to an external, user-run worker service. Both
+// cases go through this interface so neither leaks into the other.
 class PyWorker {
 public:
-    PyWorker(pid_t pid) : _pid(pid) {}
-    ~PyWorker() { terminate_and_wait(); }
+    virtual ~PyWorker() = default;
+
+    virtual const std::string& url() const = 0;
+    virtual void mark_dead() = 0;
+    virtual bool is_dead() const = 0;
+
+    // Process lifecycle / pooling -- meaningful only for a local worker; no-ops for a remote one.
+    virtual void terminate_and_wait() {}
+    virtual void touch() {}
+    virtual bool expired() { return false; }
+};
+
+// A local Python worker process: PyWorkerManager spawns it, owns its Unix socket, pools it, and
+// reaps it when it dies or expires.
+class LocalPyWorker final : public PyWorker {
+public:
+    explicit LocalPyWorker(pid_t pid) : _pid(pid) {}
+    ~LocalPyWorker() override { terminate_and_wait(); }
 
     void terminate();
-
     void wait();
-
-    void terminate_and_wait() {
+    void terminate_and_wait() override {
         lock_free_call_once(_once, [this]() {
             terminate();
             remove_unix_socket();
@@ -59,14 +76,14 @@ public:
     }
     void remove_unix_socket();
 
-    const std::string url() { return _url; }
+    const std::string& url() const override { return _url; }
     void set_url(std::string url) { _url = std::move(url); }
 
-    void touch() { _last_touch_time = MonotonicSeconds(); }
-    bool expired();
+    void touch() override { _last_touch_time = MonotonicSeconds(); }
+    bool expired() override;
 
-    void mark_dead() { _is_dead = true; }
-    bool is_dead() { return _is_dead; }
+    void mark_dead() override { _is_dead = true; }
+    bool is_dead() const override { return _is_dead; }
 
 private:
     std::atomic<bool> _once{};
@@ -74,6 +91,22 @@ private:
     std::string _url;
     pid_t _pid = -1;
     int64_t _last_touch_time = 0;
+};
+
+// A connection to an external, user-run Arrow Flight worker service (the CREATE FUNCTION
+// "service_url" property). It has no local process lifecycle -- the user runs and isolates it, and
+// "dead" just means "drop and reconnect".
+class RemotePyWorker final : public PyWorker {
+public:
+    explicit RemotePyWorker(std::string url) : _url(std::move(url)) {}
+
+    const std::string& url() const override { return _url; }
+    void mark_dead() override { _is_dead = true; }
+    bool is_dead() const override { return _is_dead; }
+
+private:
+    std::string _url;
+    std::atomic<bool> _is_dead{false};
 };
 
 class PyWorkerManager {
@@ -101,7 +134,7 @@ public:
     void cleanup_expired_worker();
 
 private:
-    Status _fork_py_worker(std::unique_ptr<PyWorker>* child_process);
+    Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 
     const size_t max_worker_per_driver = 2;

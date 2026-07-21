@@ -372,6 +372,173 @@
       "remediation": "Keep format code inside the Format module; move connector orchestration and higher execution policy upward."
     },
     {
+      "id": "datasinkfile",
+      "doc_label": "DataSinkFile",
+      "summary": "Reusable file sink builders for delimited text and Parquet output over explicit format, filesystem, expression, and column dependencies without full Exec, concrete Storage, or orchestration coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkFile"],
+      "owned_roots": ["be/src/data_sink/file"],
+      "allowed_include_prefixes": [
+        "data_sink/file/",
+        "formats/",
+        "fs/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "compute_env/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["FormatCore", "FormatCsv", "FormatParquet", "Expr", "FileSystem", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_file_test"],
+      "allowed_test_link_deps": ["DataSinkFile", "FormatCore", "FormatCsv", "FormatParquet", "Expr", "Runtime", "FileSystem", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep file serialization builders independent of full Exec and concrete Storage; place sink lifecycle and orchestration in higher data-sink modules instead of expanding this leaf target."
+    },
+    {
+      "id": "datasinkresult",
+      "doc_label": "DataSinkResult",
+      "summary": "Query-result and memory-scratch sinks plus their protocol and file writers over explicit compute-result, execution-contract, format, filesystem, expression, and runtime dependencies without full Exec or concrete Storage coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkResult"],
+      "owned_roots": ["be/src/data_sink/result"],
+      "allowed_include_prefixes": [
+        "data_sink/result/",
+        "data_sink/file/",
+        "compute_env/result/",
+        "exec_primitive/",
+        "formats/",
+        "exprs/",
+        "runtime/",
+        "platform/",
+        "fs/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["DataSinkFile", "ComputeEnv", "ExecPrimitive", "FormatCore", "FormatCsv", "FormatParquet", "Expr", "Runtime", "Platform", "FileSystem", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_result_test"],
+      "allowed_test_link_deps": ["DataSinkResult", "ServiceBE", "Service", "SchemaScannerBuiltin"],
+      "remediation": "Keep result serialization and delivery in DataSinkResult over compute-result and lower contracts; keep concrete storage, full Exec composition, and service/bootstrap behavior outside this module."
+    },
+    {
+      "id": "datasinkexchange",
+      "doc_label": "DataSinkExchange",
+      "summary": "Inter-backend exchange sink implementations over compute data-stream services, execution contracts, expressions, runtime serialization, and RPC primitives without full Exec, Storage, or service coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkExchange"],
+      "owned_roots": ["be/src/data_sink/exchange"],
+      "allowed_include_prefixes": [
+        "data_sink/exchange/",
+        "compute_env/data_stream/",
+        "exec_primitive/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep exchange sending in DataSinkExchange over compute data-stream and lower contracts; keep pipeline composition, storage, and service/bootstrap behavior outside this module."
+    },
+    {
+      "id": "datasinkexternal",
+      "doc_label": "DataSinkExternal",
+      "summary": "Export, MySQL, Hive, Iceberg, table-function, schema, blackhole, and no-op sinks over reusable file builders, formats, filesystem, execution contracts, and runtime helpers without full Exec or concrete Storage coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkExternal"],
+      "owned_roots": ["be/src/data_sink/external"],
+      "allowed_include_prefixes": [
+        "data_sink/external/",
+        "data_sink/file/",
+        "storage_primitive/",
+        "exec_primitive/",
+        "formats/",
+        "exprs/",
+        "runtime/",
+        "platform/",
+        "fs/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "cache/", "compute_env/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["DataSinkFile", "StoragePrimitive", "ExecPrimitive", "FormatCore", "FormatCsv", "Expr", "Runtime", "Platform", "FileSystem", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep non-tablet external and administrative sinks in DataSinkExternal over file, format, filesystem, and lower contracts; keep concrete storage, full Exec composition, and service/bootstrap behavior outside this module."
+    },
+    {
+      "id": "datasinkdictionarycache",
+      "doc_label": "DataSinkDictionaryCache",
+      "summary": "Pipeline-only dictionary-cache sink lifecycle over execution contracts and runtime without concrete Exec operator or writer coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkDictionaryCache"],
+      "owned_roots": ["be/src/data_sink/dictionary_cache"],
+      "allowed_include_prefixes": [
+        "data_sink/dictionary_cache/",
+        "exec_primitive/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/", "http/", "compute_env/", "cache/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["ExecPrimitive", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_dictionary_cache_test"],
+      "allowed_test_link_deps": ["DataSinkDictionaryCache", "ExecPrimitive", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep dictionary-cache sink lifecycle independent of its Exec-owned pipeline operator and writer; pipeline composition remains in Exec."
+    },
+    {
+      "id": "datasinktablet",
+      "doc_label": "DataSinkTablet",
+      "summary": "OLAP tablet routing, validation, channel management, and RPC sending over explicit Storage, ComputeEnv, execution-contract, expression, and runtime dependencies without full Exec or service coupling.",
+      "agents_path": "be/src/data_sink/AGENTS.md",
+      "owned_targets": ["DataSinkTablet"],
+      "owned_roots": ["be/src/data_sink/tablet"],
+      "allowed_include_prefixes": [
+        "data_sink/tablet/",
+        "storage/",
+        "storage_primitive/",
+        "compute_env/",
+        "exec_primitive/",
+        "exprs/",
+        "runtime/",
+        "platform/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "service/", "connector/", "agent/", "http/", "data_workflows/", "orchestration/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["Storage", "StoragePrimitive", "ComputeEnv", "ExecPrimitive", "Expr", "Runtime", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["data_sink_tablet_test"],
+      "allowed_test_link_deps": ["DataSinkTablet", "ServiceBE", "Service", "SchemaScannerBuiltin"],
+      "remediation": "Keep tablet routing and write-channel behavior in DataSinkTablet over explicit Storage, ComputeEnv, and lower contracts; keep full Exec composition and service/bootstrap behavior outside this module."
+    },
+    {
       "id": "storageprimitive",
       "doc_label": "StoragePrimitive",
       "summary": "Shared storage-access primitives, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
@@ -540,6 +707,7 @@
       "owned_roots": ["be/src/data_workflows"],
       "allowed_include_prefixes": [
         "data_workflows/",
+        "cache/",
         "connector/file/",
         "storage/",
         "storage_primitive/",
@@ -568,6 +736,7 @@
       "allowed_target_deps": [
         "Storage",
         "Exec",
+        "Cache",
         "ConnectorFile",
         "Runtime",
         "StorageBase",
@@ -591,8 +760,10 @@
       "allowed_test_targets": ["data_workflows_test"],
       "allowed_test_link_deps": [
         "DataWorkflows",
+        "SchemaScannerBuiltin",
         "Storage",
         "Exec",
+        "Cache",
         "ConnectorFile",
         "Runtime",
         "StorageBase",
@@ -701,7 +872,7 @@
     {
       "id": "execprimitive",
       "doc_label": "ExecPrimitive",
-      "summary": "Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
+      "summary": "Primitive execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",
       "owned_targets": ["ExecPrimitive"],
       "owned_roots": ["be/src/exec_primitive"],
       "allowed_include_prefixes": [
@@ -728,7 +899,7 @@
       "allowed_target_deps": ["Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_primitive_test"],
       "allowed_test_link_deps": ["ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExecPrimitive limited to execution contracts, the DataSink base contract, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward."
+      "remediation": "Keep ExecPrimitive limited to execution contracts, synchronous and asynchronous DataSink lifecycle contracts, runtime filters, generic morsel queues, and stable operator/factory primitives; move runtime, scheduler, concrete operators, concrete sinks, storage, service, and connector integration upward."
     },
     {
       "id": "execruntime",
@@ -1157,7 +1328,8 @@
       "doc_label": "ExecSchemaScannerCore",
       "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",
       "owned_targets": ["ExecSchemaScannerCore"],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "additional_owned_globs": ["be/src/exec/schema_scanner_factory.h"],
+      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner_factory.h", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/schema_scanner/", "exec/pipeline/", "storage/", "http/", "service/", "cache/"],
       "forbidden_includes": [
         "exec/exec_env.h",
@@ -1165,30 +1337,40 @@
         "exec_primitive/data_sink.h"
       ],
       "allowed_target_deps": ["Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["schema_scanner_core_test"],
-      "allowed_test_link_deps": ["ExecSchemaScannerCore", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep SchemaScannerCore limited to the base SchemaScanner contract; move concrete scanner creation and service-specific logic into higher schema scanner modules."
     },
     {
-      "id": "execschemascanners",
-      "doc_label": "ExecSchemaScanners",
-      "summary": "Clean concrete schema scanners that do not depend on SchemaHelper, FE RPC/client helpers, storage, service, cache, pipeline, or ExecEnv.",
-      "owned_targets": ["ExecSchemaScanners"],
+      "id": "schemascannerbuiltin",
+      "doc_label": "SchemaScannerBuiltin",
+      "summary": "Builtin schema scanner factory composition above the concrete scanner module without full Exec coupling.",
+      "owned_targets": ["SchemaScannerBuiltin"],
+      "agents_path": "be/src/schema_scanner/AGENTS.md",
+      "allowed_include_prefixes": ["schema_scanner/", "exec/schema_scanner.h", "exec/schema_scanner_factory.h", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "service/", "http/", "agent/", "connector/", "data_workflows/"],
+      "forbidden_includes": ["exec/exec_env.h"],
+      "allowed_target_deps": ["SchemaScanners", "ExecSchemaScannerCore"],
+      "allowed_test_targets": ["schema_scanner_test"],
+      "allowed_test_link_deps": ["SchemaScannerBuiltin", "SchemaScanners", "ExecSchemaScannerCore", "Storage", "StoragePrimitive", "Cache", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep builtin scanner selection as composition over SchemaScanners and ExecSchemaScannerCore; do not link or include full Exec."
+    },
+    {
+      "id": "schemascanners",
+      "doc_label": "SchemaScanners",
+      "summary": "Concrete schema scanner implementations over the Exec-owned core contract, FE RPC helpers, Storage, Cache, and Platform without full Exec coupling.",
+      "owned_targets": ["SchemaScanners"],
+      "agents_path": "be/src/schema_scanner/AGENTS.md",
       "additional_owned_globs": [
-        "be/src/exec/schema_scanner/schema_column_filler.h"
+        "be/src/schema_scanner/schema_column_filler.h"
       ],
-      "allowed_include_prefixes": ["exec/schema_scanner.h", "exec/schema_scanner/schema_column_filler.h", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exec/pipeline/", "storage/", "http/", "service/", "cache/"],
+      "allowed_include_prefixes": ["schema_scanner/", "exec/schema_scanner.h", "storage/", "storage_primitive/", "cache/", "platform/", "exprs/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/", "service/", "http/", "agent/", "connector/", "data_workflows/"],
       "forbidden_includes": [
-        "exec/schema_scanner/schema_helper.h",
         "exec/exec_env.h",
         "exec_primitive/exec_node.h",
         "exec_primitive/data_sink.h"
       ],
-      "allowed_target_deps": ["ExecSchemaScannerCore", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["exec_schema_scanners_test"],
-      "allowed_test_link_deps": ["ExecSchemaScanners", "ExecSchemaScannerCore", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep this first schema scanner target limited to clean local/static scanners; leave SchemaHelper, storage, HTTP, cache, service, and ExecEnv users in higher compatibility modules until they get explicit boundaries."
+      "allowed_target_deps": ["ExecSchemaScannerCore", "Storage", "StoragePrimitive", "Cache", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep concrete scanners in SchemaScanners over explicit lower module dependencies; route execution through the core contract and keep full Exec, service, and connector code out."
     },
     {
       "id": "execjoincore",
@@ -1223,6 +1405,9 @@
       "allowed_include_prefixes": [
         "orchestration/",
         "data_workflows/",
+        "data_sink/result/",
+        "data_sink/exchange/",
+        "data_sink/tablet/",
         "connector_primitive/",
         "column/",
         "exec/",
@@ -1237,7 +1422,7 @@
         "types/"
       ],
       "forbidden_include_prefixes": ["service/", "http/", "agent/"],
-      "allowed_target_deps": ["DataWorkflows", "Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "Platform", "ColumnCore", "Runtime", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
+      "allowed_target_deps": ["DataWorkflows", "DataSinkResult", "DataSinkExchange", "DataSinkTablet", "Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "Platform", "ColumnCore", "Runtime", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
       "allowed_test_targets": ["orchestration_test"],
       "allowed_test_link_deps": ["Orchestration"],
       "remediation": "Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules."
@@ -1305,7 +1490,7 @@
         "ExecPrimitive",
         "ExecRuntime",
         "ExecSchemaScannerCore",
-        "ExecSchemaScanners",
+        "SchemaScanners",
         "ExecJoinCore",
         "Exec",
         "ConnectorPrimitive",
@@ -1325,7 +1510,7 @@
     {
       "id": "service",
       "doc_label": "Service",
-      "summary": "Shared service-layer target above Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.",
+      "summary": "Shared service-layer target above DataWorkflows, Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.",
       "owned_targets": ["Service"],
       "allowed_include_prefixes": [
         "service/",
@@ -1337,6 +1522,7 @@
         "common/",
         "connector/",
         "compute_env/",
+        "data_workflows/",
         "exec/",
         "exec_primitive/",
         "exprs/",
@@ -1357,6 +1543,7 @@
       "allowed_target_deps": [
         "Script",
         "Runtime",
+        "DataWorkflows",
         "Orchestration",
         "Runtime",
         "Runtime",

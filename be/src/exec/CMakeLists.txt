@@ -22,6 +22,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
+    schema_scanner_factory.cpp
 )
 
 ADD_BE_LIB(ExecSchemaScannerCore
@@ -30,35 +31,6 @@ ADD_BE_LIB(ExecSchemaScannerCore
 
 target_link_libraries(ExecSchemaScannerCore PUBLIC
     Expr
-    Runtime
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
-set(EXEC_SCHEMA_SCANNER_FILES
-    schema_scanner/schema_be_bvars_scanner.cpp
-    schema_scanner/schema_be_configs_scanner.cpp
-    schema_scanner/schema_be_threads_scanner.cpp
-    schema_scanner/schema_charsets_scanner.cpp
-    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
-    schema_scanner/schema_collations_scanner.cpp
-    schema_scanner/schema_dummy_scanner.cpp
-    schema_scanner/schema_events_scanner.cpp
-    schema_scanner/schema_statistics_scanner.cpp
-    schema_scanner/schema_triggers_scanner.cpp
-)
-
-ADD_BE_LIB(ExecSchemaScanners
-    ${EXEC_SCHEMA_SCANNER_FILES}
-)
-
-target_link_libraries(ExecSchemaScanners PUBLIC
-    ExecSchemaScannerCore
     Runtime
     ChunkCore
     ColumnCore
@@ -264,9 +236,6 @@ set(EXEC_NON_PIPELINE_FILES
     select_node.cpp
     short_circuit.cpp
     short_circuit_hybrid.cpp
-    write_combined_txn_log.cpp
-    local_file_writer.cpp
-    plain_text_builder.cpp
     agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
@@ -303,7 +272,6 @@ set(EXEC_NON_PIPELINE_FILES
     except_hash_set.cpp
     except_node.cpp
     parquet_writer.cpp
-    parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
     enforce_unique_row_locator_node.cpp
@@ -313,93 +281,19 @@ set(EXEC_NON_PIPELINE_FILES
     dict_decode_node.cpp
     repeat_node.cpp
     table_function_node.cpp
-    schema_scanner_factory.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    schema_scanner/schema_analyze_status.cpp
-    schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_schemata_scanner.cpp
-    schema_scanner/schema_variables_scanner.cpp
-    schema_scanner/schema_columns_scanner.cpp
-    schema_scanner/schema_column_stats_usage_scanner.cpp
-    schema_scanner/schema_views_scanner.cpp
-    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
-    schema_scanner/schema_materialized_views_scanner.cpp
-    schema_scanner/schema_tasks_scanner.cpp
-    schema_scanner/schema_task_runs_scanner.cpp
-    schema_scanner/schema_loads_scanner.cpp
-    schema_scanner/schema_load_tracking_logs_scanner.cpp
-    schema_scanner/schema_partitions_meta_scanner.cpp
-    schema_scanner/schema_user_privileges_scanner.cpp
-    schema_scanner/schema_schema_privileges_scanner.cpp
-    schema_scanner/schema_table_privileges_scanner.cpp
-    schema_scanner/schema_tables_config_scanner.cpp
-    schema_scanner/schema_be_tablets_scanner.cpp
-    schema_scanner/schema_be_txns_scanner.cpp
-    schema_scanner/schema_be_logs_scanner.cpp
-    schema_scanner/schema_be_metrics_scanner.cpp
-    schema_scanner/schema_fe_metrics_scanner.cpp
-    schema_scanner/schema_fe_threads_scanner.cpp
-    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
-    schema_scanner/schema_be_compactions_scanner.cpp
-    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
-    schema_scanner/schema_be_tablet_write_log_scanner.cpp
-    schema_scanner/schema_pipe_files.cpp
-    schema_scanner/schema_pipes.cpp
-    schema_scanner/schema_recyclebin_catalogs.cpp
-    schema_scanner/starrocks_role_edges_scanner.cpp
-    schema_scanner/starrocks_grants_to_scanner.cpp
-    schema_scanner/schema_helper.cpp
-    schema_scanner/schema_routine_load_jobs_scanner.cpp
-    schema_scanner/schema_stream_loads_scanner.cpp
-    schema_scanner/schema_be_datacache_metrics_scanner.cpp
-    schema_scanner/sys_object_dependencies.cpp
-    schema_scanner/sys_fe_locks.cpp
-    schema_scanner/sys_fe_memory_usage.cpp
-    schema_scanner/schema_temp_tables_scanner.cpp
-    schema_scanner/schema_warehouse_metrics.cpp
-    schema_scanner/schema_warehouse_queries.cpp
-    schema_scanner/schema_cluster_snapshots_scanner.cpp
-    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
-    schema_scanner/schema_applicable_roles_scanner.cpp
-    schema_scanner/schema_keywords_scanner.cpp
-    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     connector_scan_node.cpp
 )
 
-set(EXEC_DATA_SINK_FILES
-    data_sinks/arrow_result_writer.cpp
-    data_sinks/blackhole_table_sink.cpp
-    data_sinks/buffer_control_result_writer.cpp
-    data_sinks/customized_result_writer.cpp
+set(EXEC_DATA_SINK_COMPAT_FILES
     data_sinks/data_sink_factory.cpp
     data_sinks/data_sink_pipeline.cpp
-    data_sinks/data_stream_sender.cpp
-    data_sinks/dictionary_cache_sink.cpp
-    data_sinks/export_sink.cpp
-    data_sinks/file_result_writer.cpp
-    data_sinks/hive_table_sink.cpp
-    data_sinks/http_result_writer.cpp
-    data_sinks/iceberg_table_sink.cpp
-    data_sinks/memory_scratch_sink.cpp
-    data_sinks/metadata_result_writer.cpp
-    data_sinks/multi_cast_data_stream_sink.cpp
-    data_sinks/multi_olap_table_sink.cpp
-    data_sinks/mysql_result_writer.cpp
-    data_sinks/mysql_table_sink.cpp
-    data_sinks/mysql_table_writer.cpp
-    data_sinks/range_router.cpp
-    data_sinks/range_tablet_sink_sender.cpp
-    data_sinks/result_sink.cpp
-    data_sinks/schema_table_sink.cpp
-    data_sinks/statistic_result_writer.cpp
-    data_sinks/table_function_table_sink.cpp
-    data_sinks/tablet_sink.cpp
-    data_sinks/tablet_sink_colocate_sender.cpp
-    data_sinks/tablet_sink_index_channel.cpp
-    data_sinks/tablet_sink_sender.cpp
-    data_sinks/variable_result_writer.cpp
+    data_sinks/pipeline_sink_builder.cpp
+    data_sinks/hive_table_sink_pipeline_builder.cpp
+    data_sinks/table_function_table_sink_pipeline_builder.cpp
+    data_sinks/iceberg_table_sink_pipeline_builder.cpp
 )
 
 set(EXEC_RUNTIME_COMPAT_FILES
@@ -407,12 +301,6 @@ set(EXEC_RUNTIME_COMPAT_FILES
     exec_env.cpp
     pipeline/pipeline_fragment_reporter.cpp
     runtime_compat/runtime_state_helper.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_executor.cpp
-    batch_write/isomorphic_batch_write.cpp
-    batch_write/batch_write_mgr.cpp
-    batch_write/batch_write_util.cpp
-    batch_write/txn_state_cache.cpp
     runtime_filter_compat/runtime_filter_merger.cpp
     runtime_filter_compat/runtime_filter_port.cpp
     runtime_filter_compat/runtime_filter_rpc.cpp
@@ -481,12 +369,26 @@ target_link_libraries(ExecRuntime PUBLIC
 
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
-    ${EXEC_DATA_SINK_FILES}
+    ${EXEC_DATA_SINK_COMPAT_FILES}
     ${EXEC_RUNTIME_COMPAT_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE Formats Platform Connector ConnectorLake ConnectorFile ConnectorHive ConnectorIceberg)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecJoinCore Runtime ComputeEnv Cache)
+target_link_libraries(Exec PRIVATE
+    DataSinkFile
+    DataSinkResult
+    DataSinkExchange
+    DataSinkExternal
+    DataSinkDictionaryCache
+    DataSinkTablet
+    Formats
+    Platform
+    Connector
+    ConnectorLake
+    ConnectorFile
+    ConnectorHive
+    ConnectorIceberg
+)

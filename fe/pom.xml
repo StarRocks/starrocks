@@ -70,7 +70,7 @@ under the License.
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.135.Final</io.netty.version>
+        <io.netty.version>4.1.136.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -601,6 +601,14 @@ under the License.
                 <version>3.4.0</version>
             </dependency>
 
+            <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+                 7 jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+            <dependency>
+                <groupId>org.tukaani</groupId>
+                <artifactId>xz</artifactId>
+                <version>1.9</version>
+            </dependency>
+
             <!-- pin okio-jvm to the same version as okio; okhttp 4.10.0 drags in
                  okio-jvm 3.0.0 which is affected by CVE-2023-3635 -->
             <dependency>
@@ -757,6 +765,12 @@ under the License.
                     <exclusion>
                         <groupId>org.eclipse.jetty</groupId>
                         <artifactId>jetty-server</artifactId>
+                    </exclusion>
+                    <!-- avro-ipc ships jquery 1.4.2 (CVE-2011-4969 etc.); only referenced by
+                         avro-mapred's tether feature which is never used -->
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>avro-ipc</artifactId>
                     </exclusion>
                     <exclusion>
                         <groupId>org.eclipse.jetty</groupId>
@@ -1694,6 +1708,10 @@ under the License.
                                         <exclude>org.apache.tomcat.embed:*</exclude>
                                         <!-- tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 -->
                                         <exclude>com.tencentcloudapi:*:[,3.1.1471)</exclude>
+                                        <!-- ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's
+                                             unused tether feature references it -->
+                                        <exclude>org.apache.avro:avro-ipc</exclude>
+                                        <exclude>org.apache.avro:avro-ipc-jetty</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>

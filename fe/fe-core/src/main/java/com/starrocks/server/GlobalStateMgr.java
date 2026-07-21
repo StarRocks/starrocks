@@ -1692,6 +1692,9 @@ public class GlobalStateMgr {
     void stopLeaderOnlyDaemonThreads() {
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
+        if (autovacuumDaemon != null) {
+            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopGracefully(timeoutMs));
+        }
         stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
         stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
         stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));

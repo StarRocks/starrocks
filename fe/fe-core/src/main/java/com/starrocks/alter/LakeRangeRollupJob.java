@@ -342,6 +342,36 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
         return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
     }
 
+    @Override
+    protected List<Column> getShadowSchema() {
+        return rollupSchema;
+    }
+
+    @Override
+    protected KeysType getShadowKeysType() {
+        return rollupKeysType;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyIdxes() {
+        return rollupSortKeyIdxes;
+    }
+
+    @Override
+    protected List<Integer> getShadowSortKeyUniqueIds() {
+        return rollupSortKeyUniqueIds;
+    }
+
+    @Override
+    protected short getShadowShortKeyColumnCount() {
+        return shadowShortKeyColumnCount;
+    }
+
+    @Override
+    protected String shadowKindLabel() {
+        return "rollup";
+    }
+
     /**
      * Register the rollup's own {@link com.starrocks.catalog.MaterializedIndexMeta} under its own
      * (real) name. Unlike the replace-flavored schema-change job, we do NOT call

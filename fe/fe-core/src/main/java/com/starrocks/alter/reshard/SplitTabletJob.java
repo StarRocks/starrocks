@@ -740,6 +740,18 @@ public class SplitTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
+
+            // Installing the new materialized indexes changes the partition's tablet layout:
+            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
+            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
+            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+            // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
+            // partition-replace commit point. This runs on both the leader (runRunningJob) and the
+            // replay path (replayCleaningJob), so followers re-plan too.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 

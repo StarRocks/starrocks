@@ -42,20 +42,17 @@
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
-#include "common/thread/priority_thread_pool.hpp"
-#include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector/common/connector_sink_executor.h"
-#include "exec/batch_write/batch_write_mgr.h"
 #include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
-#include "exec/stream_load/stream_load_executor.h"
-#include "exec/stream_load/transaction_mgr.h"
+#include "exec/schema_scanner_factory.h"
+#include "exec/schema_scanner_factory_adapter.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "exprs/udf/python/env.h"
 #include "gutil/strings/join.h"
@@ -84,10 +81,17 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() : _runtime_env(RuntimeEnv::GetInstance()) {
+ExecEnv::ExecEnv() : ExecEnv(nullptr) {}
+
+ExecEnv::ExecEnv(std::unique_ptr<SchemaScannerFactory> schema_scanner_factory)
+        : _runtime_env(RuntimeEnv::GetInstance()), _schema_scanner_factory(std::move(schema_scanner_factory)) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
+
+const SchemaScannerFactory* resolve_schema_scanner_factory(const ExecEnv* exec_env) {
+    return exec_env == nullptr ? nullptr : exec_env->schema_scanner_factory();
+}
 
 void ExecEnv::_refresh_service_contexts() {
     auto* runtime_env = _runtime_env;
@@ -132,9 +136,6 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.load_path_mgr = load_path_mgr();
     _runtime_services.load_stream_mgr = load_stream_mgr();
     _runtime_services.stream_context_mgr = stream_context_mgr();
-    _runtime_services.transaction_mgr = _transaction_mgr;
-    _runtime_services.batch_write_mgr = _batch_write_mgr;
-    _runtime_services.stream_load_executor = _stream_load_executor;
     _runtime_services.runtime_filter_sender = _runtime_filter_sender;
     _runtime_services.runtime_filter_query_lifecycle = _runtime_filter_query_lifecycle;
     _runtime_services.runtime_filter_cache = _runtime_filter_cache;
@@ -178,7 +179,8 @@ void ExecEnv::set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFi
     _refresh_service_contexts();
 }
 
-Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env) {
+Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env,
+                     std::unique_ptr<SchemaScannerFactory> schema_scanner_factory) {
     DCHECK(process_metrics_registry != nullptr);
     DCHECK(runtime_env != nullptr);
     _runtime_env = runtime_env;
@@ -191,6 +193,9 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     if (_compute_env == nullptr) {
         return Status::InternalError("ComputeEnv is not attached");
     }
+    if (schema_scanner_factory != nullptr) {
+        _schema_scanner_factory = std::move(schema_scanner_factory);
+    }
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
     _table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
@@ -198,21 +203,6 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
-
-    _stream_load_executor = new StreamLoadExecutor(this);
-    _transaction_mgr = new TransactionMgr(this);
-
-    std::unique_ptr<ThreadPool> batch_write_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::merge_commit_thread_pool_num_min)
-                            .set_max_threads(config::merge_commit_thread_pool_num_max)
-                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
-                            .build(&batch_write_thread_pool));
-    auto batch_write_executor =
-            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
-    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -233,6 +223,10 @@ Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEn
     _refresh_service_contexts();
 
     return Status::OK();
+}
+
+Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env) {
+    return init(process_metrics_registry, runtime_env, nullptr);
 }
 
 DataStreamMgr* ExecEnv::stream_mgr() {
@@ -276,12 +270,6 @@ void ExecEnv::stop() {
         _lookup_dispatcher_mgr->close();
     }
 
-    if (_batch_write_mgr) {
-        start = MonotonicMillis();
-        _batch_write_mgr->stop();
-        component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
-    }
-
     start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
     component_times.emplace_back("PythonEnvManager", MonotonicMillis() - start);
@@ -312,17 +300,15 @@ void ExecEnv::clear_query_contexts() {
 }
 
 void ExecEnv::destroy() {
-    delete_and_null(_transaction_mgr);
-    delete_and_null(_stream_load_executor);
     delete_and_null(_connector_sink_spill_executor);
     delete_and_null(_query_context_mgr);
 
     delete_and_null(_runtime_filter_cache);
     delete_and_null(_lookup_dispatcher_mgr);
-    delete_and_null(_batch_write_mgr);
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
     _compute_env = nullptr;
+    _schema_scanner_factory.reset();
     _refresh_service_contexts();
 }
 

@@ -102,9 +102,9 @@ mysql> SHOW PROC '/compactions';
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                                                                                                                              |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18} |
-| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38} |
-| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23} |
+| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
@@ -127,6 +127,9 @@ mysql> SHOW PROC '/compactions';
   - `write_segment_mb`: すべてのサブタスクによって生成された新しいファイルの合計サイズ。単位: MB。
   - `write_remote_sec`: リモートストレージにデータを書き込むすべてのサブタスクの合計時間。単位: 秒。
   - `in_queue_sec`: キューに滞在するすべてのサブタスクの合計時間。単位: 秒。
+  - `score_before`: Compaction 前のパーティションの Compaction Score。`avg`、`p50`、`max` フィールドを含みます。
+  - `score_after`: Compaction 後のパーティションの Compaction Score。`avg`、`p50`、`max` フィールドを含みます。
+  - `partial_success`: Compaction ジョブが部分的に成功したかどうか（一部のタブレットが失敗）。
 
 #### Compaction タスクの実行詳細の表示
 

@@ -20,15 +20,17 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
-    private ScalarOperator skewColumn;
-    private List<ScalarOperator> skewValues;
+    private final ScalarOperator skewColumn;
+    private final List<ScalarOperator> skewValues;
     private Optional<PhysicalHashJoinOperator> skewJoinFriend = Optional.empty();
 
     // Only meaningful for skew join: 0=left child, 1=right child, -1=unknown/not skew join.
@@ -39,11 +41,13 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
+                                    Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators,
                                     Projection projection,
                                     ScalarOperator skewColumn,
                                     List<ScalarOperator> skewValues) {
 
-        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate,
+                predicateCommonOperators, projection);
         this.skewColumn = skewColumn;
         this.skewValues = skewValues;
     }

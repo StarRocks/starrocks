@@ -80,7 +80,7 @@ protected:
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
-                   is_idx(name)) {
+                   is_idx(name) || is_lcrm(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -273,6 +273,54 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_FALSE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_TRUE(file_exist("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// Production full-vacuum path: an orphan .lcrm from a finalized txn (txn_id <
+// min_active_txn_id) is reclaimed, while an in-flight .lcrm (txn_id >=
+// min_active_txn_id) is protected by the same txn-id gate that guards output
+// segments. This exercises the real vacuum_orphaned_datafiles path (runs the
+// orphan scan with expired_seconds=0 + the txn-id filter), complementing the
+// mtime-window offline datafile_gc test above. .lcrm is never referenced by any
+// live metadata, so it relies entirely on that txn-id gate for safety.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
+    // txn 2 < min_active(10), unreferenced -> reclaimed.
+    const std::string orphan_lcrm = "0000000000000002_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    // txn 0xFFFF >= min_active(10) -> in-flight, protected.
+    const std::string inflight_lcrm = "000000000000FFFF_bff53950-a542-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+    create_data_file(inflight_lcrm);
+
+    // A retained metadata (version above max_check_version) that references neither
+    // .lcrm -- metadata never references .lcrm, so check_reference_files protects
+    // nothing here and the txn-id gate is the only guard.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66610,
+        "version": 6,
+        "rowsets": [],
+        "commit_time": 99
+        }
+        )DEL")));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66610);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    ASSERT_TRUE(file_exist(orphan_lcrm));
+    ASSERT_TRUE(file_exist(inflight_lcrm));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
+    EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
@@ -3090,6 +3138,279 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
     }
 }
 
+// A range-distribution reshard child's retain_versions may reference a pre-reshard version the
+// child never had (its earliest metadata is the reshard publish version). The version-interval
+// retain must: (a) not fail with NotFound -- it never reads {child}_V.meta; (b) keep a pre-reshard
+// segment that was live at the pinned version, purely by its recorded version and WITHOUT relying
+// on the `shared` flag (identical-tablet inherited files are not marked shared); and (c) still
+// vacuum the child's own post-pin garbage.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_retain_version_below_tablet_earliest) {
+    // A: created pre-reshard at version 3, inherited by the child (shared=false), compacted out at v6.
+    create_data_file("00000000000159e4_aaaaaaaa-0000-0000-0000-000000000003.dat");
+    // B: created by the child at version 6 (> pinned 3), compacted out at v7 -> collectable garbage.
+    create_data_file("00000000000159e4_bbbbbbbb-0000-0000-0000-000000000006.dat");
+    // C: live rowset segment.
+    create_data_file("00000000000159e4_cccccccc-0000-0000-0000-000000000006.dat");
+
+    // Child's earliest metadata is version 6 (the reshard publish version); no version <= 5 exists.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 700,
+            "version": 6,
+            "rowsets": [
+                { "id": 60, "version": 6, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_cccccccc-0000-0000-0000-000000000006.dat", "size": 100 } ] }
+            ],
+            "compaction_inputs": [
+                { "id": 30, "version": 3, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_aaaaaaaa-0000-0000-0000-000000000003.dat", "size": 100, "shared": false } ] }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 100
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 700,
+            "version": 7,
+            "rowsets": [
+                { "id": 60, "version": 6, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_cccccccc-0000-0000-0000-000000000006.dat", "size": 100 } ] }
+            ],
+            "compaction_inputs": [
+                { "id": 61, "version": 6, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_bbbbbbbb-0000-0000-0000-000000000006.dat", "size": 100 } ] }
+            ],
+            "prev_garbage_version": 6,
+            "commit_time": 200
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(700);
+    info->set_min_version(6);
+    request.set_min_retain_version(7);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    request.add_retain_versions(3); // pre-reshard version the child never had
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    // (a) whole RPC succeeds instead of aborting on NotFound.
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // (b) pre-reshard segment pinned by version 3 is retained, though shared=false.
+    EXPECT_TRUE(file_exist("00000000000159e4_aaaaaaaa-0000-0000-0000-000000000003.dat"));
+    // (c) the child's own post-pin garbage (created at version 6, > 3) is vacuumed.
+    EXPECT_FALSE(file_exist("00000000000159e4_bbbbbbbb-0000-0000-0000-000000000006.dat"));
+    // live rowset segment untouched.
+    EXPECT_TRUE(file_exist("00000000000159e4_cccccccc-0000-0000-0000-000000000006.dat"));
+}
+
+// Compaction-input retention: a rowset's SEGMENTS are retained by the rowset's version -- kept when a
+// pinned snapshot version falls in [rowset.version, tablet.version), reclaimed otherwise. DEL files are
+// retained by their OWN version instead, because a cloud-native PK compaction transfers older del files
+// onto a higher-versioned output rowset. A snapshot pins version 5.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_compaction_input_retention_by_version) {
+    create_data_file("00000000000159e4_11110000-0000-0000-0000-000000000003.dat"); // rowset created v3, pinned
+    create_data_file("00000000000159e4_22220000-0000-0000-0000-000000000008.dat"); // rowset created v8, not pinned
+    create_data_file("00000000000159e4_33330000-0000-0000-0000-000000000003.del"); // transferred del, created v3
+    create_data_file("00000000000159e4_44440000-0000-0000-0000-000000000008.del"); // fresh del, created v8
+    create_data_file("00000000000159e4_55550000-0000-0000-0000-000000000010.dat"); // live
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 950,
+            "version": 10,
+            "rowsets": [
+                { "id": 100, "version": 10, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_55550000-0000-0000-0000-000000000010.dat", "size": 100 } ] }
+            ],
+            "compaction_inputs": [
+                { "id": 90, "version": 3, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_11110000-0000-0000-0000-000000000003.dat", "size": 100 } ] },
+                { "id": 91, "version": 8, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_22220000-0000-0000-0000-000000000008.dat", "size": 100 } ],
+                  "del_files": [
+                      { "name": "00000000000159e4_33330000-0000-0000-0000-000000000003.del", "version": 3 },
+                      { "name": "00000000000159e4_44440000-0000-0000-0000-000000000008.del", "version": 8 }
+                  ] }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 100
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(950);
+    info->set_min_version(8);
+    request.set_min_retain_version(10);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    request.add_retain_versions(5); // pins version 5
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // Segment of the version-3 rowset is retained: the pin (5) lies in [3, 10).
+    EXPECT_TRUE(file_exist("00000000000159e4_11110000-0000-0000-0000-000000000003.dat"));
+    // Segment of the version-8 rowset is reclaimed: the pin (5) is not in [8, 10).
+    EXPECT_FALSE(file_exist("00000000000159e4_22220000-0000-0000-0000-000000000008.dat"));
+    // Del files are retained by their own version: v3 (<= pinned 5) survives, v8 (> pinned 5) is reclaimed.
+    EXPECT_TRUE(file_exist("00000000000159e4_33330000-0000-0000-0000-000000000003.del"));
+    EXPECT_FALSE(file_exist("00000000000159e4_44440000-0000-0000-0000-000000000008.del"));
+    EXPECT_TRUE(file_exist("00000000000159e4_55550000-0000-0000-0000-000000000010.dat"));
+}
+
+// Orphan files carry a stamped creation version; the interval retain keeps exactly the orphan files
+// that were live at a pinned version and deletes newer ones -- no {tablet}_V.meta read needed.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_orphan_file_version_interval) {
+    create_data_file("00000000000159e3_dddddddd-0000-0000-0000-000000000003.delvec"); // created v3, pinned
+    create_data_file("00000000000159e3_eeeeeeee-0000-0000-0000-000000000006.delvec"); // created v6, not pinned
+    create_data_file("00000000000159e4_ffffffff-0000-0000-0000-000000000007.dat");    // live
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 800,
+            "version": 7,
+            "rowsets": [
+                { "id": 70, "version": 7, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_ffffffff-0000-0000-0000-000000000007.dat", "size": 100 } ] }
+            ],
+            "orphan_files": [
+                { "name": "00000000000159e3_dddddddd-0000-0000-0000-000000000003.delvec", "size": 23, "version": 3 },
+                { "name": "00000000000159e3_eeeeeeee-0000-0000-0000-000000000006.delvec", "size": 23, "version": 6 }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 100
+        }
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(800);
+    info->set_min_version(7);
+    request.set_min_retain_version(7);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    request.add_retain_versions(3);
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    // orphan created at version 3 was live at pinned version 3 -> retained.
+    EXPECT_TRUE(file_exist("00000000000159e3_dddddddd-0000-0000-0000-000000000003.delvec"));
+    // orphan created at version 6 (> pinned 3) -> deleted.
+    EXPECT_FALSE(file_exist("00000000000159e3_eeeeeeee-0000-0000-0000-000000000006.delvec"));
+    EXPECT_TRUE(file_exist("00000000000159e4_ffffffff-0000-0000-0000-000000000007.dat"));
+}
+
+// Old-format tablet metadata predates the FileMetaPB.version field and may also carry unset
+// `version` on (compaction-input) rowsets, so both read as 0. The interval retain treats an unset
+// (0) creation version as "created at the earliest version": such files are conservatively retained
+// under a snapshot that pins any older version (never a false delete), and are reclaimed normally
+// when no snapshot pins them. This locks down the backward-compat behavior of the switch from the
+// old filename-based retain to the version-interval retain.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_legacy_unset_version_fields) {
+    // Tablet 900 -- pinned by a snapshot at an old version: legacy unset-version files are kept.
+    create_data_file("00000000000159e4_aa000000-0000-0000-0000-000000000000.dat");    // compaction input (no version)
+    create_data_file("00000000000159e3_bb000000-0000-0000-0000-000000000000.delvec"); // orphan (no version)
+    create_data_file("00000000000159e4_cc000000-0000-0000-0000-000000000000.dat");    // live
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 8,
+            "rowsets": [
+                { "id": 90, "version": 8, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_cc000000-0000-0000-0000-000000000000.dat", "size": 100 } ] }
+            ],
+            "compaction_inputs": [
+                { "id": 80, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_aa000000-0000-0000-0000-000000000000.dat", "size": 100 } ] }
+            ],
+            "orphan_files": [
+                { "name": "00000000000159e3_bb000000-0000-0000-0000-000000000000.delvec", "size": 23 }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 100
+        }
+        )DEL")));
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(900);
+        info->set_min_version(8);
+        request.set_min_retain_version(8);
+        request.set_grace_timestamp(::time(nullptr) + 3600);
+        request.set_min_active_txn_id(12345);
+        request.add_retain_versions(5); // snapshot pins an old version the legacy files predate
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // unset version reads as 0 -> conservatively retained under the snapshot (no false delete).
+        EXPECT_TRUE(file_exist("00000000000159e4_aa000000-0000-0000-0000-000000000000.dat"));
+        EXPECT_TRUE(file_exist("00000000000159e3_bb000000-0000-0000-0000-000000000000.delvec"));
+        EXPECT_TRUE(file_exist("00000000000159e4_cc000000-0000-0000-0000-000000000000.dat"));
+    }
+
+    // Tablet 901 -- identical legacy layout but no snapshot pins it: garbage is reclaimed normally.
+    create_data_file("00000000000159e4_dd000000-0000-0000-0000-000000000000.dat");    // compaction input (no version)
+    create_data_file("00000000000159e3_ee000000-0000-0000-0000-000000000000.delvec"); // orphan (no version)
+    create_data_file("00000000000159e4_ff000000-0000-0000-0000-000000000000.dat");    // live
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 901,
+            "version": 8,
+            "rowsets": [
+                { "id": 91, "version": 8, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_ff000000-0000-0000-0000-000000000000.dat", "size": 100 } ] }
+            ],
+            "compaction_inputs": [
+                { "id": 81, "data_size": 100,
+                  "segment_metas": [ { "filename": "00000000000159e4_dd000000-0000-0000-0000-000000000000.dat", "size": 100 } ] }
+            ],
+            "orphan_files": [
+                { "name": "00000000000159e3_ee000000-0000-0000-0000-000000000000.delvec", "size": 23 }
+            ],
+            "prev_garbage_version": 0,
+            "commit_time": 100
+        }
+        )DEL")));
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(901);
+        info->set_min_version(8);
+        request.set_min_retain_version(8);
+        request.set_grace_timestamp(::time(nullptr) + 3600);
+        request.set_min_active_txn_id(12345);
+        // no retain_versions: nothing pins these versions.
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // no snapshot -> legacy garbage (unset version) reclaimed normally.
+        EXPECT_FALSE(file_exist("00000000000159e4_dd000000-0000-0000-0000-000000000000.dat"));
+        EXPECT_FALSE(file_exist("00000000000159e3_ee000000-0000-0000-0000-000000000000.delvec"));
+        EXPECT_TRUE(file_exist("00000000000159e4_ff000000-0000-0000-0000-000000000000.dat"));
+    }
+}
+
 // Test: vacuum deletes .vi files for compaction_inputs using segment_metas
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
@@ -3832,6 +4153,30 @@ TEST_P(LakeVacuumTest, idg_idx_files_unreferenced_are_orphaned) {
     ASSERT_OK(datafile_gc(kTestDir, "", 0, true));
     EXPECT_TRUE(file_exist(live_idx));
     EXPECT_FALSE(file_exist(stranded_idx));
+}
+
+// .lcrm (Lake Compaction Rows Mapper) files are referenced only from the transaction
+// log, never from any live TabletMetadataPB field: on a successful publish they are
+// consumed and deleted by RowsMapperIterator, and superseded ones enter orphan_files.
+// One left behind by an aborted/failed/crashed PK compaction is therefore referenced
+// by nothing durable -- before .lcrm was added to the orphan-file candidate filter it
+// could not be reclaimed by any GC path (the reference-driven vacuum never sees it and
+// the datafile GC skipped its extension), a permanent storage leak. datafile_gc must
+// now treat such an unreferenced .lcrm as an orphan, while still protecting an
+// in-flight .lcrm via the same expire window that guards the segments written by the
+// same compaction.
+TEST_P(LakeVacuumTest, lcrm_files_unreferenced_are_orphaned) {
+    const std::string orphan_lcrm = "0000000000abc020_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+
+    // Safety: within the expire window an .lcrm is never a candidate, even when it is
+    // unreferenced -- an in-flight compaction's mapper must survive until publish.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/3600, /*do_delete=*/true));
+    EXPECT_TRUE(file_exist(orphan_lcrm));
+
+    // Past the expire window, an unreferenced .lcrm is reclaimed as an orphan.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/0, /*do_delete=*/true));
+    EXPECT_FALSE(file_exist(orphan_lcrm));
 }
 
 // Drop tablet local cache evicts active IDG .idx files (vacuum.cpp 1524-1528).

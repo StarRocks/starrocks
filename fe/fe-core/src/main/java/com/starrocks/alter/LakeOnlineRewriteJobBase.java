@@ -24,19 +24,24 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.Utils;
@@ -50,13 +55,23 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -128,6 +143,11 @@ public abstract class LakeOnlineRewriteJobBase
         Long rewriteTxnId;
         @SerializedName(value = "commitVersion")
         Long commitVersion;
+        // True when the rewrite INSERT wrote no source op_write because the partition was empty at the
+        // watershed (zero tablet commit infos). Drives the flip's shadow_rewrite_source_empty so BE
+        // synthesizes an empty op_schema_change@W for ANY W (null = not yet determined).
+        @SerializedName(value = "sourceEmpty")
+        Boolean sourceEmpty;
 
         PartitionRewriteState() {}
 
@@ -138,6 +158,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.watershedVersion = other.watershedVersion;
             this.rewriteTxnId = other.rewriteTxnId;
             this.commitVersion = other.commitVersion;
+            this.sourceEmpty = other.sourceEmpty;
         }
     }
 
@@ -200,6 +221,12 @@ public abstract class LakeOnlineRewriteJobBase
     public Long getWatershedVersion(long physicalPartitionId) {
         PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
         return partitionState == null ? null : partitionState.watershedVersion;
+    }
+
+    @VisibleForTesting
+    public Boolean getSourceEmpty(long physicalPartitionId) {
+        PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
+        return partitionState == null ? null : partitionState.sourceEmpty;
     }
 
     @VisibleForTesting
@@ -316,6 +343,152 @@ public abstract class LakeOnlineRewriteJobBase
     protected void afterJobSettled(boolean cancelled) {
     }
 
+    // ---- shadow-index config for the per-tablet CreateReplicaTask (createShadowTabletMetadata) --------
+    // Each subclass supplies its own shadow-index schema/key config; the shared createShadowTabletMetadata
+    // below builds the tablet schema from these so the persisted sort-key arity matches the promoted index.
+    protected abstract List<Column> getShadowSchema();
+
+    protected abstract KeysType getShadowKeysType();
+
+    protected abstract List<Integer> getShadowSortKeyIdxes();
+
+    protected abstract List<Integer> getShadowSortKeyUniqueIds();
+
+    protected abstract short getShadowShortKeyColumnCount();
+
+    /** A short label for the shadow ("rollup" / "range-rewrite") used in log and error text. */
+    protected abstract String shadowKindLabel();
+
+    /**
+     * Write each shadow tablet's version-1 metadata on its compute node, carrying the shadow index's OWN
+     * schema (its sort key), so the reshard/pre-split boundary validation reads the shadow's sort-key
+     * arity rather than the base index's. Both range subclasses build their shadow shards in the base
+     * index's shard group (shared per-partition storage path), so without this the compute node would
+     * lazily materialize a shadow tablet's version-1 metadata from the base index's shared
+     * initial-metadata template and read the BASE schema (a stale sort-key arity), which breaks the
+     * reshard/pre-split boundary validation.
+     *
+     * <p>Build one CreateReplicaTask per shadow tablet under a READ lock, then send and wait outside the
+     * lock (a network round-trip must not be held across the database lock). Tablet-creation optimization
+     * is forced off so each tablet writes its OWN per-tablet version-1 metadata instead of the shared
+     * template. Runs while the job is still PENDING (before the WAITING_TXN journal), so a failure leaves
+     * the job re-runnable: the runPendingJob cleanup drops the orphaned shards and a retry rebuilds the
+     * shadow fresh.
+     */
+    protected void createShadowTabletMetadata(List<PendingPartitionPlan> plans) throws AlterCancelException {
+        long shadowTabletCount = plans.stream()
+                .filter(plan -> plan.shadowIndex != null)
+                .mapToLong(plan -> plan.shadowIndex.getTablets().size())
+                .sum();
+        if (shadowTabletCount == 0) {
+            return;
+        }
+
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>((int) shadowTabletCount);
+        AgentBatchTask batchTask;
+        // Build the tasks under a READ lock (stable table metadata + compute-node resolution), then send
+        // and wait outside the lock (a network round-trip must not be held across the database lock).
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
+            batchTask = buildShadowTabletCreateTasks(table, plans, countDownLatch);
+        }
+
+        LakeRollupJob.sendAgentTaskAndWait(batchTask, countDownLatch,
+                Config.tablet_create_timeout_second * shadowTabletCount);
+    }
+
+    /**
+     * Build one {@link CreateReplicaTask} per shadow tablet, each carrying the shadow index's own tablet
+     * schema (its sort key) and its per-tablet range. The caller holds the database read lock. Split out
+     * so a unit test can assert the emitted tablet schema without a compute-node round-trip.
+     */
+    @VisibleForTesting
+    AgentBatchTask buildShadowTabletCreateTasks(@NotNull OlapTable table, List<PendingPartitionPlan> plans,
+                                                MarkedCountDownLatch<Long, Long> countDownLatch)
+            throws AlterCancelException {
+        AgentBatchTask batchTask = new AgentBatchTask();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        long gtid = getNextGtid();
+
+        // The shadow index meta is not registered on the table until PENDING stage 3, so build the
+        // MaterializedIndexMeta from this job's shadow config -- identical to what registerShadowIndexMeta
+        // will register -- and derive the tablet schema (with the shadow's own sort key) from it.
+        MaterializedIndexMeta shadowIndexMeta = new MaterializedIndexMeta(
+                shadowIndexMetaId, getShadowSchema(), 0 /* schemaVersion */, 0 /* schemaHash */,
+                getShadowShortKeyColumnCount(), TStorageType.COLUMN, getShadowKeysType(), null /* defineStmt */,
+                getShadowSortKeyIdxes(), getShadowSortKeyUniqueIds());
+        TTabletSchema tabletSchema =
+                SchemaInfo.fromMaterializedIndex(table, shadowIndexMetaId, shadowIndexMeta).toTabletSchema();
+        String shadowKind = shadowKindLabel();
+
+        for (PendingPartitionPlan plan : plans) {
+            if (plan.shadowIndex == null) {
+                continue;
+            }
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(plan.physicalPartitionId);
+            if (physicalPartition == null) {
+                throw new AlterCancelException("partition " + plan.physicalPartitionId
+                        + " was dropped while creating " + shadowKind + " shadow tablets");
+            }
+            TStorageMedium storageMedium = table.getPartitionInfo()
+                    .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+
+            // The schema file is created once per partition, with the first tablet.
+            boolean createSchemaFile = true;
+            for (Tablet shadowTablet : plan.shadowIndex.getTablets()) {
+                long shadowTabletId = shadowTablet.getId();
+                ComputeNode computeNode = null;
+                try {
+                    computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, shadowTabletId);
+                } catch (ErrorReportException e) {
+                    // computeNode stays null -> handled below.
+                }
+                if (computeNode == null) {
+                    throw new AlterCancelException(
+                            "no alive compute node to create " + shadowKind + " shadow tablet " + shadowTabletId);
+                }
+                countDownLatch.addMark(computeNode.getId(), shadowTabletId);
+
+                CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                        .setNodeId(computeNode.getId())
+                        .setDbId(dbId)
+                        .setTableId(tableId)
+                        .setPartitionId(plan.physicalPartitionId)
+                        .setIndexId(shadowIndexMetaId)
+                        .setTabletId(shadowTabletId)
+                        .setVersion(Partition.PARTITION_INIT_VERSION)
+                        .setStorageMedium(storageMedium)
+                        .setLatch(countDownLatch)
+                        .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        // Carry the table's flat-json config: this per-tablet metadata replaces the shared
+                        // base template (which had it), so without this a flat-json-enabled table's shadow
+                        // tablets would lose the derivation -- as every other create-replica path sets it.
+                        .setFlatJsonConfig(table.getFlatJsonConfig())
+                        .setTabletType(TTabletType.TABLET_TYPE_LAKE)
+                        .setCompressionType(table.getCompressionType())
+                        // The compute node overwrites the tablet schema's compression level with this
+                        // request field (defaults to 0), so set it explicitly to preserve a table's
+                        // configured non-default compression level -- as every other create-replica path does.
+                        .setCompressionLevel(table.getCompressionLevel())
+                        .setCreateSchemaFile(createSchemaFile)
+                        .setTabletSchema(tabletSchema)
+                        // Force per-tablet version-1 metadata: with the optimization on the compute node
+                        // would write the shared initial-metadata template, which belongs to the base index
+                        // sharing this partition storage path. Per-tablet metadata both fixes the stale
+                        // schema read and avoids clobbering the base template.
+                        .setEnableTabletCreationOptimization(false)
+                        .setGtid(gtid)
+                        .setCompactionStrategy(table.getCompactionStrategy())
+                        .setRange(shadowTablet.getRange())
+                        .build();
+                createSchemaFile = false;
+                batchTask.addTask(task);
+            }
+        }
+        return batchTask;
+    }
+
     // ---- PENDING ---------------------------------------------------------------------------------
 
     @Override
@@ -376,6 +549,11 @@ public abstract class LakeOnlineRewriteJobBase
             for (PendingPartitionPlan plan : pendingPlans) {
                 planPartitionShadow(plan, table, cachedDbName);
             }
+
+            // Write each shadow tablet's version-1 metadata on the compute nodes (default no-op; the range
+            // rewrite and the additive rollup persist their own schema here). Still lock-free and still PENDING, so on any
+            // failure the finally below drops the orphaned shards and a retry rebuilds the shadow fresh.
+            createShadowTabletMetadata(pendingPlans);
 
             // Stage 3 (WRITE-lock commit): re-fetch and re-validate the table (TOCTOU: it may have been
             // dropped/altered while the lock was released), then install the built shadow indexes, journal
@@ -758,7 +936,34 @@ public abstract class LakeOnlineRewriteJobBase
             }
         }
 
-        // All partitions' rewrites have published: hand off to the flip phase.
+        // All partitions' rewrites have published (every partition's rewrite txn is VISIBLE here).
+        // Record whether each rewrite produced a source op_write: a partition empty at the watershed
+        // rewrites zero rows, so there is no source op_write on object storage. The flip passes this to BE
+        // (shadow_rewrite_source_empty) so it synthesizes an empty op_schema_change@W instead of 404ing on
+        // the absent source -- this is the empty-at-W>1 case (a repeat online rewrite of an empty range
+        // partition; W==1 empty is already handled by BE). Read from the rewrite txn's (persisted)
+        // InsertTxnCommitAttachment, the same attachment classifyRewrite already relies on, so a leader
+        // failover that re-runs this recovers it; and journaled by the persist below.
+        for (long physicalPartitionId : partitionStates.keySet()) {
+            PartitionRewriteState state = partitionStates.get(physicalPartitionId);
+            if (state.sourceEmpty == null && state.rewriteTxnId != null) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, state.rewriteTxnId);
+                if (txnState != null) {
+                    state.sourceEmpty = rewriteSourceEmpty(txnState);
+                } else {
+                    // The rewrite txn just went VISIBLE (classifyRewrite returned DONE this tick), so it is
+                    // normally still present; a replay that finds it evicted re-runs the rewrite instead of
+                    // reaching here. If it is nonetheless unavailable, leave sourceEmpty unset (treated as
+                    // false at the flip -> BE loads the source). That is safe for a non-empty partition; an
+                    // empty-at-W>1 partition would fall back to the pre-fix flip-publish retry until
+                    // recovered. Log it so the rare degradation is diagnosable rather than silent.
+                    LOG.warn("online rewrite job {}: rewrite txn {} state unavailable while recording "
+                            + "sourceEmpty for partition {}; leaving it unset", jobId, state.rewriteTxnId,
+                            physicalPartitionId);
+                }
+            }
+        }
         this.finishedTimeMs = System.currentTimeMillis();
         persistStateChange(this, JobState.FINISHED_REWRITING);
 
@@ -821,6 +1026,27 @@ public abstract class LakeOnlineRewriteJobBase
         }
         // PREPARE / PREPARED / COMMITTED: in flight, wait.
         return RewriteStatus.IN_FLIGHT;
+    }
+
+    /**
+     * Whether a rewrite txn loaded zero rows, i.e. the partition was empty at the watershed. Read from the
+     * rewrite INSERT's {@link InsertTxnCommitAttachment} (loadedRows), which is persisted on the
+     * TransactionState and carries the same shadow-rewrite markers {@link #classifyRewrite} already reads,
+     * so it survives a leader failover. Drives {@code shadow_rewrite_source_empty} so BE synthesizes an
+     * empty {@code op_schema_change@W} for any W rather than 404ing on the absent source op_write.
+     */
+    private static boolean rewriteSourceEmpty(TransactionState txnState) {
+        // The partition was empty at the watershed iff the rewrite INSERT wrote zero rows. Read loadedRows
+        // from the rewrite txn's InsertTxnCommitAttachment: it is persisted (so it survives a leader
+        // failover) and is the only emptiness signal still available here. This runs only after the rewrite
+        // txn is VISIBLE (classifyRewrite -> DONE), and the VISIBLE finish resets
+        // TransactionState.tabletCommitInfos to null (a memory optimization, on the leader too), so the
+        // commit-info list cannot be consulted at this point. loadedRows == 0 is authoritative: a lake load
+        // that wrote rows reports them via the DPP_NORMAL_ALL counter (the same counter behind "N rows
+        // affected"), so 0 uniquely means an empty rewrite.
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        return (attachment instanceof InsertTxnCommitAttachment)
+                && ((InsertTxnCommitAttachment) attachment).getLoadedRows() == 0;
     }
 
     /**
@@ -1113,7 +1339,7 @@ public abstract class LakeOnlineRewriteJobBase
                 Preconditions.checkState(watershedVersion != null,
                         "watershed version not captured for partition " + physicalPartitionId);
                 publishInfos.add(new PartitionPublishInfo(shadowTablets, originTablets,
-                        commitVersion, rewriteTxnId, watershedVersion));
+                        commitVersion, rewriteTxnId, watershedVersion, Boolean.TRUE.equals(state.sourceEmpty)));
             }
         } catch (AlterCancelException e) {
             LOG.warn("online rewrite job {}: table dropped before publish", jobId);
@@ -1142,6 +1368,8 @@ public abstract class LakeOnlineRewriteJobBase
                 shadowTxnInfo.commitTime = finishedTimeMs / 1000;
                 shadowTxnInfo.gtid = watershedGtid;
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
+                // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
+                shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
                 if (!isFileBundling) {
                     Utils.publishVersion(info.shadowTablets, shadowTxnInfo, 1, info.commitVersion,
                             computeResource, false);
@@ -1172,14 +1400,16 @@ public abstract class LakeOnlineRewriteJobBase
         final long commitVersion;
         final long rewriteTxnId;
         final long watershedVersion;
+        final boolean sourceEmpty;
 
         PartitionPublishInfo(List<Tablet> shadowTablets, List<Tablet> originTablets,
-                             long commitVersion, long rewriteTxnId, long watershedVersion) {
+                             long commitVersion, long rewriteTxnId, long watershedVersion, boolean sourceEmpty) {
             this.shadowTablets = shadowTablets;
             this.originTablets = originTablets;
             this.commitVersion = commitVersion;
             this.rewriteTxnId = rewriteTxnId;
             this.watershedVersion = watershedVersion;
+            this.sourceEmpty = sourceEmpty;
         }
     }
 

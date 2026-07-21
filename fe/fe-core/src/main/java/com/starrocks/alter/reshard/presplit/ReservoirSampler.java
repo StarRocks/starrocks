@@ -64,9 +64,11 @@ public final class ReservoirSampler implements Sampler {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
         long byteLimit = request.getSampleByteLimit();
         Iterator<SampleRow> rowIterator = execution.rows();
+        List<Long> secondaryIndexMetaIds = secondaryIndexMetaIds(request.getSecondaryIndexSortKeys());
 
         List<Tuple> sortKeyTuples = new ArrayList<>();
         List<Tuple> partitionSourceTuples = new ArrayList<>();
+        List<List<IndexTuple>> secondaryIndexTuples = new ArrayList<>();
         long accumulatedBytes = 0L;
 
         while (rowIterator.hasNext()) {
@@ -81,9 +83,13 @@ public final class ReservoirSampler implements Sampler {
             // distinguishes the unpartitioned path from the partitioned one here.
             List<Variant> sortKeyValues = row.sortKeyTuple();
             List<Variant> partitionSourceValues = row.partitionSourceTuple();
+            List<IndexTuple> rowSecondaryIndexTuples = row.secondaryIndexTuples();
             long rowBytes = estimateRowBytes(sortKeyValues);
             if (!partitionSourceValues.isEmpty()) {
                 rowBytes += estimateRowBytes(partitionSourceValues);
+            }
+            for (IndexTuple indexTuple : rowSecondaryIndexTuples) {
+                rowBytes += estimateRowBytes(indexTuple.values());
             }
             // Always admit the first row so a single oversize row doesn't return an empty
             // SampleSet; for subsequent rows enforce the soft limit.
@@ -96,16 +102,41 @@ public final class ReservoirSampler implements Sampler {
             if (!partitionSourceValues.isEmpty()) {
                 partitionSourceTuples.add(new Tuple(ImmutableList.copyOf(partitionSourceValues)));
             }
+            if (!secondaryIndexMetaIds.isEmpty()) {
+                secondaryIndexTuples.add(ImmutableList.copyOf(rowSecondaryIndexTuples));
+            }
             accumulatedBytes += rowBytes;
         }
 
         if (sortKeyTuples.isEmpty()) {
-            return SampleSet.EMPTY;
+            if (secondaryIndexMetaIds.isEmpty()) {
+                return SampleSet.EMPTY;
+            }
+            // A zero-row sample of a request WITH secondary specs still carries the
+            // authoritative id set -- SampleSet.EMPTY has none, which would defeat the
+            // downstream id-set check.
+            return new SampleSet(
+                    List.of(), List.of(), secondaryIndexMetaIds, List.of(), execution.estimates());
         }
-        // partitionSourceTuples is either empty (executor projected no partition-source
-        // columns) or filled 1:1 with sortKeyTuples. The mid-stream byte-limit break
-        // preserves this invariant because the two lists are appended together per row.
-        return new SampleSet(sortKeyTuples, partitionSourceTuples, execution.estimates());
+        // partitionSourceTuples/secondaryIndexTuples are either empty (executor projected
+        // no partition-source columns / request carried no secondary specs) or filled 1:1
+        // with sortKeyTuples. The mid-stream byte-limit break preserves this invariant
+        // because the lists are appended together per row.
+        return new SampleSet(
+                sortKeyTuples, partitionSourceTuples, secondaryIndexMetaIds, secondaryIndexTuples,
+                execution.estimates());
+    }
+
+    /** Extracts the authoritative secondary index-id set, in the request's declared spec order. */
+    private static List<Long> secondaryIndexMetaIds(List<SecondaryIndexSpec> secondaryIndexSortKeys) {
+        if (secondaryIndexSortKeys.isEmpty()) {
+            return List.of();
+        }
+        List<Long> metaIds = new ArrayList<>(secondaryIndexSortKeys.size());
+        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
+            metaIds.add(secondaryIndexSpec.indexMetaId());
+        }
+        return metaIds;
     }
 
     /**

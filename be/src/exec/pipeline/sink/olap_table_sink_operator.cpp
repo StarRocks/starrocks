@@ -18,7 +18,7 @@
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/data_sinks/tablet_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"

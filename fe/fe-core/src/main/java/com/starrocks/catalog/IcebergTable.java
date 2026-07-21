@@ -128,6 +128,10 @@ public class IcebergTable extends Table {
     private Map<String, String> icebergProperties = Maps.newHashMap();
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
+    // Per-query read view of a targeted snapshot for time travel; null means an ordinary read of the
+    // current table state. Bundles the snapshot schema and the partition specs its manifests reference
+    // so the two are always pinned and dropped together.
+    private transient SnapshotReadView readView;
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
@@ -173,7 +177,9 @@ public class IcebergTable extends Table {
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
-            String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
+            org.apache.iceberg.Table nativeTable = getNativeTable();
+            String uuid = nativeTable instanceof BaseTable
+                    ? ((BaseTable) nativeTable).operations().current().uuid() : null;
             return String.join(".", catalogName, catalogDBName, catalogTableName,
                     uuid == null ? "" : uuid);
         } else {
@@ -184,9 +190,8 @@ public class IcebergTable extends Table {
     @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
-            List<PartitionField> partitionFields = this.getNativeTable().spec().fields();
-            Schema schema = this.getNativeTable().schema();
-            partitionColumns = partitionFields.stream().map(partitionField ->
+            Schema schema = getReadSchema();
+            partitionColumns = readSchemaPartitionFields().stream().map(partitionField ->
                     getColumn(getPartitionSourceName(schema, partitionField))).collect(Collectors.toList());
         }
         return partitionColumns;
@@ -198,13 +203,13 @@ public class IcebergTable extends Table {
 
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
-        for (PartitionField field : getNativeTable().spec().fields()) {
+        Schema schema = getReadSchema();
+        // readSchemaPartitionFields() guarantees the source column resolves, so no null check.
+        for (PartitionField field : readSchemaPartitionFields()) {
             if (!field.transform().isIdentity() && hasPartitionTransformedEvolution()) {
                 continue;
             }
-            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
-            Column partitionCol = getColumn(baseColumnName);
-            allPartitionColumns.add(partitionCol);
+            allPartitionColumns.add(getColumn(schema.findColumnName(field.sourceId())));
         }
         return allPartitionColumns;
     }
@@ -212,7 +217,7 @@ public class IcebergTable extends Table {
     public boolean isAllPartitionColumnsAlwaysIdentity() {
         // now we are sure we have never applied transformation,
         // we check if all partition columns are identity.
-        for (PartitionField field : getNativeTable().spec().fields()) {
+        for (PartitionField field : getReadSpec().fields()) {
             if (!field.transform().isIdentity()) {
                 return false;
             }
@@ -221,8 +226,8 @@ public class IcebergTable extends Table {
     }
 
     public PartitionField getPartitionField(String partitionColumnName) {
-        List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
-        Schema schema = this.getNativeTable().schema();
+        List<PartitionField> allPartitionFields = getReadSpec().fields();
+        Schema schema = getReadSchema();
         for (PartitionField field : allPartitionFields) {
             if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
                 return field;
@@ -272,8 +277,8 @@ public class IcebergTable extends Table {
     //  in the same partition column.
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
-        return (!isV2Format() && getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
-                (isV2Format() && getNativeTable().spec().specId() > 0);
+        return (!isV2Format() && getReadSpec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
+                (isV2Format() && getReadSpec().specId() > 0);
     }
 
     public boolean isV2Format() {
@@ -319,7 +324,7 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
+        return getReadSpec().isUnpartitioned();
     }
 
     public boolean isPartitioned() {
@@ -332,7 +337,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNamesWithTransform() {
-        PartitionSpec partitionSpec = getNativeTable().spec();
+        PartitionSpec partitionSpec = getReadSpec();
         return IcebergApiConverter.toPartitionFields(partitionSpec, false);
     }
 
@@ -392,8 +397,9 @@ public class IcebergTable extends Table {
         List<BucketProperty> bucketProperties = new ArrayList<>();
         List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
 
+        Schema schema = getReadSchema();
         for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
-            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            Column column = getColumn(schema.findColumnName(bucket.first));
             if (!bucketPropertySupported(column.getType())) {
                 continue;
             }
@@ -440,6 +446,71 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
+    // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    private static class SnapshotReadView {
+        private final Schema schema;
+        private final Map<Integer, PartitionSpec> specsById;
+
+        SnapshotReadView(Schema schema, Map<Integer, PartitionSpec> specsById) {
+            this.schema = schema;
+            this.specsById = specsById;
+        }
+    }
+
+    // Return a per-query copy bound to the given read metadata (a targeted snapshot's schema and the
+    // partition specs its manifests reference, for time travel), with the StarRocks full schema
+    // rebuilt from the read schema.
+    public IcebergTable withReadMetadata(Schema readSchema, Map<Integer, PartitionSpec> readSpecsById) {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, IcebergApiConverter.toFullSchemas(readSchema, getNativeTable()), getNativeTable(),
+                icebergProperties);
+        table.readView = new SnapshotReadView(readSchema, readSpecsById);
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        table.metricsReporter = metricsReporter;
+        return table;
+    }
+
+    // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
+    // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
+    // are not exposed; ordinary reads keep the current spec.
+    private List<PartitionField> readSchemaPartitionFields() {
+        Schema schema = getReadSchema();
+        return getReadSpec().fields().stream()
+                .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .collect(Collectors.toList());
+    }
+
+    // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
+    // time-travel read (bound via withReadMetadata), otherwise the current table schema.
+    public Schema getReadSchema() {
+        return readView != null ? readView.schema : getNativeTable().schema();
+    }
+
+    // The partition spec this table instance is read with. For a time-travel read this is derived
+    // from the target snapshot's manifests: a single spec is the snapshot's partitioning; multiple
+    // specs (mixed partitioning within the snapshot) are treated as unpartitioned so table-level
+    // partition-metadata optimizations are disabled and correctness is preserved (scan planning still
+    // uses each file's own spec). Ordinary reads use the current table spec.
+    public PartitionSpec getReadSpec() {
+        Map<Integer, PartitionSpec> specsById = readView != null ? readView.specsById : null;
+        if (specsById == null) {
+            return getNativeTable().spec();
+        }
+        if (specsById.size() == 1) {
+            return specsById.values().iterator().next();
+        }
+        return PartitionSpec.unpartitioned();
+    }
+
+    // True when this is a time-travel read that pinned an explicit snapshot read view via
+    // withReadMetadata. Lets callers tell a time-travel read (keep the snapshot schema/spec) from an
+    // ordinary read of the current table state.
+    public boolean isTimeTravelRead() {
+        return readView != null;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
@@ -448,7 +519,7 @@ public class IcebergTable extends Table {
         tIcebergTable.setLocation(getNativeTable().location());
 
         List<TColumn> tColumns = Lists.newArrayList();
-        Schema iceSchema = nativeTable.schema();
+        Schema iceSchema = getReadSchema();
         for (Column column : getBaseSchema()) {
             TColumn tc = column.toThrift();
             // Per Iceberg spec, the read path should ONLY use initial-default to backfill
@@ -468,10 +539,15 @@ public class IcebergTable extends Table {
         }
         tIcebergTable.setColumns(tColumns);
 
-        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
+        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(iceSchema));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
         if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
-            List<String> exprStr = IcebergApiConverter.toPartitionFields(nativeTable.spec(), true);
+            // Resolve partition source names against the read schema so the generated
+            // expressions match the column names in fullSchema.
+            List<PartitionField> partitionFields = readSchemaPartitionFields();
+            List<String> exprStr = partitionFields.stream()
+                    .map(field -> IcebergApiConverter.toPartitionField(iceSchema, field, true))
+                    .collect(Collectors.toList());
             List<Expr> partitionExprs = exprStr.stream()
                     .map(expr -> {
                         if (expr.startsWith(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "void")) {
@@ -525,11 +601,11 @@ public class IcebergTable extends Table {
             }
             List<TIcebergPartitionInfo> partitionInfos = Lists.newArrayList();
             for (int i = 0; i < partitionExprs.size(); i++) {
+                PartitionField field = partitionFields.get(i);
                 TIcebergPartitionInfo partInfo = new TIcebergPartitionInfo();
-                partInfo.setSource_column_name(nativeTable.schema()
-                        .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
-                partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
-                partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
+                partInfo.setSource_column_name(iceSchema.findColumnName(field.sourceId()));
+                partInfo.setPartition_column_name(field.name());
+                partInfo.setTransform_expr(field.transform().toString());
                 partInfo.setPartition_expr(ExprToThrift.treeToThrift(partitionExprs.get(i)));
                 partitionInfos.add(partInfo);
             }

@@ -21,10 +21,16 @@ set(DATA_WORKFLOWS_FILES
     compaction/engine_manual_compaction_task.cpp
     consistency/engine_checksum_task.cpp
     load/engine_batch_load_task.cpp
+    load/batch_write/batch_write_mgr.cpp
+    load/batch_write/batch_write_util.cpp
+    load/batch_write/isomorphic_batch_write.cpp
+    load/batch_write/txn_state_cache.cpp
     load/lake_spark_load_handler.cpp
     load/push_broker_reader.cpp
     load/push_handler.cpp
     load/rejected_record_sync_daemon.cpp
+    load/stream_load/stream_load_executor.cpp
+    load/stream_load/transaction_mgr.cpp
     load/routine_load/data_consumer.cpp
     load/routine_load/data_consumer_group.cpp
     load/routine_load/data_consumer_pool.cpp
@@ -46,7 +52,9 @@ ADD_BE_LIB(DataWorkflows
 target_link_libraries(DataWorkflows PUBLIC
     Storage
     Exec
+    Cache
     ConnectorFile
+    ComputeEnv
     Runtime
     StoragePrimitive
     Platform

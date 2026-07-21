@@ -46,6 +46,7 @@ set(STORAGE_FILES
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
+    non_closing_chunk_iterator.cpp
     kv_store.cpp
     local_tablet_reader.cpp
     olap_server.cpp
@@ -186,6 +187,7 @@ set(STORAGE_FILES
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
@@ -321,3 +323,4 @@ ADD_BE_LIB(Storage
 )
 
 target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
+target_link_libraries(Storage PRIVATE Runtime)

@@ -31,6 +31,11 @@ on:
         required: false
         default: '2'
         type: string
+      target_probation:
+        description: 'PROBATION target watermark — drip fills probation up to this many cases from the recovered pool'
+        required: false
+        default: '30'
+        type: string
       dry_run:
         description: 'Only print decisions; do not write files or open a PR'
         required: false
@@ -73,10 +78,22 @@ jobs:
             --resolve-record files/unstable_case_resolve_record.json \
             --repo "${{ github.repository }}" --branch "${BRANCH}" \
             --k "${{ inputs.k || '5' }}" --min-days "${{ inputs.min_days || '2' }}" --q "${{ inputs.q || '2' }}" \
-            ${DRY}
+            --recovered-pool files/unstable_case_recovered_pool.json \
+            --target-probation "${{ inputs.target_probation || '30' }}" \
+            ${DRY} 2>&1 | tee /tmp/pd-${GITHUB_RUN_ID}.log
+
+          # Surface the decision counts in the run Summary (no need to open logs).
+          {
+            echo "## Probation promote-demote — ${BRANCH} (dry_run=${{ inputs.dry_run }})"
+            echo '```'
+            grep -E '^(PROMOTE|DEMOTE|  of which QUARANTINE|PENDING|STALE|DRIP)' \
+              "/tmp/pd-${GITHUB_RUN_ID}.log" | sed -E 's/: \[.*$//' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ -n "${DRY}" ]]; then
             echo "::notice::dry-run — no files written, no PR. Re-run with dry_run=false to apply."
+            echo "_dry-run — no files written, no PR._" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -86,11 +103,14 @@ jobs:
           # debugging, then exit non-zero so the operator knows to wire SYNC_PAT.
           if [[ -z "${GH_TOKEN}" ]]; then
             echo "::error::dry_run=false but no SYNC_PAT token — cannot open the PR. (diff below)"
+            echo "⚠️ **changes computed but NO SYNC_PAT — PR not opened.**" >> "$GITHUB_STEP_SUMMARY"
             git --no-pager diff -- files/ || true
             exit 1
           fi
           if git diff --quiet files/; then
-            echo "No promote/demote changes — skipping PR."; exit 0
+            echo "No promote/demote changes — skipping PR."
+            echo "_No file changes → no PR opened._" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           git config user.name  "wanpengfei-git"
           git config user.email "wanpengfei91@163.com"
@@ -100,7 +120,7 @@ jobs:
           # push is rejected non-fast-forward — making the workflow un-retriable.
           BR="auto/probation-promote-demote-$(date +%Y-%m-%d)-${ch_branch}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
-          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json
+          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json files/unstable_case_recovered_pool.json
           git commit -m "[Tool] probation promote/demote ${BRANCH} (auto)"
           git push origin "$BR"
           BODY=$(mktemp)
@@ -111,9 +131,11 @@ jobs:
 
           Please sanity-check the diff before merging.
           EOF
-          gh pr create --repo StarRocks/ci-tool --base main --head "$BR" \
-            --title "[Tool] probation promote/demote $(date +%Y-%m-%d) (auto)" --body-file "$BODY"
+          PR_URL=$(gh pr create --repo StarRocks/ci-tool --base main --head "$BR" \
+            --title "[Tool] probation promote/demote $(date +%Y-%m-%d) (auto)" --body-file "$BODY")
           rm -f "$BODY"
+          echo "Opened PR: ${PR_URL}"
+          echo "**PR opened:** ${PR_URL}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean ENV
         if: always()

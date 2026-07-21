@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -25,6 +29,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
@@ -1479,6 +1484,91 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     - 1: LO_ORDERKEY");
         assertContains(plan, "  1:AGGREGATE (update finalize)");
         assertContains(plan, "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testOneTabletOptGatedByTabletRowCount() throws Exception {
+        // dates_n has a single tablet. "group by d_date" (d_date is not the distribution column, d_datekey is)
+        // only collapses into a one-phase aggregation because of the one-tablet optimization. The
+        // one_tablet_opt_max_tablet_rows gate must turn that optimization off when the single tablet is
+        // oversized, forcing a normal two-phase (shuffled) aggregation.
+        OlapTable datesN = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("dates_n");
+        LocalTablet tablet = (LocalTablet) datesN.getPartitions().iterator().next()
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+        Replica replica = tablet.getImmutableReplicas().get(0);
+
+        long originalVersion = replica.getVersion();
+        long originalDataSize = replica.getDataSize();
+        long originalRowCount = replica.getRowCount();
+        long originalMaxTabletRows = connectContext.getSessionVariable().getOneTabletOptMaxTabletRows();
+
+        long bigRowCount = 20_000_000L;
+        String sql = "select count(d_datekey), d_date from dates_n group by d_date";
+        try {
+            // Make getFuzzyRowCount() (max replica row count on a LocalTablet) report an oversized tablet.
+            replica.updateRowCount(originalVersion, originalDataSize, bigRowCount);
+
+            // Gate disabled (-1): the one-tablet optimization stays on -> one-phase aggregation.
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(-1);
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "LocalShuffleColumns");
+            assertContains(plan, "  1:AGGREGATE (update finalize)");
+            assertContains(plan, "  0:OlapScanNode");
+
+            // Threshold below the tablet row count: the gate disables the one-tablet optimization, so the plan
+            // falls back to a two-phase shuffled aggregation with an EXCHANGE.
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(100);
+            plan = getVerboseExplain(sql);
+            assertNotContains(plan, "  1:AGGREGATE (update finalize)");
+            assertContains(plan, "AGGREGATE (update serialize)");
+            assertContains(plan, "AGGREGATE (merge finalize)");
+            assertContains(plan, "EXCHANGE");
+        } finally {
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(originalMaxTabletRows);
+            replica.updateRowCount(originalVersion, originalDataSize, originalRowCount);
+        }
+    }
+
+    @Test
+    public void testIsSelectedSingleTabletTooLarge() throws Exception {
+        // Directly exercise the gate helper against dates_n's real single tablet.
+        OlapTable datesN = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("dates_n");
+        Partition partition = datesN.getPartitions().iterator().next();
+        LocalTablet tablet = (LocalTablet) partition.getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        Replica replica = tablet.getImmutableReplicas().get(0);
+
+        long indexMetaId = datesN.getBaseIndexMetaId();
+        List<Long> partitionIds = Lists.newArrayList(partition.getId());
+        List<Long> oneTablet = Lists.newArrayList(tablet.getId());
+        List<Long> twoTablets = Lists.newArrayList(tablet.getId(), tablet.getId() + 1);
+
+        long originalVersion = replica.getVersion();
+        long originalDataSize = replica.getDataSize();
+        long originalRowCount = replica.getRowCount();
+        try {
+            replica.updateRowCount(originalVersion, originalDataSize, 5000L);
+
+            // rows (5000) strictly greater than the threshold -> too large.
+            Assertions.assertTrue(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 4999L));
+            // rows equal to the threshold -> not too large (strict greater-than).
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 5000L));
+            // rows below the threshold -> not too large.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 5001L));
+            // maxTabletRows < 0 disables the gate.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, -1L));
+            // more than one selected tablet -> gate does not apply.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, twoTablets, 4999L));
+        } finally {
+            replica.updateRowCount(originalVersion, originalDataSize, originalRowCount);
+        }
     }
 
     @Test

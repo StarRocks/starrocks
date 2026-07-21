@@ -24,9 +24,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
@@ -43,11 +43,13 @@ import org.apache.logging.log4j.Logger;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -75,7 +77,7 @@ import java.util.function.BooleanSupplier;
  *       takes a {@link PartitionSampleGrouper#group grouped} list of
  *       {@link PartitionSamples}, pre-creates missing partitions, and
  *       submits ONE combined reshard via
- *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundariesMultiTablet}.</li>
+ *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundaries}.</li>
  * </ul>
  */
 public final class TabletPreSplitCoordinator {
@@ -110,9 +112,6 @@ public final class TabletPreSplitCoordinator {
         if (table.getState() != OlapTable.OlapTableState.NORMAL) {
             return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
         }
-        if (table.getVisibleIndexMetas().size() != 1) {
-            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
-        }
         if (!areSortKeyColumnsSupported(table)) {
             return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
         }
@@ -130,6 +129,9 @@ public final class TabletPreSplitCoordinator {
         }
         if (baseIndex.getRowCount() > 0) {
             return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
+        }
+        if (PreSplitTargets.resolveVisibleIndexTargets(table, partition) == null) {
+            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
         }
 
         return new PreSplitOutcome.Eligible();
@@ -566,7 +568,7 @@ public final class TabletPreSplitCoordinator {
      * </ul>
      *
      * <p>After the loop, when at least one partition contributed,
-     * {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet} builds
+     * {@link SplitTabletJobFactory#forExternalBoundaries} builds
      * the combined job and
      * {@link com.starrocks.alter.reshard.TabletReshardJobMgr#addTabletReshardJob}
      * admits it. Any synchronous failure of either step downgrades the whole
@@ -589,11 +591,13 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
-            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource) {
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
         Objects.requireNonNull(ctx, "ctx");
+        Objects.requireNonNull(sampledSecondaryIndexMetaIds, "sampledSecondaryIndexMetaIds");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
@@ -607,14 +611,14 @@ public final class TabletPreSplitCoordinator {
         // Phase 2: per-partition pre-create + plan, accumulating into oldTabletIdToRanges.
         // perPartitionResults is parallel-by-input bookkeeping: Skipped(reason) for dropped
         // entries, Submitted(null) sentinel for entries that fed the combined job.
-        List<Column> sortKey = MetaUtils.getRangeDistributionColumns(table);
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         List<PreSplitOutcome> perPartitionResults = new ArrayList<>(partitionSamplesList.size());
 
         for (PartitionSamples entry : partitionSamplesList) {
             PreSplitMetrics.recordPartitionCounted();
             PreSplitOutcome perPartition = planOnePartition(
-                    database, table, entry, sortKey, activeComputeNodeCount, ctx, oldTabletIdToRanges);
+                    database, table, entry, activeComputeNodeCount, ctx,
+                    sampledSecondaryIndexMetaIds, oldTabletIdToRanges);
             perPartitionResults.add(perPartition);
         }
 
@@ -626,7 +630,7 @@ public final class TabletPreSplitCoordinator {
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
         try {
-            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundaries(
                     database, table, oldTabletIdToRanges);
             // Carry the load's acquired compute resource (the one that sized the split) so the job's
             // shard creation + publish run in the load's warehouse. Use prepared.computeResource() (passed
@@ -642,7 +646,7 @@ public final class TabletPreSplitCoordinator {
                     table.getName(), submitFailure.getMessage());
             return skipPostEligibility(SkipReason.SUBMIT_FAILED);
         } catch (RuntimeException submitFailure) {
-            // forExternalBoundariesMultiTablet validates the range list shape and may throw
+            // forExternalBoundaries validates the range list shape and may throw
             // IllegalArgumentException for bad caller-supplied ranges. Map to SUBMIT_FAILED
             // so the load still proceeds against the pre-create-only layout.
             LOG.warn("Pre-split combined submit rejected for table {}: {}",
@@ -658,10 +662,19 @@ public final class TabletPreSplitCoordinator {
      * sentinel; on any per-partition failure, returns a {@link PreSplitOutcome.Skipped}
      * carrying the specific reason. Throwables are caught and mapped — the
      * caller iterates the full list regardless of one entry's outcome.
+     *
+     * <p>Every visible index (base + rollups) is re-resolved and planned inside a
+     * LOCAL {@code {oldTabletId -> ranges}} map; the local map is merged into the
+     * combined {@code oldTabletIdToRanges} only after ALL indexes planned
+     * successfully. Any throw discards the local map, so a base-only remnant never
+     * leaks into the combined submit. A no-cut index is simply omitted from the
+     * local map; if EVERY index is no-cut the partition returns
+     * {@link SkipReason#NO_USEFUL_CUTS}.
      */
     private static PreSplitOutcome planOnePartition(
-            Database database, OlapTable table, PartitionSamples entry, List<Column> sortKey,
+            Database database, OlapTable table, PartitionSamples entry,
             int activeComputeNodeCount, ConnectContext ctx,
+            Set<Long> sampledSecondaryIndexMetaIds,
             Map<Long, List<TabletRange>> oldTabletIdToRanges) {
         try {
             if (!entry.existsInCatalog()) {
@@ -688,27 +701,43 @@ public final class TabletPreSplitCoordinator {
                 }
             }
 
-            // Brief intensive READ lock for post-create re-resolve. Lock is acquired BEFORE the
-            // try block so a throw from the lock call does not run the finally release.
-            ResolvedPartition resolved = resolveUnderReadLock(database, table, entry.partitionName());
-            if (resolved == null) {
+            // Always re-resolve the partition's full visible-index target list immediately before
+            // planning (existing AND pre-created partitions): the factory does NOT enforce
+            // one-tablet-per-index, so a concurrent split could otherwise leak stale targets. A
+            // resolved secondary index-id set that no longer equals the sampled set drops the
+            // partition here rather than submitting a base-only partial.
+            List<IndexPreSplitTarget> resolvedTargets =
+                    resolveUnderReadLock(database, table, entry.partitionName(), sampledSecondaryIndexMetaIds);
+            if (resolvedTargets == null) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
                 return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
             }
 
             int requestedTabletCount = selectTabletCount(
                     new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount);
-            SampleSet sampleSet = buildSampleSet(entry);
-            BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
-                    sampleSet, requestedTabletCount, sortKey);
-            if (planResult.isNoSplit()) {
+            // Plan every index into a LOCAL map first; merge only on full success so a throw
+            // mid-way never leaves a base-only remnant in the combined map. targets.get(0) is the
+            // base (resolveVisibleIndexTargets returns base first); the rest are rollups matched
+            // to each row's IndexTuple by indexMetaId, never by list position.
+            Map<Long, List<TabletRange>> local = new LinkedHashMap<>();
+            for (int i = 0; i < resolvedTargets.size(); i++) {
+                IndexPreSplitTarget target = resolvedTargets.get(i);
+                Long secondaryIndexMetaId = i == 0 ? null : target.indexMetaId();
+                SampleSet sampleSet = buildSampleSet(entry, secondaryIndexMetaId);
+                BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
+                        sampleSet, requestedTabletCount, target.sortKey());
+                if (planResult.isNoSplit()) {
+                    continue;
+                }
+                local.put(target.oldTabletId(),
+                        DefaultPreSplitPipeline.buildTabletRanges(planResult.getBoundaries()));
+            }
+            if (local.isEmpty()) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.NO_USEFUL_CUTS);
                 return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
             }
 
-            List<TabletRange> tabletRanges = DefaultPreSplitPipeline.buildTabletRanges(
-                    planResult.getBoundaries());
-            oldTabletIdToRanges.put(resolved.oldTabletId, tabletRanges);
+            oldTabletIdToRanges.putAll(local);
             // Submitted(null) is a "fed-into-combined-submit" sentinel; promoted at the outer
             // level when the combined job is admitted.
             return new PreSplitOutcome.Submitted(null);
@@ -726,12 +755,19 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Acquire an intensive table READ lock, re-resolve the partition's
-     * default physical partition + base index, verify single-tablet + empty,
-     * and return the discovered oldTabletId. Returns {@code null} when any
-     * eligibility check fails (caller maps to PARTITION_NOT_ELIGIBLE_POST_CREATE).
+     * Acquire an intensive table READ lock and re-resolve the partition's FULL
+     * visible-index target list (base first) via
+     * {@link PreSplitTargets#resolveVisibleIndexTargets}. Verifies the base index
+     * is empty (its row count is not checked by the resolver) and that the
+     * resolved secondary index-id set still equals {@code sampledSecondaryIndexMetaIds}.
+     * Runs for BOTH existing and pre-created partitions -- always re-resolve
+     * immediately before planning, because the factory does NOT enforce
+     * one-tablet-per-index and a stale target from the grouper snapshot must be
+     * rejected here. Returns {@code null} when any check fails (caller maps to
+     * PARTITION_NOT_ELIGIBLE_POST_CREATE).
      */
-    private static ResolvedPartition resolveUnderReadLock(Database database, OlapTable table, String partitionName) {
+    private static List<IndexPreSplitTarget> resolveUnderReadLock(
+            Database database, OlapTable table, String partitionName, Set<Long> sampledSecondaryIndexMetaIds) {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
         try {
@@ -744,14 +780,24 @@ public final class TabletPreSplitCoordinator {
                 return null;
             }
             MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());
-            if (baseIndex == null) {
+            if (baseIndex == null || baseIndex.getRowCount() > 0) {
+                // resolveVisibleIndexTargets covers base tablet count + sort key, but intentionally
+                // not row-count emptiness -- gate that here before resolving the full index set.
                 return null;
             }
-            List<Tablet> tablets = baseIndex.getTablets();
-            if (tablets.size() != 1 || baseIndex.getRowCount() > 0) {
+            List<IndexPreSplitTarget> targets =
+                    PreSplitTargets.resolveVisibleIndexTargets(table, physicalPartition);
+            if (targets == null) {
                 return null;
             }
-            return new ResolvedPartition(physicalPartition.getId(), tablets.get(0).getId());
+            Set<Long> resolvedSecondaryIndexMetaIds = new HashSet<>();
+            for (int i = 1; i < targets.size(); i++) {
+                resolvedSecondaryIndexMetaIds.add(targets.get(i).indexMetaId());
+            }
+            if (!resolvedSecondaryIndexMetaIds.equals(sampledSecondaryIndexMetaIds)) {
+                return null;
+            }
+            return targets;
         } finally {
             locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
         }
@@ -759,19 +805,38 @@ public final class TabletPreSplitCoordinator {
 
     /**
      * Project the entry's {@link SampleRow} list into a {@link SampleSet} the
-     * {@link BoundaryPlanner} consumes — only the sort-key tuples and a
-     * zero-byte {@link Estimates} are needed here (estimatedBytes already
-     * drove K_i selection).
+     * {@link BoundaryPlanner} consumes for one index. When
+     * {@code secondaryIndexMetaId} is {@code null} the base sort-key tuples are
+     * used; otherwise each row's {@link IndexTuple} whose {@code indexMetaId}
+     * matches is selected (matched by id, never by list position). Only the
+     * per-index tuples and a zero-byte {@link Estimates} are needed here
+     * (estimatedBytes already drove K_i selection).
      */
-    private static SampleSet buildSampleSet(PartitionSamples entry) {
+    private static SampleSet buildSampleSet(PartitionSamples entry, Long secondaryIndexMetaId) {
         List<SampleRow> rows = entry.samples();
-        List<Tuple> sortKeyTuples = new ArrayList<>(rows.size());
+        List<Tuple> tuples = new ArrayList<>(rows.size());
         for (SampleRow row : rows) {
-            sortKeyTuples.add(new Tuple(row.sortKeyTuple()));
+            List<Variant> values = secondaryIndexMetaId == null
+                    ? row.sortKeyTuple() : indexTupleValues(row, secondaryIndexMetaId);
+            tuples.add(new Tuple(values));
         }
-        return new SampleSet(sortKeyTuples, Estimates.ZERO);
+        return new SampleSet(tuples, Estimates.ZERO);
     }
 
-    /** One partition's post-create resolution: stable IDs the coordinator passes to the factory. */
-    private record ResolvedPartition(long physicalPartitionId, long oldTabletId) { }
+    /**
+     * The values of the row's {@link IndexTuple} tagged with {@code indexMetaId}.
+     * The grouper carries exactly one tuple per sampled secondary index, so a
+     * missing match signals a corrupt sample and is thrown as a RuntimeException
+     * that {@link #planOnePartition} maps to SAMPLE_FAILED (the whole partition,
+     * never a base-only remnant).
+     */
+    private static List<Variant> indexTupleValues(SampleRow row, long indexMetaId) {
+        for (IndexTuple indexTuple : row.secondaryIndexTuples()) {
+            if (indexTuple.indexMetaId() == indexMetaId) {
+                return indexTuple.values();
+            }
+        }
+        throw new IllegalStateException(
+                "sample row is missing a secondary-index tuple for index " + indexMetaId);
+    }
 }
