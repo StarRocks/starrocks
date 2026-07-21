@@ -611,6 +611,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         long startMs = System.currentTimeMillis();
         String deleteType = "metadata";
 
+        // executeMetadataDelete may run against a cached native table. Refresh it so the no-match probe below
+        // sees the latest snapshot: without this a stale cache could skip the commit while a concurrent writer
+        // has appended matching files, silently leaving them behind. DeleteFiles.commit() refreshes internally,
+        // so refreshing here keeps the "nothing matched -> skip commit" decision consistent with what a real
+        // commit would have seen.
+        nativeTbl.refresh();
+
         // Cast-on-string-partition conjuncts cannot be expressed as a sound Iceberg filter; evaluate them
         // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
         // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
@@ -620,6 +627,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         DeleteFiles deleteFiles = nativeTbl.newDelete();
         String deleteDesc;
+        boolean hasMatchedFiles;
         if (residual.hasResidual()) {
             if (icebergTable.hasPartitionTransformedEvolution()) {
                 // Defensive: canDeleteUsingMetadata should have returned false; never silently mis-delete.
@@ -643,6 +651,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new StarRocksConnectorException("Cannot metadata-delete on %s.%s: pushable predicate is not " +
                         "convertible to an Iceberg expression", dbName, tableName);
             }
+            // Delete the individual files whose partition values satisfy the StarRocks-side residual.
             int matchedFiles = 0;
             try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
                     .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
@@ -660,14 +669,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new StarRocksConnectorException("Failed to plan files for metadata delete on %s.%s: %s",
                         dbName, tableName, e.getMessage());
             }
-            if (matchedFiles == 0) {
-                // No partition matched the residual -> nothing to delete; do not commit an empty snapshot.
-                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
-                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                        System.currentTimeMillis() - startMs, deleteType);
-                LOG.info("Metadata delete on {}.{} matched no partitions; nothing deleted", dbName, tableName);
-                return;
-            }
+            hasMatchedFiles = matchedFiles > 0;
             deleteDesc = "cast-on-string-partition residual, matchedFiles=" + matchedFiles;
         } else {
             // Convert ScalarOperator to Iceberg Expression
@@ -679,8 +681,32 @@ public class IcebergMetadata implements ConnectorMetadata {
                         System.currentTimeMillis() - startMs, deleteType);
                 throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
             }
+            // canDeleteUsingMetadata guarantees every candidate file is wholly matched, so a single row-filter
+            // delete is sound; only probe for existence to detect the no-match case handled below.
+            try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
+                    .filter(deleteExpr).caseSensitive(false).ignoreResiduals().planFiles();
+                    CloseableIterator<FileScanTask> iterator = tasks.iterator()) {
+                hasMatchedFiles = iterator.hasNext();
+            } catch (IOException e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to plan files for metadata delete on %s.%s: %s",
+                        dbName, tableName, e.getMessage());
+            }
             deleteFiles.deleteFromRowFilter(deleteExpr);
             deleteDesc = deleteExpr.toString();
+        }
+
+        // DeleteFiles.commit() creates a new snapshot even when nothing matched (Iceberg has no no-op
+        // detection), so an idempotent cleanup DELETE hitting an absent partition, or any DELETE on an empty
+        // table, would pollute the snapshot log with empty `delete` snapshots. Skip the commit in that case.
+        if (!hasMatchedFiles) {
+            ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
+            LOG.info("Metadata delete on {}.{} matched no files; nothing deleted", dbName, tableName);
+            return;
         }
 
         // Set engine info and user for audit

@@ -3904,6 +3904,91 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testExecuteMetadataDeleteNoMatchingFilesSkipsCommit() throws Exception {
+        // A metadata delete whose filter matches no files must not commit a new (empty) snapshot:
+        // Iceberg's DeleteFiles has no no-op detection, so an unconditional commit would inflate
+        // the snapshot log for idempotent cleanup DELETEs that match nothing.
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        long snapshotIdBeforeDelete = mockedNativeTableB.currentSnapshot().snapshotId();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        // k2 = 999 is partition level (identity partition) but matches no existing partition
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(999));
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        Assertions.assertTrue(metadata.canDeleteUsingMetadata(icebergTable, predicate),
+                "partition-level predicate should route to metadata delete");
+
+        metadata.executeMetadataDelete(icebergTable, predicate, connectContext);
+
+        mockedNativeTableB.refresh();
+        Assertions.assertEquals(snapshotIdBeforeDelete, mockedNativeTableB.currentSnapshot().snapshotId(),
+                "no-match metadata delete must not commit a new snapshot");
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertEquals(2, fileScanTasks.size(), "no files should be deleted");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteOnEmptyTableSkipsCommit() throws Exception {
+        // On an empty table canDeleteUsingMetadata is vacuously true for any convertible predicate
+        // (no candidate files to check), so even a non-partition predicate routes to metadata delete.
+        // Executing it must not create a snapshot on a table that has none.
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(0, INT, "k1", true), ConstantOperator.createInt(1));
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        Assertions.assertTrue(metadata.canDeleteUsingMetadata(icebergTable, predicate),
+                "any convertible predicate on an empty table routes to metadata delete");
+
+        metadata.executeMetadataDelete(icebergTable, predicate, connectContext);
+
+        mockedNativeTableB.refresh();
+        Assertions.assertNull(mockedNativeTableB.currentSnapshot(),
+                "delete on an empty table must not create a snapshot");
+    }
+
+    @Test
     public void testCanDeleteUsingMetadataStringDatePartitionCast() throws Exception {
         // A STRING date partition column compared with a temporal value coerces to CAST(k2 AS DATETIME) = <ts>.
         // The whole predicate is on the identity partition column, so metadata (whole-file) delete is eligible;
