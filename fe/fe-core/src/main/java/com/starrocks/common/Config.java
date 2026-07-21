@@ -2586,6 +2586,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_statistic_cache_refresh_after_write = false;
 
+    @ConfField
+    public static boolean enable_statistic_cache_metrics = false;
+
     @ConfField(mutable = true, comment = "When replaying external-table statistics journals on followers " +
             "(and during restart recovery), invalidate the connector statistics cache by the table UUID " +
             "persisted in the journal and reload it lazily on the next query, instead of eagerly refreshing " +
