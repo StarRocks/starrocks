@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -266,5 +268,61 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
         Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
+    public void testApplyVisibleLogBatchAdvancesVersionOnceToFinal() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+
+        Assertions.assertEquals(1, partition.getVisibleVersion());
+
+        // A batch of 3 contiguous load txns (versions 2, 3, 4). The visible version -- what lock-free query
+        // planning reads -- is advanced only once, at batch end, straight to the batch's final materialized
+        // version, never stepped through an intermediate version whose .meta BE never wrote.
+        List<TransactionState> states = Lists.newArrayList();
+        for (long version = 2; version <= 4; version++) {
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            PartitionCommitInfo pci =
+                    new PartitionCommitInfo(physicalPartitionId, version, System.currentTimeMillis());
+            TableCommitInfo tci = new TableCommitInfo(tableId);
+            tci.addPartitionCommitInfo(pci);
+            state.putIdToTableCommitInfo(tableId, tci);
+            states.add(state);
+        }
+
+        applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/ null);
+
+        Assertions.assertEquals(4, partition.getVisibleVersion());
+    }
+
+    @Test
+    public void testApplyVisibleLogBatchRejectsNonContiguousVersions() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        PhysicalPartition partition = table.getPartition(partitionId).getDefaultPhysicalPartition();
+
+        Assertions.assertEquals(1, partition.getVisibleVersion());
+
+        // Versions 2 then 4 -- skipping 3 -- must trip the per-partition continuity check. Because the
+        // version is advanced only at batch end (which never runs on failure), the partition's visible
+        // version is left untouched rather than stepped to a bogus value.
+        List<TransactionState> states = Lists.newArrayList();
+        for (long version : new long[] {2, 4}) {
+            TransactionState state = newTransactionState();
+            state.setTransactionStatus(TransactionStatus.VISIBLE);
+            PartitionCommitInfo pci =
+                    new PartitionCommitInfo(physicalPartitionId, version, System.currentTimeMillis());
+            TableCommitInfo tci = new TableCommitInfo(tableId);
+            tci.addPartitionCommitInfo(pci);
+            state.putIdToTableCommitInfo(tableId, tci);
+            states.add(state);
+        }
+
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> applier.applyVisibleLogBatch(new TransactionStateBatch(states), /*unused*/ null));
+        Assertions.assertEquals(1, partition.getVisibleVersion());
     }
 }
