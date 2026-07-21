@@ -278,9 +278,9 @@ public final class MetricRepo {
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
 
-    public static final LongCounterMetric SYNC_STATS_BUDGET_EXCEEDED =
-            new LongCounterMetric("sync_stats_budget_exceeded", Metric.MetricUnit.OPERATIONS,
-                    "Times we have exceeded the budget");
+    public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
+            new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
+                    "Times we have exhausted the budget");
 
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
@@ -1062,7 +1062,7 @@ public final class MetricRepo {
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
 
-        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_BUDGET_EXCEEDED);
+        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL);
 
         // init system metrics
         initSystemMetrics();

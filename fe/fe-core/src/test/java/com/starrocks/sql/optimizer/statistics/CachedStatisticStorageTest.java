@@ -60,7 +60,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
-import static com.starrocks.metric.MetricRepo.SYNC_STATS_BUDGET_EXCEEDED;
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -690,7 +690,7 @@ public class CachedStatisticStorageTest {
         int originalQueryBudget = Config.sync_statistics_load_per_query_budget_ms;
         ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
         StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
-        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
         try {
             Config.enable_sync_statistics_load = true;
             Config.sync_statistics_load_timeout_ms = 100;
@@ -707,7 +707,7 @@ public class CachedStatisticStorageTest {
             Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
             Assertions.assertFalse(timeoutFuture.isDone());
             Assertions.assertNull(connectContext.getStatisticsLoadBudget());
-            Assertions.assertEquals(beforeMetric, SYNC_STATS_BUDGET_EXCEEDED.getValue());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
             ConnectContext.exchangeThreadLocalInfo(previousContext);
@@ -728,7 +728,7 @@ public class CachedStatisticStorageTest {
         int originalTimeout = Config.sync_statistics_load_timeout_ms;
         ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
         StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
-        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
         try {
             Config.enable_sync_statistics_load = true;
             Config.sync_statistics_load_timeout_ms = 100;
@@ -743,7 +743,7 @@ public class CachedStatisticStorageTest {
             Assertions.assertEquals(100, timeoutFuture.timeout);
             Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
             Assertions.assertEquals(900, budget.getRemainingBudgetMs());
-            Assertions.assertEquals(beforeMetric, SYNC_STATS_BUDGET_EXCEEDED.getValue());
+            Assertions.assertEquals(beforeMetric, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
             ConnectContext.exchangeThreadLocalInfo(previousContext);
@@ -763,7 +763,7 @@ public class CachedStatisticStorageTest {
         int originalTimeout = Config.sync_statistics_load_timeout_ms;
         ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(connectContext);
         StatisticsLoadBudget previousBudget = connectContext.getStatisticsLoadBudget();
-        long beforeMetric = SYNC_STATS_BUDGET_EXCEEDED.getValue();
+        long beforeMetric = SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue();
         try {
             Config.enable_sync_statistics_load = true;
             Config.sync_statistics_load_timeout_ms = 1000;
@@ -778,7 +778,7 @@ public class CachedStatisticStorageTest {
             Assertions.assertEquals(100, timeoutFuture.timeout);
             Assertions.assertEquals(TimeUnit.MILLISECONDS, timeoutFuture.unit);
             Assertions.assertEquals(0, budget.getRemainingBudgetMs());
-            Assertions.assertEquals(beforeMetric + 1, SYNC_STATS_BUDGET_EXCEEDED.getValue());
+            Assertions.assertEquals(beforeMetric + 1, SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.getValue());
         } finally {
             connectContext.setStatisticsLoadBudget(previousBudget);
             ConnectContext.exchangeThreadLocalInfo(previousContext);

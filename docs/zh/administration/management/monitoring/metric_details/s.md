@@ -503,7 +503,7 @@ description: "Alphabetical s"
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
 
-## `starrocks_fe_sync_stats_budget_exceeded`
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
 
 - 单位：计数
 - 类型：累计

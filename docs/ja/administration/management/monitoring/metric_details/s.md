@@ -477,7 +477,7 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
 
-## `starrocks_fe_sync_stats_budget_exceeded`
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
 
 - 単位: カウント
 - タイプ: 累積

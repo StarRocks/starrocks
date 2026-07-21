@@ -57,7 +57,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.metric.MetricRepo.SYNC_STATS_BUDGET_EXCEEDED;
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
@@ -819,7 +819,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     private void increaseSyncStatsBudgetExceededIfBudgetExhausted(StatisticsLoadBudget statisticsLoadBudget) {
         if (statisticsLoadBudget != null && statisticsLoadBudget.getRemainingBudgetMs() <= 0) {
-            SYNC_STATS_BUDGET_EXCEEDED.increase(1L);
+            SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.increase(1L);
         }
     }
 

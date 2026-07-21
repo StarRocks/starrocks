@@ -481,7 +481,7 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
-## `starrocks_fe_sync_stats_budget_exceeded`
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
 
 - Unit: Count
 - Type: Cumulative
