@@ -183,16 +183,17 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
             return;
         }
         try {
+            long tableId = table.getId();
             if (TabletReshardUtils.needSplit(maxTabletSize)) {
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
                         splitPlanSignature(maxTabletSize));
-                TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(table.getId(), signature);
+                TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());
-                    sizeSplitLatch.recordFired(table.getId(), signature, job.getJobId(), decision.nextAbortRetries());
+                    sizeSplitLatch.recordFired(tableId, signature, job.getJobId(), decision.nextAbortRetries());
                     LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
                             db.getFullName(), table.getName(), maxTabletSize);
-                } else if (sizeSplitLatch.claimSuppressionLog(table.getId())) {
+                } else if (sizeSplitLatch.claimSuppressionLog(tableId)) {
                     LOG.warn("Auto split for table {}.{} made no progress on an unchanged layout "
                                     + "(tablet not splittable); suppressing further split jobs until its data changes",
                             db.getFullName(), table.getName());
@@ -200,7 +201,7 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
                 return;
             }
             // Below the split threshold: drop any stale suppression so future growth re-arms, and bound the map.
-            sizeSplitLatch.forgetTable(table.getId());
+            sizeSplitLatch.forgetTable(tableId);
             if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
                 createTabletReshardJob(db, table, new MergeTabletClause());
                 LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
@@ -339,14 +340,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
             if (candidate == null) {
                 continue;
             }
-            // db and table lookups are not atomic; the null guards are conservative — a dropped db/table
-            // is simply skipped this cycle.
+            // db and table lookups are not atomic; the guard is conservative — a dropped db/table is
+            // simply skipped this cycle, and its stale size-split latch entry is reclaimed so a
+            // re-created table re-arms cleanly.
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(candidate.dbId());
-            if (db == null) {
-                sizeSplitLatch.forgetTable(tableId);
-                continue;
-            }
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+            Table table = db == null ? null : GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(candidate.dbId(), candidate.tableId());
             if (!(table instanceof OlapTable)) {
                 sizeSplitLatch.forgetTable(tableId);

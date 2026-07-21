@@ -514,7 +514,7 @@ public class TabletReshardJobMgrTest {
 
         mockLeaderAdmissionOpen();
         oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         // Round 1: first over-threshold observation -> one split job fired, table latched.
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
@@ -547,7 +547,7 @@ public class TabletReshardJobMgrTest {
 
         mockLeaderAdmissionOpen();
         oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
                 Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
@@ -585,7 +585,7 @@ public class TabletReshardJobMgrTest {
         mockLeaderAdmissionOpen();
         long originalTarget = Config.tablet_reshard_target_size;
         try {
-            TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+            TabletReshardJobMgr mgr = new TabletReshardJobMgr();
             long big = originalTarget * 8; // calcSplitCount ~ 8
             oversizedTablet.setDataSize(big);
             mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), big, Long.MAX_VALUE);
@@ -622,7 +622,7 @@ public class TabletReshardJobMgrTest {
         long originalTarget = Config.tablet_reshard_target_size;
         int originalMax = Config.tablet_reshard_max_split_count;
         try {
-            TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+            TabletReshardJobMgr mgr = new TabletReshardJobMgr();
             // Cap the count at 2; huge tablet so calcSplitCount is pinned at the cap regardless of target.
             Config.tablet_reshard_max_split_count = 2;
             long huge = originalTarget * 100;
@@ -700,7 +700,7 @@ public class TabletReshardJobMgrTest {
 
         mockLeaderAdmissionOpen();
         oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
                 Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
@@ -729,7 +729,7 @@ public class TabletReshardJobMgrTest {
         };
         mockLeaderAdmissionOpen();
         oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
                 Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
@@ -754,7 +754,7 @@ public class TabletReshardJobMgrTest {
             }
         };
         oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
-        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
 
         mockLeaderAdmissionOpen();
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
