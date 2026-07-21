@@ -24,7 +24,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -157,13 +156,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -326,7 +325,8 @@ public class PlanFragmentBuilder {
         if ((!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
+                .reduce(Integer::sum).orElse(2) <= 1)
+                && !hasOversizedSingleTablet(execPlan)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
             for (PlanFragment fragment : execPlan.getFragments()) {
                 fragment.setSingleTabletGatherOutputFragment(true);
@@ -343,6 +343,30 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
+    }
+
+    // Consistency guard for one_tablet_opt_max_tablet_rows: when a single scanned tablet is too large the
+    // logical one-tablet optimization is disabled at its source (Utils.isSelectedSingleTabletTooLarge in
+    // LogicalProperty), so the physical single-tablet gather output must be disabled too. Otherwise a now
+    // two-phase (shuffled, multi-instance) aggregation could be wrongly pinned to a single-tablet gather.
+    private static boolean hasOversizedSingleTablet(ExecPlan execPlan) {
+        if (execPlan.getConnectContext() == null) {
+            return false;
+        }
+        long maxTabletRows = execPlan.getConnectContext().getSessionVariable().getOneTabletOptMaxTabletRows();
+        if (maxTabletRows < 0) {
+            return false;
+        }
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode olapScanNode) {
+                if (Utils.isSelectedSingleTabletTooLarge(olapScanNode.getDesc().getTable(),
+                        olapScanNode.getSelectedIndexMetaId(), olapScanNode.getSelectedPartitionIds(),
+                        olapScanNode.getScanTabletIds(), maxTabletRows)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
@@ -910,6 +934,21 @@ public class PlanFragmentBuilder {
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
+
+            // Per-scan decision to enable the lake prepared-physical-split scan. Gated on the (INVISIBLE)
+            // session switch + a cloud-native (lake) table. Query cache is mutually exclusive with this
+            // optimization by design: when query cache is on we fall back to the non-split scan so the
+            // per-fragment cache/ticket path is not perturbed.
+            ConnectContext connectContext = context.getConnectContext();
+            if (connectContext != null
+                    && connectContext.getSessionVariable().isEnableLakePreparedPhysicalSplitScan()
+                    && !connectContext.getSessionVariable().isEnableQueryCache()
+                    && referenceTable.isCloudNativeTableOrMaterializedView()
+                    && (connectContext.getSessionVariable().isEnableLakePreparedSplitOnDupTableScan()
+                            || !context.getDuplicatedLakeScanTableIds().contains(referenceTable.getId()))) {
+                scanNode.setUsePreparedPhysicalSplitScan(true);
+            }
+
             currentExecGroup.add(scanNode);
 
             // set slot
@@ -972,11 +1011,7 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
-                RangeColocateScanDispatch dispatch = null;
-                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
-                }
+                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
@@ -1016,30 +1051,8 @@ public class PlanFragmentBuilder {
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        // Range-colocate scans use the dispatch facade when alignment
-                        // holds; if alignment is transiently broken the same scan still
-                        // needs a bucketSeq for non-colocate consumers, so fall back to
-                        // position-based and let the dispatch-time alignment guard in
-                        // OlapScanNode.getBucketNums() handle the colocate-dispatch path.
-                        if (dispatch != null) {
-                            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
-                            if (rangeColocateMap != null) {
-                                tabletId2BucketSeq.putAll(rangeColocateMap);
-                            } else {
-                                // Range-colocate but transiently unaligned: fall back to position-based
-                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
-                                // on the colocate-dispatch path by validating this built assignment against
-                                // the aligned mapping, so no unaligned observation needs to be recorded here.
-                                for (int i = 0; i < allTabletIds.size(); i++) {
-                                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                                }
-                            }
-                        } else {
-                            // HASH or range non-colocate: position-based bucketSeq.
-                            for (int i = 0; i < allTabletIds.size(); i++) {
-                                tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                            }
-                        }
+                        OlapScanNode.fillTabletId2BucketSeq(
+                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
@@ -3380,22 +3393,8 @@ public class PlanFragmentBuilder {
         }
 
         private boolean isColocateJoin(OptExpression optExpression) {
-            // Colocate join detection: a required property is colocate when
-            // it is either a hash-LOCAL spec (classic colocate) or a
-            // RangeDistributionSpec (range colocate; scan-local by invariant).
-            return optExpression.getRequiredProperties().stream().allMatch(
-                    physicalPropertySet -> {
-                        DistributionSpec spec = physicalPropertySet.getDistributionProperty().getSpec();
-                        if (spec instanceof RangeDistributionSpec) {
-                            return true;
-                        }
-                        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
-                            return false;
-                        }
-                        HashDistributionDesc.SourceType hashSourceType =
-                                ((HashDistributionSpec) spec).getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
-                    });
+            return optExpression.getRequiredProperties().stream().allMatch(physicalPropertySet ->
+                    DistributionSpecHelper.supportColocate(physicalPropertySet.getDistributionProperty().getSpec()));
         }
 
         public boolean isShuffleJoin(OptExpression optExpression) {
@@ -3405,12 +3404,10 @@ public class PlanFragmentBuilder {
                         if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
                             return false;
                         }
-                        HashDistributionDesc.SourceType hashSourceType =
+                        HashDistributionDesc desc =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                        .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                                        .getHashDistributionDesc();
+                        return desc.isShuffleLike();
                     });
         }
 

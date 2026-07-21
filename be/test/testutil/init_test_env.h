@@ -41,6 +41,7 @@
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/schema_scanner_factory.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "gtest/gtest.h"
 #include "module/connector_bootstrap.h"
@@ -64,7 +65,7 @@ namespace starrocks {
 
 extern void shutdown_tracer();
 
-int init_test_env(int argc, char** argv) {
+int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> schema_scanner_factory = nullptr) {
     ::testing::InitGoogleTest(&argc, argv);
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -182,7 +183,7 @@ int init_test_env(int argc, char** argv) {
     exec_env->set_compute_env(compute_env.get());
     st = runtime_env->init_lake_thread_pools(process_metrics);
     CHECK(st.ok()) << st;
-    st = exec_env->init(process_metrics_registry, runtime_env);
+    st = exec_env->init(process_metrics_registry, runtime_env, std::move(schema_scanner_factory));
     CHECK(st.ok()) << st;
 
     StorageEnvOptions storage_env_options;
@@ -210,11 +211,13 @@ int init_test_env(int argc, char** argv) {
     data_workflows_env_options.metrics = process_metrics_registry->root_registry();
     data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     data_workflows_env_options.load_mem_tracker = runtime_env->load_mem_tracker();
+    data_workflows_env_options.load_stream_mgr = exec_env->load_stream_mgr();
     st = data_workflows_env->init(data_workflows_env_options);
     CHECK(st.ok()) << st;
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
+                                 data_workflows_env->stream_load_executor());
     CHECK(st.ok()) << st;
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
@@ -248,6 +251,8 @@ int init_test_env(int argc, char** argv) {
 #endif
     orchestration_env->destroy();
     orchestration_env.reset();
+    // Query contexts and orchestration callbacks must release their non-owning
+    // BatchWriteMgr references before DataWorkflows is destroyed.
     data_workflows_env->destroy();
     data_workflows_env.reset();
     delete engine;

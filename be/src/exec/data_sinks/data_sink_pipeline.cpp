@@ -16,13 +16,15 @@
 #include <typeinfo>
 
 #include "common/logging.h"
-#include "exec/data_sinks/blackhole_table_sink.h"
-#include "exec/data_sinks/data_stream_sender.h"
-#include "exec/data_sinks/dictionary_cache_sink.h"
-#include "exec/data_sinks/export_sink.h"
-#include "exec/data_sinks/hive_table_sink.h"
-#include "exec/data_sinks/multi_olap_table_sink.h"
-#include "exec/data_sinks/tablet_sink.h"
+#include "data_sink/dictionary_cache/dictionary_cache_sink.h"
+#include "data_sink/exchange/data_stream_sender.h"
+#include "data_sink/external/blackhole_table_sink.h"
+#include "data_sink/external/export_sink.h"
+#include "data_sink/external/hive_table_sink.h"
+#include "data_sink/tablet/multi_olap_table_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
+#include "exec/data_sinks/hive_table_sink_pipeline_builder.h"
+#include "exec/data_sinks/table_function_table_sink_pipeline_builder.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
@@ -50,14 +52,15 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Partitions_types.h"
 #ifndef __APPLE__
-#include "exec/data_sinks/iceberg_table_sink.h"
+#include "data_sink/external/iceberg_table_sink.h"
+#include "exec/data_sinks/iceberg_table_sink_pipeline_builder.h"
 #endif
-#include "exec/data_sinks/memory_scratch_sink.h"
-#include "exec/data_sinks/multi_cast_data_stream_sink.h"
-#include "exec/data_sinks/mysql_table_sink.h"
-#include "exec/data_sinks/noop_sink.h"
-#include "exec/data_sinks/result_sink.h"
-#include "exec/data_sinks/table_function_table_sink.h"
+#include "data_sink/exchange/multi_cast_data_stream_sink.h"
+#include "data_sink/external/mysql_table_sink.h"
+#include "data_sink/external/noop_sink.h"
+#include "data_sink/external/table_function_table_sink.h"
+#include "data_sink/result/memory_scratch_sink.h"
+#include "data_sink/result/result_sink.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -277,14 +280,16 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
 #ifndef __APPLE__
     } else if (typeid(*this) == typeid(IcebergTableSink)) {
         auto* iceberg_table_sink = down_cast<IcebergTableSink*>(this);
-        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(
+                decompose_iceberg_table_sink_to_pipeline(*iceberg_table_sink, prev_operators, thrift_sink, context));
 #endif
     } else if (typeid(*this) == typeid(HiveTableSink)) {
         auto* hive_table_sink = down_cast<HiveTableSink*>(this);
-        RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(decompose_hive_table_sink_to_pipeline(*hive_table_sink, prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(TableFunctionTableSink)) {
         auto* table_function_table_sink = down_cast<TableFunctionTableSink*>(this);
-        RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
+        RETURN_IF_ERROR(decompose_table_function_table_sink_to_pipeline(*table_function_table_sink, prev_operators,
+                                                                        thrift_sink, context));
     } else if (typeid(*this) == typeid(DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);

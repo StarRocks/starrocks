@@ -78,7 +78,18 @@ Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<Table
 Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
     // merge other writer's files into current writer
     _segments.insert(_segments.end(), other_writer->_segments.begin(), other_writer->_segments.end());
-    _dels.insert(_dels.end(), other_writer->_dels.begin(), other_writer->_dels.end());
+    // Assign each consolidated del file an op_offset that places it right after THIS batch's segments
+    // in the merged rowset. merge_other_writer() is called once per merge batch in slot order, so after
+    // appending this batch's segments above, _segments.size()-1 is the global index of this batch's
+    // last segment. A delete therefore (a) wins over equal keys upserted by this or earlier batches and
+    // (b) loses to a re-upsert in a later batch (higher segment index) -- preserving the in-transaction
+    // upsert/delete order across the parallel/batched spill merge (publish interleaves by op_offset).
+    // _del_op_offsets must stay positionally aligned with _dels.
+    const uint32_t del_op_offset = _segments.empty() ? 0 : static_cast<uint32_t>(_segments.size() - 1);
+    for (const auto& del : other_writer->_dels) {
+        _dels.push_back(del);
+        _del_op_offsets.push_back(del_op_offset);
+    }
     _ssts.insert(_ssts.end(), other_writer->_ssts.begin(), other_writer->_ssts.end());
     _sst_ranges.insert(_sst_ranges.end(), other_writer->_sst_ranges.begin(), other_writer->_sst_ranges.end());
     _num_rows += other_writer->_num_rows;

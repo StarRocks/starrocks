@@ -54,10 +54,16 @@ public:
      * @param schema - Table schema (borrowed, outlives task)
      * @param quit_flag - Shared cancellation flag (nullptr or points to context's atomic)
      * @param write_io_timer - Shared I/O metrics counter (borrowed)
+     * @param op_aware - Whether the merge input carries a trailing hidden __op column (set by the sink
+     *                   only when the memtable actually kept it, i.e. a PK load with an op slot and the
+     *                   preserve-order feature on). When true, run() splits each merged chunk into upsert
+     *                   rows and net-deleted keys. Passed explicitly rather than inferred from the last
+     *                   column name, so a real user column named "__op" is never mistaken for the op column.
      */
     TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
                                     std::unique_ptr<LoadSpillMergeInputBatch> task, const Schema* schema,
-                                    std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer);
+                                    std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer,
+                                    bool op_aware);
 
     ~TabletInternalParallelMergeTask() override;
 
@@ -110,6 +116,10 @@ private:
 
     // Shared I/O metrics counter (borrowed)
     RuntimeProfile::Counter* _write_io_timer = nullptr;
+
+    // Whether the merge input carries a trailing hidden __op column (see ctor). Drives the op-aware
+    // upsert/delete split in run(); never inferred from the last column name.
+    const bool _op_aware = false;
 };
 
 } // namespace lake

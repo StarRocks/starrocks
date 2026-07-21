@@ -54,6 +54,7 @@ class ExecEnv;
 class MetricRegistry;
 class Status;
 class StreamLoadContext;
+class StreamLoadExecutor;
 class TRoutineLoadTask;
 
 namespace orchestration {
@@ -68,8 +69,12 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env, StreamLoadOrchestrator* stream_load_orchestrator)
-            : _exec_env(exec_env), _stream_load_orchestrator(stream_load_orchestrator), _data_consumer_pool(10) {}
+    RoutineLoadTaskExecutor(ExecEnv* exec_env, StreamLoadOrchestrator* stream_load_orchestrator,
+                            StreamLoadExecutor* stream_load_executor)
+            : _exec_env(exec_env),
+              _stream_load_orchestrator(stream_load_orchestrator),
+              _stream_load_executor(stream_load_executor),
+              _data_consumer_pool(10) {}
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
@@ -97,6 +102,7 @@ private:
 
     ExecEnv* _exec_env;
     StreamLoadOrchestrator* _stream_load_orchestrator;
+    StreamLoadExecutor* _stream_load_executor;
     std::unique_ptr<ThreadPool> _thread_pool;
     DataConsumerPool _data_consumer_pool;
 

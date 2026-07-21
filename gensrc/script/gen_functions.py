@@ -135,6 +135,7 @@ void __attribute__((constructor)) {module}_initialize() {{
 function_list = list()
 function_set = set()
 function_signature_set = set()
+FE_HIDDEN_FUNCTIONS = {'dict_encode'}
 
 def add_function(fn_data):
     entry = dict()
@@ -263,7 +264,7 @@ ${default_values}
 
     value = dict()
     value["license"] = license_string
-    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list])
+    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
 
     content = java_template.substitute(value)
 
@@ -330,6 +331,7 @@ def generate_cpp(path):
         "GinFunctions",
         "AiFunctions",
         "HttpRequestFunctions",
+        "DictFunctions",
     ]
 
     modules_contents = dict()

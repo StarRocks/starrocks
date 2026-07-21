@@ -155,7 +155,8 @@ public final class BrokerLoadPreSplitHook {
                 MetaUtils.getRangeDistributionColumns(targetTable),
                 targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
                 sumFileBytes(fileStatuses),
-                computeResource);
+                computeResource,
+                SecondaryIndexSpec.forVisibleRollups(targetTable));
         PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
     }
 

@@ -38,7 +38,7 @@ class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
     LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() override;
+    ~LakePrimaryIndex() override = default;
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -65,13 +65,9 @@ public:
 
     std::shared_timed_mutex* get_index_lock() { return &_mutex; }
 
-    void set_enable_persistent_index(bool enable_persistent_index) {
-        _enable_persistent_index = enable_persistent_index;
-    }
-
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
+    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t generation_version = 0);
 
     // Force any in-memory memtables of the cloud-native persistent index to
     // be flushed into sstables on shared storage. A no-op for LOCAL /
@@ -144,7 +140,6 @@ private:
     int64_t _data_version = 0;
     // make sure at most 1 thread is read or write primary index
     std::shared_timed_mutex _mutex;
-    bool _enable_persistent_index = false;
 };
 
 } // namespace lake

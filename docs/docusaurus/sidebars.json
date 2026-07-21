@@ -25,6 +25,7 @@
                 "id": "quick_start/quick_start"
             },
             "items": [
+                "quick_start/MCP",
                 "quick_start/shared-nothing",
                 "quick_start/shared-data",
                 "quick_start/iceberg",

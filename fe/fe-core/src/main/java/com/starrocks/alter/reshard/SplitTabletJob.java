@@ -304,6 +304,10 @@ public class SplitTabletJob extends TabletReshardJob {
         // 3. Add the new versions of materialized index to catalog
         addNewMaterializedIndexes();
 
+        // 3b. Now that the reshard output tablets are visible, proactively enqueue them for async
+        // vector-index build (leader-only path; no-op for non-async-vector-index tables).
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
+
         // 3. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .peekNextTransactionId();
@@ -575,10 +579,13 @@ public class SplitTabletJob extends TabletReshardJob {
                     ? 0 : idx.getGroupSchema(rangeGroupId).getColocateColumnCount();
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
+            // vectorIndexBuildInfos is required by the publishVersion signature but intentionally
+            // ignored here: reshard output tablets are enqueued for async vector-index build AFTER
+            // they become visible (see VectorIndexBuildScheduler.onReshardComplete in runRunningJob),
+            // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
                     computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
-            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
 
             return tabletRange;
         } catch (Exception e) {
@@ -740,33 +747,24 @@ public class SplitTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
+
+            // Installing the new materialized indexes changes the partition's tablet layout:
+            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
+            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
+            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+            // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
+            // partition-replace commit point. This runs on both the leader (runRunningJob) and the
+            // replay path (replayCleaningJob), so followers re-plan too.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 
     private void removeOldMaterializedIndexes() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition
-                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                    if (oldIndex == null) {
-                        continue;
-                    }
-                    // Remove old tablets from inverted index
-                    for (Tablet tablet : oldIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
-                    }
-                }
-            }
+            recycleOldMaterializedIndexes(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         }
     }
 

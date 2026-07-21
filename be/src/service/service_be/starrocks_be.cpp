@@ -50,6 +50,7 @@
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
+#include "schema_scanner/builtin_schema_scanner_factory.h"
 #include "service/daemon.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
@@ -227,7 +228,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->set_compute_env(compute_env.get());
     EXIT_IF_ERROR(runtime_env->init_lake_thread_pools(process_metrics));
-    EXIT_IF_ERROR(exec_env->init(process_metrics_registry, runtime_env));
+    EXIT_IF_ERROR(exec_env->init(process_metrics_registry, runtime_env, create_builtin_schema_scanner_factory()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
     EXIT_IF_ERROR(init_storage_env(runtime_env, platform_env, compute_env.get()));
@@ -242,11 +243,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     data_workflows_env_options.metrics = process_metrics_registry->root_registry();
     data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     data_workflows_env_options.load_mem_tracker = runtime_env->load_mem_tracker();
+    data_workflows_env_options.load_stream_mgr = exec_env->load_stream_mgr();
     EXIT_IF_ERROR(data_workflows_env->init(data_workflows_env_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
+    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
+                                          data_workflows_env->stream_load_executor()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
@@ -320,7 +323,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto brpc_server = std::make_unique<brpc::Server>();
 
     auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
-    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, orchestration_env.get(), load_channel_mgr);
+    auto* batch_write_mgr = data_workflows_env->batch_write_mgr();
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, orchestration_env.get(), load_channel_mgr,
+                                                                  batch_write_mgr);
 #ifndef __APPLE__
     LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager(), load_channel_mgr);
 
@@ -378,14 +383,16 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, orchestration_env.get(), *runtime_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            cache_env, exec_env, orchestration_env.get(), *runtime_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->stream_load_executor(), data_workflows_env->transaction_mgr(), batch_write_mgr,
+            config::be_http_port, config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, orchestration_env.get(), *runtime_env,
-                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
-                                                       config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(
+            nullptr, exec_env, orchestration_env.get(), *runtime_env, process_metrics_registry, load_channel_mgr,
+            data_workflows_env->stream_load_executor(), data_workflows_env->transaction_mgr(), batch_write_mgr,
+            config::be_http_port, config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
@@ -510,6 +517,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
 
+    // Batch-write fragment attachments capture the DataWorkflows-owned manager.
+    // Keep DataWorkflows alive until request servers have joined, query contexts
+    // have released their attachments, and Orchestration has been destroyed.
     data_workflows_env->destroy();
     data_workflows_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";

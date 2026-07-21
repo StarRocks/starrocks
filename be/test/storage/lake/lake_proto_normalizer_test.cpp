@@ -442,4 +442,42 @@ TEST(LakeProtoNormalizerTest, before_save_recovers_present_but_empty_op_write_na
     EXPECT_EQ("rw0", op.deprecated_rewrite_segments(0));
 }
 
+// ---- after_load: force cloud-native persistent index for primary-key tablets --------------------
+
+TEST(LakeProtoNormalizerTest, after_load_upgrades_pk_in_memory_index_to_cloud_native) {
+    TabletMetadataPB metadata;
+    metadata.mutable_schema()->set_keys_type(KeysType::PRIMARY_KEYS);
+    // In-memory index (enable_persistent_index unset/false).
+    metadata.set_enable_persistent_index(false);
+
+    normalize_tablet_metadata_after_load(&metadata);
+
+    EXPECT_TRUE(metadata.enable_persistent_index());
+    EXPECT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, metadata.persistent_index_type());
+}
+
+TEST(LakeProtoNormalizerTest, after_load_upgrades_pk_local_index_to_cloud_native) {
+    TabletMetadataPB metadata;
+    metadata.mutable_schema()->set_keys_type(KeysType::PRIMARY_KEYS);
+    metadata.set_enable_persistent_index(true);
+    metadata.set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+
+    normalize_tablet_metadata_after_load(&metadata);
+
+    EXPECT_TRUE(metadata.enable_persistent_index());
+    EXPECT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, metadata.persistent_index_type());
+}
+
+TEST(LakeProtoNormalizerTest, after_load_leaves_non_pk_tablet_untouched) {
+    TabletMetadataPB metadata;
+    metadata.mutable_schema()->set_keys_type(KeysType::DUP_KEYS);
+    metadata.set_enable_persistent_index(false);
+    metadata.set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+
+    normalize_tablet_metadata_after_load(&metadata);
+
+    EXPECT_FALSE(metadata.enable_persistent_index());
+    EXPECT_EQ(PersistentIndexTypePB::LOCAL, metadata.persistent_index_type());
+}
+
 } // namespace starrocks::lake

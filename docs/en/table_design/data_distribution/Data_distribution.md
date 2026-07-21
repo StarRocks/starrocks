@@ -48,9 +48,9 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 | **Distribution method**   | **Partitioning and bucketing method**                        | **Description**                                              |
 | ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Random distribution       | Random bucketing                                             | The entire table is considered a partition. The data in the table is randomly distributed into different buckets. This is the default data distribution method. |
+| Random distribution       | Random bucketing                                             | The entire table is considered a partition. The data in the table is randomly distributed into different buckets. This is the default data distribution method when range distribution is not in effect (see Range distribution). |
 | Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. |
-| Range distribution        | Range-based bucketing                                        | Supported from v4.1 onwards. The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the value range of the table key. |
+| Range distribution        | Range-based bucketing                                        | Supported from v4.1 onwards. In shared-data mode, it is the default distribution when no `DISTRIBUTED BY` clause is specified. The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the value range of the table key. |
 | Range+Random distribution | <ol><li>Range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
 | Range+Hash distribution   | <ol><li>Range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. </li></ol> |
 | List+Random distribution  | <ol><li>Expression partitioning or list partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the value lists that the partitioning columns values belongs to.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
@@ -67,10 +67,13 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
       pv BIGINT DEFAULT '0' ,
       city_code VARCHAR(100),
       user_name VARCHAR(32) DEFAULT ''
-  )
-  DUPLICATE KEY (event_day,site_id,pv);
-  -- Because the partitioning and bucketing methods are not configured, random distribution is used by default.
+  );
+  -- Because no key type, ORDER BY, or bucketing method is configured, a Duplicate Key table with random distribution is created by default.
   ```
+
+  :::note
+  In shared-data mode, if you specify an explicit key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause, range distribution is used by default instead. See [Range-based bucketing](#range-based-bucketing).
+  :::
 
 - **Hash distribution**
 
@@ -89,10 +92,10 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 
 - **Range distribution**
 
-  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
 
   :::note
-  To enable this semantic, you must set the FE configuration `enable_range_distribution` to `true`.
+  In shared-data mode, range distribution is **enabled by default**, controlled by the FE configuration `enable_range_distribution`; set it to `false` to disable this default. This configuration has no effect in shared-nothing mode.
   :::
 
   ```SQL
@@ -204,7 +207,7 @@ The supported bucketing methods are [random bucketing](#random-bucketing-since-v
 
 - Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
 
-- Range-based bucketing: From v4.1, if the FE configuration `enable_range_distribution` is enabled, a table that specifies an explicit key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause distributes data within a partition by the range of those columns. Tablets can be automatically split or merged to mitigate data skew. This semantic is disabled by default.
+- Range-based bucketing: From v4.1, if the FE configuration `enable_range_distribution` is enabled, a table that specifies an explicit key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause distributes data within a partition by the range of those columns. Tablets can be automatically split or merged to mitigate data skew. In shared-data mode this is enabled by default; set `enable_range_distribution` to `false` to disable it. The configuration has no effect in shared-nothing mode.
 
 The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). You can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
 
@@ -642,7 +645,7 @@ SHOW PARTITIONS FROM site_access;
 
 ### Random bucketing (since v3.1)
 
-StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets.
+StarRocks distributes the data in a partition randomly across all buckets. It is suitable for scenarios with small data sizes and relatively low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically sets the number of buckets. In shared-data mode, a table that specifies a key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause uses range-based bucketing by default instead; see [Range-based bucketing](#range-based-bucketing).
 
 However, note that if you query massive amounts of data and frequently use certain columns as filter conditions, the query performance provided by random bucketing may not be optimal. In such scenarios, it is recommended to use [hash bucketing](#hash-bucketing). When these columns are used as filter conditions for queries, only data in a small number of buckets that the query hits need to be scanned and computed, which can significantly improve query performance.
 
@@ -776,7 +779,7 @@ Practically speaking, you can use one or two bucketing columns based on your bus
 
 ### Range-based bucketing
 
-From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic**, controlled by the FE configuration `enable_range_distribution`. In shared-data mode it is enabled by default. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
 
 The range-based distribution semantic is different from the default semantic in the following aspects:
 - If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
@@ -807,8 +810,8 @@ The range-based distribution semantic is different from the default semantic in 
 
 #### Precautions
 
-- This semantic is supported from v4.1 onwards and disabled by default.
-- To enable this semantic, you must set the FE configuration `enable_range_distribution` to `true`.
+- This semantic is supported from v4.1 onwards. In shared-data mode it is enabled by default, controlled by the FE configuration `enable_range_distribution`.
+- To disable it and fall back to the previous default distribution, set the FE configuration `enable_range_distribution` to `false`. It has no effect in shared-nothing mode.
 
 #### Examples
 
@@ -864,8 +867,8 @@ The following operations are not supported on tables with range distribution:
 
 | DDL | Reason |
 |---|---|
-| `ALTER TABLE ... ADD ROLLUP ...` | Synchronous rollup assumes 1-to-1 base/rollup tablet pairing with same row order, which range distribution does not provide. |
-| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | Same code path as `ADD ROLLUP`. |
+| `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on shared-data range tables (from v4.2) it builds an independent-sort-key rollup, and multiple such rollups are supported (one per `ALTER TABLE` statement). |
+| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
 | `ALTER TABLE ... ORDER BY (...)` (modify sort key) | The sort key defines tablet boundaries, so modifying it would invalidate existing range tablets. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | New key columns auto-append to the (derived) range sort key on AGG/UNIQUE tables or tables without explicit `ORDER BY`. |

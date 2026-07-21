@@ -24,6 +24,7 @@
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/random/random.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
@@ -1465,7 +1466,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     int64_t full_rowset_size = 0;
     if (rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            st = state.load_upserts(rowset.get(), i);
+            st = state.load_upserts(i);
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
                                                       st.to_string(), debug_string());
@@ -1513,7 +1514,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
         // 2. pure upsert. no delete files, the following logic will be skip
         for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-            st = state.load_deletes(rowset.get(), i);
+            st = state.load_deletes(i);
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
                                                       st.to_string(), debug_string());
@@ -1545,7 +1546,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 del_idx = rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(loaded_delfile);
             }
             while (i < del_idx) {
-                st = state.load_upserts(rowset.get(), loaded_upsert);
+                st = state.load_upserts(loaded_upsert);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_upserts_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_upserts_failed"); });
                 if (!st.ok()) {
@@ -1601,7 +1602,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             }
             if (loaded_delfile < delfile_num) {
                 DCHECK(i == del_idx);
-                st = state.load_deletes(rowset.get(), loaded_delfile);
+                st = state.load_deletes(loaded_delfile);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_deletes_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_deletes_failed"); });
                 if (!st.ok()) {
@@ -5401,8 +5402,20 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            continue;
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // A rssid appears here only with non-empty rowids resolved from the primary index, so a 0-row
+            // segment means the index/rowset-meta disagree with the on-disk segment data. Silently skipping
+            // would return short read columns and later crash in append_selective; fail loudly instead.
+            std::string msg = strings::Substitute(
+                    "segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3; primary "
+                    "index/rowset-meta vs segment-data inconsistency (possibly a corrupt partial-update / "
+                    "auto-increment segment rewrite output)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
@@ -5464,8 +5477,18 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            return Status::OK();
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:auto_increment_segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // Same integrity guard as the main read loop: a 0-row segment with resolved rowids means the
+            // primary index / rowset meta disagree with the on-disk segment data.
+            std::string msg = strings::Substitute(
+                    "auto-increment: segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3 "
+                    "(primary index/rowset-meta vs segment-data inconsistency)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),

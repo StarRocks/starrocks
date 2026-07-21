@@ -16,8 +16,10 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TCompactionStrategy;
@@ -29,6 +31,7 @@ import com.starrocks.thrift.TTabletSchema;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -100,6 +103,21 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateBinlogConfigTask(backendId, requireNonNull(configs, "configs is null"));
     }
 
+    public static TabletMetadataUpdateAgentTask createFlatJsonConfigUpdateTask(long backendId,
+                                                                               Set<Long> tablets,
+                                                                               FlatJsonConfig flatJsonConfig) {
+        requireNonNull(tablets, "tablets is null");
+        requireNonNull(flatJsonConfig, "flatJsonConfig is null");
+        List<Pair<Long, FlatJsonConfig>> configList = tablets.stream()
+                .map(id -> new Pair<>(id, flatJsonConfig)).collect(Collectors.toList());
+        return createFlatJsonConfigUpdateTask(backendId, configList);
+    }
+
+    public static TabletMetadataUpdateAgentTask createFlatJsonConfigUpdateTask(long backendId,
+                                                                               List<Pair<Long, FlatJsonConfig>> configs) {
+        return new UpdateFlatJsonConfigTask(backendId, requireNonNull(configs, "configs is null"));
+    }
+
     public static TabletMetadataUpdateAgentTask createPrimaryIndexCacheExpireTimeUpdateTask(long backendId,
                                                                                             Set<Long> tablets,
                                                                                             Integer expireTime) {
@@ -118,7 +136,15 @@ public class TabletMetadataUpdateAgentTaskFactory {
                                                                              List<Long> tabletIds,
                                                                              TTabletSchema tabletSchema,
                                                                              boolean createSchemaFile) {
-        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile);
+        return createTabletSchemaUpdateTask(backendId, tabletIds, tabletSchema, createSchemaFile, null);
+    }
+
+    public static TabletMetadataUpdateAgentTask createTabletSchemaUpdateTask(long backendId,
+                                                                             List<Long> tabletIds,
+                                                                             TTabletSchema tabletSchema,
+                                                                             boolean createSchemaFile,
+                                                                             Map<Long, TabletRange> tabletRanges) {
+        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile, tabletRanges);
     }
 
     private static class UpdatePartitionIdTask extends TabletMetadataUpdateAgentTask {
@@ -315,6 +341,33 @@ public class TabletMetadataUpdateAgentTaskFactory {
         }
     }
 
+    private static class UpdateFlatJsonConfigTask extends TabletMetadataUpdateAgentTask {
+        private final List<Pair<Long, FlatJsonConfig>> flatJsonConfigList;
+
+        private UpdateFlatJsonConfigTask(long backendId, List<Pair<Long, FlatJsonConfig>> flatJsonConfigList) {
+            super(backendId, flatJsonConfigList.hashCode());
+            this.flatJsonConfigList = flatJsonConfigList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return flatJsonConfigList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, FlatJsonConfig> pair : flatJsonConfigList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setFlat_json_config(pair.second.toTFlatJsonConfig());
+                metaInfo.setMeta_type(TTabletMetaType.FLAT_JSON_CONFIG);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
     private static class UpdatePrimaryIndexCacheExpireTimeTask extends TabletMetadataUpdateAgentTask {
         private final List<Pair<Long, Integer>> expireTimeList;
 
@@ -346,15 +399,19 @@ public class TabletMetadataUpdateAgentTaskFactory {
         private final List<Long> tablets;
         private final TTabletSchema tabletSchema;
         private final boolean createSchemaFile;
+        // Per-tablet target range, only set for an arity-changing range-distribution schema change.
+        // Null on the ordinary fast-schema-evolution path (no range is sent).
+        private final Map<Long, TabletRange> tabletRanges;
 
         private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
-                                       boolean createSchemaFile) {
+                                       boolean createSchemaFile, Map<Long, TabletRange> tabletRanges) {
             super(backendId, tablets.hashCode());
             this.tablets = new ArrayList<>(tablets);
             // tabletSchema may be null when the table has multi materialized index
             // and the schema of some materialized indexes are not needed to be updated
             this.tabletSchema = tabletSchema;
             this.createSchemaFile = createSchemaFile;
+            this.tabletRanges = tabletRanges;
         }
 
         @Override
@@ -372,6 +429,13 @@ public class TabletMetadataUpdateAgentTaskFactory {
 
                 if (tabletSchema != null) {
                     metaInfo.setTablet_schema(tabletSchema);
+                }
+
+                if (tabletRanges != null) {
+                    TabletRange range = tabletRanges.get(tabletId);
+                    if (range != null) {
+                        metaInfo.setTablet_range(range.toThrift());
+                    }
                 }
 
                 metaInfos.add(metaInfo);

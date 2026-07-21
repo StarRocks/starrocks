@@ -19,7 +19,7 @@
 #include "base/simd/multi_version.h"
 #include "base/simd/simd.h"
 
-#if defined(__AVX2__)
+#if defined(__x86_64__)
 #include <immintrin.h>
 #endif
 
@@ -29,7 +29,7 @@
 
 namespace SIMD::Expand {
 
-#if defined(__AVX2__)
+#if defined(__x86_64__)
 // Lookup table for AVX2 expand: for each 8-bit mask, stores the permutation
 // indices needed to scatter `popcount(mask)` valid elements into their final
 // positions. Initialised at startup.
@@ -64,7 +64,7 @@ struct ExpandLUTInitializer {
     }
 };
 static ExpandLUTInitializer g_expand_lut_init;
-#endif // __AVX2__
+#endif // __x86_64__
 
 MFV_DEFAULT(void expand_load_selection_i32(int32_t* dst_data, const int32_t* src_data, const uint8_t* nulls,
                                            size_t count) { expand_load_branchless(dst_data, src_data, nulls, count); });

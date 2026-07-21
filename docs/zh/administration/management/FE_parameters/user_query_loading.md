@@ -100,6 +100,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 优化器在存储格式未知或列 Schema 不可用时，用于估算外部文件表（FILES() 和 ENGINE=file 表）行数的平均行大小（字节）。行数估算公式为 `总文件字节数 / connector_row_size_estimate_bytes`。值越小，估算行数越大，可能影响 Join 顺序决策。
 - 引入版本: v3.4
 
+### `connector_table_analyze_scan_bytes_cap`
+
+- 默认值: 2147483648（2 GB）
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**主**扫描字节预算。每个 (分区, 列) 的统计扫描会累计其打开的 split 的字节数，一旦达到该预算即提前停止（软上限：最后一个 split 可能略微超出）。因此单个过大的分区或未分区表会被收集为一个有上界的降级样本，而不是失败或超时。取值 `0` 或更小表示该维度不限制。请按收集的列数进行校准，因为一个分区会为每一列各跑一个独立扫描。将该参数与 `connector_table_analyze_scan_files_cap`、`connector_table_analyze_scan_rows_cap` 同时设为 `0` 或更小，即可完全关闭有界成本收集并回退为全量扫描。可通过 `ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**次**扫描文件数预算。统计扫描在打开该数量的文件后即提前停止，用于限制由大量小文件组成的分区的收集成本。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- 默认值: 10000000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - 默认值: 12 * 3600
@@ -814,6 +841,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于刷新统计信息缓存的线程池大小。
 - 引入版本: -
 
+### `enable_statistic_cache_metrics`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否为 `CachedStatisticStorage` 持有的统计信息缓存（列、表、分区、直方图、外部表以及多列统计信息缓存）启用统计记录。
+- 引入版本: -
+
 ### `statistic_collect_interval_sec`
 
 - 默认值: 5 * 60
@@ -943,6 +979,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
 - 引入版本: v4.0
+
+### `enable_pipeline_routine_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Routine Load 任务是否在 Pipeline 引擎上执行。启用后，每个任务在其分配的 BE 上本地执行（由该 BE 从 Kafka/Pulsar 消费数据），而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Routine Load 使用旧版执行路径，行为与之前完全一致。请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
+
+### `enable_pipeline_stream_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 经典同步 Stream Load 是否在 Pipeline 引擎上执行，而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Stream Load 使用旧版执行路径，行为与之前完全一致。（Routine Load 请使用 `enable_pipeline_routine_load`。）请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
 
 ### `enable_routine_load_lag_metrics`
 

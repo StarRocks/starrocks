@@ -7,6 +7,7 @@ keywords: ['session','variable']
 # 系统变量
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
@@ -637,6 +638,27 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
+### enable_lake_prepared_physical_split_scan
+
+* 描述：是否为存算分离集群中的云原生表开启 prepared physical split scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* 描述：数据倾斜阈值。在 prepared physical split scan 下，即使 scan range 数量已达到 pipeline DOP，仍可据此将单个超大 lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 默认值：1.5
+* 类型：Double
+* 引入版本：v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 prepared physical split scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
@@ -1234,6 +1256,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：3000
 * 单位：毫秒
 
+### one_tablet_opt_max_tablet_rows
+
+* 描述：按 tablet 大小控制单 tablet 优化。当查询被裁剪到单个 tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 shuffle。这对小 tablet 很高效，但当 tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（shuffle）计划。设置为 `-1` 可禁用该门控，无论 tablet 大小都始终应用单 tablet 优化。
+* 默认值：10000000
+* 类型：Long
+* 引入版本：v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * 描述：指定一个物化视图改写规则可消耗的最大时间。当达到阈值时，将不再使用该规则进行查询改写。
@@ -1613,5 +1642,7 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 默认值：28800（即 8 小时）
 * 单位：秒
 * 类型：Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

@@ -17,9 +17,9 @@
 #include <memory>
 
 #include "compute_env/pipeline/driver_scan_operator.h"
-#include "exec/runtime/fragment_runtime_state.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "exec/runtime/pipeline_driver.h"
-#include "exec/runtime/query_runtime_state.h"
 #include "exec_primitive/pipeline/primitives/event.h"
 #include "exec_primitive/pipeline/scan/morsel_queue.h"
 #include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"

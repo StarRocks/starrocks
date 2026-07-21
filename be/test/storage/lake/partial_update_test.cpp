@@ -1561,14 +1561,12 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        LakePartialUpdateTest, LakePartialUpdateTest,
-        ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                          PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
-                          PrimaryKeyParam{.enable_persistent_index = true,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE},
-                          PrimaryKeyParam{.enable_persistent_index = false,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
+INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
+                                           PrimaryKeyParam{
+                                                   .enable_persistent_index = true,
+                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                                   .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:

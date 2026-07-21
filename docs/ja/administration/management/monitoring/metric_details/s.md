@@ -284,6 +284,23 @@ description: "Alphabetical s"
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。現在この BE の StarOSWorker に割り当てられている shard 数（worker のローカル shard テーブルのサイズ）。値は `StarOSWorker::add_shard` および `StarOSWorker::remove_shard` の内部で同期的に書き込まれ（mutation 時に push される方式）、メトリクス取得時に再計算されるわけではありません。したがって取得される値は、直近に発生した shard テーブルの変更結果を反映します。BE シャットダウン時に gauge はリセットされず、次回の mutation が発生するまで前回の値を保持します。BE 間の shard 分布バランスを観測したり、FE 側の配置結果との乖離を検出するために利用できます。
 
+## `starrocks_fe_alter_duration_ms`
+
+- 単位: ミリ秒
+- タイプ: サマリー
+- ラベル: `execution_mode` (`fse`、`legacy_fse`、または `rewrite`)、`is_leader`
+- 説明: ALTER TABLE の変更を適用するのにかかった時間 (ミリ秒)。ステートメント単位。報告するのは Leader FE (`is_leader="true"`) のみです。0.75、0.95、0.98、0.99、0.999 の分位値と `_sum`、`_count` を含みます。`execution_mode` ラベルは変更の適用方法を示します。
+  - `fse`: 現行の Fast Schema Evolution (FSE) で、ステートメント実行中に即座に完了します。
+  - `legacy_fse`: 旧来の FSE パスで、バックグラウンドで実行され通常はるかに遅くなります。`cloud_native_fast_schema_evolution_v2` が無効な共有データ (shared-data) クラスターでのみ発生します (デフォルトは有効で、その場合は `fse`)。
+  - `rewrite`: 変更のためにテーブルデータを物理的に書き換える必要があった場合 (例: 列の型変更) を示し、これもバックグラウンドで実行されます。
+
+## `starrocks_fe_alter_operation_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type` (`add_column`、`drop_column`、または `modify_column`)、`is_leader`
+- 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -459,6 +476,48 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
+
+## `starrocks_fe_statistics_cache_entries`
+
+- 単位: カウント
+- タイプ: ゲージ
+- ラベル: `cache` — 統計情報キャッシュの名前: `table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats`、または `multi_column_stats`。
+- 説明: 対象の統計情報キャッシュ（Caffeine ベース）に現在保持されているおおよそのエントリ数。キャッシュごとの最大値は FE 設定 `statistic_cache_columns` で制御されます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 対象の統計情報キャッシュから（サイズまたは有効期限により）退避されたエントリの累積数。キャッシュサイズに対してこの値が継続的に増加する場合は、`statistic_cache_columns` の引き上げを検討してください。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 統計情報キャッシュから提供されたルックアップの累積数。`starrocks_fe_statistics_cache_miss_count` と合わせてキャッシュヒット率を算出できます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: Caffeine ローダーが例外で完了したため失敗した統計情報キャッシュロードの累積数。欠落している統計情報行は空の結果としてキャッシュされ、ロード失敗ではなくロード成功としてカウントされます。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りでエラーが発生していることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 成功した統計情報キャッシュのロードの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: キャッシュに見つからずロードをトリガーした統計情報キャッシュのルックアップの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 

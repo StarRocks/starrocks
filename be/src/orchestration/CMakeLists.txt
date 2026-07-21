@@ -50,3 +50,9 @@ target_link_libraries(Orchestration PUBLIC
     StarRocksGen
     Types
 )
+
+target_link_libraries(Orchestration PRIVATE
+    DataSinkResult
+    DataSinkExchange
+    DataSinkTablet
+)

@@ -26,6 +26,7 @@
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
 #include "exec/join/join_hash_map_method.h"
+#include "exec/join/join_hash_table_descriptor.h"
 #include "exec/join/join_key_constructor.h"
 #include "exprs/column_ref.h"
 #include "runtime/descriptors.h"
@@ -343,27 +344,59 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear
 }
 
 // ------------------------------------------------------------------------------------
-// JoinHashTable
+// JoinHashTable::build
 // ------------------------------------------------------------------------------------
 
-JoinHashTable JoinHashTable::clone_readable_table() {
-    JoinHashTable ht;
-
-    ht._is_empty_map = this->_is_empty_map;
-    ht._key_constructor_type = this->_key_constructor_type;
-    ht._hash_map_method_type = this->_hash_map_method_type;
-
-    ht._table_items = this->_table_items;
-    // Clone a new probe state.
-    ht._probe_state = std::make_unique<HashTableProbeState>(*this->_probe_state);
-
-    visit([&](const auto& hash_map) {
-        using HashMapType = std::decay_t<decltype(*hash_map)>;
-        ht._hash_map = std::make_unique<HashMapType>(ht._table_items.get(), ht._probe_state.get());
+Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
+    CancelableDefer defer = CancelableDefer([&]() {
+        _table_items->key_columns.clear();
+        _table_items->build_chunk->columns().clear();
+        _hash_map = {};
     });
 
-    return ht;
+    RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
+    _table_items->has_large_column = _table_items->build_chunk->has_large_column();
+
+    // If the join key is column ref of build chunk, fetch from build chunk directly
+    size_t join_key_count = _table_items->join_keys.size();
+    for (size_t i = 0; i < join_key_count; i++) {
+        if (_table_items->join_keys[i].col_ref != nullptr) {
+            SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
+            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
+        }
+    }
+
+    RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
+
+    if (_table_items->row_count == 0 && allow_build_empty_table) {
+        _is_empty_map = true;
+        _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
+    } else {
+        _is_empty_map = false;
+        std::tie(_key_constructor_type, _hash_map_method_type) =
+                JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get());
+        // Look up the concrete factory registered by the join_hash_map_*_inst.cpp files and
+        // invoke it. build.cpp thus never names a concrete JoinHashMap<LT, CT, MT> and avoids the
+        // per-combo instantiation cost that a compile-time dispatch pays here.
+        JoinHashMapFactoryFn factory = find_join_hash_map_factory(_key_constructor_type, _hash_map_method_type);
+        if (factory == nullptr) {
+            return Status::InternalError("no join hash map factory registered for the selected key/method type");
+        }
+        _hash_map = factory(_table_items.get(), _probe_state.get());
+    }
+    // Dispatch is now a single virtual call rather than an ~80-way std::visit.
+    _hash_map->build_prepare(state);
+    _hash_map->probe_prepare(state);
+    _hash_map->build(state);
+    FAIL_POINT_TRIGGER_EXECUTE(hash_join_build_bad_alloc, { throw std::bad_alloc(); });
+    defer.cancel();
+
+    return Status::OK();
 }
+
+// ------------------------------------------------------------------------------------
+// JoinHashTable
+// ------------------------------------------------------------------------------------
 
 void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
@@ -378,26 +411,6 @@ void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
 
 float JoinHashTable::get_keys_per_bucket() const {
     return _table_items->get_keys_per_bucket();
-}
-
-std::string JoinHashTable::get_hash_map_type() const {
-    if (const bool has_not_built = visit([&](const auto& map) { return map == nullptr; }); has_not_built) {
-        return "NONE";
-    }
-
-    if (_is_empty_map) {
-        return "EMPTY";
-    }
-
-    return dispatch_join_hash_map(
-            _key_constructor_type, _hash_map_method_type,
-            [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
-                static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
-                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
-                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
-                return fmt::format("{}-{}-{}", join_key_constructor_type_to_string(CT),
-                                   join_hash_map_method_type_to_string(MT), logical_type_to_string(LT));
-            });
 }
 
 void JoinHashTable::close() {
@@ -625,85 +638,6 @@ int64_t JoinHashTable::mem_usage() const {
     }
     usage += _table_items->build_slice.size() * sizeof(Slice);
     return usage;
-}
-
-Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
-    CancelableDefer defer = CancelableDefer([&]() {
-        _table_items->key_columns.clear();
-        _table_items->build_chunk->columns().clear();
-        _hash_map = {};
-    });
-
-    RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
-    _table_items->has_large_column = _table_items->build_chunk->has_large_column();
-
-    // If the join key is column ref of build chunk, fetch from build chunk directly
-    size_t join_key_count = _table_items->join_keys.size();
-    for (size_t i = 0; i < join_key_count; i++) {
-        if (_table_items->join_keys[i].col_ref != nullptr) {
-            SlotId slot_id = _table_items->join_keys[i].col_ref->slot_id();
-            _table_items->key_columns[i] = _table_items->build_chunk->get_column_by_slot_id(slot_id);
-        }
-    }
-
-    RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
-
-    if (_table_items->row_count == 0 && allow_build_empty_table) {
-        _is_empty_map = true;
-        _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
-    } else {
-        _is_empty_map = false;
-        std::tie(_key_constructor_type, _hash_map_method_type) =
-                JoinHashMapSelector::construct_key_and_determine_hash_map(state, _table_items.get());
-        auto create_hash_map = [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
-            static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
-            if constexpr (LT != JoinHashMapMethodUnaryTypeTraits<MUT>::logical_type) {
-                return Status::InvalidArgument(
-                        strings::Substitute("Join key logical type {} does not match hash map logical type {}",
-                                            static_cast<int>(CUT), static_cast<int>(MUT)));
-            } else {
-                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
-                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
-                _hash_map = std::make_unique<JoinHashMap<LT, CT, MT>>(_table_items.get(), _probe_state.get());
-                return Status::OK();
-            }
-        };
-        RETURN_IF_ERROR(dispatch_join_hash_map(_key_constructor_type, _hash_map_method_type, create_hash_map));
-    }
-    visit([&](auto& hash_map) {
-        hash_map->build_prepare(state);
-        hash_map->probe_prepare(state);
-        hash_map->build(state);
-        FAIL_POINT_TRIGGER_EXECUTE(hash_join_build_bad_alloc, { throw std::bad_alloc(); });
-    });
-    defer.cancel();
-
-    return Status::OK();
-}
-
-void JoinHashTable::reset_probe_state(RuntimeState* state) {
-    visit([&](const auto& hash_map) {
-        auto new_hash_map = std::make_unique<std::decay_t<decltype(*hash_map)>>(_table_items.get(), _probe_state.get());
-        new_hash_map->probe_prepare(state);
-        _hash_map = std::move(new_hash_map);
-    });
-}
-
-Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-                            bool* eos) {
-    visit([&](const auto& hash_map) { hash_map->probe(state, key_columns, probe_chunk, chunk, eos); });
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
-    return Status::OK();
-}
-
-Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    visit([&](const auto& hash_map) { hash_map->probe_remain(state, chunk, eos); });
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
-    return Status::OK();
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
@@ -977,9 +911,77 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
     }
 }
 
+std::string JoinHashTable::get_hash_map_type() const {
+    if (_hash_map == nullptr) {
+        return "NONE";
+    }
+
+    if (_is_empty_map) {
+        return "EMPTY";
+    }
+
+    return dispatch_join_hash_map(
+            _key_constructor_type, _hash_map_method_type,
+            [&]<JoinKeyConstructorUnaryType CUT, JoinHashMapMethodUnaryType MUT>() {
+                static constexpr auto LT = JoinKeyConstructorUnaryTypeTraits<CUT>::logical_type;
+                static constexpr auto CT = JoinKeyConstructorUnaryTypeTraits<CUT>::key_constructor_type;
+                static constexpr auto MT = JoinHashMapMethodUnaryTypeTraits<MUT>::map_method_type;
+                return fmt::format("{}-{}-{}", join_key_constructor_type_to_string(CT),
+                                   join_hash_map_method_type_to_string(MT), logical_type_to_string(LT));
+            });
+}
+
+JoinHashTable JoinHashTable::clone_readable_table() {
+    JoinHashTable ht;
+
+    ht._is_empty_map = this->_is_empty_map;
+    ht._key_constructor_type = this->_key_constructor_type;
+    ht._hash_map_method_type = this->_hash_map_method_type;
+
+    ht._table_items = this->_table_items;
+    // Clone a new probe state.
+    ht._probe_state = std::make_unique<HashTableProbeState>(*this->_probe_state);
+
+    // Clone a fresh hash map of the same concrete type, bound to the cloned items/state.
+    if (_hash_map != nullptr) {
+        ht._hash_map = _hash_map->clone(ht._table_items.get(), ht._probe_state.get());
+    }
+
+    return ht;
+}
+
+void JoinHashTable::reset_probe_state(RuntimeState* state) {
+    if (_hash_map == nullptr) {
+        return;
+    }
+    _hash_map = _hash_map->clone(_table_items.get(), _probe_state.get());
+    _hash_map->probe_prepare(state);
+}
+
+Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+                            bool* eos) {
+    _hash_map->probe(state, key_columns, probe_chunk, chunk, eos);
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
+    return Status::OK();
+}
+
+Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    _hash_map->probe_remain(state, chunk, eos);
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*chunk)->downgrade());
+    }
+    return Status::OK();
+}
+
 template <bool is_remain>
 Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
-    visit([&](const auto& hash_map) { hash_map->template lazy_output<is_remain>(state, probe_chunk, result_chunk); });
+    if constexpr (is_remain) {
+        _hash_map->lazy_output_for_remain(state, probe_chunk, result_chunk);
+    } else {
+        _hash_map->lazy_output_for_probe(state, probe_chunk, result_chunk);
+    }
     if (_table_items->has_large_column) {
         RETURN_IF_ERROR((*result_chunk)->downgrade());
     }

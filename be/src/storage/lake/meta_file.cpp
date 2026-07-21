@@ -191,6 +191,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
+            if (i < dcg_ver.versions_size()) {
+                file_meta.set_version(dcg_ver.versions(i));
+            }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
@@ -273,6 +276,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         if (del_meta.has_shared()) {
             del_file_with_rid.set_shared(del_meta.shared());
         }
+        // Freshly created del file: stamp its creation version so lake vacuum can retain it by its
+        // own version after it is later transferred onto a higher-versioned compaction output rowset.
+        del_file_with_rid.set_version(rowset->version());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id
@@ -280,7 +286,14 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
     // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : orphan_files) {
         DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
-        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
+        added_orphan->CopyFrom(orphan_file);
+        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // their creation version is the metadata version being built. Respect an accurate version if
+        // the producer already set one.
+        if (!added_orphan->has_version()) {
+            added_orphan->set_version(_tablet_meta->version());
+        }
     }
     if (!_tablet_meta->rowset_to_schema().empty()) {
         auto schema_id = _tablet_meta->schema().id();
@@ -301,6 +314,9 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
         // sibling tablets. The orphan FileMetaPB only carries `shared`, so encode bundling into it
         // too, otherwise vacuum deletes the shared bundle file while a sibling still references it.
         file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
+        // These segments are produced and discarded within this txn, so their creation version is
+        // the metadata version being built.
+        file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -310,22 +326,27 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    to the front of the per-segment `entries` list so readers see the
     //    newest first (mirrors DCG reverse-by-version ordering). Multiple
     //    entries may coexist on the same segment from successive alters.
-    auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
-    for (const auto& se : op.segment_entries()) {
-        // Defense-in-depth: an entry missing segment_id would index the map at
-        // default 0 and corrupt segment 0's IDG. FE always sets both fields.
-        if (!se.has_entry() || !se.has_segment_id()) {
-            LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
-            continue;
+    //    Guarded so the empty no-op shape (a materialized index whose schema
+    //    lacks the indexed columns — the op carries only alter_version) does
+    //    not materialize an empty idg_meta submessage into the metadata.
+    if (!op.segment_entries().empty()) {
+        auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+        for (const auto& se : op.segment_entries()) {
+            // Defense-in-depth: an entry missing segment_id would index the map at
+            // default 0 and corrupt segment 0's IDG. FE always sets both fields.
+            if (!se.has_entry() || !se.has_segment_id()) {
+                LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
+                continue;
+            }
+            IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
+            // Build new entries list: [new_entry, old_entries...]
+            IndexDeltaGroupVerPB merged;
+            merged.add_entries()->CopyFrom(se.entry());
+            for (const auto& old_e : ver.entries()) {
+                merged.add_entries()->CopyFrom(old_e);
+            }
+            ver.Swap(&merged);
         }
-        IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
-        // Build new entries list: [new_entry, old_entries...]
-        IndexDeltaGroupVerPB merged;
-        merged.add_entries()->CopyFrom(se.entry());
-        for (const auto& old_e : ver.entries()) {
-            merged.add_entries()->CopyFrom(old_e);
-        }
-        ver.Swap(&merged);
     }
 
     // 2. Reconcile table_indices: add any new index not already present.
@@ -377,6 +398,65 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         if (new_ix.has_index_type()) {
             for (int col_uid : new_ix.col_unique_id()) {
                 bump_flag(col_uid, new_ix.index_type());
+            }
+        }
+    }
+
+    // 4. Stamp the FE-allocated new schema id/version onto the tablet metadata
+    //    schema. The fast path changed the schema content above (table_indices +
+    //    per-column flags) but reused the old schema_id; every lake by-id schema
+    //    cache (GS{id} metacache, GlobalTabletSchemaMap dedup, SCHEMA_{id} file)
+    //    keys on id and would keep returning the stale pre-index schema — so data
+    //    loaded after the index, and compaction output, would build no index.
+    //    A new id forces every cache to miss and pick up this indexed schema.
+    if (op.has_new_schema_id() && op.new_schema_id() > 0) {
+        const int64_t new_schema_id = op.new_schema_id();
+        const int64_t old_schema_id = schema->id();
+        schema->set_id(new_schema_id);
+        if (op.has_new_schema_version()) {
+            schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
+        }
+        // Durability across the two schema-resolution regimes:
+        //  - Empty rowset_to_schema (fresh table / never fast-evolved): every
+        //    existing rowset and compaction resolve via metadata->schema(), whose
+        //    id/content we just bumped; their segments' missing footer index is
+        //    served by the .idx sidecar until compaction rebuilds it inline. No
+        //    map maintenance needed.
+        //  - Non-empty rowset_to_schema (table already fast-evolved): existing
+        //    rowsets are PINNED to a historical schema, and BOTH the read path
+        //    (rowset.cpp) and compaction's get_output_rowset_schema resolve through
+        //    historical_schemas — bumping metadata->schema() alone is bypassed, so
+        //    those rowsets (and compaction output) would never pick up the index.
+        //    Register the indexed schema under new_schema_id and repoint the pins
+        //    that referenced the pre-index current schema (old_schema_id, identical
+        //    columns) to it, so those rowsets read via the .idx sidecar and
+        //    compaction rebuilds the index inline. Rowsets pinned to OLDER
+        //    (fewer-column) historical schemas keep their pin. rowset.cpp CHECKs
+        //    that a pinned schema_id exists in historical_schemas, so the archive
+        //    and the repoint must happen together. Guarded on historical_schemas so
+        //    replay is idempotent (on replay schema()->id() already == new id).
+        //    If every pin moved off old_schema_id, its historical_schemas entry is
+        //    left unreferenced here; the next compaction's historical_schemas GC
+        //    (see apply_opcompaction below) reclaims such entries.
+        if (!_tablet_meta->rowset_to_schema().empty() && _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
+            (*_tablet_meta->mutable_historical_schemas())[new_schema_id].CopyFrom(*schema);
+            for (auto& entry : *_tablet_meta->mutable_rowset_to_schema()) {
+                if (entry.second == old_schema_id) {
+                    entry.second = new_schema_id;
+                }
+            }
+        }
+        // Best-effort persist the new schema as a standalone SCHEMA_{id} file so
+        // any by-id cold reader (get_tablet_schema_by_id) resolves the indexed
+        // schema. Non-fatal on failure: loads/compaction resolve via
+        // metadata->schema() whose id now equals new_schema_id. Gated on the id
+        // actually changing in THIS apply so re-applying the same op (metadata
+        // replay on restart) does not repeat the remote object-store write.
+        if (old_schema_id != new_schema_id) {
+            if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
+                auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
+                LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet "
+                                          << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
             }
         }
     }
@@ -502,6 +582,7 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
                     file_meta.set_name(entry.index_file());
                     if (entry.has_file_size()) file_meta.set_size(entry.file_size());
                     if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    file_meta.set_version(entry.version());
                     _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
                 }
             }
@@ -636,6 +717,7 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
             }
         }
         file_meta.set_shared(shared);
+        file_meta.set_version(input_sstable.generation_version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -652,7 +734,12 @@ void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compactio
     // tablet metadata GC process, which runs periodically and handles failures gracefully.
     // This approach is safe, non-blocking, and handles distributed cleanup correctly.
     if (op_compaction.has_lcrm_file()) {
-        _tablet_meta->add_orphan_files()->CopyFrom(op_compaction.lcrm_file());
+        auto* added = _tablet_meta->add_orphan_files();
+        added->CopyFrom(op_compaction.lcrm_file());
+        // The mapper file is produced and orphaned by this compaction and is never referenced by any
+        // visible tablet metadata, so its creation version is the metadata version being built.
+        // Stamping it lets vacuum reclaim it instead of over-retaining it under a covering snapshot.
+        added->set_version(_tablet_meta->version());
     }
 }
 
@@ -737,6 +824,9 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                 if (dcg.shared_files_size() > 0) {
                     file_meta.set_shared(dcg.shared_files(i));
                 }
+                if (i < dcg.versions_size()) {
+                    file_meta.set_version(dcg.versions(i));
+                }
                 // Put useless `.cols` files into orphan files
                 _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
             }
@@ -761,6 +851,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                     file_meta.set_name(entry.index_file());
                     if (entry.has_file_size()) file_meta.set_size(entry.file_size());
                     if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    file_meta.set_version(entry.version());
                     _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
                 }
             }
@@ -866,6 +957,9 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
         // tablets. Encode bundling into the orphan's `shared` flag so vacuum's alive-check protects
         // it instead of deleting a bundle file a sibling still references.
         file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
+        // These segments are produced and discarded within this txn, so their creation version is
+        // the metadata version being built.
+        file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -982,6 +1076,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         if (refered_versions.find(itr->first) == refered_versions.end()) {
             VLOG(2) << "Remove delvec file record from delvec meta, version: " << itr->first
                     << ", file: " << itr->second.name();
+            itr->second.set_version(itr->first);
             _tablet_meta->mutable_orphan_files()->Add(std::move(itr->second));
             itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->erase(itr);
         } else {
@@ -1005,6 +1100,7 @@ void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
             file_meta.set_name(sstable.filename());
             file_meta.set_size(sstable.filesize());
             file_meta.set_shared(sstable.shared());
+            file_meta.set_version(sstable.generation_version());
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
         // Clear the SSTable metadata.
@@ -1370,6 +1466,8 @@ Status MetaFileBuilder::set_final_rowset() {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
         del_file_with_rid.set_shared(del.shared());
+        // Freshly created del file: stamp its creation version (see apply_opwrite).
+        del_file_with_rid.set_version(rowset->version());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
 
@@ -1379,7 +1477,14 @@ Status MetaFileBuilder::set_final_rowset() {
     // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
         DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
-        _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
+        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
+        added_orphan->CopyFrom(orphan_file);
+        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // their creation version is the metadata version being built. Respect an accurate version if
+        // the producer already set one.
+        if (!added_orphan->has_version()) {
+            added_orphan->set_version(_tablet_meta->version());
+        }
     }
 
     // Handle schema mapping (same logic as apply_opwrite)

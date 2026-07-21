@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
@@ -218,6 +219,38 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testPartitionCacheCountedInEstimateSize(@Mocked IcebergCatalog icebergCatalog) {
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+        Table nativeTable = createBaseTableWithManifests(1, 0, spec);
+        Map<String, Partition> partitionMap = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            partitionMap.put("dt=part-" + i, new Partition(1234L, 1L));
+        }
+        new Expectations() {
+            {
+                icebergCatalog.getTable((ConnectContext) any, "db", "test");
+                result = nativeTable;
+                minTimes = 0;
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = partitionMap;
+                minTimes = 0;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergTable table = IcebergTable.builder().setSrTableName("test")
+                .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
+
+        long before = cachingIcebergCatalog.estimateSize();
+        cachingIcebergCatalog.getPartitions(table, 1L, null);
+        long after = cachingIcebergCatalog.estimateSize();
+        // partitionCache used to be excluded from estimateSize, so a full partition map was invisible.
+        Assertions.assertTrue(after > before,
+                "partitionCache must be counted in estimateSize; before=" + before + " after=" + after);
+    }
+
+    @Test
     public void testGetDB(@Mocked IcebergCatalog icebergCatalog, @Mocked Database db) {
         new Expectations() {
             {
@@ -266,7 +299,7 @@ public class CachingIcebergCatalogTest {
                 () -> cachingIcebergCatalog.getTable(connectContext, "test", "table"));
         String expectedPrefix = "Failed to get iceberg table iceberg_catalog.test.table";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 
     private int getStaticIntField(String fieldName) {

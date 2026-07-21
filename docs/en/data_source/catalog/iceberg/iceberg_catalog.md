@@ -433,6 +433,11 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Required: No
   - Description: Whether to create the tables `iceberg_namespace_properties` and `iceberg_tables` for storing metadata in the database specified by `iceberg.catalog.uri`. The default value is `false`. Specify `true` if these two tables have not yet been created in the database specified by `iceberg.catalog.uri`.
 
+- `iceberg.catalog.jdbc.catalog-name`
+  - Required: No
+  - Description: Explicitly specifies the value of the `catalog_name` column in the Iceberg JDBC metadata tables (`iceberg_tables` and `iceberg_namespace_properties`). When not set, the name of the StarRocks-side catalog (the `<catalog_name>` provided after `CREATE EXTERNAL CATALOG`) is used, which preserves backward compatibility.
+  - When you need to attach StarRocks to an Iceberg JDBC catalog that has already been created by other engines (such as Spark or Flink) and share the same metadata, you must set this parameter to the catalog name used by the other engine. Otherwise the underlying `WHERE catalog_name = ?` query cannot match the existing metadata, and StarRocks will not be able to see any databases or tables.
+
 The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
 ```SQL
@@ -451,6 +456,25 @@ PROPERTIES
 );
 ```
 If using MySQL or other custom JDBC drivers, the corresponding JAR files need to be placed in the `fe/lib` and `be/lib/jni-packages` directories.
+
+The following example shows how to attach StarRocks to an Iceberg JDBC catalog that has already been created by another engine (for example Spark) whose underlying `catalog_name` is `"spark_ice"`. In this case, the StarRocks-side catalog name `sr_side_view` may differ from the underlying `catalog_name`, as long as you explicitly specify `iceberg.catalog.jdbc.catalog-name`:
+
+```SQL
+CREATE EXTERNAL CATALOG sr_side_view
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password",
+    "iceberg.catalog.jdbc.catalog-name" = "spark_ice",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 </TabItem>
 
@@ -756,6 +780,10 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     ```
 
 - To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
+
+  :::note
+  When vended credentials are used, StarRocks accesses GCS directly with the token vended by the REST catalog. Any `gcp.gcs.impersonation_service_account` configured on the catalog is ignored for that access.
+  :::
 
 `StorageCredentialParams` for Google GCS:
 

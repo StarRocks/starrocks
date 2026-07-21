@@ -159,7 +159,7 @@ PROPERTIES (
 
 :::note
 
-在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。已使用 `LOCAL` 持久化索引的存量表不受影响。
+在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。此前使用 `LOCAL`（或内存）持久化索引的存量表会自动升级为云原生持久化索引。
 
 :::
 

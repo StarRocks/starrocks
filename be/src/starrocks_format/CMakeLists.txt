@@ -27,6 +27,7 @@ set(STARROCKS_LIBS
     ChunkCore
     ColumnCore
     Connector
+    ConnectorLake
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_WHOLE_ARCHIVE_PREFIX} Expr ${WL_WHOLE_ARCHIVE_SUFFIX}

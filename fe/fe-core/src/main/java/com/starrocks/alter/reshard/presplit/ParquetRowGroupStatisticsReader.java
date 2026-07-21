@@ -14,6 +14,9 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.io.ByteStreams;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
@@ -59,7 +62,14 @@ import java.util.Optional;
 
 /**
  * Reads one Parquet file's footer and emits per-row-group min/max/row-count
- * statistics projected onto a single StarRocks sort-key column. Produced
+ * statistics projected onto ALL of the StarRocks sort-key columns, one
+ * {@link com.starrocks.catalog.Variant} per column, composed into a per-column
+ * bounding-box {@link com.starrocks.catalog.Tuple}. Absent nulls, the box is a valid loose
+ * lexicographic bound of the row group: minTuple/maxTuple are composed from each column's
+ * independent footer min/max, not from a single co-occurring row. A NULL sorts below every
+ * value, so it can fall under minTuple, exactly as in the single-column meta tier -- but data
+ * safety never depends on the bound: the BE routes every row (including nulls) by its true
+ * value, so a null-leading row simply lands in the leftmost tablet. Produced
  * {@link RowGroupStatistics} tuples already carry the StarRocks-side
  * primitive type required by
  * {@link BoundaryPlanner#validateTupleAgainstSchema} — the caller (a
@@ -116,23 +126,33 @@ public final class ParquetRowGroupStatisticsReader {
     }
 
     public static List<RowGroupStatistics> read(
-            FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn, String loadTimeZone)
+            FileStatus fileStatus, Configuration hadoopConfig, List<Column> sortKeyColumns, String loadTimeZone)
             throws StarRocksException {
         Objects.requireNonNull(fileStatus, "fileStatus");
         Objects.requireNonNull(hadoopConfig, "hadoopConfig");
-        Objects.requireNonNull(sortKeyColumn, "sortKeyColumn");
+        Objects.requireNonNull(sortKeyColumns, "sortKeyColumns");
+        Preconditions.checkArgument(!sortKeyColumns.isEmpty(), "sortKeyColumns must be non-empty");
 
         try {
             HadoopInputFile inputFile = HadoopInputFile.fromStatus(fileStatus, hadoopConfig);
             try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
                 ParquetMetadata metadata = reader.getFooter();
+                MessageType schema = metadata.getFileMetaData().getSchema();
                 Optional<ZoneOffset> loadOffset = MetaTierTemporalWindow.fixedLoadOffset(loadTimeZone);
-                SortKeyLocation location = locateSortKeyColumn(
-                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn, loadOffset);
+                // Read the raw footer column_orders at most once per file, and only if some
+                // sort-key column actually needs it (byte-array DECIMAL / unsigned INT32 -- see
+                // requiresColumnOrderCheck); most keys never trigger it, so the extra footer read
+                // is memoized and stays unpaid for the common case. null -> unknown order for every
+                // leaf -> those leaves defer to data tier via declaresTypeDefinedColumnOrder.
+                Supplier<List<ColumnOrder>> columnOrders = Suppliers.memoize(() -> readColumnOrders(inputFile));
+                List<SortKeyLocation> locations = new ArrayList<>(sortKeyColumns.size());
+                for (Column sortKeyColumn : sortKeyColumns) {
+                    locations.add(locateSortKeyColumn(schema, columnOrders, sortKeyColumn, loadOffset));
+                }
                 List<BlockMetaData> blocks = metadata.getBlocks();
                 List<RowGroupStatistics> rowGroupStatistics = new ArrayList<>(blocks.size());
                 for (BlockMetaData block : blocks) {
-                    rowGroupStatistics.add(convertBlock(block, location));
+                    rowGroupStatistics.add(convertBlock(block, locations));
                 }
                 return rowGroupStatistics;
             }
@@ -143,8 +163,8 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn,
-            Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
+    private static SortKeyLocation locateSortKeyColumn(MessageType schema, Supplier<List<ColumnOrder>> columnOrders,
+            Column sortKeyColumn, Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
         for (int i = 0; i < schema.getFieldCount(); i++) {
@@ -181,8 +201,7 @@ public final class ParquetRowGroupStatisticsReader {
         // declaresTypeDefinedColumnOrder). Only those leaves pay the extra raw-footer read.
         boolean typeDefinedColumnOrder = false;
         if (requiresColumnOrderCheck(parquetTypeName, logicalAnnotation)) {
-            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(
-                    readColumnOrders(inputFile), leafColumnIndex(schema, path));
+            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(columnOrders.get(), leafColumnIndex(schema, path));
         }
         rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn,
                 loadOffset);
@@ -268,7 +287,18 @@ public final class ParquetRowGroupStatisticsReader {
                     // the BE unsigned memcmp + shorter-prefix tiebreak, and a CHAR StringVariant is
                     // canonicalized (truncated at the first '\0') to match the BE's strnlen view of a
                     // CHAR value, so a CHAR boundary separates rows exactly as a VARCHAR one does.
-                    yield starRocksPrimitive.isCharFamily();
+                    //
+                    // A UTF8 string can also back a StarRocks DATE / DATETIME sort key -- some Parquet
+                    // exports store timestamps as strings. The footer min/max are the lexicographically
+                    // min/max strings; for canonical ISO-8601 text ("yyyy-MM-dd[ HH:mm:ss]") that equals
+                    // chronological order, so they loosely bound the row group's date/datetime range.
+                    // toVariant coerces them with the same Variant.of the data tier applies to a
+                    // projected string (unparseable / out-of-range datetime -> throws -> data-tier
+                    // fallback). A non-canonical string only degrades tablet balance -- the BE still
+                    // routes every row by its true value, so no row is misplaced.
+                    yield starRocksPrimitive.isCharFamily()
+                            || starRocksPrimitive == PrimitiveType.DATE
+                            || starRocksPrimitive == PrimitiveType.DATETIME;
                 }
                 yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
@@ -285,50 +315,47 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static RowGroupStatistics convertBlock(BlockMetaData block, SortKeyLocation location)
+    private static RowGroupStatistics convertBlock(BlockMetaData block, List<SortKeyLocation> locations)
             throws StarRocksException {
         long rowCount = block.getRowCount();
-        ColumnChunkMetaData chunk = findColumnChunk(block, location.path);
-        if (chunk == null) {
-            return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+        List<Variant> minValues = new ArrayList<>(locations.size());
+        List<Variant> maxValues = new ArrayList<>(locations.size());
+        for (SortKeyLocation location : locations) {
+            ColumnChunkMetaData chunk = findColumnChunk(block, location.path);
+            if (chunk == null) {
+                // A column with no chunk in this row group: cannot bound the tuple -> whole
+                // row group has no usable stats (data-tier fallback downstream).
+                return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+            }
+            Statistics<?> statistics = chunk.getStatistics();
+            if (statistics == null || statistics.isEmpty() || !statistics.hasNonNullValue()) {
+                return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+            }
+            try {
+                minValues.add(toVariant(statistics.genericGetMin(), location));
+                maxValues.add(toVariant(statistics.genericGetMax(), location));
+            } catch (RuntimeException conversionFailure) {
+                // Variant.of and its subclass constructors throw IllegalArgumentException
+                // (e.g. unsupported type) or RuntimeException (e.g. BoolVariant on a
+                // malformed literal) when a stat value cannot be represented. Translate
+                // to a meta-tier fallback signal so the pipeline retries with data tier rather
+                // than aborting the load. NOTE: toVariant's date/datetime path also throws the
+                // checked MetaTierUnavailableException (out-of-window rejection); that is not a
+                // RuntimeException and intentionally propagates past this catch with its own
+                // message -- do not widen this to catch (Exception).
+                throw new MetaTierUnavailableException(String.format(
+                        "Parquet stats value not representable for sort-key column \"%s\": %s",
+                        location.starRocksColumn.getName(), conversionFailure.getMessage()));
+            }
         }
-        Statistics<?> statistics = chunk.getStatistics();
-        if (statistics == null || statistics.isEmpty() || !statistics.hasNonNullValue()) {
-            return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
-        }
-        Variant minVariant;
-        Variant maxVariant;
-        try {
-            minVariant = toVariant(statistics.genericGetMin(), location);
-            maxVariant = toVariant(statistics.genericGetMax(), location);
-        } catch (RuntimeException conversionFailure) {
-            // Variant.of and its subclass constructors throw IllegalArgumentException
-            // (e.g. unsupported type) or RuntimeException (e.g. BoolVariant on a
-            // malformed literal) when a stat value cannot be represented. Translate
-            // to a meta-tier fallback signal so the pipeline retries with data tier rather
-            // than aborting the load. NOTE: toVariant's date/datetime path also throws the
-            // checked MetaTierUnavailableException (out-of-window rejection); that is not a
-            // RuntimeException and intentionally propagates past this catch with its own
-            // message — do not widen this to catch (Exception).
-            throw new MetaTierUnavailableException(String.format(
-                    "Parquet stats value not representable for sort-key column \"%s\": %s",
-                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
-        }
-        // String (BINARY+UTF8) chunk min/max are exact in practice: parquet-cpp and
-        // parquet-mr do not truncate chunk-level Statistics (parquet-mr's
-        // parquet.statistics.truncate.length defaults to Integer.MAX_VALUE; parquet-cpp
-        // drops stats past max_statistics_size, which the isEmpty() guard above already
-        // routes to data tier). Pre-split is a pure planning optimization: the BE routes
-        // every loaded row to a tablet by its true value, independent of these stats. So
-        // even under a hypothetical custom-truncating writer, a widened min/max can only
-        // skew split boundaries or trigger a conservative overlap fallback -- it can never
-        // misroute or drop data. All numeric/temporal stats are exact too, so this reader
-        // never marks a Parquet row group truncated.
-        return new RowGroupStatistics(
-                new Tuple(List.of(minVariant)),
-                new Tuple(List.of(maxVariant)),
-                rowCount,
-                /*truncated=*/ false);
+        // Parquet chunk stats are never truncated (parquet-mr defaults truncate.length to
+        // Integer.MAX_VALUE and parquet-cpp drops oversized stats, which the isEmpty() guard
+        // above already routes to data tier). Absent nulls the box tuple is a valid loose
+        // lexicographic bound of the row group; a null (which sorts below every value) can fall
+        // under minTuple, but data safety does not rely on the bound -- the BE routes every row
+        // by its true value, so a null-leading row lands in the leftmost tablet (as in the
+        // single-column meta tier).
+        return new RowGroupStatistics(new Tuple(minValues), new Tuple(maxValues), rowCount, /*truncated=*/ false);
     }
 
     private static Variant toVariant(Object parquetValue, SortKeyLocation location)
@@ -380,6 +407,9 @@ public final class ParquetRowGroupStatisticsReader {
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
         // A CHAR value is NUL-canonicalized in the StringVariant constructor; VARCHAR keeps raw bytes.
+        // A UTF8 string backing a DATE / DATETIME sort key is parsed here by Variant.of -- the same
+        // coercion the data tier applies to a projected string value; an unparseable or out-of-range
+        // datetime throws IllegalArgumentException, which convertBlock turns into a data-tier fallback.
         return Variant.of(location.starRocksColumn.getType(), rendered);
     }
 

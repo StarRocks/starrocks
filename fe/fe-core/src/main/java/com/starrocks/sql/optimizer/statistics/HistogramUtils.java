@@ -99,4 +99,62 @@ public class HistogramUtils {
         }
         return mcv;
     }
+
+    // Serialize to the BE-style {"buckets":[...],"mcv":[...]} JSON; bounds kept as raw double (type-agnostic).
+    public static String serializeHistogram(Histogram histogram) {
+        JsonObject root = new JsonObject();
+
+        JsonArray bucketsArray = new JsonArray();
+        if (histogram.getBuckets() != null) {
+            for (Bucket bucket : histogram.getBuckets()) {
+                JsonArray bucketArray = new JsonArray();
+                bucketArray.add(Double.toString(bucket.getLower()));
+                bucketArray.add(Double.toString(bucket.getUpper()));
+                bucketArray.add(Long.toString(bucket.getCount()));
+                bucketArray.add(Long.toString(bucket.getUpperRepeats()));
+                bucket.getDistinctCount().ifPresent(distinctCount -> bucketArray.add(Long.toString(distinctCount)));
+                bucketsArray.add(bucketArray);
+            }
+        }
+        root.add("buckets", bucketsArray);
+
+        JsonArray mcvArray = new JsonArray();
+        if (histogram.getMCV() != null) {
+            for (Map.Entry<String, Long> entry : histogram.getMCV().entrySet()) {
+                JsonArray mcvEntry = new JsonArray();
+                mcvEntry.add(entry.getKey());
+                mcvEntry.add(Long.toString(entry.getValue()));
+                mcvArray.add(mcvEntry);
+            }
+        }
+        root.add("mcv", mcvArray);
+
+        return root.toString();
+    }
+
+    // Inverse of serializeHistogram; bounds parsed straight back to double, no column Type needed.
+    public static Histogram deserializeHistogram(String histogramString) {
+        JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
+
+        List<Bucket> buckets = Lists.newArrayList();
+        JsonElement bucketsElement = jsonObject.get("buckets");
+        if (bucketsElement != null && !bucketsElement.isJsonNull()) {
+            JsonArray bucketsArray = bucketsElement.getAsJsonArray();
+            for (int i = 0; i < bucketsArray.size(); ++i) {
+                JsonArray bucketArray = bucketsArray.get(i).getAsJsonArray();
+                double lower = Double.parseDouble(bucketArray.get(0).getAsString());
+                double upper = Double.parseDouble(bucketArray.get(1).getAsString());
+                long count = Long.parseLong(bucketArray.get(2).getAsString());
+                long upperRepeats = Long.parseLong(bucketArray.get(3).getAsString());
+                if (bucketArray.size() == 5) {
+                    buckets.add(new Bucket(lower, upper, count, upperRepeats,
+                            Long.parseLong(bucketArray.get(4).getAsString())));
+                } else {
+                    buckets.add(new Bucket(lower, upper, count, upperRepeats));
+                }
+            }
+        }
+
+        return new Histogram(buckets, convertMCV(histogramString));
+    }
 }

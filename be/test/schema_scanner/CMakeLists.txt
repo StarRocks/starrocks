@@ -1,0 +1,69 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
+set(SCHEMA_SCANNER_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    schema_scanner_test_main.cpp
+    schema_be_tablet_write_log_scanner_test.cpp
+    schema_columns_scanner_test.cpp
+    schema_fe_metrics_scanner_test.cpp
+    schema_fe_tablet_schedules_scanner_test.cpp
+    schema_loads_scanner_test.cpp
+    schema_materialized_view_refresh_jobs_scanner_test.cpp
+    schema_materialized_views_scanner_test.cpp
+    schema_partitions_meta_scanner_test.cpp
+    schema_scanner_core_test.cpp
+    schema_scanner_test.cpp
+    schema_scanners_test.cpp
+    schema_task_runs_scanner_test.cpp
+)
+
+set(SCHEMA_SCANNER_TEST_LINK_LIBS
+    SchemaScannerBuiltin
+    SchemaScanners
+    ExecSchemaScannerCore
+    Storage
+    StoragePrimitive
+    Cache
+    Platform
+    Expr
+    Runtime
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+list(REMOVE_ITEM SCHEMA_SCANNER_TEST_LINK_LIBS arrow_testing)
+
+add_library(starrocks_schema_scanner_test_objs OBJECT ${SCHEMA_SCANNER_TEST_FILES})
+target_link_libraries(starrocks_schema_scanner_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_schema_scanner_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(schema_scanner_test $<TARGET_OBJECTS:starrocks_schema_scanner_test_objs>)
+target_link_libraries(schema_scanner_test ${SCHEMA_SCANNER_TEST_LINK_LIBS})

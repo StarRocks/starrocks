@@ -41,10 +41,7 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         TableFunctionTable sourceTable = context.sourceTable();
         // FILES() reports one format for the whole table, so resolve the reader once.
         MetaTierFormat format = MetaTierFormat.fromTableFunctionFormat(sourceTable.getFormat());
-        // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
-        // before this provider is invoked, so a single-element sort key is the
-        // contract by the time we get here.
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(sourceTable.getProperties());
 
@@ -58,7 +55,7 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
                 continue;
             }
             FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-            aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn, context.loadTimeZone()));
+            aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
         }
         return aggregated;
     }

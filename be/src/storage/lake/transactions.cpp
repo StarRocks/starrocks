@@ -24,6 +24,7 @@
 #include "gutil/strings/join.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -96,8 +97,16 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
+        // skip_meta_cache forces this to read DURABLE storage only: with file bundling a version can sit in
+        // the metacache (its metadata cached during publish) without a durable bundle written yet -- e.g. a
+        // batch publish advanced the primary index and cached the metadata but had not written the bundle,
+        // and is now being retried. A plain cache-hitting read would treat such a version as "exists in
+        // remote", adopt it as the base, and record it as prev_garbage_version, leaving a dangling reference
+        // (NotFound while vacuum walks the chain) once the cache is evicted.
         auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true, gtid);
+        auto res = tablet_mgr->get_tablet_metadata(
+                tablet_id, index_version,
+                CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true}, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -182,15 +191,17 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
 // for the now-PUBLISH_NORMAL shadow tablet). The returned log is handed to publish_version()'s shared
 // apply path as a single (tablet, log) pair.
 //
-// W == 1 means the base partition was empty at the watershed (lake invariant: PARTITION_INIT_VERSION == 1,
-// the first load publishes version 2), so the rewrite produced no source op_write: an empty
-// op_schema_change@1 is synthesized and returned WITHOUT any object-storage access (a source load would 404).
-// For W > 1 the source op_write MUST exist (the rewrite INSERT opens and finishes a delta writer for every
-// shadow tablet, even 0-row ones), so it is loaded and its status propagates as-is -- a not-found is NOT
-// turned into an empty log (that would silently drop the partition's data by advancing the version). The
-// caller routes any error through new_version_metadata_or_error, which hands back an idempotent retry whose
-// source was already consumed by a prior successful publish (new_version already published) and otherwise
-// fails the publish (which then retries).
+// An empty partition at the watershed produced no source op_write, so an empty op_schema_change@W is
+// synthesized and returned WITHOUT any object-storage access (a source load would 404). Emptiness is known
+// from alter_version == 1 (lake invariant: PARTITION_INIT_VERSION == 1, the first load publishes version 2)
+// or from txn.shadow_rewrite_source_empty() (FE saw the rewrite load zero rows), the latter covering an empty
+// partition at W > 1 (a repeat online rewrite of an empty range partition). Otherwise the source op_write
+// MUST exist (a non-empty partition's rewrite INSERT opens and finishes a delta writer for every shadow
+// tablet, even 0-row ones), so it is loaded and its status propagates as-is -- a not-found is NOT turned
+// into an empty log (that would silently drop the partition's data by advancing the version). The caller
+// routes any error through new_version_metadata_or_error, which hands back an idempotent retry whose source
+// was already consumed by a prior successful publish (new_version already published) and otherwise fails the
+// publish (which then retries).
 static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletManager* tablet_mgr,
                                                                         const PublishTabletInfo& tablet_info,
                                                                         const TxnInfoPB& txn, size_t txns_size,
@@ -213,14 +224,20 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
     if (tablet_info.get_tablet_ids_in_txn_logs().size() != 1) {
         return Status::InvalidArgument("shadow rewrite: expected exactly one source tablet");
     }
-    // W == 1: the base partition was empty at the watershed (lake invariant: PARTITION_INIT_VERSION == 1,
-    // the first load publishes version 2), so the rewrite produced no source op_write. Synthesize an empty
-    // op_schema_change@1 and return WITHOUT any object-storage access -- no source load (would 404) and no
-    // already-published probe (which also 404s on the common first publish). Idempotent retries of a W == 1
-    // publish are handled upstream in publish_version (the metacache short-circuit and the base-version
-    // read); a cold-cache retry that reaches here re-applies, which is idempotent (vacuum reclaims
-    // oldest-first, so base_version 1 being present implies the post-watershed vlogs are too).
-    if (alter_version == 1) {
+    // Empty at the watershed: no source op_write was produced, so synthesize an empty
+    // op_schema_change@W and return WITHOUT any object-storage access -- no source load (would 404) and no
+    // already-published probe (which also 404s on the common first publish). Two ways to know the partition
+    // was empty at W:
+    //   - alter_version == 1: the lake invariant (PARTITION_INIT_VERSION == 1, the first load publishes
+    //     version 2) makes W == 1 imply empty.
+    //   - shadow_rewrite_source_empty: FE observed the rewrite txn loaded zero rows, i.e.
+    //     the partition was empty at W > 1 (a repeat online rewrite of an empty range partition). Without
+    //     this the W > 1 branch below would load the (absent) source and 404, wedging the flip.
+    // Idempotent retries of an empty publish are handled upstream in publish_version (the metacache
+    // short-circuit and the base-version read); a cold-cache retry that reaches here re-applies, which is
+    // idempotent (vacuum reclaims oldest-first, so base_version 1 being present implies the post-watershed
+    // vlogs are too).
+    if (alter_version == 1 || txn.shadow_rewrite_source_empty()) {
         auto schema_change_log = std::make_shared<TxnLog>();
         schema_change_log->set_tablet_id(tablet_info.get_tablet_id_in_metadata());
         schema_change_log->set_txn_id(txn.txn_id());
@@ -228,12 +245,13 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
         return schema_change_log;
     }
 
-    // W > 1: a non-empty partition's rewrite INSERT opens and finishes a delta writer for EVERY shadow tablet
-    // (LakeTabletsChannel::_create_delta_writers + finish-all-on-EOS), so even a 0-row shadow tablet gets an
-    // (empty) op_write -- the source MUST exist. A not-found (lost source) is NOT turned into an empty log
-    // here (that would silently drop the partition's pre-watershed data by advancing the version); it
-    // propagates so the caller's new_version_metadata_or_error hands back an idempotent retry whose source
-    // was already consumed (new_version already published) or otherwise fails the publish (which retries).
+    // Non-empty at the watershed (alter_version > 1 and not shadow_rewrite_source_empty): the rewrite INSERT
+    // opens and finishes a delta writer for EVERY shadow tablet (LakeTabletsChannel::_create_delta_writers +
+    // finish-all-on-EOS), so even a 0-row shadow tablet gets an (empty) op_write -- the source MUST exist.
+    // A not-found (lost source) is NOT turned into an empty log here (that would silently drop the
+    // partition's pre-watershed data by advancing the version); it propagates so the caller's
+    // new_version_metadata_or_error hands back an idempotent retry whose source was already consumed
+    // (new_version already published) or otherwise fails the publish (which retries).
     ASSIGN_OR_RETURN(auto source_log, load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txn));
 
     // Source present: anchor it as op_schema_change@W.
@@ -467,6 +485,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                         return new_version_metadata_or_error(missig_txn_log_meta.status());
                     } else {
                         base_metadata = std::move(missig_txn_log_meta).value();
+                        // Keep base_version in sync with base_metadata.
+                        base_version = base_metadata->version();
                         continue;
                     }
                 } else if (txns[i].force_publish()) {
@@ -485,6 +505,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
         if (log_applier == nullptr) {
             // init log_applier
+            DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
                                               new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
