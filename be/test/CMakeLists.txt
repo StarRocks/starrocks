@@ -285,13 +285,7 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
-<<<<<<< HEAD
-        ./formats/disk_range_test.cpp
-        ./geo/geo_types_test.cpp
-        ./geo/wkt_parse_test.cpp
-=======
         ./formats/parquet/statistics_helper_test.cpp
->>>>>>> 5349261c2e ([BugFix] Support BOOLEAN min/max in parquet column index statistics (#74752))
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
         ./http/handler_required_privilege_test.cpp
