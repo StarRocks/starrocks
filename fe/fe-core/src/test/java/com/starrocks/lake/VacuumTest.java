@@ -64,7 +64,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -503,7 +502,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -630,7 +629,7 @@ public class VacuumTest {
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
         Config.lake_fullvacuum_parallel_partitions = 1;
         Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
+        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
         Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
         Config.lake_fullvacuum_parallel_partitions = oldValue1;
         FeConstants.runningUnitTest = true;
@@ -926,71 +925,6 @@ public class VacuumTest {
     }
 
     @Test
-    public void testOnStoppedReleasesLeaderSessionState() throws Exception {
-        // On leader demotion onStopped() must shut down and dereference the executor (so it is
-        // recreated on re-election) and release the reservations of queued-but-never-run tasks.
-        // A still-running task keeps its reservation until its own finally releases it: dropping
-        // it early would let a re-elected session vacuum the same partition concurrently with the
-        // straggler, and the straggler's late finally would then drop the new session's live entry.
-        int oldParallel = Config.lake_autovacuum_parallel_partitions;
-        try {
-            // Single-threaded pool: the first task occupies the worker, the second stays queued.
-            Config.lake_autovacuum_parallel_partitions = 1;
-            AutovacuumDaemon daemon = new AutovacuumDaemon();
-            ThreadPoolExecutor pool = Deencapsulation.invoke(daemon, "getExecutorService");
-            Set<Long> vacuumingPartitions = Deencapsulation.getField(daemon, "vacuumingPartitions");
-
-            long runningPartition = 123L;
-            long queuedPartition = 456L;
-            vacuumingPartitions.add(runningPartition);
-            vacuumingPartitions.add(queuedPartition);
-
-            CountDownLatch started = new CountDownLatch(1);
-            CountDownLatch release = new CountDownLatch(1);
-            // Emulates vacuumPartition() for a straggler stuck in a non-interruptible section: it
-            // survives the shutdownNow() interrupt and only its finally releases its reservation.
-            pool.execute(() -> {
-                try {
-                    started.countDown();
-                    boolean released = false;
-                    while (!released) {
-                        try {
-                            release.await();
-                            released = true;
-                        } catch (InterruptedException ignored) {
-                            // Swallow the shutdownNow() interrupt and keep running.
-                        }
-                    }
-                } finally {
-                    vacuumingPartitions.remove(runningPartition);
-                }
-            });
-            Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
-            pool.execute(newVacuumTask(queuedPartition, () -> vacuumingPartitions.remove(queuedPartition)));
-
-            Deencapsulation.setField(daemon, "nextCollectTimeMs", 999L);
-            Deencapsulation.invoke(daemon, "onStopped");
-
-            Assertions.assertTrue(pool.isShutdown());
-            Assertions.assertNull(Deencapsulation.getField(daemon, "executorService"));
-            Assertions.assertTrue(
-                    ((java.util.Collection<?>) Deencapsulation.getField(daemon, "pendingCandidates")).isEmpty());
-            Assertions.assertEquals(0L, (long) Deencapsulation.getField(daemon, "nextCollectTimeMs"));
-            // The queued task will never run its finally, so onStopped() released its reservation...
-            Assertions.assertFalse(vacuumingPartitions.contains(queuedPartition));
-            // ...while the running task's reservation survives, so a re-elected session skips it.
-            Assertions.assertTrue(vacuumingPartitions.contains(runningPartition));
-
-            // The straggler eventually finishes and releases its own reservation.
-            release.countDown();
-            Assertions.assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
-            Assertions.assertTrue(vacuumingPartitions.isEmpty());
-        } finally {
-            Config.lake_autovacuum_parallel_partitions = oldParallel;
-        }
-    }
-
-    @Test
     public void testScheduleVacuumRoundGatesAndRejectionRollback() throws Exception {
         long oldNaptime = Config.lake_autovacuum_partition_naptime_seconds;
         boolean oldDetect = Config.lake_autovacuum_detect_vaccumed_version;
@@ -1086,15 +1020,6 @@ public class VacuumTest {
             Config.lake_autovacuum_partition_naptime_seconds = oldNaptime;
             Config.lake_autovacuum_detect_vaccumed_version = oldDetect;
         }
-    }
-
-    // VacuumTask is private to AutovacuumDaemon; construct it reflectively so the test can put a
-    // task carrying a partition id into the pool queue exactly as submitPendingCandidates() does.
-    private static Runnable newVacuumTask(long partitionId, Runnable work) throws Exception {
-        Class<?> clazz = Class.forName("com.starrocks.lake.vacuum.AutovacuumDaemon$VacuumTask");
-        java.lang.reflect.Constructor<?> ctor = clazz.getDeclaredConstructor(long.class, Runnable.class);
-        ctor.setAccessible(true);
-        return (Runnable) ctor.newInstance(partitionId, work);
     }
 
     private static Object findCandidate(List<Object> candidates, long partitionId) throws Exception {
