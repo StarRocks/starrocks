@@ -42,9 +42,7 @@ import java.util.function.BooleanSupplier;
  *   <li>{@link #dispatch} — partitioned-vs-unpartitioned routing, including the
  *       automatic-partition gate that conservatively skips manually
  *       list/range-partitioned targets (those cannot pre-create partitions from
- *       sampled values), and the INSERT-from-table rollup descope (a rollup's sort
- *       key cannot be remapped to source columns, so a multi-index target skips
- *       before sampling for that load kind only).</li>
+ *       sampled values).</li>
  *   <li>{@link #runSinglePartitionFlow} — resolve the unique partition + base
  *       tablet, build a {@link DefaultPreSplitPipeline}, submit via
  *       {@link TabletPreSplitCoordinator#submitAsynchronously}, then sync-await
@@ -76,29 +74,15 @@ final class PreSplitFlow {
      * requested tablet count; computeResource sizes the active CN count; scanContext carries
      * the source-specific scan inputs; secondaryIndexSpecs names every OTHER visible index
      * (rollup) whose sort key the multi-partition data-tier sampler should project alongside
-     * the base sort key -- empty for single-index targets and for INSERT-from-table (descoped).
+     * the base sort key -- empty for single-index targets.
      */
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
                     ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
-
-        /**
-         * Backward-compatible constructor for callers with no rollup to project;
-         * defaults secondaryIndexSpecs to empty.
-         */
-        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
-                List<Column> partitionColumns, long estimatedBytes, ComputeResource computeResource) {
-            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource, List.of());
-        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
-        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.getVisibleIndexMetas().size() > 1) {
-            // INSERT-from-table cannot remap a divergent rollup sort key to source columns (descoped).
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
-            return;
-        }
         if (target.getPartitionInfo().isPartitioned()) {
             // Manually list/range-partitioned targets do not support pre-creating partitions
             // from sampled values; skip conservatively, let the load proceed.
@@ -115,13 +99,6 @@ final class PreSplitFlow {
                                        LoadKind loadKind, BooleanSupplier shouldAbort) {
         PreSplitTargets.EligibleTarget target = PreSplitTargets.findEligibleTarget(database, table);
         if (target == null) {
-            return;
-        }
-        if (loadKind == LoadKind.INSERT_FROM_TABLE && target.indexTargets().size() > 1) {
-            // Authoritative re-check on the resolved index set: a rollup that became visible after the
-            // dispatch-time descope gate must not be sampled with the base-only INSERT-from-table source
-            // mapping. Skip pre-split (load proceeds) -- INSERT-from-table with a rollup is out of scope.
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
             return;
         }
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
