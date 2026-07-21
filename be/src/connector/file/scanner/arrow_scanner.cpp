@@ -323,8 +323,8 @@ Status ArrowScanner::next_batch() {
                 _consecutive_errors = 0;
                 continue;
             }
-            _scanner_eof = true;
-            return Status::EndOfFile("reach end of current file");
+            _file.reset();
+            continue;
         }
 
         _consecutive_errors = 0;
