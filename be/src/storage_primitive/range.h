@@ -394,9 +394,15 @@ template <typename T>
 inline bool SparseRangeIterator<T>::has_more() const {
     // A default-constructed iterator (_range == nullptr) has no ranges to traverse.
     // Guard the null before dereferencing: PhysicalSplitMorselQueue can reach
-    // _segment_range_iter.has_more() while the iterator is still default-constructed
-    // (empty/edge tablet, see issue #75203); without this check that dereferenced a
-    // null _range -> std::vector::size() at address 0 -> CN SIGSEGV @0x0.
+    // _segment_range_iter.has_more() while the iterator is still default-constructed.
+    // This happens when _init_segment() early-returns before it reaches
+    // `_segment_range_iter = _segment_scan_range.new_iterator()` -- e.g. a transient
+    // lake Rowset::get_segments() failure returns an empty (uncached) segment list, so
+    // _cur_segment() is null for that call; the immediate retry then succeeds and the
+    // while-condition's checks 1-3 fall through to this has_more() with _range still null
+    // (issue #75203). Without this guard, _range->_ranges.size() dereferences null ->
+    // std::vector::size() read at offset 0/8 of a null object -> CN SIGSEGV (@0x0 in the
+    // release build; @0x8 under -O0/ASAN -- the operand-load order is a codegen artifact).
     return _range != nullptr && _index < _range->_ranges.size();
 }
 
