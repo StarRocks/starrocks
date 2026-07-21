@@ -261,6 +261,7 @@ public:
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
@@ -318,6 +319,11 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    // Whether _segments has been materialized by get_segments_checked(). Keyed on an explicit flag
+    // (not _segments.empty()) so a genuinely zero-segment rowset is loaded exactly once instead of
+    // re-invoking segments() on every call. Stays false on a transient load failure so a later retry
+    // re-attempts the load -- the non-idempotency that caused issue #75203.
+    bool _segments_loaded = false;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.

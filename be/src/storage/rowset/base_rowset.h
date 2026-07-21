@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/statusor.h"
 #include "storage/olap_common.h"
 
 namespace starrocks {
@@ -36,6 +37,13 @@ public:
     virtual bool is_overlapped() const = 0;
     //virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments() = 0;
     virtual std::vector<SegmentSharedPtr> get_segments() = 0;
+
+    // Like get_segments(), but surfaces a segment-load failure as a non-OK Status instead of
+    // silently returning an empty vector. Local rowsets load segments eagerly in load() and never
+    // fail here, so the default just wraps get_segments(); lake rowsets override this to propagate
+    // the real (retryable) load status. See issue #75203: the swallowed error left a scan-split
+    // iterator uninitialized and crashed the CN.
+    virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() { return get_segments(); }
 
     // get_segments() with the nullptr placeholders removed. A null entry appears only for a lake rowset
     // when experimental_lake_ignore_lost_segment dropped a physically-missing segment (local rowsets
