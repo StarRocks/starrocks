@@ -71,13 +71,14 @@ public class AutomaticTabletReshardTest {
                 return true;
             }
         };
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().clearSizeSplitLatchForTest();
     }
 
     @Test
     void testTriggerTabletReshardFailed() {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
                     throws StarRocksException {
                 throw new StarRocksException("Create tablet reshard job failed");
             }
@@ -92,9 +93,12 @@ public class AutomaticTabletReshardTest {
     void testTriggerTabletReshardSuccess() {
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
                     throws StarRocksException {
-                return;
+                TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
+                        new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1L, TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
             }
         };
 
@@ -150,9 +154,10 @@ public class AutomaticTabletReshardTest {
         boolean[] splitCalled = {false};
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
                     throws StarRocksException {
                 splitCalled[0] = true;
+                return new TabletReshardJobMgrTest.TestNormalTabletReshardJob(2L, TabletReshardJob.JobType.SPLIT_TABLET);
             }
         };
 

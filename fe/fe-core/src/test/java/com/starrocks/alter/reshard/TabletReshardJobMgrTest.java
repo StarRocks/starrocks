@@ -186,6 +186,7 @@ public class TabletReshardJobMgrTest {
         // Tests that use the singleton TabletReshardJobMgr share its state. Clear it before each
         // test so a job created in one test does not block table-reservation checks in the next.
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().tabletReshardJobs.clear();
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().clearSizeSplitLatchForTest();
         // Reset the table state: a split job created by a previous test transitions the table to
         // TABLET_RESHARD via init(), and triggerTabletReshard short-circuits on non-NORMAL.
         if (reshardTable != null) {
@@ -494,5 +495,38 @@ public class TabletReshardJobMgrTest {
         mgr.runAfterCatalogReadyForTest();
         Assertions.assertTrue(mergeCalled[0],
                 "drain must route a sub-threshold merge candidate to a merge job");
+    }
+
+    @Test
+    public void testAutoSplitSuppressedAfterNoProgress() throws Exception {
+        int[] splitCalls = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
+                splitCalls[0]++;
+                TestNormalTabletReshardJob job =
+                        new TestNormalTabletReshardJob(1000L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        oversizedTablet.setDataSize(Config.tablet_reshard_target_size * 2);
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+
+        // Round 1: first over-threshold observation -> one split job fired, table latched.
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, splitCalls[0], "first over-threshold scan must fire exactly one split");
+        Assertions.assertTrue(mgr.hasSizeSplitLatch(reshardTable.getId()), "table must be latched after firing");
+
+        // Round 2: same size -> same signature (identical fallback leaves layout + requested count unchanged) -> suppressed.
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(),
+                Config.tablet_reshard_target_size * 2, Long.MAX_VALUE);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, splitCalls[0], "an unchanged split request must not re-fire (loop broken)");
     }
 }
