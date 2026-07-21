@@ -619,6 +619,11 @@ public class SplitTabletJob extends TabletReshardJob {
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
         boolean nonCanonicalCrossing = false;
+        // True if any source index of this split was empty (rowCount == 0), i.e. a pre-split — whose new
+        // shards were created in the SPREAD group only. Recomputed here from the catalog (not threaded
+        // from the PENDING phase) so it is replay-safe; used to arm the backstop for a boundary-less
+        // pre-split below.
+        boolean anySpreadPreSplit = false;
         // New child ranges captured during the walk below, reused after the splice for the best-effort
         // immediate PACK reassignment. sortKeyColumns is hoisted out of the lock so that same reassign
         // can reuse it (it is immutable schema, always assigned inside the lock before the walk).
@@ -639,6 +644,7 @@ public class SplitTabletJob extends TabletReshardJob {
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
                     MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    anySpreadPreSplit |= oldIndex != null && oldIndex.getRowCount() == 0;
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
                         if (splittingTablet == null || splittingTablet.isIdenticalTablet()) {
@@ -691,6 +697,14 @@ public class SplitTabletJob extends TabletReshardJob {
                 throw new TabletReshardException(
                         "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
             }
+        } else if (anySpreadPreSplit && !newChildRanges.isEmpty()) {
+            // Boundary-less (Level-2) pre-split: nothing was spliced above, so the group would otherwise
+            // stay stable and the periodic ColocateChecker backstop would never revisit it. But the new
+            // shards were created SPREAD-only, so mark the group unstable to arm that backstop as a safety
+            // net should the immediate best-effort reconcile below fail — otherwise their PACK placement
+            // could be lost. The backstop re-stabilizes the group once the children are placed (ranges are
+            // unchanged, so its alignment step is a no-op).
+            colocateTableIndex.markAllGroupsWithSameColocateGroupIdUnstable(grpId, true);
         }
 
         // Place each new child into its owning ColocateRange's PACK shard group. This MUST run for every

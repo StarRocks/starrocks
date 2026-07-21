@@ -146,12 +146,13 @@ public class SplitTabletJobColocateTest {
     }
 
     /**
-     * A within-prefix (Level 2) pre-split adds no ColocateRange boundary and leaves the group stable,
-     * but because pre-split creates its new shards in the SPREAD group ONLY (root fix so they spread
-     * across CNs at creation), the post-publish reconcile must STILL place each child into the existing
-     * owning PACK group. Otherwise a boundary-less split would strand them SPREAD-only and lose
-     * colocation permanently — the group is stable, so the periodic ColocateChecker backstop never
-     * revisits it (this is the case the reconcile-always fix addresses).
+     * A within-prefix (Level 2) pre-split adds no ColocateRange boundary, but because pre-split creates
+     * its new shards in the SPREAD group ONLY (root fix so they spread across CNs at creation), the
+     * post-publish path must still get each child into the existing owning PACK group — otherwise a
+     * boundary-less split would strand them SPREAD-only and lose colocation permanently. The fix does
+     * both: (1) an immediate reconcile places each child into the existing PACK group, and (2) the group
+     * is marked unstable to arm the periodic ColocateChecker backstop as a safety net (a boundary-less
+     * split would otherwise leave the group stable and never revisited).
      */
     @Test
     public void testLevelTwoPreSplitReconcilesChildIntoExistingPackGroup() throws Exception {
@@ -196,8 +197,9 @@ public class SplitTabletJobColocateTest {
 
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size(),
                 "Level 2 split must not add a ColocateRange entry");
-        Assertions.assertFalse(idx.isGroupUnstable(groupId),
-                "Level 2 split must leave the group stable");
+        Assertions.assertTrue(idx.isGroupUnstable(groupId),
+                "Level 2 pre-split must arm the backstop: mark the group unstable so the periodic checker "
+                        + "converges the SPREAD-only children even if the immediate reconcile fails");
         Assertions.assertFalse(reassignedAdd.isEmpty(),
                 "SPREAD-only pre-split children must be reconciled into the existing PACK group");
         for (Map.Entry<Long, List<Long>> e : reassignedAdd.entrySet()) {
