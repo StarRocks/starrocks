@@ -204,9 +204,13 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         LOG.info("[ExternalStats] scan budget | jobId={} catalog={} db={} table={} bytesCap={} filesCap={} rowsCap={}",
                 jobId, catalogName, db.getOriginName(), table.getName(), scanBytesCap, scanFilesCap, scanRowsCap);
 
-        // Each per-partition query wraps the read in a CTE (base_cte_table) shared by every column's aggregate
-        // branch. Force CTE reuse (ratio 0 = reuse regardless of estimated cost) so the optimizer materializes
-        // a single scan per partition instead of inlining the CTE back into one scan per column.
+        // Each query wraps the read in a CTE (base_cte_table) shared by every column's aggregate branch. Force
+        // CTE reuse (ratio 0 = reuse regardless of estimated cost) so the optimizer materializes a single scan
+        // instead of inlining the CTE back into one scan per column.
+        // NOTE: buildConnectContext() already forces this, but collectStatistics(resetWarehouse=true) - used by
+        // the query-trigger and CREATE ANALYZE paths - calls setCurrentWarehouse() right before collect(),
+        // which re-clones the session variable from defaults (ratio back to 1.15) and only re-applies
+        // enable_profile. So re-force it here, the last write before the collection SQL runs. Do not remove.
         sessionVariable.setCboCteReuse(true);
         sessionVariable.setCboCTERuseRatio(0);
 
