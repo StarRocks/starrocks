@@ -689,8 +689,10 @@ public class OperationType {
     // Physically erase a materialized index parked in the CatalogRecycleBin (e.g. a superseded index
     // retired by a tablet reshard). The recycle itself is not journaled -- it is rebuilt from the
     // reshard job's replay and persisted in the recycle-bin image; only the leader-driven erase is.
-    // Must stay below OP_TYPE_EOF (20000): buildIgnorableOperations() System.exit()s on any non-
-    // whitelisted op above it.
+    // Ignorable like its erase/drop siblings above: replayEraseMaterializedIndex is idempotent and
+    // null-safe, and a failed erase merely leaves the index installed to retry next cycle, so a replay
+    // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
+    @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
 
     /*

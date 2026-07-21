@@ -1701,6 +1701,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         idToTableInfo.clear();
         nameToTableInfo.clear();
         idToPartition.clear();
+        idToIndex.clear();
         physicalPartitionIdToPartitionId.clear();
         idToRecycleTime.clear();
         enableEraseLater.clear();
