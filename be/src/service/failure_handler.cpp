@@ -45,6 +45,7 @@
 #include "cache/datacache.h"
 #endif
 #include "common/config_diagnostic_fwd.h"
+#include "common/crash_watchdog.h"
 #include "common/process_exit.h"
 #include "common/util/debug_util.h"
 #include "exec/exec_env.h"
@@ -225,6 +226,15 @@ void init_runtime_logging_hooks() {
         // This symbol may be unavailable on macOS builds using system glog.
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
 #endif
+        // Guarantee the process eventually dies even if the crash handler above stalls, so an
+        // orchestrator can restart it instead of leaving a live node stuck reporting SHUTDOWN.
+        // Opt-in only (default 0, disabled): when enabled, warn once at startup so the tradeoff is
+        // explicit — the force-exit can terminate a crash cleanup or core dump slower than the bound.
+        int64_t crash_watchdog_timeout_seconds = config::process_force_exit_after_crash_handler_hang_second;
+        may_start_crash_watchdog(crash_watchdog_timeout_seconds);
+        if (crash_watchdog_timeout_seconds > 0) {
+            LOG(WARNING) << "crash watchdog enabled; may force-exit before a slow core dump completes";
+        }
     }
     logging_hooks_initialized = true;
 }
