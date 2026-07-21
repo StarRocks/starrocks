@@ -90,6 +90,66 @@ public class EditLogFailureVisibleTest {
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
+    @Test
+    public void testInterruptedWaitHoldsFenceUntilTaskResolves() throws Exception {
+        // A leader-only thread pool shutdownNow() during demotion interrupts a worker mid-logEdit. The write
+        // may still be queued and commit later, so the interrupt must NOT release the WAL fence early -- else
+        // demotion's awaitWalDrained() could see inFlight == 0 and seal the writer ahead of the in-flight write.
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue, true);
+
+        Thread writer = new Thread(() -> {
+            try {
+                editLog.logJsonObject((short) 1, "payload");
+            } catch (Throwable ignore) {
+                // interrupted below; the write stays queued
+            }
+        });
+        writer.setDaemon(true);
+        writer.start();
+
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+
+        // Interrupt the waiting writer; it leaves logEdit (waitForCommit throws) but the task is still queued.
+        writer.interrupt();
+        writer.join(5000);
+        Assertions.assertFalse(writer.isAlive());
+
+        // Fence is still held: the interrupt did not release it while the write is in flight.
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+
+        // The JournalWriter eventually commits the queued task; only then is the fence released.
+        task.markSucceed();
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testInterruptedWaitReleasesFenceIfTaskAlreadyAborted() throws Exception {
+        // If the task already resolved (e.g. writer aborted it) by the time the interrupted caller reaches the
+        // handoff, setOnDone runs the release immediately so the fence does not leak.
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue, true);
+
+        Thread writer = new Thread(() -> {
+            try {
+                editLog.logJsonObject((short) 1, "payload");
+            } catch (Throwable ignore) {
+                // aborted below
+            }
+        });
+        writer.setDaemon(true);
+        writer.start();
+
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "journal writer closed"));
+        writer.join(5000);
+        Assertions.assertFalse(writer.isAlive());
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
     // ---- WALApplier hook ----
 
     @Test

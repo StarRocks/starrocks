@@ -1523,27 +1523,50 @@ public class EditLog {
     }
 
     /**
-     * submit log to queue, wait for JournalWriter
+     * Submit a gated journal write, wait for its commit, and (when applyAction is non-null) run the in-memory
+     * apply INSIDE the WAL fence on a successful commit. The fence (enterGate/exitGate) is released only once
+     * the write is fully resolved: on the normal path after commit (+ apply); on an abnormal exit -- the caller
+     * thread is interrupted while waiting (e.g. a leader-only thread pool is shutdownNow()'d during demotion,
+     * which interrupts its workers), or the task aborts, or apply throws -- the release is deferred to the task
+     * completion callback so it fires when the JournalWriter actually resolves the task. This is critical:
+     * releasing the fence on interrupt while the task is still queued would let demotion's awaitWalDrained()
+     * see inFlight == 0 and seal the writer AHEAD of a not-yet-committed write, defeating the fence.
      */
-    public void logEdit(short op, Writable writable) {
+    private void logEditGated(short op, Writable writable, Runnable applyAction) {
         enterGate();
+        JournalTask task = null;
+        boolean completedNormally = false;
         try {
-            waitForCommit(submitRawUninterruptibly(op, writable, -1));
+            task = submitRawUninterruptibly(op, writable, -1);
+            waitForCommit(task);
+            if (applyAction != null) {
+                applyAction.run();
+            }
+            completedNormally = true;
         } finally {
-            exitGate();
+            if (completedNormally) {
+                // Committed (and applied) on this thread: release the fence now.
+                exitGate();
+            } else if (task != null) {
+                // Interrupted/aborted with the write possibly still in flight: hold the fence until the
+                // JournalWriter resolves the task (setOnDone runs immediately if it already completed).
+                task.setOnDone(this::exitGate);
+            } else {
+                // Never enqueued (serialization failed before submit): nothing is in flight.
+                exitGate();
+            }
         }
     }
 
+    /**
+     * submit log to queue, wait for JournalWriter
+     */
+    public void logEdit(short op, Writable writable) {
+        logEditGated(op, writable, null);
+    }
+
     private void logEdit(short op, Writable writable, WALApplier walApplier) {
-        enterGate();
-        try {
-            waitForCommit(submitRawUninterruptibly(op, writable, -1));
-            if (walApplier != null) {
-                walApplier.apply(writable);
-            }
-        } finally {
-            exitGate();
-        }
+        logEditGated(op, writable, walApplier == null ? null : () -> walApplier.apply(writable));
     }
 
     public void logJsonObject(short op, Object obj) {
@@ -1565,24 +1588,18 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         };
-        enterGate();
-        try {
-            waitForCommit(submitRawUninterruptibly(op, writable, -1));
-            if (applier != null) {
-                applier.apply(obj);
-            }
-        } finally {
-            exitGate();
-        }
+        logEditGated(op, writable, applier == null ? null : () -> applier.apply(obj));
     }
 
     /**
      * Wait for the JournalWriter to commit this task. Responds to every failure by throwing an (unchecked)
-     * {@link EditLogException}: an InterruptedException on this path only arrives once the node is already
-     * demoting/shutting down (BDB is no longer writable, so the write cannot commit), so we react to it rather
-     * than retrying a doomed write; a committed-then-aborted task and a false result likewise throw. The
-     * outcome therefore always matches what actually got committed, so an applier caller applies iff this
-     * returns normally.
+     * {@link EditLogException}: an InterruptedException on this path arrives when the caller thread is being
+     * stopped (e.g. a leader-only thread pool shutdownNow() during demotion), so we react to it rather than
+     * retrying; a committed-then-aborted task and a false result likewise throw. The outcome always matches
+     * what actually got committed, so an applier caller applies iff this returns normally. NOTE: throwing here
+     * does NOT mean the write is dead -- the task may still be queued and commit later, so the caller
+     * (logEditGated) keeps the WAL fence held until the task's own completion callback resolves it, rather than
+     * releasing it on this throw.
      */
     public static void waitForCommit(JournalTask task) {
         boolean result;
