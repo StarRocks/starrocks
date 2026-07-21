@@ -3620,6 +3620,195 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
     EXPECT_EQ((static_cast<uint64_t>(out_sst.shared_rssid()) << 32) | 99, out_sst.max_rss_rowid());
 }
 
+// The merged tablet's async vector-index build watermark must be the MIN over all
+// merge sources: the merged tablet contains rowsets from every source, so a rowset is
+// only guaranteed built if it was built in its OWN source. source[0] here carries the
+// HIGHER watermark (100); buggy code that just CopyFrom's source[0] would inherit 100
+// and wrongly skip building child_b's unbuilt tail (whose true watermark is only 50).
+TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_min) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id, int64_t built_version) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(3);
+        set_primary_key_schema(meta.get(), 1001);
+        meta->set_vector_index_built_version(built_version);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
+        return meta;
+    };
+
+    // source[0] has the HIGHER watermark; buggy code would inherit 100 and skip child_b's unbuilt tail.
+    auto meta_a = make_child(child_a, 100);
+    auto meta_b = make_child(child_b, 50);
+    EXPECT_OK(put_tablet_metadata(meta_a));
+    EXPECT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+    ASSERT_TRUE(merged->has_vector_index_built_version());
+    EXPECT_EQ(50, merged->vector_index_built_version());
+}
+
+// Mixed: one source sets the watermark, the other never calls set_vector_index_built_version
+// (field absent). A source without the field guarantees nothing is built in it, so it
+// contributes 0 to the min -- the merged field must be present and 0, not the other
+// source's 100.
+TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_mixed) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id, bool set_built_version, int64_t built_version) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(3);
+        set_primary_key_schema(meta.get(), 1001);
+        if (set_built_version) {
+            meta->set_vector_index_built_version(built_version);
+        }
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
+        return meta;
+    };
+
+    auto meta_a = make_child(child_a, /*set_built_version=*/true, 100);
+    auto meta_b = make_child(child_b, /*set_built_version=*/false, 0);
+    EXPECT_OK(put_tablet_metadata(meta_a));
+    EXPECT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+    ASSERT_TRUE(merged->has_vector_index_built_version());
+    EXPECT_EQ(0, merged->vector_index_built_version());
+}
+
+// None: no source ever sets the watermark. The merged tablet must leave it unset too
+// (has_vector_index_built_version() false), not default it to 0.
+TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_none) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(3);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("shared_seg.dat");
+        sm->set_size(100);
+        sm->set_shared(true);
+        stamp_physical_identity_uid(rowset, "shared_seg.dat");
+        return meta;
+    };
+
+    auto meta_a = make_child(child_a);
+    auto meta_b = make_child(child_b);
+    EXPECT_OK(put_tablet_metadata(meta_a));
+    EXPECT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+    EXPECT_FALSE(merged->has_vector_index_built_version());
+}
+
 // Phase-1 merge (end-to-end): two siblings with matching uid and a shared segment
 // + distinct private segments. uid dedup unions their segments into one merged
 // rowset. No re-share: the merged tablet owns its segments via the ownership-transfer
