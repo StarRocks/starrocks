@@ -1043,4 +1043,63 @@ TEST_F(ArrowScannerTest, StressTestArrowMalformedRateLimit) {
     scanner->close();
 }
 
+TEST_F(ArrowScannerTest, test_multi_file_scan) {
+    std::string file1_path = (_tmp_root_dir / "multi_file_1.arrow").string();
+    std::string file2_path = (_tmp_root_dir / "multi_file_2.arrow").string();
+
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+
+    // File 1: 3 rows
+    {
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({1, 2, 3}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 3, {array});
+        auto out_file = arrow::io::FileOutputStream::Open(file1_path).ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(out_file, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        ASSERT_ARROW_OK(out_file->Close());
+    }
+
+    // File 2: 4 rows
+    {
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({4, 5, 6, 7}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 4, {array});
+        auto out_file = arrow::io::FileOutputStream::Open(file2_path).ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(out_file, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        ASSERT_ARROW_OK(out_file->Close());
+    }
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges({file1_path, file2_path}, 1, {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges);
+
+    ASSERT_OK(scanner->open());
+    int total_rows = 0;
+    while (true) {
+        auto res = scanner->get_next();
+        if (res.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        if (chunk != nullptr) {
+            total_rows += chunk->num_rows();
+        }
+    }
+    scanner->close();
+    ASSERT_EQ(7, total_rows);
+}
+
 } // namespace starrocks
