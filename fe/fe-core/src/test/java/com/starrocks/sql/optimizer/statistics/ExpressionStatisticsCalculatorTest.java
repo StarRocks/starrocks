@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableList;
@@ -651,15 +650,15 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMin = -100;                // min(leftMin, rightMin)
         final double expectedMax = 200.5;
 
-        final ColumnRefOperator leftInput = new ColumnRefOperator(2, IntegerType.INT, "left", true);
-        final ColumnRefOperator rightInput = new ColumnRefOperator(3, IntegerType.INT, "right", true);
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, FloatType.DOUBLE, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, FloatType.DOUBLE, "right", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(leftInput, new ColumnStatistic(leftMin, leftMax, leftNullFraction, 0, leftDistinctValues))
                 .addColumnStatistic(rightInput,
                         new ColumnStatistic(rightMin, rightMax, rightNullFraction, 0, rightDistinctValues))
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, FloatType.DOUBLE,
                 Lists.newArrayList(leftInput, rightInput));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -956,6 +955,32 @@ public class ExpressionStatisticsCalculatorTest {
 
         Assertions.assertNotNull(actualStatistic.getHistogram());
         Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceLeavesHistogramUnsetWhenNoInputHasMcv() {
+        // Given COALESCE(left, right) where both inputs have known stats but no histogram/MCV
+        // CASE WHEN no input contributes any MCV THEN the histogram is left unset (not empty) END
+
+        final int rowCount = 100;
+        final ColumnRefOperator left = new ColumnRefOperator(0, IntegerType.INT, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(left, ColumnStatistic.builder()
+                        .setMinValue(-100).setMaxValue(100).setNullsFraction(0.2)
+                        .setAverageRowSize(4).setDistinctValuesCount(70).build())
+                .addColumnStatistic(right, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(200).setNullsFraction(0.5)
+                        .setAverageRowSize(4).setDistinctValuesCount(20).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(left, right));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertNull(actualStatistic.getHistogram());
     }
 
     @Test

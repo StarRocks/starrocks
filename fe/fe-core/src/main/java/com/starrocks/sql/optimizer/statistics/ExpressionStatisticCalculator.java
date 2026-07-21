@@ -1035,14 +1035,19 @@ public class ExpressionStatisticCalculator {
                 coalesceMax = inputs.stream()
                         .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
             }
-            return ColumnStatistic.builder()
+            Map<String, Long> mcv = buildCoalesceMcv(inputs);
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
                     .setMinValue(coalesceMin)
                     .setMaxValue(coalesceMax)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(callOperator.getType().getTypeSize())
-                    .setDistinctValuesCount(distinctValues)
-                    .setHistogram(new Histogram(Collections.emptyList(), buildCoalesceMcv(inputs)))
-                    .build();
+                    .setDistinctValuesCount(distinctValues);
+
+            if (!mcv.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), buildCoalesceMcv(inputs)));
+            }
+
+            return builder.build();
         }
 
         private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
@@ -1075,7 +1080,12 @@ public class ExpressionStatisticCalculator {
                 final double nullsFraction = input.getNullsFraction();
                 final var histogram = input.getHistogram();
                 if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
-                    for (final var entry : histogram.getMCV().entrySet()) {
+                    for (final var entry : histogram.getMCV().entrySet().stream()
+                            .sorted((a, b) -> {
+                                int cmp = Long.compare(b.getValue(), a.getValue());
+                                return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
+                            })
+                            .collect(Collectors.toList())) {
                         contributions.add(Map.entry(entry.getKey(), entry.getValue() * weight));
                     }
                 }
@@ -1098,9 +1108,9 @@ public class ExpressionStatisticCalculator {
                 return;
             }
             for (final var entry : remaining) {
-                long scaled = Math.round(remainingBudget * entry.getValue() / totalWeighted);
+                double scaled = Math.floor(remainingBudget * entry.getValue() / totalWeighted);
                 if (scaled > 0) {
-                    targetMcv.merge(entry.getKey(), scaled, Long::sum);
+                    targetMcv.merge(entry.getKey(), (long) scaled, Long::sum);
                 }
             }
         }
