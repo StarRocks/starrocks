@@ -52,6 +52,7 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
@@ -78,7 +79,8 @@ public class PaimonPredicateConverterTest {
                     new DataField(6, "f6", new BigIntType()),
                     new DataField(7, "f7", new DecimalType()),
                     new DataField(8, "f8", new SmallIntType()),
-                    new DataField(9, "f9", new TinyIntType()));
+                    new DataField(9, "f9", new TinyIntType()),
+                    new DataField(10, "f10", new LocalZonedTimestampType()));
     private static final ColumnRefOperator F0 = new ColumnRefOperator(0, IntegerType.INT, "f0", true, false);
     private static final ColumnRefOperator F1 = new ColumnRefOperator(1, VarcharType.VARCHAR, "f1", true, false);
     private static final ColumnRefOperator F2 = new ColumnRefOperator(2, com.starrocks.type.FloatType.FLOAT, "f2", true, false);
@@ -91,6 +93,8 @@ public class PaimonPredicateConverterTest {
             com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, "f7", true, false);
     private static final ColumnRefOperator F8 = new ColumnRefOperator(8, IntegerType.SMALLINT, "f8", true, false);
     private static final ColumnRefOperator F9 = new ColumnRefOperator(9, IntegerType.TINYINT, "f9", true, false);
+    private static final ColumnRefOperator F10 = new ColumnRefOperator(10,
+            com.starrocks.type.DateType.DATETIME, "f10", true, false);
     private static final PaimonPredicateConverter CONVERTER = new PaimonPredicateConverter(new RowType(DATA_FIELDS));
 
     @Test
@@ -303,6 +307,40 @@ public class PaimonPredicateConverterTest {
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate = (LeafPredicate) result;
         Assertions.assertEquals(14.11, leafPredicate.literals().get(0));
+    }
+
+    @Test
+    public void testInvalidCastLiteralIsNotPushedDown() {
+        CastOperator decimalAsString = new CastOperator(VarcharType.VARCHAR, F7);
+        BinaryPredicateOperator invalidCast = new BinaryPredicateOperator(
+                BinaryType.NE, decimalAsString, ConstantOperator.createVarchar(""));
+
+        Assertions.assertNull(CONVERTER.convert(invalidCast));
+
+        BinaryPredicateOperator validPredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, F0, ConstantOperator.createInt(1));
+        Predicate andResult = CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, invalidCast, validPredicate));
+        Assertions.assertTrue(andResult instanceof LeafPredicate);
+        Assertions.assertTrue(((LeafPredicate) andResult).function() instanceof Equal);
+        Assertions.assertEquals(1, ((LeafPredicate) andResult).literals().get(0));
+
+        Predicate orResult = CONVERTER.convert(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, invalidCast, validPredicate));
+        Assertions.assertNull(orResult);
+    }
+
+    @Test
+    public void testLocalZonedTimestampPredicateIsPushedDown() {
+        ConstantOperator timestamp = ConstantOperator.createDatetime(
+                LocalDate.parse("2026-01-01").atTime(0, 0));
+
+        Predicate result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, F10, timestamp));
+
+        Assertions.assertTrue(result instanceof LeafPredicate);
+        LeafPredicate leafPredicate = (LeafPredicate) result;
+        Assertions.assertTrue(leafPredicate.function() instanceof Equal);
+        Assertions.assertTrue(leafPredicate.literals().get(0) instanceof Timestamp);
     }
 
     @Test

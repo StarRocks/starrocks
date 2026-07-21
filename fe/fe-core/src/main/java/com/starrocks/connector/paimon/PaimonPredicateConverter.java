@@ -49,6 +49,7 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
@@ -306,7 +307,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
                 case HLL, VARCHAR -> !(dataType instanceof VarCharType);
                 case CHAR -> !(dataType instanceof CharType);
                 case DATE -> !(dataType instanceof DateType);
-                case DATETIME -> !(dataType instanceof TimestampType);
+                case DATETIME -> !(dataType instanceof TimestampType || dataType instanceof LocalZonedTimestampType);
                 default -> true;
             };
         }
@@ -317,7 +318,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
                 res = operator.castTo(com.starrocks.type.BooleanType.BOOLEAN);
             } else if (dataType instanceof DateType) {
                 res = operator.castTo(com.starrocks.type.DateType.DATE);
-            } else if (dataType instanceof TimestampType) {
+            } else if (dataType instanceof TimestampType || dataType instanceof LocalZonedTimestampType) {
                 res = operator.castTo(com.starrocks.type.DateType.DATETIME);
             } else if (dataType instanceof VarCharType) {
                 res = operator.castTo(StringType.STRING);
@@ -340,7 +341,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
             } else if (dataType instanceof DecimalType) {
                 res = operator.castTo(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
             }
-            return res.orElse(operator);
+            return res.orElse(null);
         }
     }
 
