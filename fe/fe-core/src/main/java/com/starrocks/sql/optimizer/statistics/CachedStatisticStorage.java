@@ -807,6 +807,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             isTimeout = true;
+            LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
+                    timeoutMs, contextSupplier.get());
         } finally {
             if (hasStatisticsLoadBudget) {
                 statisticsLoadBudget.recordWait(System.nanoTime() - startNanos);
