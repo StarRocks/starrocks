@@ -78,7 +78,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_lcrm(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -271,6 +271,78 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_FALSE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_TRUE(file_exist("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// Production full-vacuum path: an orphan .lcrm from a finalized txn (txn_id <
+// min_active_txn_id) is reclaimed, while an in-flight .lcrm (txn_id >=
+// min_active_txn_id) is protected by the same txn-id gate that guards output
+// segments. This exercises the real vacuum_orphaned_datafiles path (runs the
+// orphan scan with expired_seconds=0 + the txn-id filter), complementing the
+// mtime-window offline datafile_gc test below. .lcrm is never referenced by any
+// live metadata, so it relies entirely on that txn-id gate for safety.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
+    // txn 2 < min_active(10), unreferenced -> reclaimed.
+    const std::string orphan_lcrm = "0000000000000002_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    // txn 0xFFFF >= min_active(10) -> in-flight, protected.
+    const std::string inflight_lcrm = "000000000000FFFF_bff53950-a542-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+    create_data_file(inflight_lcrm);
+
+    // A retained metadata (version above max_check_version) that references neither
+    // .lcrm -- metadata never references .lcrm, so check_reference_files protects
+    // nothing here and the txn-id gate is the only guard.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66610,
+        "version": 6,
+        "rowsets": [],
+        "commit_time": 99
+        }
+        )DEL")));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66610);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    ASSERT_TRUE(file_exist(orphan_lcrm));
+    ASSERT_TRUE(file_exist(inflight_lcrm));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
+    EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
+}
+
+// .lcrm (Lake Compaction Rows Mapper) files are referenced only from the transaction
+// log, never from any live TabletMetadataPB field: on a successful publish they are
+// consumed and deleted by RowsMapperIterator, and superseded ones enter orphan_files.
+// One left behind by an aborted/failed/crashed PK compaction is therefore referenced
+// by nothing durable -- before .lcrm was added to the orphan-file candidate filter it
+// could not be reclaimed by any GC path (the reference-driven vacuum never sees it and
+// the datafile GC skipped its extension), a permanent storage leak. datafile_gc must
+// now treat such an unreferenced .lcrm as an orphan, while still protecting an
+// in-flight .lcrm via the same expire window that guards the segments written by the
+// same compaction.
+TEST_P(LakeVacuumTest, lcrm_files_unreferenced_are_orphaned) {
+    const std::string orphan_lcrm = "0000000000abc020_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+
+    // Safety: within the expire window an .lcrm is never a candidate, even when it is
+    // unreferenced -- an in-flight compaction's mapper must survive until publish.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/3600, /*do_delete=*/true));
+    EXPECT_TRUE(file_exist(orphan_lcrm));
+
+    // Past the expire window, an unreferenced .lcrm is reclaimed as an orphan.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/0, /*do_delete=*/true));
+    EXPECT_FALSE(file_exist(orphan_lcrm));
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
