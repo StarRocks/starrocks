@@ -552,6 +552,7 @@ set (DIRECT_CONNECTOR_LINK_LIBS
     ConnectorHive
     ConnectorIceberg
     ConnectorCacheStats
+    ConnectorStarRocks
 )
 if (WITH_CONNECTOR_BENCHMARK)
     list(APPEND DIRECT_CONNECTOR_LINK_LIBS ConnectorBenchmark)

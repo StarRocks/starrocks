@@ -34,6 +34,7 @@ target_link_libraries(ModuleBootstrap PRIVATE
         ConnectorLake
         ConnectorCacheStats
         ConnectorChanges
+        ConnectorStarRocks
         Base
         Gutil
         StarRocksGen

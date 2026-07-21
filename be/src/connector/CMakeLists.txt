@@ -335,3 +335,24 @@ if (WITH_CONNECTOR_JDBC)
             libxml2
     )
 endif()
+
+ADD_BE_LIB(ConnectorStarRocks
+        starrocks/starrocks_connector.cpp
+)
+
+target_link_libraries(ConnectorStarRocks PUBLIC
+        ConnectorPrimitive
+        Storage
+        ComputeEnv
+        StoragePrimitive
+        Expr
+        Runtime
+        Platform
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)

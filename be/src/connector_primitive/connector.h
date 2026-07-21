@@ -41,6 +41,7 @@ enum ConnectorType {
     BENCHMARK = 8,
     CACHE_STATS = 9,
     CHANGES = 10,
+    STARROCKS = 11,
 };
 
 enum class ConnectorSinkProviderType {
@@ -63,6 +64,7 @@ public:
     static const std::string BENCHMARK;
     static const std::string CACHE_STATS;
     static const std::string CHANGES;
+    static const std::string STARROCKS;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

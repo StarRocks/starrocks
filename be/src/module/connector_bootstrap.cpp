@@ -23,6 +23,7 @@
 #include "connector/file/file_connector.h"
 #include "connector/hive/hive_connector.h"
 #include "connector/lake/lake_connector.h"
+#include "connector/starrocks/starrocks_connector.h"
 #include "connector_primitive/connector.h"
 
 #ifndef __APPLE__
@@ -67,6 +68,7 @@ Status bootstrap_builtin_connectors() {
     install_if_absent<LakeConnector>(registry, Connector::LAKE);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
     install_if_absent<ChangesConnector>(registry, Connector::CHANGES);
+    install_if_absent<StarRocksConnector>(registry, Connector::STARROCKS);
 #ifndef __APPLE__
     install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
 #endif

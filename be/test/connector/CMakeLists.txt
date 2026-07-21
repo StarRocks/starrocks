@@ -271,3 +271,23 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
     target_link_libraries(connector_elasticsearch_test ${CONNECTOR_ELASTICSEARCH_TEST_LINK_LIBS} gtest_main)
     set_target_properties(connector_elasticsearch_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
+
+set(CONNECTOR_STARROCKS_TEST_LINK_LIBS
+    ConnectorStarRocks
+    TestUtil
+    ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_starrocks_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
+        starrocks/starrocks_connector_test.cpp
+)
+target_link_libraries(connector_starrocks_test ${CONNECTOR_STARROCKS_TEST_LINK_LIBS} gtest_main)
+set_target_properties(connector_starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
