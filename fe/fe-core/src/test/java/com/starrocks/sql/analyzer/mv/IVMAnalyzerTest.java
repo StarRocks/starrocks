@@ -270,6 +270,132 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * A UNION ALL of append-only (Iceberg) branches has no retractable branch, so the analyzer falls back to
+     * storage-generated AUTO_INCREMENT row ids -- it must not attempt the retractable discriminant rewrite.
+     */
+    @Test
+    public void testUnionAllOfAppendOnlyBranchesYieldsAutoIncrement() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_append "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "UNION ALL SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "append-only UNION ALL MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.AUTO_INCREMENT, result.get().rowIdStrategy(),
+                "a UNION ALL without a retractable branch must yield AUTO_INCREMENT");
+    }
+
+    @Test
+    public void testRejectUnionNotAll() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_distinct_qualifier "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "UNION SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject a non-ALL UNION");
+        assertTrue(ex.getMessage().contains("only supports UNION ALL"),
+                "error must mention UNION ALL, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectUnionBranchWithAggregate() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_agg_branch "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id "
+                + "UNION ALL SELECT id, c1 FROM `iceberg0`.`unpartitioned_db`.`t_numeric`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject an aggregate UNION ALL branch");
+        assertTrue(ex.getMessage().contains("should not have aggregate functions"),
+                "error must mention the aggregate rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectUnionGroupByBranch() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_groupby_branch "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "UNION ALL SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject a GROUP BY UNION ALL branch");
+        assertTrue(ex.getMessage().contains("GROUP BY or DISTINCT branch"),
+                "error must mention the GROUP BY/DISTINCT rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectUnionDistinctBranch() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_distinct_branch "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "UNION ALL SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject a DISTINCT UNION ALL branch");
+        assertTrue(ex.getMessage().contains("GROUP BY or DISTINCT branch"),
+                "error must mention the GROUP BY/DISTINCT rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectUnionNonSelectChild() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_union_nonselect_child "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "UNION ALL (SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` "
+                + "INTERSECT SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0`)";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject a non-SelectRelation UNION ALL child");
+        assertTrue(ex.getMessage().contains("can only handle SelectRelation"),
+                "error must mention the child-type rejection, got: " + ex.getMessage());
+    }
+
+    /**
      * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
      * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
      * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away

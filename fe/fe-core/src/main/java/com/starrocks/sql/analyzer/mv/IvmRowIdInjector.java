@@ -16,11 +16,13 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 
 import java.util.List;
@@ -68,5 +70,49 @@ final class IvmRowIdInjector {
         newOutputExpressions.add(rowIdFuncExpr);
         selectRelation.getOutputExpression().forEach(expr -> newOutputExpressions.add(expr.clone()));
         selectRelation.setOutputExpr(newOutputExpressions);
+    }
+
+    /**
+     * Retractable UNION ALL: {@link IVMAnalyzer} has already injected each branch's own {@code encode(row-id
+     * keys)}. Re-key each as {@code encode(branch ordinal, keys)} under one shared (max) version so the ordinal
+     * keeps two branches with equal keys as distinct rows -- net-collapse keys only on {@code __ROW_ID__}.
+     */
+    static void discriminateUnionBranchRowIds(CreateMaterializedViewStatement statement, List<QueryRelation> branches) {
+        List<List<Expr>> discriminatedKeys = Lists.newArrayList();
+        int encodeRowIdVersion = 0;
+        for (int i = 0; i < branches.size(); i++) {
+            List<Expr> keys = Lists.newArrayList();
+            keys.add(new IntLiteral(i));
+            keys.addAll(IvmRowIdDeriver.deriveRowIdKeys(branches.get(i)));
+            discriminatedKeys.add(keys);
+            encodeRowIdVersion = Math.max(encodeRowIdVersion, IvmOpUtils.deduceEncodeRowIdVersion(keys));
+        }
+        if (statement != null) {
+            statement.setEncodeRowIdVersion(encodeRowIdVersion);
+        }
+        for (int i = 0; i < branches.size(); i++) {
+            FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, discriminatedKeys.get(i));
+            replaceRowIdColumn((SelectRelation) branches.get(i), rowIdFuncExpr);
+        }
+    }
+
+    // Replace output column 0 -- the __ROW_ID__ IVMAnalyzer prepended for this branch -- with rowIdFuncExpr.
+    private static void replaceRowIdColumn(SelectRelation selectRelation, FunctionCallExpr rowIdFuncExpr) {
+        SelectList selectList = selectRelation.getSelectList();
+        List<SelectListItem> items = selectList.getItems();
+        List<SelectListItem> newItems = Lists.newArrayList();
+        newItems.add(new SelectListItem(rowIdFuncExpr, IvmOpUtils.COLUMN_ROW_ID));
+        for (int i = 1; i < items.size(); i++) {
+            newItems.add(items.get(i));
+        }
+        selectList.setItems(newItems);
+
+        List<Expr> outputs = selectRelation.getOutputExpression();
+        List<Expr> newOutputs = Lists.newArrayList();
+        newOutputs.add(rowIdFuncExpr);
+        for (int i = 1; i < outputs.size(); i++) {
+            newOutputs.add(outputs.get(i));
+        }
+        selectRelation.setOutputExpr(newOutputs);
     }
 }

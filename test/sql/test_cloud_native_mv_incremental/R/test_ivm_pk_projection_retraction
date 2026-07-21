@@ -155,10 +155,14 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id,
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support subquery relation, but got: SubqueryRelation.')
 -- !result
-CREATE MATERIALIZED VIEW mv_rej_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION ALL SELECT id, v FROM rej_pk2;
+CREATE TABLE rej_dup (id INT NOT NULL, v BIGINT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support UnionRelation with retractable sink, but got: UnionRelation.')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_mixed_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION ALL SELECT id, v FROM rej_dup;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a UNION ALL that mixes a retractable cloud-native PRIMARY KEY branch with an append-only branch.')
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_orderby DISTRIBUTED BY HASH(id) BUCKETS 2 ORDER BY (v) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk;
@@ -190,6 +194,9 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json
 E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a join materialized view with a non-orderable output column type over a cloud-native PRIMARY KEY base, but got: JSON.')
 -- !result
 DROP TABLE rej_pk_json;
+-- result:
+-- !result
+DROP TABLE rej_dup;
 -- result:
 -- !result
 DROP TABLE rej_pk;

@@ -1,0 +1,313 @@
+-- name: test_ivm_pk_union_retraction @cloud
+CREATE TABLE pk_ua (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_ub (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ua VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_ub VALUES (1,100),(3,300);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_union
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, v FROM pk_ua UNION ALL SELECT id, v FROM pk_ub;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	10
+1	100
+2	20
+3	300
+-- !result
+UPDATE pk_ua SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	11
+1	100
+2	20
+3	300
+-- !result
+UPDATE pk_ua SET v = 10 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_ub SET v = 10 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	10
+1	10
+2	20
+3	300
+-- !result
+DELETE FROM pk_ua WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	10
+2	20
+3	300
+-- !result
+INSERT INTO pk_ub VALUES (4,400);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	10
+2	20
+3	300
+4	400
+-- !result
+DELETE FROM pk_ua WHERE id = 2;
+-- result:
+-- !result
+INSERT INTO pk_ua VALUES (5,20);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union ORDER BY id, v;
+-- result:
+1	10
+3	300
+4	400
+5	20
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union EXCEPT SELECT id,v FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u EXCEPT SELECT id,v FROM mv_pk_union) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_cnt FROM mv_pk_union;
+-- result:
+4
+-- !result
+SELECT COUNT(*) AS base_cnt FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u;
+-- result:
+4
+-- !result
+DROP MATERIALIZED VIEW mv_pk_union;
+-- result:
+-- !result
+DROP TABLE pk_ua;
+-- result:
+-- !result
+DROP TABLE pk_ub;
+-- result:
+-- !result
+CREATE TABLE pk_va (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_vb (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_vc (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_va VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_vb VALUES (1,10),(3,30);
+-- result:
+-- !result
+INSERT INTO pk_vc VALUES (1,10),(4,40);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_union3
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, v FROM pk_va UNION ALL SELECT id, v FROM pk_vb UNION ALL SELECT id, v FROM pk_vc;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union3 WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union3 ORDER BY id, v;
+-- result:
+1	10
+1	10
+1	10
+2	20
+3	30
+4	40
+-- !result
+UPDATE pk_vb SET v = 33 WHERE id = 3;
+-- result:
+-- !result
+DELETE FROM pk_vc WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union3 WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union3 ORDER BY id, v;
+-- result:
+1	10
+1	10
+2	20
+3	33
+4	40
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union3 EXCEPT SELECT id,v FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u EXCEPT SELECT id,v FROM mv_pk_union3) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_cnt FROM mv_pk_union3;
+-- result:
+5
+-- !result
+SELECT COUNT(*) AS base_cnt FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u;
+-- result:
+5
+-- !result
+DROP MATERIALIZED VIEW mv_pk_union3;
+-- result:
+-- !result
+DROP TABLE pk_va;
+-- result:
+-- !result
+DROP TABLE pk_vb;
+-- result:
+-- !result
+DROP TABLE pk_vc;
+-- result:
+-- !result
+CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_jc (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_ja VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_jb VALUES (1,100),(2,200);
+-- result:
+-- !result
+INSERT INTO pk_jc VALUES (7,70);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_union_join
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id
+   UNION ALL SELECT id, v FROM pk_jc;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
+-- result:
+1	110
+2	220
+7	70
+-- !result
+UPDATE pk_ja SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_jb SET w = 222 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
+-- result:
+1	233
+2	220
+7	70
+-- !result
+DELETE FROM pk_jb WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
+-- result:
+1	233
+7	70
+-- !result
+UPDATE pk_jc SET v = 77 WHERE id = 7;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
+SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
+-- result:
+1	233
+7	77
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union_join EXCEPT SELECT id,v FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u EXCEPT SELECT id,v FROM mv_pk_union_join) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_cnt FROM mv_pk_union_join;
+-- result:
+2
+-- !result
+SELECT COUNT(*) AS base_cnt FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u;
+-- result:
+2
+-- !result
+DROP MATERIALIZED VIEW mv_pk_union_join;
+-- result:
+-- !result
+DROP TABLE pk_ja;
+-- result:
+-- !result
+DROP TABLE pk_jb;
+-- result:
+-- !result
+DROP TABLE pk_jc;
+-- result:
+-- !result
+CREATE TABLE pk_ug (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_uh (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_union_groupby DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM pk_ug UNION ALL SELECT id, v FROM pk_uh GROUP BY id, v;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a GROUP BY or DISTINCT branch in a UNION ALL materialized view.')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_union_distinct DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM pk_ug UNION ALL SELECT DISTINCT id, v FROM pk_uh;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a GROUP BY or DISTINCT branch in a UNION ALL materialized view.')
+-- !result
+DROP TABLE pk_ug;
+-- result:
+-- !result
+DROP TABLE pk_uh;
+-- result:
+-- !result

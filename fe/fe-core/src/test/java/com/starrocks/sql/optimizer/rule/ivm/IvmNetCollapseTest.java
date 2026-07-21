@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.load.Load;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -32,8 +33,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -247,5 +250,105 @@ public class IvmNetCollapseTest {
                 root, newTaskContext(context), new ColumnRefSet(), action);
 
         Assertions.assertNull(result, "no __ROW_ID__ must defer to the shared path");
+    }
+
+    @Test
+    public void testUnionBranchRowIdRecognizedByDrill() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        // Refresh drops the __ROW_ID__ alias, so the union output row-id column is named after its encode
+        // expression, which lives only inside each branch below the multi-input union node. net-collapse must
+        // drill into the branches to recognize it.
+        ColumnRefOperator unionRid = factory.create("encoded_rid", StringType.STRING, false);
+        ColumnRefOperator unionAction = actionCol(factory);
+
+        ColumnRefOperator b0Id = factory.create("b0_id", IntegerType.INT, false);
+        ColumnRefOperator b0Rid = factory.create("b0_rid", StringType.STRING, false);
+        ColumnRefOperator b0Action = actionCol(factory);
+        OptExpression b0 = OptExpression.create(new LogicalProjectOperator(encodeBranchMap(b0Rid, b0Id, b0Action)),
+                OptExpression.create(new LogicalValuesOperator(List.of(b0Id, b0Action), Collections.emptyList())));
+
+        ColumnRefOperator b1Id = factory.create("b1_id", IntegerType.INT, false);
+        ColumnRefOperator b1Rid = factory.create("b1_rid", StringType.STRING, false);
+        ColumnRefOperator b1Action = actionCol(factory);
+        OptExpression b1 = OptExpression.create(new LogicalProjectOperator(encodeBranchMap(b1Rid, b1Id, b1Action)),
+                OptExpression.create(new LogicalValuesOperator(List.of(b1Id, b1Action), Collections.emptyList())));
+
+        LogicalUnionOperator union = new LogicalUnionOperator(
+                List.of(unionRid, unionAction),
+                List.of(List.of(b0Rid, b0Action), List.of(b1Rid, b1Action)),
+                true);
+        OptExpression root = OptExpression.create(union, b0, b1);
+        deriveLogicalProperty(root);
+
+        OptExpression result = IvmNetCollapse.applyIfRetractable(
+                root, newTaskContext(context), new ColumnRefSet(), unionAction);
+
+        Assertions.assertNotNull(result,
+                "a union row id encoded inside each branch must be recognized by drilling into the branches");
+        OptExpression window = result.inputAt(0).inputAt(0);
+        Assertions.assertTrue(window.getOp() instanceof LogicalWindowOperator, "row_number pick window");
+        Assertions.assertEquals(List.of(unionRid),
+                ((LogicalWindowOperator) window.getOp()).getPartitionExpressions(),
+                "pick partitions by the union __ROW_ID__ recognized through the branch drill");
+    }
+
+    // A branch that outputs from_binary(encode_sort_key(key)) as its row id -- the shape isRowIdEncodeExpr matches.
+    private static Map<ColumnRefOperator, ScalarOperator> encodeBranchMap(
+            ColumnRefOperator rid, ColumnRefOperator key, ColumnRefOperator action) {
+        Map<ColumnRefOperator, ScalarOperator> map = Maps.newHashMap();
+        map.put(rid, new CallOperator(FunctionSet.FROM_BINARY, StringType.STRING,
+                List.of(new CallOperator(FunctionSet.ENCODE_SORT_KEY, StringType.STRING, List.of(key)))));
+        map.put(action, action);
+        return map;
+    }
+
+    @Test
+    public void testAppendOnlyUnionEncodeColumnNotCollapsed() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        // Append-only union whose branches project a user from_binary(encode_sort_key(id)) column: the row-id
+        // drill matches it, but every branch's __ACTION__ is a constant UPSERT, so net-collapse must be skipped
+        // -- otherwise it would collapse legitimately-duplicate UNION ALL rows.
+        ColumnRefOperator unionRid = factory.create("encoded_rid", StringType.STRING, false);
+        ColumnRefOperator unionAction = actionCol(factory);
+
+        ColumnRefOperator b0Id = factory.create("b0_id", IntegerType.INT, false);
+        ColumnRefOperator b0Rid = factory.create("b0_rid", StringType.STRING, false);
+        ColumnRefOperator b0Action = actionCol(factory);
+        OptExpression b0 = OptExpression.create(
+                new LogicalProjectOperator(constActionEncodeBranchMap(b0Rid, b0Id, b0Action)),
+                OptExpression.create(new LogicalValuesOperator(List.of(b0Id), Collections.emptyList())));
+
+        ColumnRefOperator b1Id = factory.create("b1_id", IntegerType.INT, false);
+        ColumnRefOperator b1Rid = factory.create("b1_rid", StringType.STRING, false);
+        ColumnRefOperator b1Action = actionCol(factory);
+        OptExpression b1 = OptExpression.create(
+                new LogicalProjectOperator(constActionEncodeBranchMap(b1Rid, b1Id, b1Action)),
+                OptExpression.create(new LogicalValuesOperator(List.of(b1Id), Collections.emptyList())));
+
+        LogicalUnionOperator union = new LogicalUnionOperator(
+                List.of(unionRid, unionAction),
+                List.of(List.of(b0Rid, b0Action), List.of(b1Rid, b1Action)),
+                true);
+        OptExpression root = OptExpression.create(union, b0, b1);
+        deriveLogicalProperty(root);
+
+        OptExpression result = IvmNetCollapse.applyIfRetractable(
+                root, newTaskContext(context), new ColumnRefSet(), unionAction);
+
+        Assertions.assertNull(result,
+                "an append-only union (constant __ACTION__) must skip net-collapse even with a user encode column");
+    }
+
+    // Same encode row-id shape as encodeBranchMap, but __ACTION__ is a constant UPSERT -- an append-only branch
+    // with no CHANGES scan, so isActionColumnConstant must prove the union constant and skip net-collapse.
+    private static Map<ColumnRefOperator, ScalarOperator> constActionEncodeBranchMap(
+            ColumnRefOperator rid, ColumnRefOperator key, ColumnRefOperator action) {
+        Map<ColumnRefOperator, ScalarOperator> map = Maps.newHashMap();
+        map.put(rid, new CallOperator(FunctionSet.FROM_BINARY, StringType.STRING,
+                List.of(new CallOperator(FunctionSet.ENCODE_SORT_KEY, StringType.STRING, List.of(key)))));
+        map.put(action, ConstantOperator.createTinyInt((byte) 0));
+        return map;
     }
 }

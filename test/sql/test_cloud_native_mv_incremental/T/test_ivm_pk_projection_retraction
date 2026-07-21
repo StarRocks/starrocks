@@ -73,9 +73,13 @@ PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' 
 -- sub-query (derived table) over a PK base
 CREATE MATERIALIZED VIEW mv_rej_sub DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM rej_pk) t;
--- top-level UNION ALL over PK bases
-CREATE MATERIALIZED VIEW mv_rej_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION ALL SELECT id, v FROM rej_pk2;
+-- UNION ALL mixing a retractable PK branch with an append-only (DUPLICATE KEY) branch: the union would carry
+-- __ROW_ID__ on the PK branch only, so the analyzer rejects the mix. A pure-PK UNION ALL is now supported --
+-- see test_ivm_pk_union_retraction.
+CREATE TABLE rej_dup (id INT NOT NULL, v BIGINT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_rej_mixed_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION ALL SELECT id, v FROM rej_dup;
 -- MV-level ORDER BY folds the sort column into the key, widening the PK past __ROW_ID__ (sort-only: a later PR)
 CREATE MATERIALIZED VIEW mv_rej_orderby DISTRIBUTED BY HASH(id) BUCKETS 2 ORDER BY (v) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk;
@@ -95,6 +99,7 @@ PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' 
 CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json a JOIN rej_pk2 b ON a.id = b.id;
 DROP TABLE rej_pk_json;
+DROP TABLE rej_dup;
 DROP TABLE rej_pk;
 DROP TABLE rej_pk2;
 

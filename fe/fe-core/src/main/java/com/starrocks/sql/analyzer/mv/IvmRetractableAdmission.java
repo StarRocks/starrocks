@@ -17,14 +17,17 @@ package com.starrocks.sql.analyzer.mv;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.List;
+
 /**
  * Enterprise-only admission gates for retractable (delete/update) IVM over a cloud-native PRIMARY KEY base.
- * {@link IVMAnalyzer#rewriteSelectRelation} calls these at two fixed points so the shared analyzer keeps only
- * stable one-line hooks and the retraction rules (which each later PR extends) stay in one place.
+ * {@link IVMAnalyzer#rewriteSelectRelation} and {@link IVMAnalyzer#rewriteSetRelation} call these so the shared
+ * analyzer keeps only stable one-line hooks and the retraction rules (which each later PR extends) stay here.
  */
 final class IvmRetractableAdmission {
     private IvmRetractableAdmission() {
@@ -96,5 +99,37 @@ final class IvmRetractableAdmission {
                         + output.getType());
             }
         }
+    }
+
+    /**
+     * A GROUP BY / DISTINCT union branch lowers to an aggregation, and net-collapse gates join tuple cancellation
+     * off containsAggregate -- so a sibling join branch would silently keep its stale intermediate. Reject it; a
+     * retractable union branch must be a plain projection / filter / join.
+     */
+    static void rejectGroupedUnionBranch(SelectRelation selectChild) {
+        if (selectChild.getGroupByClause() != null || selectChild.isDistinct()) {
+            throw new SemanticException("IVMAnalyzer does not support a GROUP BY or DISTINCT branch in a "
+                    + "UNION ALL materialized view");
+        }
+    }
+
+    /**
+     * Decide a UNION ALL once IVMAnalyzer has rewritten every branch: admit a fully-retractable cloud-native
+     * PRIMARY KEY union -- re-key each branch to {@code encode(branch ordinal, keys)}
+     * ({@link IvmRowIdInjector#discriminateUnionBranchRowIds}) so two branches whose keys collide stay distinct
+     * rows under net-collapse -- reject a union that mixes a retractable and an append-only branch, or return
+     * {@code false} to leave a fully append-only union to the community AUTO_INCREMENT path.
+     */
+    static boolean admitRetractableUnion(CreateMaterializedViewStatement statement, List<QueryRelation> children,
+                                         int retractableBranches) {
+        if (retractableBranches == 0) {
+            return false;
+        }
+        if (retractableBranches != children.size()) {
+            throw new SemanticException("IVMAnalyzer does not support a UNION ALL that mixes a retractable "
+                    + "cloud-native PRIMARY KEY branch with an append-only branch");
+        }
+        IvmRowIdInjector.discriminateUnionBranchRowIds(statement, children);
+        return true;
     }
 }

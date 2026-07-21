@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -112,12 +113,36 @@ final class IvmNetCollapse {
                 }
                 col = (ColumnRefOperator) expr;
             }
+            // A union encodes its row id inside each branch (below this multi-input node), so drill into
+            // every branch and trace the branch output column aligned to the one being traced here.
+            if (current.getOp() instanceof LogicalUnionOperator) {
+                return tracesToRowIdEncodeThroughUnion(current, col);
+            }
             if (current.getInputs().size() != 1) {
                 return false;
             }
             current = current.inputAt(0);
         }
         return false;
+    }
+
+    private static boolean tracesToRowIdEncodeThroughUnion(OptExpression unionExpr, ColumnRefOperator target) {
+        LogicalUnionOperator union = (LogicalUnionOperator) unionExpr.getOp();
+        int idx = union.getOutputColumnRefOp().indexOf(target);
+        if (idx < 0) {
+            return false;
+        }
+        List<List<ColumnRefOperator>> childOutputColumns = union.getChildOutputColumns();
+        if (childOutputColumns.size() != unionExpr.getInputs().size()) {
+            return false;
+        }
+        for (int i = 0; i < unionExpr.getInputs().size(); i++) {
+            List<ColumnRefOperator> branchColumns = childOutputColumns.get(i);
+            if (idx >= branchColumns.size() || !tracesToRowIdEncode(unionExpr.inputAt(i), branchColumns.get(idx))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isRowIdEncodeExpr(ScalarOperator expr) {
@@ -321,12 +346,37 @@ final class IvmNetCollapse {
                 }
                 target = (ColumnRefOperator) expr;
             }
+            // Symmetric to the row-id drill: a union's action is constant only if every branch's is. Without
+            // this, an append-only union bails here as non-constant, and since the row-id drill now recognizes
+            // a branch's user encode(...) column, net-collapse would wrongly collapse duplicate UNION ALL rows.
+            if (current.getOp() instanceof LogicalUnionOperator) {
+                return isActionColumnConstantThroughUnion(current, target);
+            }
             if (current.getInputs().size() != 1) {
                 return false;
             }
             current = current.inputAt(0);
         }
         return false;
+    }
+
+    private static boolean isActionColumnConstantThroughUnion(OptExpression unionExpr, ColumnRefOperator target) {
+        LogicalUnionOperator union = (LogicalUnionOperator) unionExpr.getOp();
+        int idx = union.getOutputColumnRefOp().indexOf(target);
+        if (idx < 0) {
+            return false;
+        }
+        List<List<ColumnRefOperator>> childOutputColumns = union.getChildOutputColumns();
+        if (childOutputColumns.size() != unionExpr.getInputs().size()) {
+            return false;
+        }
+        for (int i = 0; i < unionExpr.getInputs().size(); i++) {
+            List<ColumnRefOperator> branchColumns = childOutputColumns.get(i);
+            if (idx >= branchColumns.size() || !isActionColumnConstant(unionExpr.inputAt(i), branchColumns.get(idx))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Map<ColumnRefOperator, ScalarOperator> extractColumnRefMap(Operator op) {

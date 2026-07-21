@@ -281,6 +281,7 @@ public class IVMAnalyzer {
         }
         // For UnionRelation, we only handle the case where all children are SelectRelation.
         List<QueryRelation> children = unionRelation.getRelations();
+        int retractableBranches = 0;
         for (QueryRelation child : children) {
             if (!(child instanceof SelectRelation)) {
                 throw new SemanticException("IVMAnalyzer can only handle SelectRelation/UnionRelation, but got: %s",
@@ -292,13 +293,13 @@ public class IVMAnalyzer {
                 throw new SemanticException("UnionRelation in IVMAnalyzer should not have aggregate functions, " +
                         "but got: %s", aggregateExprs);
             }
-            boolean childHasComputedRowId = rewriteRelation(selectChild);
-            if (childHasComputedRowId) {
-                throw new SemanticException("IVMAnalyzer does not support UnionRelation with retractable sink, " +
-                        "but got: %s", unionRelation.getClass().getSimpleName());
+            IvmRetractableAdmission.rejectGroupedUnionBranch(selectChild);
+            // Enterprise: a retractable branch is admitted (counted), not rejected as the community path does.
+            if (rewriteRelation(selectChild)) {
+                retractableBranches++;
             }
         }
-        return false;
+        return IvmRetractableAdmission.admitRetractableUnion(statement, children, retractableBranches);
     }
 
     private boolean rewriteSelectRelation(SelectRelation selectRelation) throws AnalysisException {
