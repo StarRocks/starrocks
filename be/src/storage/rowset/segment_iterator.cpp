@@ -460,11 +460,9 @@ private:
     StatusOr<RowIdSparseRange> _sample_by_page();
 
     Status _apply_del_vector();
-    // Pre-apply the non-PK delete predicates (DELETE ... WHERE on dup/agg/unique tables) into _scan_range
-    // BEFORE _rewrite_predicates, so a rank-truncating ANN search ranks live rows only. Gated to vector
-    // queries (see _del_predicate_preapplied); non-vector scans keep the read loop's per-chunk delete
-    // filter. Runs on the original (un-rewritten) predicates over decoded values, so it is free of the
-    // global-dict-code column wrapping the read loop needs -- no dict/raw mismatch is possible.
+    // Fold the non-PK delete survivors into _scan_range BEFORE _rewrite_predicates, so a rank-truncating
+    // ANN search ranks live rows only. Evaluates the original (un-rewritten) predicates over decoded values
+    // -- no global-dict-code wrapping, no dict/raw mismatch. Vector queries only (_del_predicate_preapplied).
     Status _apply_del_predicate();
 
     Status _init_inverted_index_iterators();
@@ -1055,9 +1053,8 @@ Status SegmentIterator::_init_scan_range_and_context() {
         if (apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
-        // Fold non-PK delete survivors into _scan_range now -- after the index filters (smallest
-        // candidate) and before _rewrite_predicates (so the predicates are still original-typed, no
-        // dict-code wrapping needed). ANN queries only; see _del_predicate_preapplied.
+        // After the index filters (smallest candidate) and before _rewrite_predicates (predicates still
+        // original-typed). ANN queries only.
         if (_del_predicate_preapplied) {
             RETURN_IF_ERROR(_apply_del_predicate());
         }
@@ -1386,11 +1383,9 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         RETURN_IF(_scan_range.empty(), Status::OK());
         pre_narrowed = true;
     } else if (_del_predicate_preapplied) {
-        // Deletes were folded into _scan_range by _apply_del_predicate (before the rewrite stage). Treat
-        // the live set as pre-narrowed so the short-circuit / count gates below protect against a
-        // filtered-HNSW under-return on a small or sparse live set -- exactly as the residual path does.
-        // (With a residual present, the branch above already ran over the delete-narrowed _scan_range, so
-        // its `matched` is live-only too.)
+        // Deletes already folded into _scan_range by _apply_del_predicate. Treat the live set as
+        // pre-narrowed so the short-circuit / count gates still guard a filtered-HNSW under-return on a
+        // small or sparse live set. (With a residual, the branch above already ran over the live range.)
         matched = range2roaring(_scan_range);
         matched_cardinality = matched.cardinality();
         pre_narrowed = true;
@@ -1607,13 +1602,9 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
 }
 
 // Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
-// A caller that truncates the candidate set by rank (ANN top-k) must pre-apply deletes -- otherwise a
-// deleted row steals a top-k slot and the LIMIT under-returns. Called from _apply_del_predicate BEFORE
-// _rewrite_predicates, so the predicates are still original-typed and the columns are read as decoded
-// values: no global-dict-code column wrapping is needed and no raw/dict mismatch is possible. Uses
-// DisjunctivePredicates::evaluate directly (the same evaluator the read loop uses on decoded values), so
-// the survivor set matches the read loop. An unreadable delete column is a hard error, not a silent skip
-// (an over-wide survivor set would let the top-k under-return, exactly the bug this guards against).
+// Called from _apply_del_predicate BEFORE _rewrite_predicates, so the predicates are still original-typed
+// and columns read as decoded values -- no global-dict-code wrapping, no raw/dict mismatch. An unreadable
+// delete column is a hard error, not a silent skip (an over-wide survivor set would under-return the top-k).
 StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
         const DisjunctivePredicates& delete_predicates, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
@@ -1712,23 +1703,18 @@ StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
 }
 
 Status SegmentIterator::_apply_del_predicate() {
-    // Precondition: _del_predicate_preapplied (a vector query on a table with non-PK delete predicates).
-    // Runs BEFORE _rewrite_predicates, so _opts.delete_predicates is still original-typed; evaluate it
-    // over the current (already index-narrowed) _scan_range and keep the survivors, so the ANN search and
-    // the PRE gates rank live rows only.
+    // Evaluate the still-original-typed delete predicates over the (index-narrowed) _scan_range and keep
+    // the survivors. Runs before _rewrite_predicates; precondition _del_predicate_preapplied.
     if (_opts.delete_predicates.empty() || _scan_range.empty()) {
         return Status::OK();
     }
     const roaring::Roaring candidate = range2roaring(_scan_range);
 
-    // Zone-map page prune (issue #2): a page can hold a deleted row only if some delete column's zone map
-    // overlaps that column's delete predicate(s), so rows in pages that overlap NO delete column are
-    // survivors with zero column reads. _del_predicates (the per-column OR groups built by
-    // _get_row_ranges_by_zone_map, which ran earlier) is a conservative superset -- it ignores the
-    // DisjunctivePredicates cross-column conjunct structure -- so it is safe for any delete shape: a page
-    // holding a deleted row always overlaps some column's predicate and is never pruned; multi-column
-    // conjuncts merely prune a little less. _del_predicates is empty when page-level zone-map filtering is
-    // off (config) or no delete column has a zone map, in which case we evaluate the whole candidate.
+    // Zone-map page prune: only pages whose zone map overlaps a delete column's predicate can hold a
+    // deleted row, so rows elsewhere survive without a read. The per-column OR groups (_del_predicates,
+    // built earlier by _get_row_ranges_by_zone_map) are a conservative superset -- safe for any delete
+    // shape (a deleted row's page always overlaps; multi-column conjuncts just prune less). Empty when
+    // page-level zone-map filtering is off or no delete column has a zone map -> evaluate everything.
     roaring::Roaring maybe_deleted;
     bool pruned = !_del_predicates.empty();
     if (pruned) {
@@ -3374,11 +3360,10 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     const auto range = static_cast<float>(_vector_index_ctx->vector_range);
     const bool ascending = _vector_index_ctx->result_order == 0;
 
-    // Top-k mode keeps only the k best rows via a bounded heap, mirroring the HNSW path's per-segment
-    // contract (it returns k per segment; the upper TopN merges into the global top-k). Keeping every
-    // candidate would size id2distance_map and _scan_range to the whole live set -- a memory cliff when
-    // this rescan runs over a large delete-narrowed candidate. Range search cannot bound to k: it must
-    // return every row within the radius.
+    // Top-k mode keeps only the k best rows (bounded heap), matching the HNSW path's per-segment contract
+    // -- the upper TopN merges into the global top-k. Keeping every candidate would size id2distance_map
+    // and _scan_range to the whole live set (a memory cliff on a large delete-narrowed rescan). Range
+    // search cannot bound to k: it returns every row within the radius.
     struct Cand {
         float dist;
         rowid_t rid;
