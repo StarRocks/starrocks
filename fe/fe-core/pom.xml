@@ -96,6 +96,13 @@ under the License.
     </profiles>
 
     <dependencies>
+        <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+             jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+        <dependency>
+            <groupId>org.tukaani</groupId>
+            <artifactId>xz</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
