@@ -88,6 +88,9 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
+    // Estimated overhead for node + key + future, rounded up
+    public static final int ENTRY_OVERHEAD_BYTES = 256;
+
     public CacheDictManager() {
     }
 
@@ -153,7 +156,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
             .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
-                    value.map(ColumnDict::getByteSize).orElse(1))
+                    ENTRY_OVERHEAD_BYTES + value.map(ColumnDict::getByteSize).orElse(0))
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(dictLoader);
 

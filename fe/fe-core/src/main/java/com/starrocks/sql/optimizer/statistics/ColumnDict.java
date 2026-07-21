@@ -72,7 +72,7 @@ public final class ColumnDict extends StatsVersion {
     private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
         int size = 0;
         for (ByteBuffer buf : dict.keySet()) {
-            size += buf.limit() - buf.position() + 4; // string bytes + offset id
+            size += buf.limit() - buf.position() + Integer.BYTES; // string bytes + offset id
         }
         return size;
     }
