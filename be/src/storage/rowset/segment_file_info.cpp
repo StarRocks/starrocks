@@ -43,12 +43,6 @@ void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_
     // Sort-key fields.
     sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
     sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-    for (const auto& sample : sort_key_samples) {
-        sample.to_proto(segment_meta->add_sort_key_samples());
-    }
-    if (!sort_key_samples.empty() && sort_key_sample_row_interval > 0) {
-        segment_meta->set_sort_key_sample_row_interval(sort_key_sample_row_interval);
-    }
     // Other per-segment metadata.
     segment_meta->set_num_rows(num_rows);
     segment_meta->set_segment_idx(segment_idx);

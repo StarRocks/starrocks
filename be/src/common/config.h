@@ -354,9 +354,10 @@ CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // Row interval between consecutive sort-key samples recorded by the segment
 // writer. Samples are consumed by tablet split and range-split parallel
 // compaction to accurately estimate row distribution for overlapping segments.
-// Setting to 0 disables sampling. The per-segment value is persisted in
-// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
-// does not break cross-version readers.
+// Setting to 0 disables sampling. The sampled tuples and their interval are
+// persisted in the segment's SORT_KEY_SAMPLE_PAGE (SortKeySampleDataPB), not
+// in tablet metadata, so that a runtime change does not break cross-version
+// readers.
 CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.

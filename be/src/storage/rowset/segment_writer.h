@@ -179,10 +179,10 @@ public:
     const VariantTuple& get_sort_key_min() { return _sort_key_min; }
     const VariantTuple& get_sort_key_max() { return _sort_key_max; }
 
-    // Transfer sort-key min, max, samples, and interval into a SegmentFileInfo.
-    // Moves _sort_key_samples out; preserves the carrier invariant
-    // (samples.empty() <=> interval == 0). Callers serialize the resulting
-    // SegmentFileInfo to a SegmentMetadataPB via SegmentFileInfo::to_proto().
+    // Transfer sort-key min/max into a SegmentFileInfo. Samples are no longer routed
+    // through SegmentFileInfo; they are written directly to a SORT_KEY_SAMPLE_PAGE by
+    // _write_sort_key_sample_page during finalize_columns. Callers serialize the
+    // resulting SegmentFileInfo to a SegmentMetadataPB via SegmentFileInfo::to_proto().
     void write_sort_key_fields_to(SegmentFileInfo& file_info);
 
     // Accessors for sort-key samples (used in unit tests).
@@ -191,6 +191,7 @@ public:
 
 private:
     Status _write_short_key_index();
+    Status _write_sort_key_sample_page();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);

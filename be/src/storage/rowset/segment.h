@@ -51,6 +51,7 @@
 #include "storage/options.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/tablet_schema.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks {
 
@@ -209,6 +210,12 @@ public:
     Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
 
+    // Lazily read the sort-key sample page (if present). On OK, |out_samples| is filled
+    // with the segment's samples (empty if the segment has no sample page) and
+    // |out_row_interval| with the interval used to produce them (0 if empty).
+    Status read_sort_key_samples(const LakeIOOptions& lake_io_opts, std::vector<VariantTuple>* out_samples,
+                                 int64_t* out_row_interval);
+
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
                                        const IndexReadOptions& index_opt);
 
@@ -321,6 +328,8 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    PagePointer _sort_key_sample_page;
+    bool _has_sort_key_sample_page = false;
     bool _skip_vector_index = false;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,

@@ -162,7 +162,8 @@ Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_siz
     DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:
-    case SHORT_KEY_PAGE: {
+    case SHORT_KEY_PAGE:
+    case SORT_KEY_SAMPLE_PAGE: {
         return Status::OK();
     }
     case DICTIONARY_PAGE:

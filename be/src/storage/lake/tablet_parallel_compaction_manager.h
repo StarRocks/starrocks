@@ -383,7 +383,7 @@ private:
 
     // Collect sort key bounds from all segments across all rowsets.
     // Returns SegmentSplitInfo (defined in tablet_splitter.h) for each segment.
-    static StatusOr<std::vector<SegmentSplitInfo>> _collect_segment_key_bounds(const std::vector<RowsetPtr>& rowsets);
+    StatusOr<std::vector<SegmentSplitInfo>> _collect_segment_key_bounds(const std::vector<RowsetPtr>& rowsets);
 
     // Create SubtaskGroups using range split strategy.
     // Uses calculate_range_split_boundaries() from tablet_splitter to calculate boundaries.

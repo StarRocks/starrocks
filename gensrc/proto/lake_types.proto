@@ -214,22 +214,21 @@ message SegmentMetadataPB {
     // IDs of vector indexes that need .vi files for this segment.
     // Only populated when the segment meets the build threshold.
     repeated int64 vector_index_ids = 5;
-    // Equal-row-interval samples of the sort key, NON-DECREASING.
-    // sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
-    // where interval == sort_key_sample_row_interval. Always paired with
-    // a positive sort_key_sample_row_interval. May be empty when num_rows
-    // is not greater than interval (small segments produce no samples
-    // because the first sample row is at index `interval`, which only
-    // exists for num_rows > interval). Consumed by tablet split and
-    // range-split parallel compaction to accurately estimate row
-    // distribution for overlapping segments.
-    repeated TuplePB sort_key_samples = 6;
-    // Row interval used to produce sort_key_samples. Set if and only if
-    // sort_key_samples_size() > 0; in that case the value is > 0 and
-    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
-    // Persisted per-segment so a future change to the producer's interval
-    // constant cannot break cross-version readers.
-    optional int64 sort_key_sample_row_interval = 7;
+    // DEPRECATED (renamed with deprecated_ prefix to prevent new use): the canonical home for
+    // sort-key samples is now the segment's SORT_KEY_SAMPLE_PAGE (SegmentFooterPB.sort_key_sample_page,
+    // body SortKeySampleDataPB), which keeps tablet metadata from growing with row count. Current
+    // writers do NOT populate these fields; tablet split / range-split compaction read them ONLY as a
+    // fallback for segments written before the relocation. Field numbers 6/7 are reserved forever and
+    // MUST NOT be renumbered or reused. A later version may drop the read-fallback and add
+    // [deprecated = true] once no live segment stores samples only in metadata.
+    //
+    // Equal-row-interval samples of the sort key, NON-DECREASING: element i is the sort key at
+    // 0-indexed row (i+1) * deprecated_sort_key_sample_row_interval. json_name preserves the original
+    // field name so JSON dump/tooling output is unchanged by the rename (matches deprecated_segments etc.).
+    repeated TuplePB deprecated_sort_key_samples = 6 [json_name = "sort_key_samples"];
+    // Row interval that produced deprecated_sort_key_samples (see above). Set iff
+    // deprecated_sort_key_samples is non-empty; then > 0 and size() * interval < num_rows.
+    optional int64 deprecated_sort_key_sample_row_interval = 7 [json_name = "sort_key_sample_row_interval"];
     // File attributes of the segment. These are the canonical home for the
     // per-segment file info that historically lived in the parallel arrays on
     // RowsetMetadataPB (deprecated_segments / deprecated_segment_size /

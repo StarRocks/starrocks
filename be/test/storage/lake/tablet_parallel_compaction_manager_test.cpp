@@ -22,11 +22,16 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
@@ -34,6 +39,8 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
 #include "types/type_descriptor.h"
@@ -4689,7 +4696,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = _manager->_collect_segment_key_bounds(rowsets);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         EXPECT_EQ(200, result.value()[0].num_rows);
@@ -4725,7 +4732,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = _manager->_collect_segment_key_bounds(rowsets);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(3, result.value().size());
         for (const auto& bound : result.value()) {
@@ -4764,11 +4771,95 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, i, 0));
         }
 
-        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        auto result = _manager->_collect_segment_key_bounds(rowsets);
         ASSERT_TRUE(result.ok());
         ASSERT_EQ(2, result.value().size());
         EXPECT_EQ(1000, result.value()[0].data_size); // 100/400 * 4000
         EXPECT_EQ(3000, result.value()[1].data_size); // 300/400 * 4000
+    }
+}
+
+// _collect_segment_key_bounds reads sort-key samples from each segment's
+// SORT_KEY_SAMPLE_PAGE when SegmentMetadataPB carries none. Uses a REAL
+// TabletManager-backed rowset with a genuine compaction_segment_limit (a real
+// partial-compaction Rowset, not just next_compaction_offset metadata): the
+// consumer iterates rowset->metadata().segment_metas() and opens each segment
+// by position, so it must still read ALL segments' samples even though the
+// limited Rowset's own segments() accessor would trim to fewer.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_reads_page_samples_partial_compaction) {
+    auto old_interval = config::segment_sort_key_sample_row_interval;
+    DeferOp guard([old_interval]() { config::segment_sort_key_sample_row_interval = old_interval; });
+    config::segment_sort_key_sample_row_interval = 5;
+
+    const int64_t tablet_id = 20301;
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(0);
+    rowset->set_overlapped(true);
+
+    const int num_segments = 3;
+    const int rows_per_segment = 21; // interval=5 -> (21-1)/5 = 4 samples per segment.
+    int64_t total_rows = 0;
+    for (int s = 0; s < num_segments; ++s) {
+        std::string segment_name = fmt::format("page_seg_{}.dat", s);
+        std::string path = _lp->segment_location(tablet_id, segment_name);
+        std::string dir = std::filesystem::path(path).parent_path().string();
+        CHECK_OK(fs::create_directories(dir));
+
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(fopts, path));
+        SegmentWriterOptions wopts;
+        SegmentWriter writer(std::move(wfile), 0, tablet_schema, wopts);
+        CHECK_OK(writer.init());
+
+        const int base = s * 100;
+        auto col0 = Int32Column::create();
+        auto col1 = Int32Column::create();
+        std::vector<int> v0(rows_per_segment), v1(rows_per_segment, 0);
+        for (int i = 0; i < rows_per_segment; ++i) v0[i] = base + i;
+        col0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        col1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t seg_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&seg_size, &index_size, &footer_position));
+
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(static_cast<int64_t>(seg_size));
+        segment_meta->set_num_rows(rows_per_segment);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(base));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(base + rows_per_segment - 1));
+        total_rows += rows_per_segment;
+    }
+    rowset->set_num_rows(total_rows);
+    rowset->set_data_size(total_rows * 8);
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+    auto meta = tablet.metadata();
+
+    // A REAL limited/partial-compaction Rowset: compaction_segment_limit=1 (< num_segments).
+    std::vector<RowsetPtr> rowsets;
+    rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, /*rowset_index=*/0,
+                                               /*compaction_segment_limit=*/1));
+
+    auto result = _manager->_collect_segment_key_bounds(rowsets);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(num_segments, result.value().size());
+    for (const auto& seg : result.value()) {
+        EXPECT_EQ(4U, seg.sort_key_samples.size());
+        EXPECT_EQ(5, seg.sort_key_sample_row_interval);
+        for (size_t i = 1; i < seg.sort_key_samples.size(); ++i) {
+            EXPECT_LE(seg.sort_key_samples[i - 1].compare(seg.sort_key_samples[i]), 0);
+        }
     }
 }
 

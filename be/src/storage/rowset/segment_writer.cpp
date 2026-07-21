@@ -138,6 +138,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+        if (footer->has_sort_key_sample_page()) {
+            *_footer.mutable_sort_key_sample_page() = footer->sort_key_sample_page();
+        }
         _verify_footer();
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
@@ -327,8 +330,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_min = _sort_key_min;
     file_info.sort_key_max = _sort_key_max;
-    file_info.sort_key_samples = std::move(_sort_key_samples);
-    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -419,6 +420,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     if (_has_key) {
         uint64_t index_offset = _wfile->size();
         RETURN_IF_ERROR(_write_short_key_index());
+        RETURN_IF_ERROR(_write_sort_key_sample_page());
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
     }
@@ -442,6 +444,29 @@ Status SegmentWriter::_write_short_key_index() {
     // short key index page is not compressed right now
     RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp));
     pp.to_proto(_footer.mutable_short_key_index_page());
+    return Status::OK();
+}
+
+Status SegmentWriter::_write_sort_key_sample_page() {
+    if (_sort_key_samples.empty()) {
+        return Status::OK();
+    }
+    SortKeySampleDataPB data;
+    for (const auto& sample : _sort_key_samples) {
+        sample.to_proto(data.add_samples());
+    }
+    data.set_row_interval(_sort_key_sample_row_interval);
+    std::string buf;
+    if (!data.SerializeToString(&buf)) {
+        return Status::InternalError("failed to serialize sort key sample page");
+    }
+    std::vector<Slice> body{Slice(buf)};
+    PageFooterPB footer;
+    footer.set_type(SORT_KEY_SAMPLE_PAGE);
+    footer.set_uncompressed_size(static_cast<uint32_t>(buf.size()));
+    PagePointer pp;
+    RETURN_IF_ERROR(PageIO::write_page(_wfile.get(), body, footer, &pp)); // NO_COMPRESSION
+    pp.to_proto(_footer.mutable_sort_key_sample_page());
     return Status::OK();
 }
 

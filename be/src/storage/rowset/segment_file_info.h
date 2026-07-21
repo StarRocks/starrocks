@@ -33,12 +33,6 @@ void to_file_meta_pb(const FileInfo& file, FileMetaPB* file_meta);
 struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
     VariantTuple sort_key_max;
-    // Equal-row-interval samples of the sort key (NON-DECREASING) collected by
-    // SegmentWriter. May be empty for small segments (num_rows <= interval) or
-    // segments where sampling was not armed. Always paired with
-    // sort_key_sample_row_interval: samples.empty() <=> sort_key_sample_row_interval == 0.
-    std::vector<VariantTuple> sort_key_samples;
-    int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
     // IDs of vector indexes whose .vi file belongs to this segment (one .vi file per id).
     std::vector<int64_t> vector_index_ids;

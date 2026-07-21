@@ -29,6 +29,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -46,6 +47,7 @@
 #include "storage/lake/tablet_merger_split_family.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
@@ -827,6 +829,138 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
     EXPECT_EQ(0, tablet_ranges.size());
 }
 
+// Data-driven split reads sort-key samples from the segment's SORT_KEY_SAMPLE_PAGE (new
+// writer, no metadata samples) rather than SegmentMetadataPB.sort_key_samples. Proven by
+// parity: the page-backed metadata (real TabletManager, segments carry samples only in
+// their page) must produce byte-identical split ranges to an equivalent legacy metadata
+// (tablet_manager=nullptr, samples set directly on SegmentMetadataPB) -- if the page were
+// not opened/read, the page-backed run would degrade to no-sample distribution and diverge.
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_reads_sort_key_samples_from_segment_page) {
+    auto old_interval = config::segment_sort_key_sample_row_interval;
+    DeferOp guard([old_interval]() { config::segment_sort_key_sample_row_interval = old_interval; });
+    config::segment_sort_key_sample_row_interval = 10;
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_id(9101);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(1);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(2);
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(false);
+    c1->set_aggregation("REPLACE");
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+
+    // 101 rows with keys 0..100 (monotonic, dense) -> min=0, max=100. With
+    // row_interval=10, samples fire at 0-indexed rows 10,20,...,100 (10 samples).
+    const int num_rows = 101;
+    auto write_monotonic_segment = [&](const std::string& seg_name) -> uint64_t {
+        auto segment_path = _tablet_manager->segment_location(tablet_id, seg_name);
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wfile_or = fs::new_writable_file(fopts, segment_path);
+        CHECK_OK(wfile_or.status());
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile_or.value()), 0, tablet_schema, opts);
+        CHECK_OK(writer.init());
+        auto col0 = Int32Column::create();
+        auto col1 = Int32Column::create();
+        std::vector<int> v0(num_rows), v1(num_rows);
+        for (int i = 0; i < num_rows; ++i) {
+            v0[i] = i;
+            v1[i] = i;
+        }
+        col0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        col1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
+        CHECK_OK(writer.append_chunk(*chunk));
+        uint64_t segment_file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&segment_file_size, &index_size, &footer_position));
+        return segment_file_size;
+    };
+
+    const uint64_t seg0_size = write_monotonic_segment("seg_0.dat");
+    const uint64_t seg1_size = write_monotonic_segment("seg_1.dat");
+
+    std::vector<int64_t> expected_samples;
+    for (int64_t v = 10; v <= 100; v += 10) expected_samples.push_back(v);
+    ASSERT_EQ(10U, expected_samples.size());
+
+    auto build_metadata = [&](bool with_legacy_samples) {
+        auto m = std::make_shared<TabletMetadataPB>();
+        m->set_id(tablet_id);
+        m->set_version(1);
+        *m->mutable_schema() = schema_pb;
+        auto* rowset = m->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(2 * num_rows);
+        rowset->set_data_size(static_cast<int64_t>(seg0_size + seg1_size));
+        for (int s = 0; s < 2; ++s) {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(s == 0 ? "seg_0.dat" : "seg_1.dat");
+            sm->set_size(static_cast<int64_t>(s == 0 ? seg0_size : seg1_size));
+            sm->set_num_rows(num_rows);
+            *sm->mutable_sort_key_min() = generate_sort_key(0);
+            *sm->mutable_sort_key_max() = generate_sort_key(100);
+            if (with_legacy_samples) {
+                for (int64_t v : expected_samples) {
+                    *sm->add_deprecated_sort_key_samples() = generate_sort_key(static_cast<int>(v));
+                }
+                sm->set_deprecated_sort_key_sample_row_interval(10);
+            }
+        }
+        return m;
+    };
+
+    // A) page-backed: real tablet_manager, no legacy metadata samples. Must open the real
+    //    segment files and read their SORT_KEY_SAMPLE_PAGE.
+    auto meta_page = build_metadata(/*with_legacy_samples=*/false);
+    std::vector<lake::TabletRangeInfo> ranges_page;
+    ASSERT_OK(lake::get_tablet_split_ranges(_tablet_manager.get(), meta_page, /*split_count=*/2, &ranges_page));
+
+    // B) legacy metadata-backed parity reference: identical sample content, no I/O needed
+    //    (tablet_manager=nullptr proves this path never touches the segment files).
+    auto meta_legacy = build_metadata(/*with_legacy_samples=*/true);
+    std::vector<lake::TabletRangeInfo> ranges_legacy;
+    ASSERT_OK(
+            lake::get_tablet_split_ranges(/*tablet_manager=*/nullptr, meta_legacy, /*split_count=*/2, &ranges_legacy));
+
+    ASSERT_EQ(2U, ranges_page.size());
+    ASSERT_EQ(ranges_legacy.size(), ranges_page.size());
+    for (size_t i = 0; i < ranges_page.size(); ++i) {
+        EXPECT_EQ(ranges_legacy[i].range.SerializeAsString(), ranges_page[i].range.SerializeAsString())
+                << "range " << i;
+        ASSERT_EQ(ranges_legacy[i].rowset_stats.size(), ranges_page[i].rowset_stats.size());
+        for (const auto& [rowset_id, stat] : ranges_page[i].rowset_stats) {
+            auto it = ranges_legacy[i].rowset_stats.find(rowset_id);
+            ASSERT_NE(ranges_legacy[i].rowset_stats.end(), it);
+            EXPECT_EQ(it->second.num_rows, stat.num_rows);
+            EXPECT_EQ(it->second.data_size, stat.data_size);
+            EXPECT_EQ(it->second.num_dels, stat.num_dels);
+        }
+    }
+
+    // Row conservation across both children.
+    int64_t total_rows = 0;
+    for (const auto& r : ranges_page) {
+        for (const auto& [rowset_id, stat] : r.rowset_stats) total_rows += stat.num_rows;
+    }
+    EXPECT_EQ(2 * num_rows, total_rows);
+}
+
 // A flush_pk_memtable failure during an identical-tablet reshard must propagate out of
 // publish_resharding_tablet rather than copying stale, unflushed metadata onto the new tablet.
 TEST_F(LakeTabletReshardTest, test_identical_tablet_flush_failure_propagates) {
@@ -1421,9 +1555,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
-        sm->set_sort_key_sample_row_interval(100);
-        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(100));
-        sm->add_sort_key_samples()->CopyFrom(generate_sort_key(200));
+        sm->set_deprecated_sort_key_sample_row_interval(100);
+        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
+        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(200));
     }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
@@ -2089,9 +2223,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
-        sm->set_sort_key_sample_row_interval(interval);
+        sm->set_deprecated_sort_key_sample_row_interval(interval);
         for (int v = min_v + interval; v < max_v; v += interval) {
-            sm->add_sort_key_samples()->CopyFrom(generate_sort_key(v));
+            sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(v));
         }
     };
 

@@ -23,11 +23,14 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "fs/fs.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
+#include "storage/options.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_map.h"
@@ -43,25 +46,70 @@ namespace starrocks::lake {
 
 using google::protobuf::RepeatedPtrField;
 
+// Overflow-safe validity of a sample set: samples.size() * row_interval < num_rows.
+static bool sample_count_consistent(int64_t num_samples, int64_t row_interval, int64_t num_rows) {
+    return row_interval > 0 && num_rows > 0 && num_samples <= (num_rows - 1) / row_interval;
+}
+
 Status SegmentSplitInfo::load_sort_key_samples(const SegmentMetadataPB& segment_meta) {
-    if (segment_meta.sort_key_samples_size() == 0 || !segment_meta.has_sort_key_sample_row_interval()) {
+    // Legacy fallback: read samples from the deprecated tablet-metadata fields, for segments written
+    // before samples were relocated to the segment's SORT_KEY_SAMPLE_PAGE. New segments have these empty.
+    if (segment_meta.deprecated_sort_key_samples_size() == 0 ||
+        !segment_meta.has_deprecated_sort_key_sample_row_interval()) {
         return Status::OK();
     }
-    const int64_t row_interval = segment_meta.sort_key_sample_row_interval();
-    const int64_t num_samples = segment_meta.sort_key_samples_size();
-    // Overflow-safe validity: sort_key_samples.size() * row_interval < num_rows.
-    if (!(row_interval > 0 && num_rows > 0 && num_samples <= (num_rows - 1) / row_interval)) {
+    const int64_t row_interval = segment_meta.deprecated_sort_key_sample_row_interval();
+    const int64_t num_samples = segment_meta.deprecated_sort_key_samples_size();
+    if (!sample_count_consistent(num_samples, row_interval, num_rows)) {
         return Status::OK(); // Invalid metadata -- fall through with empty samples.
     }
     sort_key_sample_row_interval = row_interval;
     sort_key_samples.reserve(num_samples);
-    for (const auto& sample_pb : segment_meta.sort_key_samples()) {
+    for (const auto& sample_pb : segment_meta.deprecated_sort_key_samples()) {
         VariantTuple sample;
         RETURN_IF_ERROR(sample.from_proto(sample_pb));
         DCHECK(sort_key_samples.empty() || sort_key_samples.back().compare(sample) <= 0);
         sort_key_samples.push_back(std::move(sample));
     }
     return Status::OK();
+}
+
+Status SegmentSplitInfo::load_sort_key_samples_from_segment(Segment* segment, const LakeIOOptions& lake_io_opts) {
+    std::vector<VariantTuple> samples;
+    int64_t row_interval = 0;
+    RETURN_IF_ERROR(segment->read_sort_key_samples(lake_io_opts, &samples, &row_interval));
+    const int64_t num_samples = static_cast<int64_t>(samples.size());
+    // Same overflow-safe validity check as load_sort_key_samples; an empty page (num_samples == 0)
+    // or an inconsistent one degrades to no-sample distribution.
+    if (num_samples == 0 || !sample_count_consistent(num_samples, row_interval, num_rows)) {
+        return Status::OK();
+    }
+    sort_key_sample_row_interval = row_interval;
+    sort_key_samples = std::move(samples);
+    return Status::OK();
+}
+
+LakeIOOptions sort_key_sample_read_options() {
+    LakeIOOptions opts;
+    opts.fill_data_cache = false; // one-shot read on a rare path; don't pollute the local data cache
+    opts.use_page_cache = true;   // sample page is small and immutable; caching it is harmless
+    opts.fill_metadata_cache = false;
+    return opts;
+}
+
+Status read_segment_sort_key_samples(TabletManager* tablet_manager, int64_t tablet_id,
+                                     const TabletSchemaPtr& tablet_schema, const LakeIOOptions& lake_io_opts,
+                                     const RowsetMetadataPB& rowset_meta, int segment_pos, SegmentSplitInfo* out) {
+    const auto& segment_meta = rowset_meta.segment_metas(segment_pos);
+    FileInfo seg_info{.path = tablet_manager->segment_location(tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) seg_info.size = segment_meta.size();
+    if (segment_meta.has_bundle_file_offset()) seg_info.bundle_file_offset = segment_meta.bundle_file_offset();
+    if (segment_meta.has_encryption_meta()) seg_info.encryption_meta = segment_meta.encryption_meta();
+    const uint32_t segment_id = get_segment_idx(rowset_meta, segment_pos);
+    size_t footer_size_hint = 16 * 1024;
+    ASSIGN_OR_RETURN(auto segment, tablet_manager->load_segment(seg_info, segment_id, &footer_size_hint, lake_io_opts,
+                                                                /*fill_meta_cache=*/false, tablet_schema));
+    return out->load_sort_key_samples_from_segment(segment.get(), lake_io_opts);
 }
 
 // ================================================================================
@@ -620,21 +668,69 @@ void apply_rowset_anchor(const std::unordered_map<uint32_t, RowsetAnchor>& ancho
     }
 }
 
+// Resolve the materialized TabletSchema that governs `rowset_id`, mirroring lake::Rowset's
+// rowset_to_schema -> historical_schemas -> top-level-schema resolution. Returns nullptr when the
+// resolved schema has no valid id (hand-crafted test / legacy metadata that never assigned one):
+// GlobalTabletSchemaMap::emplace DCHECK-aborts on an invalid id, so in that case the page-read path
+// is skipped and split/compaction degrades to no-sample, like any other page-read failure. Doing
+// the resolution here (instead of constructing a throwaway Rowset just to reach tablet_schema())
+// also avoids aborting when a rowset_to_schema mapping dangles into a missing historical schema.
+TabletSchemaPtr resolve_rowset_schema_or_null(const TabletMetadataPtr& tablet_metadata, uint32_t rowset_id) {
+    const auto& rowset_to_schema = tablet_metadata->rowset_to_schema();
+    if (auto it = rowset_to_schema.find(rowset_id); it != rowset_to_schema.end()) {
+        auto hs_it = tablet_metadata->historical_schemas().find(it->second);
+        if (hs_it != tablet_metadata->historical_schemas().end()) {
+            if (hs_it->second.id() == TabletSchema::invalid_id()) return nullptr;
+            return GlobalTabletSchemaMap::Instance()->emplace(hs_it->second).first;
+        }
+        // Mapping present but the referenced historical schema is missing (corrupt metadata):
+        // fall through to the top-level schema rather than aborting.
+    }
+    if (tablet_metadata->schema().id() == TabletSchema::invalid_id()) return nullptr;
+    return GlobalTabletSchemaMap::Instance()->emplace(tablet_metadata->schema()).first;
+}
+
 // Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
 // non-empty" — the data-driven and external-boundaries callers have different
 // semantics on empty (one errors, the other treats it as a no-op fast path) and
 // own that check.
-Status build_segments_from_rowsets(const RepeatedPtrField<RowsetMetadataPB>& rowsets,
-                                   std::vector<SegmentSplitInfo>* segments) {
-    for (const auto& rowset : rowsets) {
-        for (const auto& segment_meta : rowset.segment_metas()) {
+//
+// Sort-key samples: prefer legacy metadata samples (no I/O) when present; otherwise, if
+// `tablet_manager` is non-null, open the segment and read them from its SORT_KEY_SAMPLE_PAGE
+// (non-fatal -- degrades to no-sample on any open/read failure). `tablet_manager` may be
+// nullptr in unit tests, in which case the page path is skipped entirely.
+Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                                   const LakeIOOptions& lake_io_opts, std::vector<SegmentSplitInfo>* segments) {
+    for (int ri = 0; ri < tablet_metadata->rowsets_size(); ++ri) {
+        const auto& rowset = tablet_metadata->rowsets(ri);
+        // Per-rowset schema for the page-read path, resolved lazily on the first segment that
+        // needs it (nullptr => unresolvable => skip the page path, degrade to no-sample).
+        TabletSchemaPtr rowset_schema;
+        bool rowset_schema_resolved = false;
+        for (int si = 0; si < rowset.segment_metas_size(); ++si) {
+            const auto& segment_meta = rowset.segment_metas(si);
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
             segment.num_rows = segment_meta.num_rows();
             segment.data_size = segment_meta.size();
-            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            if (segment_meta.deprecated_sort_key_samples_size() > 0) {
+                RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta)); // legacy metadata, no I/O
+            } else if (tablet_manager != nullptr) {
+                if (!rowset_schema_resolved) {
+                    rowset_schema = resolve_rowset_schema_or_null(tablet_metadata, rowset.id());
+                    rowset_schema_resolved = true;
+                }
+                if (rowset_schema != nullptr) {
+                    // Best-effort: a page-read failure degrades this segment to no-sample, never fails the split.
+                    WARN_IF_ERROR(read_segment_sort_key_samples(tablet_manager, tablet_metadata->id(), rowset_schema,
+                                                                lake_io_opts, rowset, si, &segment),
+                                  fmt::format("sort-key sample page read failed (degrading to no-sample split), "
+                                              "tablet={} rowset={} seg_pos={}",
+                                              tablet_metadata->id(), rowset.id(), si));
+                }
+            }
             segments->push_back(std::move(segment));
         }
     }
@@ -684,7 +780,8 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     }
 
     std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets(tablet_metadata->rowsets(), &segments));
+    RETURN_IF_ERROR(
+            build_segments_from_rowsets(tablet_manager, tablet_metadata, sort_key_sample_read_options(), &segments));
     if (segments.empty()) {
         return Status::InvalidArgument("No segments found in tablet metadata");
     }
@@ -973,7 +1070,8 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //    here is corruption (we already short-circuited the empty-rowsets case
     //    at step 4); external boundaries uses a distinct error message vs the data-driven path.
     std::vector<SegmentSplitInfo> segments;
-    RETURN_IF_ERROR(build_segments_from_rowsets(old_tablet_metadata->rowsets(), &segments));
+    RETURN_IF_ERROR(build_segments_from_rowsets(tablet_manager, old_tablet_metadata, sort_key_sample_read_options(),
+                                                &segments));
     if (segments.empty()) {
         return Status::InvalidArgument("rowsets present but no segments derived (possibly corrupt metadata)");
     }

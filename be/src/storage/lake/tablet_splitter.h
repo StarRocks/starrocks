@@ -20,10 +20,12 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
 class TabletRange;
+struct LakeIOOptions;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -55,6 +57,11 @@ struct SegmentSplitInfo {
     // sort_key_sample_row_interval at their defaults (empty/zero).
     // Requires num_rows to be set before calling.
     Status load_sort_key_samples(const SegmentMetadataPB& segment_meta);
+
+    // Populate sort_key_samples / sort_key_sample_row_interval from the segment's sample page.
+    // Applies the same validity check as load_sort_key_samples; on failure leaves samples empty.
+    // `num_rows` must be set first.
+    Status load_sort_key_samples_from_segment(Segment* segment, const LakeIOOptions& lake_io_opts);
 };
 
 // Per-range estimated statistics keyed by source_id.
@@ -145,6 +152,20 @@ Status compute_split_ranges_from_external_boundaries(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const google::protobuf::RepeatedPtrField<TabletRangePB>& external_ranges,
         std::vector<TabletRangeInfo>* split_ranges);
+
+// Cache/I/O options for reading sort-key sample pages at split / range-split-compaction time:
+// one-shot read on a rare path, so don't fill the local data cache or the metadata cache; the
+// small immutable sample page is left eligible for the shared page cache (harmless to cache).
+LakeIOOptions sort_key_sample_read_options();
+
+// Open segment `segment_pos` of `rowset_meta` and populate `out`'s samples from its SORT_KEY_SAMPLE_PAGE.
+// BEST-EFFORT: sort-key samples only refine split-boundary accuracy, NEVER data correctness. A page
+// open/read failure (transient object-store error, corrupt page, or a legacy dummy-file test fixture)
+// must degrade the split/compaction to min/max-only distribution, NOT abort the reshard/compaction.
+// Therefore callers MUST invoke this via WARN_IF_ERROR and MUST NOT RETURN_IF_ERROR it.
+Status read_segment_sort_key_samples(TabletManager* tablet_manager, int64_t tablet_id,
+                                     const TabletSchemaPtr& tablet_schema, const LakeIOOptions& lake_io_opts,
+                                     const RowsetMetadataPB& rowset_meta, int segment_pos, SegmentSplitInfo* out);
 
 // -----------------------------------------------------------------------------
 // Phase-1 per-segment shared optimization. The helpers below are exposed for

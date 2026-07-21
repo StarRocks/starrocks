@@ -2419,13 +2419,15 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
         const std::vector<RowsetPtr>& rowsets) {
     std::vector<SegmentSplitInfo> segments;
 
+    const LakeIOOptions lake_io_opts = sort_key_sample_read_options();
     for (const auto& rowset : rowsets) {
         const auto& rowset_meta = rowset->metadata();
         int32_t num_segments = rowset_meta.segment_metas_size();
         int64_t rowset_data_size = rowset->data_size();
         int64_t rowset_num_rows = rowset->num_rows();
 
-        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+        for (int si = 0; si < rowset_meta.segment_metas_size(); ++si) {
+            const auto& segment_meta = rowset_meta.segment_metas(si);
             SegmentSplitInfo segment;
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
@@ -2435,7 +2437,14 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
             } else if (num_segments > 0) {
                 segment.data_size = rowset_data_size / num_segments;
             }
-            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            if (segment_meta.deprecated_sort_key_samples_size() > 0) {
+                RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta)); // legacy metadata, no I/O
+            } else if (_tablet_mgr != nullptr) {
+                // Best-effort: a page-read failure degrades this segment to no-sample, never fails compaction.
+                WARN_IF_ERROR(read_segment_sort_key_samples(_tablet_mgr, rowset->tablet_id(), rowset->tablet_schema(),
+                                                            lake_io_opts, rowset_meta, si, &segment),
+                              "sort-key sample page read failed (degrading to no-sample range-split compaction)");
+            }
             segments.push_back(std::move(segment));
         }
     }

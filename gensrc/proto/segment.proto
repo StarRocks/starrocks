@@ -68,6 +68,7 @@ enum PageTypePB {
     INDEX_PAGE = 2;
     DICTIONARY_PAGE = 3;
     SHORT_KEY_PAGE = 4;
+    SORT_KEY_SAMPLE_PAGE = 5;
 }
 
 enum NullEncodingPB {
@@ -131,6 +132,14 @@ message ShortKeyFooterPB {
     optional uint32 num_rows_per_block = 5;
     // How many rows in this segment
     optional uint32 num_segment_rows = 6;
+}
+
+// Body of a SORT_KEY_SAMPLE_PAGE. Equal-row-interval samples of the sort key,
+// NON-DECREASING; samples[i] is the sort key at 0-indexed row (i+1) * row_interval.
+// Relocated here from SegmentMetadataPB.sort_key_samples so tablet metadata stays small.
+message SortKeySampleDataPB {
+    repeated TuplePB samples = 1;
+    optional int64 row_interval = 2;
 }
 
 message PageFooterPB {
@@ -226,6 +235,11 @@ message SegmentFooterPB {
     optional PagePointerPB short_key_index_page = 9;
     // vector index storage type
     optional VectorIndexStorageTypePB vector_index_storage_type = 10;
+    // Page pointer to the sort-key sample page (body: serialized SortKeySampleDataPB).
+    // Written by new segment writers; read lazily only at tablet split / range-split
+    // compaction. Absent for segments written before this change (their samples, if any,
+    // live in the deprecated-for-write SegmentMetadataPB.sort_key_samples).
+    optional PagePointerPB sort_key_sample_page = 11;
 }
 
 message BTreeMetaPB {

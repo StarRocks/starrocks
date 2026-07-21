@@ -283,6 +283,10 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
+    _has_sort_key_sample_page = footer.has_sort_key_sample_page();
+    if (_has_sort_key_sample_page) {
+        _sort_key_sample_page = PagePointer(footer.sort_key_sample_page());
+    }
     _skip_vector_index =
             footer.has_vector_index_storage_type() && footer.vector_index_storage_type() == VECTOR_INDEX_STORAGE_NONE;
     return Status::OK();
@@ -436,6 +440,53 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
 
     _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
     return _sk_index_decoder->parse(body, footer.short_key_page_footer());
+}
+
+Status Segment::read_sort_key_samples(const LakeIOOptions& lake_io_opts, std::vector<VariantTuple>* out_samples,
+                                      int64_t* out_row_interval) {
+    out_samples->clear();
+    *out_row_interval = 0;
+    if (!_has_sort_key_sample_page) {
+        return Status::OK();
+    }
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size};
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+        _encryption_info = std::make_unique<FileEncryptionInfo>(file_opts.encryption_info);
+    }
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info));
+
+    PageReadOptions opts;
+    opts.use_page_cache = lake_io_opts.use_page_cache;
+    opts.read_file = read_file.get();
+    opts.page_pointer = _sort_key_sample_page;
+    opts.codec = nullptr; // NO_COMPRESSION
+    OlapReaderStatistics tmp_stats;
+    opts.stats = &tmp_stats;
+
+    PageHandle handle;
+    Slice body;
+    PageFooterPB footer;
+    RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
+    if (footer.type() != SORT_KEY_SAMPLE_PAGE) {
+        return Status::Corruption("unexpected page type for sort key sample page");
+    }
+    SortKeySampleDataPB data;
+    if (!data.ParseFromArray(body.data, static_cast<int>(body.size))) {
+        return Status::Corruption("failed to parse sort key sample page");
+    }
+    out_samples->reserve(data.samples_size());
+    for (const auto& sample_pb : data.samples()) {
+        VariantTuple vt;
+        RETURN_IF_ERROR(vt.from_proto(sample_pb));
+        out_samples->push_back(std::move(vt));
+    }
+    *out_row_interval = data.row_interval();
+    return Status::OK();
 }
 
 void Segment::_reset() {

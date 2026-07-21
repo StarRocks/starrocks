@@ -22,9 +22,14 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
+#include "storage/options.h"
+#include "storage/rowset/page_pointer.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -252,25 +257,154 @@ TEST_F(SegmentWriterSortKeySamplingTest, vertical_writer_reinit_preserves_sample
 }
 
 // ---------------------------------------------------------------------------
-// write_sort_key_fields_to(SegmentFileInfo&) transfers min, max, samples, and
-// interval into a SegmentFileInfo. Preserves the carrier invariant
-// (samples.empty() <=> 0).
+// write_sort_key_fields_to(SegmentFileInfo&) copies only sort-key min/max.
+// Samples are no longer routed through SegmentFileInfo -- they stay in the
+// writer and are consumed by _write_sort_key_sample_page during finalize.
 // ---------------------------------------------------------------------------
-TEST_F(SegmentWriterSortKeySamplingTest, write_sort_key_fields_to_transfers_ownership) {
+TEST_F(SegmentWriterSortKeySamplingTest, write_sort_key_fields_to_copies_min_max_only) {
+    const int64_t num_rows = 2 * kInterval + 3;
+    auto w = new_writer(0);
+    ASSERT_OK(w->init(true));
+    auto chunk = make_increasing_chunk(num_rows, 0);
+    ASSERT_OK(w->append_chunk(*chunk));
+    SegmentFileInfo file_info;
+    w->write_sort_key_fields_to(file_info);
+    EXPECT_FALSE(file_info.sort_key_min.empty());
+    EXPECT_FALSE(file_info.sort_key_max.empty());
+    // Samples stay in the writer (consumed by _write_sort_key_sample_page during finalize),
+    // no longer moved into SegmentFileInfo.
+    EXPECT_EQ(2U, w->get_sort_key_samples().size());
+    EXPECT_EQ(kInterval, w->get_sort_key_sample_row_interval());
+}
+
+// ---------------------------------------------------------------------------
+// Sort-key samples are written to a SORT_KEY_SAMPLE_PAGE in the segment file
+// and are no longer present in SegmentMetadataPB (built from SegmentFileInfo).
+// ---------------------------------------------------------------------------
+TEST_F(SegmentWriterSortKeySamplingTest, samples_written_to_page_not_metadata) {
     const int64_t num_rows = 2 * kInterval + 3;
     auto w = new_writer(0);
     ASSERT_OK(w->init(true));
     auto chunk = make_increasing_chunk(num_rows, 0);
     ASSERT_OK(w->append_chunk(*chunk));
 
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(w->finalize(&file_size, &index_size, &footer_position));
+
     SegmentFileInfo file_info;
     w->write_sort_key_fields_to(file_info);
-    EXPECT_EQ(2U, file_info.sort_key_samples.size());
-    EXPECT_EQ(kInterval, file_info.sort_key_sample_row_interval);
-    EXPECT_FALSE(file_info.sort_key_min.empty());
-    EXPECT_FALSE(file_info.sort_key_max.empty());
-    // After fill, writer's samples should be moved out.
-    EXPECT_TRUE(w->get_sort_key_samples().empty());
+    SegmentMetadataPB segment_meta;
+    file_info.to_proto(/*segment_idx=*/0, &segment_meta);
+    EXPECT_EQ(0, segment_meta.deprecated_sort_key_samples_size());
+    EXPECT_FALSE(segment_meta.has_deprecated_sort_key_sample_row_interval());
+
+    // The on-disk footer carries the page pointer instead.
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(w->segment_path()));
+    SegmentFooterPB footer;
+    // Pass nullptr for the footer-length hint so parse reads the default tail window from EOF
+    // (a zero-valued hint would read 0 bytes and fail the magic check).
+    ASSERT_OK(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, nullptr).status());
+    ASSERT_TRUE(footer.has_sort_key_sample_page());
+    EXPECT_GT(footer.sort_key_sample_page().size(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Partial-update rewrite: init(cols, has_key=false, &partial_footer) merges
+// the supplied footer's sort_key_sample_page pointer into the new writer's
+// footer, and it survives finalize (verified via the on-disk footer, since
+// this writer itself never re-arms sampling with has_key=false).
+// ---------------------------------------------------------------------------
+TEST_F(SegmentWriterSortKeySamplingTest, sort_key_sample_page_preserved_on_partial_update_rewrite) {
+    SegmentFooterPB partial_footer;
+    PagePointer pp(/*offset=*/123, /*size=*/456);
+    pp.to_proto(partial_footer.mutable_sort_key_sample_page());
+    partial_footer.set_num_rows(1);
+
+    auto w = new_writer(0);
+    std::vector<uint32_t> value_cols{1};
+    ASSERT_OK(w->init(value_cols, /*has_key=*/false, &partial_footer));
+
+    auto s = ChunkHelper::convert_schema(_schema, value_cols);
+    auto chunk = ChunkFactory::new_chunk(s, 1);
+    chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    ASSERT_OK(w->append_chunk(*chunk));
+
+    uint64_t index_size = 0;
+    uint64_t file_size = 0;
+    ASSERT_OK(w->finalize_columns(&index_size));
+    ASSERT_OK(w->finalize_footer(&file_size));
+
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(w->segment_path()));
+    SegmentFooterPB footer;
+    // Pass nullptr for the footer-length hint so parse reads the default tail window from EOF
+    // (a zero-valued hint would read 0 bytes and fail the magic check).
+    ASSERT_OK(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, nullptr).status());
+    ASSERT_TRUE(footer.has_sort_key_sample_page());
+    EXPECT_EQ(123, footer.sort_key_sample_page().offset());
+    EXPECT_EQ(456, footer.sort_key_sample_page().size());
+}
+
+// ---------------------------------------------------------------------------
+// Round-trip: Segment::read_sort_key_samples() reads back exactly the samples
+// the writer produced, in order.
+// ---------------------------------------------------------------------------
+TEST_F(SegmentWriterSortKeySamplingTest, read_sort_key_samples_round_trip) {
+    const int64_t num_rows = 2 * kInterval + 3;
+    auto w = new_writer(0);
+    ASSERT_OK(w->init(true));
+    auto chunk = make_increasing_chunk(num_rows, 0);
+    ASSERT_OK(w->append_chunk(*chunk));
+    const auto expected_samples = w->get_sort_key_samples();
+
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(w->finalize(&file_size, &index_size, &footer_position));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{w->segment_path()}, 0, _schema));
+
+    std::vector<VariantTuple> samples;
+    int64_t interval = 0;
+    LakeIOOptions io_opts; // defaults
+    ASSERT_OK(segment->read_sort_key_samples(io_opts, &samples, &interval));
+    EXPECT_EQ((num_rows - 1) / config::segment_sort_key_sample_row_interval, (int64_t)samples.size());
+    EXPECT_EQ(config::segment_sort_key_sample_row_interval, interval);
+    ASSERT_EQ(expected_samples.size(), samples.size());
+    for (size_t i = 0; i < samples.size(); ++i) {
+        EXPECT_EQ(0, expected_samples[i].compare(samples[i]));
+    }
+    for (size_t i = 1; i < samples.size(); ++i) {
+        EXPECT_LE(samples[i - 1].compare(samples[i]), 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Small segment (num_rows <= interval): no sample page is written; reading
+// back yields an empty sample set and interval == 0.
+// ---------------------------------------------------------------------------
+TEST_F(SegmentWriterSortKeySamplingTest, read_sort_key_samples_small_segment_is_empty) {
+    const int64_t num_rows = kInterval - 1;
+    auto w = new_writer(0);
+    ASSERT_OK(w->init(true));
+    auto chunk = make_increasing_chunk(num_rows, 0);
+    ASSERT_OK(w->append_chunk(*chunk));
+    ASSERT_TRUE(w->get_sort_key_samples().empty());
+
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(w->finalize(&file_size, &index_size, &footer_position));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{w->segment_path()}, 0, _schema));
+
+    std::vector<VariantTuple> samples;
+    int64_t interval = 0;
+    LakeIOOptions io_opts;
+    ASSERT_OK(segment->read_sort_key_samples(io_opts, &samples, &interval));
+    EXPECT_TRUE(samples.empty());
+    EXPECT_EQ(0, interval);
 }
 
 } // namespace starrocks
