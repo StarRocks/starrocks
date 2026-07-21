@@ -421,6 +421,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
             "lake_tablet_internal_parallel_skew_split_ratio";
 
+    public static final String ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN =
+            "enable_lake_prepared_split_on_dup_table_scan";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -1351,6 +1354,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // already reaches pipeline_dop. Only affects enable_lake_prepared_physical_split_scan.
     @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
     private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
+
+    // When false (default), a lake table scanned by >=2 scan operators in the same query (self-join /
+    // multi-scan) does NOT use the prepared-physical-split scan: its per-scan reuse of a shared prepared
+    // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
+    private boolean enableLakePreparedSplitOnDupTableScan = false;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -4826,6 +4835,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public double getLakeTabletInternalParallelSkewSplitRatio() {
         return lakeTabletInternalParallelSkewSplitRatio;
+    }
+
+    public boolean isEnableLakePreparedSplitOnDupTableScan() {
+        return enableLakePreparedSplitOnDupTableScan;
+    }
+
+    public void setEnableLakePreparedSplitOnDupTableScan(boolean enableLakePreparedSplitOnDupTableScan) {
+        this.enableLakePreparedSplitOnDupTableScan = enableLakePreparedSplitOnDupTableScan;
     }
 
     public void setLakeTabletInternalParallelSkewSplitRatio(double ratio) {
