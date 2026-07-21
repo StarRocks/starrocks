@@ -154,4 +154,82 @@ public class RoutineLoadJobMetaTest {
             Config.enable_pipeline_routine_load = saved;
         }
     }
+
+    @Test
+    public void testKafkaTaskInfoCreateRoutineLoadTaskFormatArrow() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(102L, "kafka_arrow_rl_job", db.getId(),
+                table.getId(), "localhost:9092", "topic1");
+        job.setFormat("arrow");
+
+        String label = "kafka_arrow_rl_label";
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(table.getId()), label, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                60, job.getComputeResource());
+
+        KafkaTaskInfo task = new KafkaTaskInfo(UUIDUtil.genUUID(), job, 1000, 2000,
+                com.google.common.collect.ImmutableMap.of(0, 0L), 3000);
+        task.setBeId(10001L);
+        Deencapsulation.setField(task, "txnId", txnId);
+        Deencapsulation.setField(task, "label", label);
+
+        TRoutineLoadTask t = task.createRoutineLoadTask();
+        Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_ARROW, t.getFormat());
+    }
+
+    @Test
+    public void testPulsarTaskInfoCreateRoutineLoadTaskFormatArrow() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(103L, "pulsar_arrow_rl_job", db.getId(),
+                table.getId(), "pulsar://localhost:6650", "topic1", "sub1");
+        job.setFormat("arrow");
+
+        String label = "pulsar_arrow_rl_label";
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(table.getId()), label, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                60, job.getComputeResource());
+
+        PulsarTaskInfo task = new PulsarTaskInfo(UUIDUtil.genUUID(), job, 1000, 2000,
+                Arrays.asList("0"), Maps.newHashMap(), 3000);
+        task.setBeId(10001L);
+        Deencapsulation.setField(task, "txnId", txnId);
+        Deencapsulation.setField(task, "label", label);
+
+        TRoutineLoadTask t = task.createRoutineLoadTask();
+        Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_ARROW, t.getFormat());
+    }
+
+    @Test
+    public void testPulsarTaskInfoCreateRoutineLoadTaskFormatAvro() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(104L, "pulsar_avro_rl_job", db.getId(),
+                table.getId(), "pulsar://localhost:6650", "topic1", "sub1");
+        job.setFormat("avro");
+
+        String label = "pulsar_avro_rl_label";
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(table.getId()), label, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                60, job.getComputeResource());
+
+        PulsarTaskInfo task = new PulsarTaskInfo(UUIDUtil.genUUID(), job, 1000, 2000,
+                Arrays.asList("0"), Maps.newHashMap(), 3000);
+        task.setBeId(10001L);
+        Deencapsulation.setField(task, "txnId", txnId);
+        Deencapsulation.setField(task, "label", label);
+
+        TRoutineLoadTask t = task.createRoutineLoadTask();
+        Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_AVRO, t.getFormat());
+    }
 }

@@ -72,6 +72,10 @@ struct ArrowConvertContext {
     int64_t file_size = -1;
     int64_t file_mtime_ms = -1;
 
+    // --- Routine Load Arrow Stream fields ---
+    int64_t consumer_partition = -1;
+    int64_t consumer_offset = -1;
+
     void set_current_column(std::string_view column_name, const TypeDescriptor& type) {
         current_column_name = std::string(column_name);
         current_type_length = type.len > 0 ? static_cast<size_t>(type.len) : 0;
@@ -114,7 +118,7 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
                                      Filter* chunk_filter, ArrowConvertContext* conv_ctx);
 
 struct ConvertFuncTree {
-    ConvertFuncTree(ConvertFunc f) : func(f){};
+    ConvertFuncTree(ConvertFunc f) : func(f) {};
     ConvertFuncTree() = default;
     ConvertFunc func = nullptr;
     std::vector<std::string> field_names; // used in struct

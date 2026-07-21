@@ -23,6 +23,11 @@
 #include <vector>
 
 #include "base/string/slice.h"
+
+namespace starrocks {
+class StreamLoadPipeInputStream;
+}
+
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -76,6 +81,12 @@ private:
     Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
     int64_t _last_file_scan_rows{0};
+    std::shared_ptr<SequentialFile> _file;
+    ByteBufferPtr _parser_buf;
+    std::shared_ptr<arrow::io::InputStream> _arrow_stream;
+    std::shared_ptr<arrow::io::BufferReader> _arrow_buffer_reader;
+    int _consecutive_errors{0};
+    static constexpr int kMaxConsecutiveErrors = 10;
 };
 
 } // namespace starrocks

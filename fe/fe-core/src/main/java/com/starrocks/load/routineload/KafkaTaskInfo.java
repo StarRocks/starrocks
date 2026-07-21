@@ -216,6 +216,8 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_JSON);
         } else if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("avro")) {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_AVRO);
+        } else if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("arrow")) {
+            tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_ARROW);
         } else {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_CSV_PLAIN);
         }

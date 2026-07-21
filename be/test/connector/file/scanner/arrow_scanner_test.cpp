@@ -30,6 +30,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
@@ -775,6 +776,269 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
 
     auto res2 = scanner->get_next();
     ASSERT_TRUE(res2.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
+    LoadStreamMgr load_stream_mgr;
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_VARCHAR);
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_ARROW;
+    range.file_type = TFileType::FILE_STREAM;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+    state->set_db("test_db");
+    state->set_load_label("test_label");
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->strict_mode = true;
+    params->__isset.strict_mode = true;
+    std::vector<TupleDescriptor*> tuples;
+    desc_tbl->get_tuple_descs(&tuples);
+    const auto num_tuples = tuples.size();
+    params->src_tuple_id = 0;
+    params->dest_tuple_id = num_tuples - 1;
+    const auto* src_tuple = desc_tbl->get_tuple_descriptor(params->src_tuple_id);
+    const auto* dst_tuple = desc_tbl->get_tuple_descriptor(params->dest_tuple_id);
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        auto& src_slot = src_tuple->slots()[i];
+        auto& dst_slot = dst_tuple->slots()[i];
+        params->expr_of_dest_slot[dst_slot->id()] =
+                create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+    }
+
+    for (int i = 0; i < src_tuple->slots().size(); i++) {
+        params->src_slot_ids.emplace_back(i);
+    }
+
+    RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+    ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+
+    TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // Create First Arrow stream
+    arrow::Int32Builder int_builder1;
+    arrow::StringBuilder str_builder1;
+    ASSERT_ARROW_OK(int_builder1.AppendValues({1, 2}));
+    ASSERT_ARROW_OK(str_builder1.AppendValues({"a", "b"}));
+    std::shared_ptr<arrow::Array> int_array1, str_array1;
+    ASSERT_ARROW_OK(int_builder1.Finish(&int_array1));
+    ASSERT_ARROW_OK(str_builder1.Finish(&str_array1));
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+    auto batch1 = arrow::RecordBatch::Make(schema, 2, {int_array1, str_array1});
+
+    auto stream1 = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer1 = arrow::ipc::MakeStreamWriter(stream1, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer1->WriteRecordBatch(*batch1));
+    ASSERT_ARROW_OK(writer1->Close());
+    auto buf1 = stream1->Finish().ValueOrDie();
+
+    // Create Second Arrow stream
+    arrow::Int32Builder int_builder2;
+    arrow::StringBuilder str_builder2;
+    ASSERT_ARROW_OK(int_builder2.AppendValues({3, 4}));
+    ASSERT_ARROW_OK(str_builder2.AppendValues({"c", "d"}));
+    std::shared_ptr<arrow::Array> int_array2, str_array2;
+    ASSERT_ARROW_OK(int_builder2.Finish(&int_array2));
+    ASSERT_ARROW_OK(str_builder2.Finish(&str_array2));
+
+    auto batch2 = arrow::RecordBatch::Make(schema, 2, {int_array2, str_array2});
+    auto stream2 = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer2 = arrow::ipc::MakeStreamWriter(stream2, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer2->WriteRecordBatch(*batch2));
+    ASSERT_ARROW_OK(writer2->Close());
+    auto buf2 = stream2->Finish().ValueOrDie();
+
+    // Append both to pipe as separate buffers
+    ByteBufferPtr bb1 = ByteBuffer::allocate(buf1->size());
+    bb1->put_bytes((const char*)buf1->data(), buf1->size());
+    bb1->flip();
+    EXPECT_OK(pipe->append(bb1));
+
+    ByteBufferPtr bb2 = ByteBuffer::allocate(buf2->size());
+    bb2->put_bytes((const char*)buf2->data(), buf2->size());
+    bb2->flip();
+    EXPECT_OK(pipe->append(bb2));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(2, chunk->num_rows());
+    ASSERT_EQ(1, chunk->columns()[0]->get(0).get_int32());
+    ASSERT_EQ("a", chunk->columns()[1]->get(0).get_slice());
+    ASSERT_EQ(2, chunk->columns()[0]->get(1).get_int32());
+    ASSERT_EQ("b", chunk->columns()[1]->get(1).get_slice());
+
+    // Pull next buffer seamlessly
+    auto res2 = scanner->get_next();
+    ASSERT_OK(res2.status());
+    auto chunk2 = res2.value();
+    ASSERT_NE(nullptr, chunk2);
+    ASSERT_EQ(2, chunk2->num_rows());
+    ASSERT_EQ(3, chunk2->columns()[0]->get(0).get_int32());
+    ASSERT_EQ("c", chunk2->columns()[1]->get(0).get_slice());
+    ASSERT_EQ(4, chunk2->columns()[0]->get(1).get_int32());
+    ASSERT_EQ("d", chunk2->columns()[1]->get(1).get_slice());
+
+    auto res3 = scanner->get_next();
+    ASSERT_TRUE(res3.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, TestScanArrowStreamMalformedAndEmpty) {
+    std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
+    std::string pipe_id = "test_malformed_arrow_pipe";
+    ExecEnv::GetInstance()->load_stream_mgr()->put(pipe_id, pipe);
+
+    TScanRange* scan_range = get_scan_range();
+    TBrokerScanRange* broker_scan_range = get_broker_scan_range(pipe_id);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_desc;
+    range_desc.__set_path("test_path");
+    range_desc.__set_start_offset(0);
+    range_desc.__set_size(100);
+    ranges.push_back(range_desc);
+
+    TBrokerScanRangeParams* params = get_params();
+    params->__set_format_type(TFileFormatType::FORMAT_ARROW);
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // 1. Append malformed buffer
+    std::string malformed_data = "INVALID_ARROW_STREAM_HEADER_DATA";
+    ByteBufferPtr bb_malformed = ByteBuffer::allocate(malformed_data.size());
+    bb_malformed->put_bytes(malformed_data.data(), malformed_data.size());
+    bb_malformed->flip();
+    EXPECT_OK(pipe->append(bb_malformed));
+
+    // 2. Create valid Arrow stream buffer
+    arrow::Int32Builder int_builder;
+    arrow::StringBuilder str_builder;
+    ASSERT_ARROW_OK(int_builder.AppendValues({10}));
+    ASSERT_ARROW_OK(str_builder.AppendValues({"valid"}));
+    std::shared_ptr<arrow::Array> int_array, str_array;
+    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
+    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
+
+    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
+    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
+    auto schema = arrow::schema({int_field, str_field});
+    auto batch = arrow::RecordBatch::Make(schema, 1, {int_array, str_array});
+
+    auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
+    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+    ASSERT_ARROW_OK(writer->Close());
+    auto buf = stream->Finish().ValueOrDie();
+
+    ByteBufferPtr bb_valid = ByteBuffer::allocate(buf->size());
+    bb_valid->put_bytes((const char*)buf->data(), buf->size());
+    bb_valid->flip();
+    EXPECT_OK(pipe->append(bb_valid));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    // Scanner should skip malformed message, count filtered rows, and return valid batch
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+    auto chunk = res.value();
+    ASSERT_NE(nullptr, chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(10, chunk->columns()[0]->get(0).get_int32());
+
+    ASSERT_EQ(1, counter->num_rows_filtered);
+
+    auto res_eof = scanner->get_next();
+    ASSERT_TRUE(res_eof.status().is_end_of_file());
+
+    scanner->close();
+}
+
+TEST_F(ArrowScannerTest, StressTestArrowMalformedRateLimit) {
+    std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
+    std::string pipe_id = "test_malformed_arrow_pipe_limit";
+    ExecEnv::GetInstance()->load_stream_mgr()->put(pipe_id, pipe);
+
+    TScanRange* scan_range = get_scan_range();
+    TBrokerScanRange* broker_scan_range = get_broker_scan_range(pipe_id);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_desc;
+    range_desc.__set_path("test_path");
+    range_desc.__set_start_offset(0);
+    range_desc.__set_size(100);
+    ranges.push_back(range_desc);
+
+    TBrokerScanRangeParams* params = get_params();
+    params->__set_format_type(TFileFormatType::FORMAT_ARROW);
+    broker_scan_range->params = *params;
+    broker_scan_range->ranges = ranges;
+
+    // Append 11 malformed buffers (exceeding the kMaxConsecutiveErrors threshold of 10)
+    std::string malformed_data = "INVALID_ARROW_STREAM_HEADER_DATA";
+    for (int i = 0; i < 11; ++i) {
+        ByteBufferPtr bb_malformed = ByteBuffer::allocate(malformed_data.size());
+        bb_malformed->put_bytes(malformed_data.data(), malformed_data.size());
+        bb_malformed->flip();
+        EXPECT_OK(pipe->append(bb_malformed));
+    }
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    // Scanner should abort because it exceeded consecutive errors
+    auto res = scanner->get_next();
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_internal_error());
+    ASSERT_NE(std::string::npos,
+              res.status().to_string().find("Arrow scanner exceeded max consecutive error threshold"));
 
     scanner->close();
 }
