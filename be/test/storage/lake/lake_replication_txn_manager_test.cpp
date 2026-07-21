@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/coding.h"
 #include "storage/lake/lake_replication_txn_manager.h"
 
 #include <fmt/format.h>
@@ -24,6 +23,7 @@
 #include <random>
 #include <thread>
 
+#include "base/coding.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
