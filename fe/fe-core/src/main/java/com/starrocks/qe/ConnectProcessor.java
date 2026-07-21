@@ -203,6 +203,10 @@ public class ConnectProcessor {
         ctx.getSerializer().setCapability(ctx.getCapability());
         // reset session variable
         ctx.resetSessionVariable();
+        // drop the previous logical session's diagnostics: COM_CHANGE_USER re-authenticates a
+        // different user on this same ConnectContext, and SHOW WARNINGS is the one statement that
+        // reads the buffer without clearing it first
+        ctx.clearWarnings();
     }
 
     public static long getThreadAllocatedBytes(long threadId) {

@@ -55,6 +55,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
@@ -359,6 +360,47 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
         Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
         Assertions.assertFalse(myContext.isKilled());
+    }
+
+    // A pooled connection handed back out must not expose the previous unit of work's diagnostics:
+    // SHOW WARNINGS is the one statement that reads the buffer without clearing it first.
+    @Test
+    public void testResetConnectionClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(resetConnectionPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Error", "1064", "leftover error from the previous session"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // COM_CHANGE_USER re-authenticates a different user on the same ConnectContext
+    // (MysqlProto.changeUser mutates it in place) and then falls through to the reset path, so the
+    // previous user's error text and load tracking URL must not survive into the new user's session.
+    // changeUserPacket cannot authenticate against the test catalog, so stub a successful
+    // change-user to reach handleResetConnection.
+    @Test
+    public void testChangeUserClearsSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                return true;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265",
+                "1 row(s) filtered or substituted to NULL during load; "
+                        + "tracking_url=http://127.0.0.1:8040/api/_load_error_log?file=previous_user"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
     }
 
     @Test
