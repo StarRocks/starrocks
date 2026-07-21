@@ -210,12 +210,21 @@ public class MergeTabletJobTest {
         Assertions.assertTrue(afterMergeIndex.getTablets().size() < beforeMergeIndex.getTablets().size());
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // The superseded (old) merge-child index is parked in the recycle bin rather than deleted
+        // immediately (issue #75993), so its tablets are retained until the retention expires and an
+        // in-flight query planned against it can finish reading.
         for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
         for (Tablet tablet : afterMergeIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+
+        // Symmetric to SplitTabletJobTest: the superseded index is scheduled for removal in the recycle
+        // bin but left installed on the partition until the retention expires.
+        Assertions.assertNotNull(physicalPartition.getIndex(beforeMergeIndex.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .isMaterializedIndexRecycled(beforeMergeIndex.getId()));
     }
 
     @Test
