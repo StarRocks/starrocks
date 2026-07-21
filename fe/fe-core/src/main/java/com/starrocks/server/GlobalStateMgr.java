@@ -1549,12 +1549,17 @@ public class GlobalStateMgr {
 
     @VisibleForTesting
     void rollbackLeaderActivation() {
-        // Rollback only happens during ACTIVATING, before publishLeaderLease opens the gate, so the gate is
-        // still closed and need not be closed again.
+        // Roll back a failed activation. publishLeaderLease() opens the WAL gate as its FIRST step, and many
+        // later activation steps (bootstrap actions, daemon start, metric init, ...) can still throw, so this
+        // rollback CAN run with the gate already open. Close it here (closeWalGate is idempotent): EditLog.log*
+        // gates solely on the WAL gate now, so a node that falls back to follower after a failed activation
+        // would otherwise keep admitting journal writes through the still-open gate. This also upholds the
+        // invariant beginLeaderActivation() relies on -- INACTIVE (after demotion/rollback) => gate closed.
         leaderWorkAdmissionOpen.set(false);
         activeLeaderLease = LeaderLease.INVALID;
         pendingDemotionTargetType = null;
         updateLeaderRoleState(LeaderRoleState.INACTIVE);
+        closeEditLogWalGate();
     }
 
     @VisibleForTesting

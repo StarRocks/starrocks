@@ -358,14 +358,21 @@ public class GlobalStateMgrTest {
     @Test
     public void testLeaderLeaseRollbackAfterActivationFailure() {
         GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(100), false);
+        globalStateMgr.setEditLog(editLog);
         globalStateMgr.beginLeaderActivation();
         globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
         globalStateMgr.publishLeaderLease(105L);
         LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        // publishLeaderLease opens the WAL gate as its last step.
+        Assertions.assertTrue(editLog.isWalGateOpenForTest());
 
         globalStateMgr.rollbackLeaderActivation();
 
         Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        // A failed activation rolls back after the gate was opened; it must close the gate again, otherwise a
+        // node that falls back to follower keeps admitting journal writes through the still-open WAL gate.
+        Assertions.assertFalse(editLog.isWalGateOpenForTest());
         Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
         Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
         Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());

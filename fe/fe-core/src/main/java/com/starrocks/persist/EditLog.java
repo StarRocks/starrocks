@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
@@ -1425,6 +1426,15 @@ public class EditLog {
     int inFlightForTest() {
         synchronized (editLogFenceLock) {
             return inFlight;
+        }
+    }
+
+    // Test accessor: whether the leader WAL gate is currently open. Public because GlobalStateMgr lifecycle
+    // tests (a different package) assert the gate is closed after demotion/activation-rollback.
+    @VisibleForTesting
+    public boolean isWalGateOpenForTest() {
+        synchronized (editLogFenceLock) {
+            return gateOpen;
         }
     }
 
