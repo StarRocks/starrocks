@@ -377,4 +377,45 @@ TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_buffer_boundary) {
     EXPECT_EQ("{\"y\":2}", rows[1][1]);
 }
 
+// Regression test for the empty-field trim crash: an EMPTY field parsed with
+// trim_space enabled must not crash. split_record() calls trim(value, 0) for
+// an empty field, and the previous trim() computed `end = len - 1`, which
+// underflows to SIZE_MAX when len == 0 -- value[SIZE_MAX] is then read out of
+// bounds and the BE crashes. Under ASAN the unfixed code aborts here; the
+// fixed trim() returns an empty slice.
+TEST_F(CSVReaderTest, test_split_record_trim_space_empty_field) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = ",";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    // Leading empty field, a value, and a trailing empty field.
+    starrocks::CSVReader::Record record1{",x,", 3};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("", fields1[0].to_string());
+    EXPECT_EQ("x", fields1[1].to_string());
+    EXPECT_EQ("", fields1[2].to_string());
+
+    // All-empty record: every field goes through trim(_, 0).
+    starrocks::CSVReader::Record record2{",,", 2};
+    starrocks::CSVReader::Fields fields2;
+    reader.split_record(record2, &fields2);
+    EXPECT_EQ(3, fields2.size());
+    EXPECT_EQ("", fields2[0].to_string());
+    EXPECT_EQ("", fields2[1].to_string());
+    EXPECT_EQ("", fields2[2].to_string());
+
+    // All-spaces field must trim to empty (exercises the end == begin path).
+    starrocks::CSVReader::Record record3{"   ", 3};
+    starrocks::CSVReader::Fields fields3;
+    reader.split_record(record3, &fields3);
+    EXPECT_EQ(1, fields3.size());
+    EXPECT_EQ("", fields3[0].to_string());
+}
+
 } // namespace starrocks::csv

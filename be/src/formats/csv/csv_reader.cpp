@@ -27,13 +27,13 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
         ++begin;
     }
 
-    size_t end = len - 1;
+    size_t end = len;
 
-    while (end > begin && value[end] == ' ') {
+    while (end > begin && value[end - 1] == ' ') {
         --end;
     }
 
-    return std::make_pair(value + begin, end - begin + 1);
+    return std::make_pair(value + begin, end - begin);
 }
 
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
