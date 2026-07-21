@@ -26,7 +26,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
-import com.starrocks.type.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -127,10 +126,6 @@ public class AnalyzeStmtAnalyzer {
 
     public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
-    }
-
-    public static boolean isUnsupportedHistogramColumnType(Type type) {
-        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
     }
 
     static class AnalyzeStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -450,7 +445,7 @@ public class AnalyzeStmtAnalyzer {
                 }
                 // Explicitly-listed columns: reject unsupported types outright.
                 for (Expr column : columns) {
-                    if (isUnsupportedHistogramColumnType(column.getType())) {
+                    if (StatisticUtils.isUnsupportedHistogramColumnType(column.getType())) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
                     }
@@ -463,9 +458,14 @@ public class AnalyzeStmtAnalyzer {
                         List<String> supported = analyzeStmt.getColumnNames().stream()
                                 .filter(name -> {
                                     Column col = analyzeTable.getColumn(name);
-                                    return col == null || !isUnsupportedHistogramColumnType(col.getType());
+                                    return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
                                 })
                                 .collect(Collectors.toList());
+                        if (supported.isEmpty()) {
+                            throw new SemanticException(
+                                    "Table '%s' has no columns that support histogram statistics",
+                                    analyzeTable.getName());
+                        }
                         analyzeStmt.setColumnNames(supported);
                     }
                 }
