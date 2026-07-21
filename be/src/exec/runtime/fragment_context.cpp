@@ -186,6 +186,10 @@ void FragmentContext::count_down_execution_group(size_t val) {
         (void)execution_services(state).streaming_load_thread_pool->submit(runnable);
     }
 
+    if (_finish_cb) {
+        _finish_cb(this);
+    }
+
     destroy_pass_through_chunk_buffer();
 
     auto fragment_lifecycle = _fragment_lifecycle.lock();

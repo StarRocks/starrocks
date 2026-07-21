@@ -501,8 +501,12 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         for (ReshardingTablet reshardingTablet : reshardingTablets) {
             Tablet oldTablet = oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
             Preconditions.checkNotNull(oldTablet, "Not found tablet " + reshardingTablet.getFirstOldTabletId());
+            // Carry the async vector-index build watermark forward onto each split child (its single
+            // parent's watermark), mirroring the BE side. No-op for non-vector tables.
+            long vibv = TabletReshardUtils.minVectorIndexBuiltVersion(oldIndex, reshardingTablet.getOldTabletIds());
             for (long tabletId : reshardingTablet.getNewTabletIds()) {
-                Tablet tablet = new LakeTablet(tabletId, oldTablet.getRange());
+                LakeTablet tablet = new LakeTablet(tabletId, oldTablet.getRange());
+                tablet.setVectorIndexBuiltVersion(vibv);
                 newIndex.addTablet(tablet, null, false);
             }
         }

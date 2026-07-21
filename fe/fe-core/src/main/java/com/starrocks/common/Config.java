@@ -2777,6 +2777,29 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_task_schedule_interval = 30; // unit: second, default 30s
 
+    // Bounded-cost external-table statistics collection (Iceberg first). Each per-(partition, column)
+    // statistics scan carries these caps; a scan stops as soon as any positive cap is reached (soft cap:
+    // the last split may overshoot). Small partitions/tables finish within budget and stay complete, while
+    // an oversized single partition or unpartitioned table is truncated to a bounded, degraded sample
+    // instead of failing/timing out. All three <= 0 disables the mechanism (the single rollback switch).
+    // bytes_cap is the primary budget: task.length() is precise and available on every FileScanTask, and
+    // scan time correlates with bytes more than rows. Calibrate against column count - a partition runs one
+    // independent scan per column (see design 2.6), so the real cost is roughly bytes_cap x column count.
+    @ConfField(mutable = true, comment = "Per statistics-scan byte budget for external-table analyze; " +
+            "<= 0 means unlimited. Primary bounded-cost budget, calibrate against collected column count.")
+    public static long connector_table_analyze_scan_bytes_cap = 2L * 1024 * 1024 * 1024; // 2GB
+
+    @ConfField(mutable = true, comment = "Per statistics-scan file-count budget for external-table analyze; " +
+            "<= 0 means unlimited. Secondary budget to cap opening too many small remote files.")
+    public static long connector_table_analyze_scan_files_cap = 1000;
+
+    // rows_cap is auxiliary only: split row counts can only be estimated (recordCount is per-file, not
+    // per-split), so it is a soft assist rather than the primary budget. Default aligns with
+    // connector_table_query_trigger_analyze_small_table_rows (10M).
+    @ConfField(mutable = true, comment = "Per statistics-scan estimated-row budget for external-table analyze; " +
+            "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
+    public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
@@ -3151,6 +3174,23 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField(mutable = true)
     public static boolean enable_pipeline_load = true;
+
+    /**
+     * Whether the classic synchronous stream load (and routine load, which shares
+     * StreamLoadPlanner) executes on the pipeline engine. Default false keeps the legacy
+     * non-pipeline PlanFragmentExecutor path as the fallback. Feature-gated rollout of
+     * stream-load-on-pipeline.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_pipeline_stream_load = false;
+
+    /**
+     * Whether routine load tasks execute on the pipeline engine (BE-local, each task pinned to
+     * its assigned BE which consumes Kafka/Pulsar into a StreamLoadPipe). Default false keeps the
+     * legacy non-pipeline StreamLoadPlanner path.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_pipeline_routine_load = false;
 
     /**
      * Enable shuffle load

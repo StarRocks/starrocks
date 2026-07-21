@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
@@ -64,7 +65,7 @@ import java.util.Optional;
  * column flags) in a single write lock.
  *
  * <p>Subclasses plug in two concrete pieces via the hook methods
- * {@link #populateAlterRequest(AlterReplicaTask)} and
+ * {@link #populateAlterRequest(AlterReplicaTask, long, MaterializedIndexMeta, OlapTable)} and
  * {@link #applyCatalogMutation(OlapTable)}. Everything else — txn watershed,
  * replica task dispatch, timeout, publish, persist/replay — is shared.
  *
@@ -158,7 +159,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      * Flag the task with the appropriate fast-path payload. Called once per
      * AlterReplicaTask before the task is added to the batch.
      */
-    protected abstract void populateAlterRequest(AlterReplicaTask task);
+    protected abstract void populateAlterRequest(AlterReplicaTask task, long indexMetaId,
+                                                 MaterializedIndexMeta indexMeta, OlapTable table);
 
     /**
      * Mutate the FE catalog to reflect the applied index change. Runs
@@ -371,6 +373,15 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             txnInfo.combinedTxnLog = false;
             txnInfo.commitTime = System.currentTimeMillis() / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            // A file-bundling table stores each version's tablet metadata in a
+            // single bundle file ({0}_{version}.meta) written by the aggregate
+            // publish path -- exactly like loads and metadata-alter jobs. The
+            // metadata vacuum for such a table only reclaims bundle-named files,
+            // so this fast path must publish the same way; publishing per-tablet
+            // ({tablet}_{version}.meta) instead leaves metadata the bundling
+            // vacuum never cleans up. Keyed on the table's current format,
+            // matching this class's cancel path (lakePublishVersionWithSkip).
+            boolean useAggregatePublish = table.isFileBundling();
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
                 if (pp == null) {
@@ -382,10 +393,22 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 // so every base + rollup + sync-MV tablet has an in-flight alter
                 // task. Publish must mirror that set or non-base indexes get left
                 // on stale visible versions while FE/base advance, eventually
-                // causing read/planning inconsistencies on those indexes.
+                // causing read/planning inconsistencies on those indexes. For a
+                // file-bundling table all of the partition's tablets must land in
+                // ONE aggregate publish: BE truncate-overwrites the bundle, so a
+                // per-index aggregate call would drop earlier indexes' tablets.
+                List<Tablet> tablets = new ArrayList<>();
                 for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                    if (useAggregatePublish) {
+                        tablets.addAll(idx.getTablets());
+                    } else {
+                        Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
+                                commitVersion, computeResource, false);
+                    }
+                }
+                if (useAggregatePublish) {
+                    Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
+                            commitVersion, computeResource, true);
                 }
             }
             return true;
@@ -773,7 +796,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(cn.getId(), dbId, tableId, ppId,
                             indexMetaId, tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
                             /*generatedColumnReq=*/ null, readSchema);
-                    populateAlterRequest(task);
+                    populateAlterRequest(task, indexMetaId, table.getIndexMetaByMetaId(indexMetaId), table);
                     batchTask.addTask(task);
                 }
             }

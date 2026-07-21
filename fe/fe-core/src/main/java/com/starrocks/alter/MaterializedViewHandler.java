@@ -265,7 +265,8 @@ public class MaterializedViewHandler extends AlterHandler {
         // A routable range rollup promotes its shadow to NORMAL directly, so it cannot share the
         // multi-job ROLLUP-state batch the existing rollup path uses; reject more than one in one
         // statement before any job is built.
-        if (isRangeRollupRoutable(olapTable)) {
+        boolean rangeRoutable = isRangeRollupRoutable(olapTable);
+        if (rangeRoutable) {
             long rollupClauseCount = alterClauses.stream()
                     .filter(clause -> clause instanceof AddRollupClause)
                     .count();
@@ -297,13 +298,22 @@ public class MaterializedViewHandler extends AlterHandler {
                 // step 2.1 check whether base index already exists in globalStateMgr
                 long baseIndexMetaId = checkAndGetBaseIndex(baseIndexName, olapTable);
 
+                // A range-distribution rollup is always derived from the base index (the K-tablet
+                // sampling and the version-pinned rewrite read the base). ADD ROLLUP ... FROM <rollup>
+                // is not supported. Checked here, before schema validation, so a FROM whose columns
+                // differ from the base reports this precise error rather than "column does not exist".
+                if (rangeRoutable && baseIndexMetaId != olapTable.getBaseIndexMetaId()) {
+                    throw new DdlException("A range-distribution rollup must be derived from the base index; "
+                            + "FROM <rollup> is not supported");
+                }
+
                 // step 2.2  check rollup schema
                 List<Column> rollupSchema =
                         checkAndPrepareMaterializedView(addRollupClause, olapTable, baseIndexMetaId);
 
                 // step 3 create rollup job
                 AlterJobV2 alterJobV2;
-                if (isRangeRollupRoutable(olapTable)) {
+                if (rangeRoutable) {
                     // Shared-data range table: build the additive K-tablet range-rollup job directly.
                     // Any range table that is NOT routable (sync MV, shared-nothing, colocate,
                     // auto-increment, primary-key) keeps the existing rejection in createMaterializedViewJob.
@@ -354,13 +364,14 @@ public class MaterializedViewHandler extends AlterHandler {
      * synchronous materialized view, which carries a query statement.)
      */
     static boolean isRangeRollupRoutable(OlapTable olapTable) {
-        // Only the base index may exist. The additive range-rollup path promotes its shadow to NORMAL
-        // directly (bypassing the multi-job ROLLUP-state coordination the existing path relies on), so a
-        // table that already carries a secondary index/rollup is not routable; it falls through to the
-        // existing range rejection in createMaterializedViewJob.
+        // A cloud-native, non-colocate, non-auto-increment, non-primary-key range-distribution table
+        // admits an additive rollup. A table that already carries one or more rollups is still routable:
+        // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
+        // table to be NORMAL) and operates only on its own shadow index meta id, so a completed rollup
+        // does not interfere. (The caller is processBatchAddRollup, so this is always a plain rollup,
+        // never a synchronous materialized view, which carries a query statement.)
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
-                && olapTable.getIndexMetaIdToMeta().size() == 1
                 && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
                 && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
@@ -544,13 +555,17 @@ public class MaterializedViewHandler extends AlterHandler {
             // this method. Everything else on a range table -- a synchronous materialized view (which
             // carries a query statement), a shared-nothing table, a colocate / auto-increment /
             // primary-key table -- is rejected here.
+            if (queryStatement != null) {
+                throw new DdlException(
+                    "Synchronous materialized view is not supported on tables with range distribution. " +
+                    "Use an asynchronous materialized view instead: declare it with an explicit " +
+                    "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
+                    "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+            }
             throw new DdlException(
-                "Synchronous materialized view / rollup is not supported on " +
-                "tables with range distribution. Use an asynchronous " +
-                "materialized view instead: declare it with an explicit " +
-                "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a " +
-                "DISTRIBUTED BY clause, e.g. CREATE MATERIALIZED VIEW ... " +
-                "DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+                "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
+                "rollup is supported only on a shared-data, non-colocate, non-auto-increment, " +
+                "non-primary-key range table.");
         }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's

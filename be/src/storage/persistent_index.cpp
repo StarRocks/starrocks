@@ -1901,8 +1901,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
     return Status::OK();
 }
 
-Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const IndexValue* values,
-                                         std::set<size_t>& check_l1_key_sizes) {
+Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const IndexValue* values) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
@@ -1910,7 +1909,6 @@ Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const Inde
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->insert(keys, values, idxes_by_shard[i]));
         }
-        check_l1_key_sizes.insert(shard_offset);
     } else {
         DCHECK(_fixed_key_size == 0);
         const auto* fkeys = reinterpret_cast<const Slice*>(keys);
@@ -3163,21 +3161,27 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
     return Status::OK();
 }
 
-Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_size) {
-    auto iter = _shard_info_by_length.find(key_size);
-    if (iter == _shard_info_by_length.end()) {
-        return Status::OK();
-    }
-    const auto [shard_off, nshard] = iter->second;
-    uint32_t shard_bits = log2(nshard);
-    std::vector<KeysInfo> keys_info_by_shard(nshard);
-    for (size_t i = 0; i < n; i++) {
-        IndexHash h(key_index_hash(keys[i].data, keys[i].size));
-        auto shard = h.shard(shard_bits);
-        keys_info_by_shard[shard].key_infos.emplace_back(i, h.hash);
-    }
-    for (size_t i = 0; i < nshard; i++) {
-        RETURN_IF_ERROR(_check_not_exist_in_shard(shard_off + i, n, keys, keys_info_by_shard[i]));
+Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys) {
+    for (const auto& [key_size, shard_info] : _shard_info_by_length) {
+        const auto [shard_off, nshard] = shard_info;
+        uint32_t shard_bits = log2(nshard);
+        std::vector<KeysInfo> keys_info_by_shard(nshard);
+        for (size_t i = 0; i < n; i++) {
+            // A fixed-size shard (key_size != 0) stores keys of exactly |key_size| bytes and
+            // compares them with a raw memcmp of |key_size| bytes, so probing a key of a different
+            // length would read past the key buffer and could report a false "already exist"; skip
+            // those. The var-len shard (key_size == 0) verifies the full key length itself, so any
+            // key is safe to probe there.
+            if (key_size != 0 && keys[i].size != key_size) {
+                continue;
+            }
+            IndexHash h(key_index_hash(keys[i].data, keys[i].size));
+            auto shard = h.shard(shard_bits);
+            keys_info_by_shard[shard].key_infos.emplace_back(i, h.hash);
+        }
+        for (size_t i = 0; i < nshard; i++) {
+            RETURN_IF_ERROR(_check_not_exist_in_shard(shard_off + i, n, keys, keys_info_by_shard[i]));
+        }
     }
     return Status::OK();
 }
@@ -4125,25 +4129,18 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
-    std::set<size_t> check_l1_l2_key_sizes;
-    RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_l2_key_sizes));
+    RETURN_IF_ERROR(_l0->insert(n, keys, values));
     if (!_l1_vec.empty()) {
         int end_idx = _has_l1 ? 1 : 0;
         for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
-            for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
-            }
+            RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
         }
     }
     if (_has_l1 && check_l1) {
-        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_l2_key_size));
-        }
+        RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
     }
     for (int i = _l2_vec.size() - 1; i >= 0; i--) {
-        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
-        }
+        RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
                                                                 std::pair<int64_t, int64_t>(0, 0));
