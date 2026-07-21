@@ -191,31 +191,28 @@ public class LeaderOpExecutor {
         return true;
     }
 
-    private void waitForForwardedJournalReplay() {
+    private void waitForForwardedJournalReplay() throws DdlException {
         if (!result.isSetMaxJournalId()) {
             return;
         }
         int replayWaitTimeoutMs = getForwardedJournalReplayWaitTimeoutMs();
         long deadline = System.currentTimeMillis() + replayWaitTimeoutMs;
-        try {
-            LOG.info("forwarding to leader get result max journal id: {}, wait timeout {}ms",
-                    result.maxJournalId, replayWaitTimeoutMs);
-            getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, replayWaitTimeoutMs);
-            if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
-                // NOTE: It is a known pitfall that when FE journal catch-up consumes the whole waitTimeoutMs,
-                // remaining becomes 0, and the subsequent StarMgr wait returns immediately because
-                // JournalObserver.waitForReplay() treats timeoutMs <= 0 as success even if replay is still behind.
-                int remaining = (int) Math.max(1, deadline - System.currentTimeMillis());
-                LOG.info("waiting for star mgr journal replay to {}, remaining timeout {}ms",
-                        result.maxStarMgrJournalId, remaining);
-                StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
-                        result.maxStarMgrJournalId, remaining,
-                        () -> StarMgrServer.getCurrentState().getReplayId());
-            }
-        } catch (DdlException e) {
-            LOG.warn("forwarded statement has already finished on leader, but local FE did not replay journal {} "
-                    + "within {}ms. Return leader result and leave local replay to catch up asynchronously",
-                    result.maxJournalId, replayWaitTimeoutMs, e);
+        LOG.info("forwarding to leader get result max journal id: {}, wait timeout {}ms",
+                result.maxJournalId, replayWaitTimeoutMs);
+        // FORWARD_WITH_SYNC must actually sync before returning: if local replay does not catch up within the
+        // timeout, let the DdlException propagate and fail the statement. Swallowing it would return success
+        // while this FE is still behind, so the same session's next statement could miss the change it just made.
+        getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, replayWaitTimeoutMs);
+        if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
+            // Math.max(1, ...) so the StarMgr wait still enforces even if the FE-journal wait consumed the whole
+            // timeout: waitOn() treats timeoutMs <= 0 as success even when replay is still behind, which would
+            // otherwise let a stale StarMgr view slip through.
+            int remaining = (int) Math.max(1, deadline - System.currentTimeMillis());
+            LOG.info("waiting for star mgr journal replay to {}, remaining timeout {}ms",
+                    result.maxStarMgrJournalId, remaining);
+            StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
+                    result.maxStarMgrJournalId, remaining,
+                    () -> StarMgrServer.getCurrentState().getReplayId());
         }
     }
 
