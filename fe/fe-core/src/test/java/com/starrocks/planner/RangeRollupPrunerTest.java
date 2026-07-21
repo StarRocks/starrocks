@@ -49,7 +49,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Regression tests for the per-index distribution pruning fix:
@@ -107,20 +106,27 @@ public class RangeRollupPrunerTest {
     }
 
     /**
-     * Documents the pre-fix crash mode: supplying the base's 2-column list against
-     * rollup tablets with 1-column ranges raises an arity {@code IllegalStateException}.
-     * The fix avoids this by using the rollup's own column list.
+     * A concurrent metadata-only sort-key flip can transiently mix tablet ranges of the old and
+     * new arity, so an arity mismatch between the tablet ranges and the supplied column list must
+     * degrade to a full scan (return every tablet) rather than throwing or silently dropping
+     * tablets. Passing the rollup's own column list (see the tests above) keeps arity aligned so
+     * this fallback is not hit in the normal rollup path.
      */
     @Test
-    public void testPrunerArityMismatchThrows() {
+    public void testPrunerArityMismatchDegradesToFullScan() {
         Column k1 = new Column("k1", IntegerType.INT, false);
         Column k2 = new Column("k2", IntegerType.INT, false);
 
-        assertThrows(IllegalStateException.class, () ->
-                new RangeDistributionPruner(
-                        Lists.newArrayList(createTablet(1L, "0", "9", k2)),
-                        Lists.newArrayList(k1, k2), // base's 2-column list — arity mismatch
-                        Maps.newHashMap()));
+        List<Tablet> tablets = Lists.newArrayList(
+                createTablet(1L, "0", "9", k2),
+                createTablet(2L, "10", "19", k2),
+                createTablet(3L, "20", "29", k2));
+
+        // base's 2-column list against 1-column tablet ranges — arity mismatch
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k1, k2), Maps.newHashMap());
+
+        assertEquals(Set.of(1L, 2L, 3L), new HashSet<>(pruner.prune()));
     }
 
     // ---- OptDistributionPruner (optimizer-rewrite) path tests ----------

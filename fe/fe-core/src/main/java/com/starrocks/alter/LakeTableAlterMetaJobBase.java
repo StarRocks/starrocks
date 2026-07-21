@@ -179,6 +179,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // Default implementation is empty. Subclasses can override this to prepare data.
     }
 
+    /**
+     * Hook for fallible validation that must run under the table WRITE lock BEFORE the FINISHED
+     * state is journaled by {@code persistStateChange}. A failure here throws before any WAL record
+     * is written, so the job stays at {@link JobState#FINISHED_REWRITING} with the catalog untouched.
+     * The default implementation is a no-op; subclasses whose finish callback performs a mutation
+     * that must not fail can move the fallible checks here.
+     */
+    protected void validateBeforeFinishUnprotected(Database db, OlapTable table) throws AlterCancelException {
+        // Default implementation is empty. Subclasses can override this to validate before persist.
+    }
+
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
     protected abstract boolean enableFileBundling();
@@ -261,6 +272,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             this.finishedTimeMs = System.currentTimeMillis();
+            // Run all fallible validation before persisting the FINISHED record, so a failure leaves
+            // the job at FINISHED_REWRITING without a durable FINISHED whose callback did not complete.
+            validateBeforeFinishUnprotected(db, table);
             // Prepare data before persist, so that copyForPersist() can include this data
             prepareForPersist(db, table);
             persistStateChange(this, JobState.FINISHED, () -> {

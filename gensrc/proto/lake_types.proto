@@ -372,6 +372,7 @@ message MetadataUpdateInfoPB {
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
+    optional TabletRangePB tablet_range = 7;
 }
 
 message BundleTabletMetadataPB {
