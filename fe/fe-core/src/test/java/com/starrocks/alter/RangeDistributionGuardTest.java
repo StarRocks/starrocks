@@ -239,12 +239,11 @@ public class RangeDistributionGuardTest {
     @Test
     public void testRangeRollupOnColocateRejected() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_colocate"));
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_colocate");
+        // Simulate colocate membership via the table's group property: the routing predicate now reads
+        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        table.setColocateGroup("t_guard_rollup_colocate_group");
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
     }
@@ -376,12 +375,11 @@ public class RangeDistributionGuardTest {
     @Test
     public void testColocateRangeTableRejectsSortKeyReorder() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_colocate"));
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_colocate");
+        // Simulate colocate membership via the table's group property: the routing predicate now reads
+        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        table.setColocateGroup("t_guard_colocate_group");
         assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate order by (k2, k1)");
     }
 
@@ -1472,6 +1470,10 @@ public class RangeDistributionGuardTest {
     @Test
     public void testColocateRangeAddKeyColUnaffected() throws Exception {
         starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo"));
+        // needsRangeRewriteSchemaChange reads the table's colocate-group property while
+        // isMetadataOnlyTrailingKeyAdd reads ColocateTableIndex; set both so the table is colocate to
+        // each guard and the ADD COLUMN KEY stays on the existing range-distribution rejection.
+        getTable("t_add_meta_colo").setColocateGroup("t_add_meta_colo_group");
         new MockUp<ColocateTableIndex>() {
             @Mock
             public boolean isColocateTable(long tableId) {
