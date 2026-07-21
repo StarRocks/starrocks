@@ -263,9 +263,32 @@ OpFactories maybe_interpolate_local_shuffle_exchange(PipelineBuilderContext* con
                                                            source_op->get_bucket_properties());
     }
 
-    return do_maybe_interpolate_local_shuffle_exchange(context, state, plan_node_id, pred_operators,
-                                                       self_partition_exprs_generator(), source_op->partition_type(),
-                                                       source_op->get_bucket_properties());
+    // Self-keys branch: the source declared no stable partition_exprs, so we partition on this
+    // operator's own keys (e.g. the join equi-keys or the group-by keys).
+    //
+    // The source may still carry bucket_properties (a lake bucket(K, N) scan reports its bucket
+    // transform there instead of in partition_exprs). We may reuse them ONLY when the self keys line
+    // up 1:1 with the bucket columns -- i.e. same count. That is the genuine bucket-shuffle case
+    // (e.g. a [BUCKET] join or a GROUP BY exactly on the bucket columns): hashing each self key by
+    // its murmur3 bucket transform keeps the local exchange aligned with the physical bucket layout.
+    //
+    // When the self keys are a strict SUPERSET of the bucket columns (e.g. COUNT(DISTINCT K) over
+    // GROUP BY K, other), reusing bucket_properties is wrong on two counts: (1) the murmur3 path in
+    // ShufflePartitioner indexes bucket_properties by the partition-column count, which is now larger
+    // than the bucket-column count -> out-of-bounds; and (2) it stamps could_local_shuffle=false on
+    // the output (see do_maybe_interpolate_local_shuffle_exchange), falsely telling a downstream
+    // DISTINCT(K) that the data is already partitioned by K when the superset [K, other] has actually
+    // scattered K across drivers -> the DISTINCT skips its own local exchange and over-counts.
+    // Drop bucket_properties in that case; the rows are then hashed by the self keys via the
+    // partition type's normal shuffle hash (CRC32 for BUCKET_SHUFFLE_HASH_PARTITIONED, fnv/xxh3 for
+    // HASH_PARTITIONED -- see ShufflePartitioner::shuffle_channel_ids), matching the native OLAP path
+    // whose source has empty bucket_properties.
+    const auto self_partition_exprs = self_partition_exprs_generator();
+    const auto& bucket_properties = source_op->get_bucket_properties();
+    const bool self_keys_match_buckets = self_partition_exprs.size() == bucket_properties.size();
+    return do_maybe_interpolate_local_shuffle_exchange(
+            context, state, plan_node_id, pred_operators, self_partition_exprs, source_op->partition_type(),
+            self_keys_match_buckets ? bucket_properties : std::vector<TBucketProperty>{});
 }
 
 OpFactories maybe_interpolate_local_bucket_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
