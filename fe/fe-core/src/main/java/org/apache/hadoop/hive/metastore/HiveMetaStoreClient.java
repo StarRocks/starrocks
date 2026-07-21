@@ -659,6 +659,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
+            // Reconnect first: get_table() may have failed on a read timeout that left an
+            // undrained response on the socket; reusing it for get_table_req() desyncs the
+            // Thrift seqid ("out of sequence response").
+            reconnect();
             GetTableRequest req = new GetTableRequest(dbName, tableName);
             req.setCapabilities(version);
             return client.get_table_req(req).getTable();
