@@ -506,8 +506,8 @@ TEST_F(PhysicalSplitMorselQueueTest, test_transient_get_segments_null_range_7520
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("/tmp/sr75203_transient"));
 
     // Bare segment reporting rows > 0 so check 3 (`_cur_segment()->num_rows() == 0`) is false on the retry.
-    auto segment = std::make_shared<Segment>(fs, FileInfo{"/tmp/sr75203_transient/0.dat"}, /*seg_id=*/0,
-                                             tablet_schema, /*tablet_manager=*/nullptr);
+    auto segment = std::make_shared<Segment>(fs, FileInfo{"/tmp/sr75203_transient/0.dat"}, /*seg_id=*/0, tablet_schema,
+                                             /*tablet_manager=*/nullptr);
     segment->set_num_rows(100);
 
     Morsels morsels;
