@@ -52,6 +52,30 @@ TEST_F(StatisticsHelperTest, DecodeBooleanMinMax) {
     EXPECT_EQ(1, max_column->get(1).get_uint8());
 }
 
+TEST_F(StatisticsHelperTest, DecodeBooleanIgnoresPaddingBits) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::type::BOOLEAN;
+
+    TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+    MutableColumnPtr column = ColumnHelper::create_column(type, true);
+
+    // PLAIN BOOLEAN encoding is bit-packed LSB first, so only bit 0 carries the value.
+    // bits 1-7 are unused padding.
+    // A byte such as 0x02 or 0xFE must decode to false, and 0x03 or 0xFF to true,
+    // regardless of the padding bits.
+    std::vector<std::string> values{std::string("\x02", 1), std::string("\x03", 1), std::string("\xFE", 1),
+                                    std::string("\xFF", 1)};
+    std::vector<bool> null_pages{false, false, false, false};
+
+    ASSERT_TRUE(StatisticsHelper::decode_value_into_column(column, values, null_pages, type, &field, "UTC").ok());
+
+    ASSERT_EQ(4, column->size());
+    EXPECT_EQ(0, column->get(0).get_uint8());
+    EXPECT_EQ(1, column->get(1).get_uint8());
+    EXPECT_EQ(0, column->get(2).get_uint8());
+    EXPECT_EQ(1, column->get(3).get_uint8());
+}
+
 TEST_F(StatisticsHelperTest, DecodeBooleanNullPage) {
     ParquetField field;
     field.physical_type = tparquet::Type::type::BOOLEAN;
