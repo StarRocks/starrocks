@@ -452,6 +452,84 @@ TEST_F(PhysicalSplitMorselQueueTest, test_lake_prepared_physical_split_pre_refin
     EXPECT_TRUE(queue.empty());
 }
 
+namespace {
+// A BaseRowset whose get_segments() returns an EMPTY list on its first call and a non-empty segment list
+// on every call after that. This models a *transient* Rowset::get_segments() failure: lake Rowset returns
+// {} on a load failure and does NOT cache it, so the immediate retry re-loads and can succeed. This is the
+// exact precondition for issue #75203 -- the first (failing) call makes _init_segment() early-return before
+// assigning _segment_range_iter, and the second (succeeding) call lets checks 1-3 fall through to check 4.
+class TransientEmptyRowset : public BaseRowset {
+public:
+    explicit TransientEmptyRowset(SegmentSharedPtr segment) : _segment(std::move(segment)) {}
+    RowsetId rowset_id() const override { return RowsetId{}; }
+    int64_t num_rows() const override { return 100; }
+    bool is_overlapped() const override { return false; }
+    std::vector<SegmentSharedPtr> get_segments() override {
+        if (_calls++ == 0) {
+            return {}; // transient failure: empty list, deliberately uncached
+        }
+        return {_segment}; // retry succeeds
+    }
+    bool has_data_files() const override { return true; }
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
+
+private:
+    SegmentSharedPtr _segment;
+    int _calls = 0;
+};
+} // namespace
+
+// Path-level regression for issue #75203: reproduce the crash through the REAL
+// PhysicalSplitMorselQueue::_try_get_split_from_single_tablet control flow, driven by a transient
+// get_segments() failure (empty then non-empty).
+//
+// Trace: check 1 (!_has_init_any_segment) fires first; _next_segment() flips it true and _init_segment()
+// calls _cur_segment() -> get_segments() call #1 -> {} -> segment==nullptr -> early-return WITHOUT setting
+// _segment_range_iter (its _range stays nullptr). Re-eval: check 1 false; check 2 (_cur_segment()==nullptr)
+// calls get_segments() #2 -> real segment -> false; check 3 (num_rows()==0) -> false; control reaches
+// check 4 (!_segment_range_iter.has_more()). WITHOUT the fix, has_more() dereferences the null _range and
+// crashes; WITH the null-safe fix, try_get() returns cleanly.
+TEST_F(PhysicalSplitMorselQueueTest, test_transient_get_segments_null_range_75203) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* col = schema_pb.add_column();
+    col->set_unique_id(0);
+    col->set_name("c0");
+    col->set_type("INT");
+    col->set_is_key(true);
+    col->set_is_nullable(false);
+    col->set_length(4);
+    col->set_index_length(4);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("/tmp/sr75203_transient"));
+
+    // Bare segment reporting rows > 0 so check 3 (`_cur_segment()->num_rows() == 0`) is false on the retry.
+    auto segment = std::make_shared<Segment>(fs, FileInfo{"/tmp/sr75203_transient/0.dat"}, /*seg_id=*/0,
+                                             tablet_schema, /*tablet_manager=*/nullptr);
+    segment->set_num_rows(100);
+
+    Morsels morsels;
+    morsels.emplace_back(std::make_unique<ScanMorsel>(1, make_scan_range()));
+    PhysicalSplitMorselQueue queue(std::move(morsels), /*degree_of_parallelism=*/1, /*splitted_scan_rows=*/1024);
+
+    auto tablet = std::make_shared<lake::Tablet>(nullptr, 10001);
+    std::vector<BaseTabletSharedPtr> tablets{tablet};
+    queue.set_tablets(tablets);
+
+    // Exactly one rowset, whose first get_segments() transiently returns empty.
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.push_back({std::make_shared<TransientEmptyRowset>(segment)});
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(tablet_schema);
+
+    // WITHOUT the fix: SIGSEGV in SparseRangeIterator::has_more(). WITH the fix: returns without crash.
+    auto result = queue.try_get();
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), nullptr);
+}
+
 // prepare_olap_scan_ranges returns one TInternalScanRange* per queued root morsel.
 TEST_F(PhysicalSplitMorselQueueTest, test_lake_prepared_physical_split_prepare_olap_scan_ranges) {
     Morsels morsels;
