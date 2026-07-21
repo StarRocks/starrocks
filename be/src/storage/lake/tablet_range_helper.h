@@ -44,8 +44,18 @@ public:
      * @return StatusOr<SeekRange> A SeekRange referencing data owned either by
      *         `tablet_range_pb` or `mem_pool`, depending on `mem_pool`.
      */
+    // Decode a persisted tablet range into a SeekRange under `tablet_schema` -- the schema the target
+    // segment is read with (for an old rowset, its archived schema). A range whose bound arity exceeds
+    // `tablet_schema`'s sort-key arity can occur when a newer build persisted the range after a
+    // metadata-only trailing sort-key add and this (possibly downgraded) build reads a rowset that still
+    // carries a narrower archived schema. Such a bound is projected onto the leading sort-key columns:
+    // the dropped trailing columns are compared against their read-time defaults (from `current_schema`,
+    // which must contain them) to set each bound's inclusivity, so the seek stays exact. `current_schema`
+    // is required only when a bound is wider than `tablet_schema`'s sort key; a same-arity range decodes
+    // directly and ignores it.
     static StatusOr<SeekRange> create_seek_range_from(const TabletRangePB& tablet_range_pb,
-                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool);
+                                                      const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
+                                                      const TabletSchemaCSPtr& current_schema = nullptr);
 
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);

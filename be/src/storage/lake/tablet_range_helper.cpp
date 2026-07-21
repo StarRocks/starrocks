@@ -29,6 +29,7 @@
 #include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/types.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
 
@@ -127,9 +128,30 @@ Status TabletRangeHelper::validate_tablet_range(const TabletRangePB& tablet_rang
     return Status::OK();
 }
 
+// The value old rows of a segment read for a sort-key column added later by a metadata-only fast schema
+// evolution, mirroring DefaultValueColumnIterator::init: a declared default of the literal "NULL", or no
+// declared default on a nullable column, reads as NULL; otherwise the declared default parsed to its type.
+static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
+    const TypeInfoPtr& type_info = get_type_info(column);
+    Datum datum;
+    if (column.has_default_value()) {
+        if (column.default_value() == "NULL") {
+            datum.set_null();
+        } else {
+            RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, column.default_value(), nullptr));
+        }
+    } else if (column.is_nullable()) {
+        datum.set_null();
+    } else {
+        return Status::Corruption(
+                fmt::format("added sort-key column {} has no default and is not nullable", column.name()));
+    }
+    return DatumVariant(type_info, datum);
+}
+
 StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangePB& tablet_range_pb,
-                                                              const TabletSchemaCSPtr& tablet_schema,
-                                                              MemPool* mem_pool) {
+                                                              const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
+                                                              const TabletSchemaCSPtr& current_schema) {
     SeekRange tablet_range;
     RETURN_IF_ERROR(validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
@@ -138,18 +160,15 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
     }
     const auto& sort_key_idxes = tablet_schema->sort_key_idxes();
     DCHECK(!sort_key_idxes.empty());
-    auto parse_bound_to_seek_tuple = [&](const TuplePB& tuple) -> StatusOr<SeekTuple> {
-        const int n = tuple.values_size();
-        if (n != sort_key_idxes.size()) {
-            return Status::Corruption(
-                    fmt::format("Unexpected number of values in TabletRangePB bound value, expected: {}, actual: {}",
-                                sort_key_idxes.size(), n));
-        }
+    const size_t seg_arity = sort_key_idxes.size();
 
+    // Decode the leading `seg_arity` values of a bound with `tablet_schema` so the SeekTuple's positional
+    // field ids align with the target segment.
+    auto decode_leading = [&](const TuplePB& tuple) -> StatusOr<SeekTuple> {
         Schema schema;
         std::vector<Datum> values;
-        values.reserve(n);
-        for (int i = 0; i < n; i++) {
+        values.reserve(seg_arity);
+        for (size_t i = 0; i < seg_arity; i++) {
             const int idx = sort_key_idxes[i];
             schema.append_sort_key_idx(idx);
             auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
@@ -162,18 +181,77 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
         return SeekTuple(std::move(schema), std::move(values));
     };
 
+    // Sign of (added-column defaults D) minus (a bound's dropped trailing values at [seg_arity, m)), a
+    // lexicographic NULL-aware comparison. D comes from `current_schema`'s sort-key columns [seg_arity, m):
+    // for an old segment every row reads those columns as their default, so D vs the trailing decides how a
+    // boundary-prefix row routes.
+    auto compare_default_to_trailing = [&](const TuplePB& tuple) -> StatusOr<int> {
+        const int m = tuple.values_size();
+        if (current_schema == nullptr) {
+            return Status::Corruption("current schema is required to project a wider range bound");
+        }
+        const auto& cur_sort_key_idxes = current_schema->sort_key_idxes();
+        if (static_cast<int>(cur_sort_key_idxes.size()) < m) {
+            return Status::Corruption(fmt::format("current schema sort-key arity {} < range bound arity {}",
+                                                  cur_sort_key_idxes.size(), m));
+        }
+        VariantTuple default_trailing;
+        VariantTuple bound_trailing;
+        default_trailing.reserve(m - seg_arity);
+        bound_trailing.reserve(m - seg_arity);
+        for (int i = static_cast<int>(seg_arity); i < m; i++) {
+            ASSIGN_OR_RETURN(auto d, read_time_default(current_schema->column(cur_sort_key_idxes[i])));
+            default_trailing.append(std::move(d));
+            DatumVariant bound_value;
+            RETURN_IF_ERROR(bound_value.from_proto(tuple.values(i)));
+            bound_trailing.append(std::move(bound_value));
+        }
+        return default_trailing.compare(bound_trailing);
+    };
+
+    // Decode a bound into a SeekTuple and its (possibly projected) inclusivity.
+    auto build_bound = [&](const TuplePB& tuple, bool pb_included, bool is_lower, SeekTuple* out_tuple,
+                           bool* out_included) -> Status {
+        const int m = tuple.values_size();
+        if (m < static_cast<int>(seg_arity)) {
+            return Status::Corruption(fmt::format(
+                    "Unexpected number of values in TabletRangePB bound value, expected at least: {}, actual: {}",
+                    seg_arity, m));
+        }
+        ASSIGN_OR_RETURN(*out_tuple, decode_leading(tuple));
+        if (m == static_cast<int>(seg_arity)) {
+            *out_included = pb_included;
+            return Status::OK();
+        }
+        // The bound is wider than this segment's sort key: project it onto the leading `seg_arity` columns
+        // and derive inclusivity from D (what old rows read for the dropped columns) vs the trailing values.
+        // A boundary-prefix row (prefix, D) is on the >= side of a lower bound iff D >= trailing, and on the
+        // < side of an upper bound iff D < trailing.
+        ASSIGN_OR_RETURN(const int cmp, compare_default_to_trailing(tuple));
+        if (is_lower) {
+            *out_included = pb_included ? (cmp >= 0) : (cmp > 0);
+        } else {
+            *out_included = pb_included ? (cmp <= 0) : (cmp < 0);
+        }
+        return Status::OK();
+    };
+
     SeekTuple lower;
     SeekTuple upper;
+    bool inclusive_lower = tablet_range_pb.lower_bound_included();
+    bool inclusive_upper = tablet_range_pb.upper_bound_included();
     if (tablet_range_pb.has_lower_bound()) {
-        ASSIGN_OR_RETURN(lower, parse_bound_to_seek_tuple(tablet_range_pb.lower_bound()));
+        RETURN_IF_ERROR(build_bound(tablet_range_pb.lower_bound(), tablet_range_pb.lower_bound_included(),
+                                    /*is_lower=*/true, &lower, &inclusive_lower));
     }
     if (tablet_range_pb.has_upper_bound()) {
-        ASSIGN_OR_RETURN(upper, parse_bound_to_seek_tuple(tablet_range_pb.upper_bound()));
+        RETURN_IF_ERROR(build_bound(tablet_range_pb.upper_bound(), tablet_range_pb.upper_bound_included(),
+                                    /*is_lower=*/false, &upper, &inclusive_upper));
     }
 
     tablet_range = SeekRange(std::move(lower), std::move(upper));
-    tablet_range.set_inclusive_lower(tablet_range_pb.lower_bound_included());
-    tablet_range.set_inclusive_upper(tablet_range_pb.upper_bound_included());
+    tablet_range.set_inclusive_lower(inclusive_lower);
+    tablet_range.set_inclusive_upper(inclusive_upper);
     return tablet_range;
 }
 

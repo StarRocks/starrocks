@@ -853,6 +853,7 @@ using tablet_reshard_helper::DcgRowWindow;
 Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int64_t new_tablet_id,
                                               const RowsetMetadataPB& target_rowset, int target_segment_position,
                                               const TabletSchemaCSPtr& full_tablet_schema,
+                                              const TabletSchemaCSPtr& current_schema,
                                               const std::vector<DcgSourceRowsetReference>& source_references,
                                               const roaring::Roaring* gap_bits,
                                               std::shared_ptr<Segment>* out_base_segment,
@@ -886,9 +887,13 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
     for (const auto& source_reference : source_references) {
         Range<rowid_t> window{0, num_rows_in_target};
         if (source_reference.effective_range != nullptr) {
+            // Decode with full_tablet_schema (the schema the base segment is opened with) so positions
+            // align; a source range persisted at a wider sort-key arity (after a metadata-only trailing
+            // add on a newer build) is projected onto that sort key using current_schema's added-column
+            // defaults. This build never writes such a range; it only tolerates one on read.
             ASSIGN_OR_RETURN(auto seek_range, TabletRangeHelper::create_seek_range_from(
                                                       *source_reference.effective_range, full_tablet_schema,
-                                                      /*mem_pool=*/nullptr));
+                                                      /*mem_pool=*/nullptr, current_schema));
             LakeIOOptions lake_io_options{.fill_data_cache = false};
             ASSIGN_OR_RETURN(auto rowid_range_opt,
                              segment_seek_range_to_rowid_range(base_segment, seek_range, lake_io_options));
@@ -1042,11 +1047,15 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
                 rebuild_columns.size(), rebuild_schema->num_columns()));
     }
 
-    // Step C — compute row windows.
+    // Step C — compute row windows. current_schema (the current tablet schema, which contains any
+    // later-added trailing key columns) lets a source range persisted at a wider sort-key arity than
+    // full_tablet_schema be projected onto the base segment's sort key using those columns' defaults.
+    TabletSchemaCSPtr current_schema =
+            new_metadata.has_schema() ? TabletSchema::create(new_metadata.schema()) : full_tablet_schema;
     std::vector<DcgRowWindow> windows;
     std::shared_ptr<Segment> base_segment;
     RETURN_IF_ERROR(compute_row_windows_for_source_rowsets(tablet_manager, new_tablet_id, target_rowset,
-                                                           target_segment_position, full_tablet_schema,
+                                                           target_segment_position, full_tablet_schema, current_schema,
                                                            source_references, gap_bits, &base_segment, &windows));
     const rowid_t num_rows_in_target = static_cast<rowid_t>(base_segment->num_rows());
 
@@ -1343,6 +1352,12 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
                                                                       const TabletMetadataPB& new_metadata,
                                                                       const CanonicalContribMap& canonical_contribs) {
     std::vector<CanonicalGapSpec> result;
+    // The current tablet schema, used to project a gap range whose bound arity is wider than a canonical
+    // rowset's (archived) sort key. This path is primary-key-only and the metadata-only trailing sort-key
+    // add excludes primary-key tables, so a wider bound does not arise here today; passing current_schema
+    // keeps create_seek_range_from correct and consistent with the other call sites regardless.
+    const TabletSchemaCSPtr current_schema =
+            new_metadata.has_schema() ? TabletSchema::create(new_metadata.schema()) : nullptr;
     for (const auto& [canonical_index, contrib] : canonical_contribs) {
         if (canonical_index < 0 || canonical_index >= new_metadata.rowsets_size()) {
             return Status::InternalError(
@@ -1398,8 +1413,8 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
 
             Roaring gap_bits;
             for (const auto& gap_range : non_contributed) {
-                ASSIGN_OR_RETURN(auto seek_range,
-                                 TabletRangeHelper::create_seek_range_from(gap_range, schema, /*mem_pool=*/nullptr));
+                ASSIGN_OR_RETURN(auto seek_range, TabletRangeHelper::create_seek_range_from(
+                                                          gap_range, schema, /*mem_pool=*/nullptr, current_schema));
                 LakeIOOptions io_opts{.fill_data_cache = false};
                 ASSIGN_OR_RETURN(auto rowid_range_opt,
                                  segment_seek_range_to_rowid_range(base_segment, seek_range, io_opts));
