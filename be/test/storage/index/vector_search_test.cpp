@@ -71,6 +71,8 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage_primitive/column_expr_predicate.h"
 #include "storage_primitive/column_predicate.h"
+#include "column/global_dict/config.h"
+#include "column/global_dict/types_fwd_decl.h"
 #include "storage_primitive/conjunctive_predicates.h"
 #include "storage_primitive/disjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
@@ -1709,6 +1711,8 @@ protected:
         int min_filter_col = 4;           // every returned row must satisfy filter_col >= this
         bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
         bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
+        bool tag_global_dict = false;     // activate a global dictionary on tag (cid 3) so _rewrite_predicates
+                                          // rewrites a delete predicate on tag into a global-dict-code predicate
         bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
         // Storage delete predicates (DELETE ... WHERE on a DUP table). When set, they must be pre-applied
         // before the ANN top-k narrowing, so the search ranks live rows only. Empty -> no delete.
@@ -1720,6 +1724,7 @@ protected:
         std::vector<float> distances; // appended ANN distance column values, when present
         int64_t search_ns = -1;
         int64_t raw_rows_read = -1;
+        int64_t del_pruned = -1; // rows the delete-predicate zone-map prune skipped from row-level eval
     };
 
     // L2 and cosine disagree on this data: row 6 is cosine-best (1.0) but l2-worst; row 7 ~0.707.
@@ -1838,6 +1843,16 @@ protected:
         seg_opts.pred_tree = std::move(pred_tree);
         seg_opts.delete_predicates = cfg.delete_predicates;
 
+        // Activate a global dictionary on the tag column (cid 3) when requested, so _rewrite_predicates
+        // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps must outlive
+        // the synchronous iterator run below; string literals give the Slices program lifetime.
+        GlobalDictMap tag_global_dict = {{"red", 1}, {"blue", 2}};
+        ColumnIdToGlobalDictMap tag_dictmaps;
+        if (cfg.tag_global_dict) {
+            tag_dictmaps.emplace(3, &tag_global_dict);
+            seg_opts.global_dictmaps = &tag_dictmaps;
+        }
+
         // Optionally register an (unarrived) pushdown runtime filter. A runtime filter post-filters the
         // top-k above the per-segment search, so PRE would under-return -- its presence must route AUTO
         // to exact BRUTE. Unarrived means the read loop's update_range_if_arrived is a no-op, so this
@@ -1925,6 +1940,7 @@ protected:
         // through raw column iterators and does not count) -- so it equals the number of rows the read
         // loop actually fetched: the deterministic marker for brute pre-narrowing.
         result->raw_rows_read = static_cast<int64_t>(stats.raw_rows_read);
+        result->del_pruned = stats.rows_del_predicate_zone_map_pruned;
     }
 };
 
@@ -1960,6 +1976,90 @@ TEST_F(VectorResidualPrefilterTest, delete_predicate_preapplied_before_ann_topk)
     ResidualCaseResult res;
     run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{2, 3, 4})) << "deleted rows must not starve live rows in the top-k";
+}
+
+TEST_F(VectorResidualPrefilterTest, delete_preapplied_short_circuit_bounds_topk) {
+    // Pure ANN (no residual) + a delete predicate removing ids < 4 -> live set {4,5,6,7}, cardinality 4.
+    // _apply_del_predicate folds the survivors into _scan_range and the vector stage treats them as
+    // pre-narrowed, so the sparse-ratio gate (0.5*8 = 4) fires and rescans exactly. The rescan must return
+    // the k=3 nearest LIVE rows {4,5,6}: not all 4 live rows (bounded-k), and not the nearer deleted rows
+    // {0,1,2,3} (deletes pre-applied). Exercises both new paths together.
+    double saved = config::vector_index_brute_selectivity_threshold;
+    config::vector_index_brute_selectivity_threshold = 0.5;
+    DeferOp restore([&] { config::vector_index_brute_selectivity_threshold = saved; });
+
+    std::unique_ptr<ColumnPredicate> del_pred(new_column_lt_predicate(get_type_info(TYPE_BIGINT), 0, "4"));
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0; // no residual constraint; assert only the returned id set
+    ConjunctivePredicates conj;
+    conj.add(del_pred.get());
+    cfg.delete_predicates.add(conj);
+
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6})) << "rescan must bound to the k nearest live rows";
+    EXPECT_EQ(res.search_ns, 0) << "sparse-ratio gate should have short-circuited the search";
+}
+
+TEST_F(VectorResidualPrefilterTest, delete_on_global_dict_column_preapplied) {
+    // #1 regression. With a global dictionary on the low-cardinality VARCHAR tag column, _rewrite_predicates
+    // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. If deletes were applied
+    // AFTER that rewrite (the bug), the INT predicate would be evaluated against the raw string column and
+    // crash / mis-filter. _apply_del_predicate runs BEFORE the rewrite, on the original string predicate, so
+    // it must never crash and must produce the correct survivors. tag='red' on rows 0..3 -> deletes 0..3 ->
+    // live {4,5,6,7}; k=3 nearest live -> {4,5,6}.
+    std::unique_ptr<ColumnPredicate> del_pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "red"));
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    cfg.with_tag_column = true;
+    cfg.tag_global_dict = true;
+    ConjunctivePredicates conj;
+    conj.add(del_pred.get());
+    cfg.delete_predicates.add(conj);
+
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}))
+            << "global-dict delete column must be pre-applied on raw values, not crash on a dict-code predicate";
+}
+
+TEST_F(VectorResidualPrefilterTest, delete_zone_map_prunes_scan) {
+    // #B (zone-map page prune). A delete predicate whose value is outside the id column's zone map
+    // (id >= 1000; ids are 0..7) matches nothing, so the prune skips the row-level delete evaluation for the
+    // whole page: every row survives with zero eval reads (del_pruned == 8), and the ANN top-k is unaffected
+    // -> {0,1,2}. Distinguishes "pruned the scan" from "scanned all and found nothing to delete".
+    std::unique_ptr<ColumnPredicate> del_pred(new_column_ge_predicate(get_type_info(TYPE_BIGINT), 0, "1000"));
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    ConjunctivePredicates conj;
+    conj.add(del_pred.get());
+    cfg.delete_predicates.add(conj);
+
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+    EXPECT_EQ(res.del_pruned, 8) << "zone map must prune the whole page from the row-level delete scan";
+}
+
+TEST_F(VectorResidualPrefilterTest, delete_multi_column_conjunct_preapplied) {
+    // #B safety. A multi-column conjunct delete (id < 6 AND tag = 'blue'). The per-column zone-map prune is a
+    // conservative superset (it ORs the columns), but the row-level eval applies the real AND, so only rows
+    // matching BOTH are deleted: id<6 = {0..5}, tag='blue' = {4..7}, AND = {4,5}. Live = {0,1,2,3,6,7};
+    // k=3 nearest -> {0,1,2}. (If the conjunct were mistakenly widened to OR, everything would be deleted.)
+    std::unique_ptr<ColumnPredicate> id_lt6(new_column_lt_predicate(get_type_info(TYPE_BIGINT), 0, "6"));
+    std::unique_ptr<ColumnPredicate> tag_blue(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "blue"));
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    cfg.with_tag_column = true;
+    ConjunctivePredicates conj;
+    conj.add(id_lt6.get());
+    conj.add(tag_blue.get());
+    cfg.delete_predicates.add(conj);
+
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}))
+            << "multi-column conjunct must delete only rows matching all its columns";
 }
 
 TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
@@ -2053,15 +2153,16 @@ TEST_F(VectorResidualPrefilterTest, cardinality_equal_k_short_circuits_search) {
 TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
     // Ratio leg: threshold 0.5 over the 8-row segment allows up to 4 candidates. filter_col >= 4 ->
     // cardinality 4 > k=3 (the <=k leg does NOT fire) but 4 <= 0.5*8 -> the ratio leg skips the search.
-    // The short-circuit path has no segment-level k-limit, so ALL candidates {4,5,6,7} come back (the
-    // upstream TopN cuts k in a real query); the search path would return only {4,5,6}. Both are exact.
+    // The exact rescan bounds its result to the k=3 nearest {4,5,6} (matching the HNSW path's per-segment
+    // k contract, and bounding the rescan's memory); the upstream TopN cuts to k anyway. It is NOT all 4
+    // candidates. Both are exact for the rows returned.
     double saved = config::vector_index_brute_selectivity_threshold;
     config::vector_index_brute_selectivity_threshold = 0.5;
     DeferOp restore([&] { config::vector_index_brute_selectivity_threshold = saved; });
     std::unique_ptr<ColumnPredicate> pred;
     ResidualCaseResult res;
     run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
-    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
     EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite ratio gate";
 }
 
