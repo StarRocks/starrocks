@@ -64,6 +64,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | 导入事务的版本号。不包括 Compaction 操作。 |
 | VersionEpoch             | 分区的纪元号。系统会在创建分区时赋值纪元，并在每次分区被 SWAP 时更改版本纪元。 |
 | VersionTxnType           | 生成当前数据版本的事务类型。有效值：`NORMAL`（正常事务）和 `REPLICATION`（数据复制）。 |
+| LastUpdateTime           | 分区最近一次被用户写入（导入 / INSERT / DELETE / UPDATE）修改的时间。 |
+| LastAccessTime           | 分区最近一次被查询扫描到的时间，当前仅保存在 FE 内存中（不持久化），查询时跨 FE 聚合结果。 |
 
 ## 示例
 
@@ -89,6 +91,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

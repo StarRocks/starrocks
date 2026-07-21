@@ -35,6 +35,7 @@ import java.util.Set;
 
 public class OlapTableTxnLogApplier implements TransactionLogApplier {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnLogApplier.class);
+
     // olap table or olap materialized view
     private final OlapTable table;
 
@@ -204,6 +205,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
                 dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
+            }
+            if (txnState.isUserWriteSource()) {
+                partition.updateLastUpdateTime(versionTime);
             }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }

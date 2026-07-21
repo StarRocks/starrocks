@@ -34,6 +34,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -73,6 +74,7 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
 import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TKeywordInfo;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -84,6 +86,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -411,6 +414,14 @@ public class InformationSchemaDataSource {
             }
         }
 
+        // Cross-FE aggregated (best-effort) access times, scoped to exactly the tables returned in THIS
+        // page: accumulate this FE's local values during the walk, then after the page is built fetch the
+        // other FEs' values for the page's tables in a single batch RPC (outside any lock) and backfill
+        // the rows. Scoping to the page keeps a paged scan from re-sending every remaining table id.
+        PartitionAccessTimeMgr accessTimeMgr = GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+        Map<Long, Long> accessTimes = new HashMap<>();
+        List<TPartitionAccessTimeTableRef> pageTableRefs = new ArrayList<>();
+
         for (Element ele : sortedElements) {
             Table table = ele.table;
             if (!table.isNativeTableOrMaterializedView()) {
@@ -439,6 +450,14 @@ public class InformationSchemaDataSource {
                 }
                 OlapTable olapTable = (OlapTable) table;
                 PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
+                // Record this table for the post-loop cross-FE batch, and merge this FE's local access
+                // times under the table READ lock (getLocalTableAccessTimes walks the partition maps).
+                TPartitionAccessTimeTableRef pageRef = new TPartitionAccessTimeTableRef();
+                pageRef.setDb_id(ele.dbId);
+                pageRef.setTable_id(olapTable.getId());
+                pageTableRefs.add(pageRef);
+                accessTimeMgr.getLocalTableAccessTimes(ele.dbId, olapTable.getId())
+                        .forEach((pid, ts) -> accessTimes.merge(pid, ts, Math::max));
                 // normal partition
                 for (Partition partition : olapTable.getPartitions()) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -446,7 +465,7 @@ public class InformationSchemaDataSource {
                         partitionMetaInfo.setDb_name(ele.dbName);
                         partitionMetaInfo.setTable_name(olapTable.getName());
                         genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                partitionMetaInfo, false /* isTemp */);
+                                partitionMetaInfo, false /* isTemp */, accessTimes);
                         pList.add(partitionMetaInfo);
                     }
                 }
@@ -457,7 +476,7 @@ public class InformationSchemaDataSource {
                         partitionMetaInfo.setDb_name(ele.dbName);
                         partitionMetaInfo.setTable_name(olapTable.getName());
                         genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                partitionMetaInfo, true /* isTemp */);
+                                partitionMetaInfo, true /* isTemp */, accessTimes);
                         pList.add(partitionMetaInfo);
                     }
                 }
@@ -469,6 +488,16 @@ public class InformationSchemaDataSource {
                 locker.unLockTableWithIntensiveDbLock(ele.dbId, table.getId(), LockType.READ);
             }
         }
+        // The page's table set is now known: fetch the OTHER FEs' access times for exactly those tables
+        // in a single batch RPC per FE (outside any lock), merge (max), then backfill LAST_ACCESS_TIME.
+        accessTimeMgr.getRemoteAccessTimes(pageTableRefs)
+                .forEach((pid, ts) -> accessTimes.merge(pid, ts, Math::max));
+        for (TPartitionMetaInfo meta : pList) {
+            long accessMs = accessTimes.getOrDefault(meta.getPartition_id(), 0L);
+            if (accessMs > 0) {
+                meta.setLast_access_time(accessMs / 1000);
+            }
+        }
         resp.partitions_meta_infos = pList;
         return resp;
     }
@@ -476,7 +505,8 @@ public class InformationSchemaDataSource {
     private static void genPartitionMetaInfo(long dbId, OlapTable table,
                                              PartitionInfo partitionInfo, Partition partition,
                                              PhysicalPartition physicalPartition,
-                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+                                             TPartitionMetaInfo partitionMetaInfo, boolean isTemp,
+                                             Map<Long, Long> accessTimes) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
@@ -558,6 +588,16 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
         // TABLET_BALANCED
         partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
+        // LAST_UPDATE_TIME (last user write, excluding compaction; persisted, cross-FE consistent)
+        long lastUpdateTimeMs = physicalPartition.getLastUpdateTime();
+        if (lastUpdateTimeMs > 0) {
+            partitionMetaInfo.setLast_update_time(lastUpdateTimeMs / 1000);
+        }
+        // LAST_ACCESS_TIME (cross-FE aggregated in-memory query access time; from accessTimes map)
+        Long lastAccessTimeMs = accessTimes.get(physicalPartition.getId());
+        if (lastAccessTimeMs != null && lastAccessTimeMs > 0) {
+            partitionMetaInfo.setLast_access_time(lastAccessTimeMs / 1000);
+        }
     }
 
     // tables

@@ -74,6 +74,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,6 +103,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public enum LoadJobSourceType {
         // The second argument marks whether the source type is a loading transaction, which is used to decide
         // combined txn log support. When adding a new type, set it explicitly so the classification is not missed.
+        // NOTE: if a new type is a *system/internal* txn (not a user data write), also add it to
+        // TransactionState.NON_USER_WRITE_SOURCE_TYPES (see isUserWriteSource()) so it does not advance
+        // a partition's lastUpdateTime.
         FRONTEND(1, false),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
         BACKEND_STREAMING(2, true),            // streaming load use this type
         INSERT_STREAMING(3, true),             // insert stmt (streaming type) use this type
@@ -213,6 +217,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
             return sourceType.toString() + ": " + ip;
         }
     }
+
+    // Transaction source types that are NOT a user data write (compaction / replication / shadow-rewrite):
+    // they bump the visible version but must NOT advance a partition's lastUpdateTime. See isUserWriteSource().
+    private static final EnumSet<LoadJobSourceType> NON_USER_WRITE_SOURCE_TYPES =
+            EnumSet.of(LoadJobSourceType.LAKE_COMPACTION, LoadJobSourceType.REPLICATION, LoadJobSourceType.SHADOW_REWRITE);
 
     @SerializedName("dd")
     private long dbId;
@@ -1179,6 +1188,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public LoadJobSourceType getSourceType() {
         return sourceType;
+    }
+
+    public boolean isUserWriteSource() {
+        return !NON_USER_WRITE_SOURCE_TYPES.contains(sourceType);
     }
 
     public boolean isFromLakeCompaction() {
