@@ -28,10 +28,16 @@ public class MaterializedViewExceptionsTest {
                 "Cannot incrementally refresh materialized view mv1: non-append-only change on base table db.t. "
                         + "INCREMENTAL materialized views " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER
                         + " (DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement).")));
-        // the marker may be wrapped deeper in the cause chain
+        // BE-detected delete on a cloud-native CHANGES scan (OLAP row-level delete path)
+        assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
+                "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet 10086")));
+        // either marker may be wrapped deeper in the cause chain
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(
                 new RuntimeException("refresh failed",
                         new IllegalStateException("... " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " ..."))));
+        assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("refresh failed",
+                        new IllegalStateException("query failed: DELETE_PREDICATE_FOUND: on tablet 42"))));
 
         // transient / unrelated failures must not be treated as breaking
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(

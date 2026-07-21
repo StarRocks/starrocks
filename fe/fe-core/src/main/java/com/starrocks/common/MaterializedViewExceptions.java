@@ -77,16 +77,21 @@ public class MaterializedViewExceptions {
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
     // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
     public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
+    // BE ChangesDataSource rejects a delete it reads on a cloud-native CHANGES scan with this token
+    // (be/src/connector/changes/changes_connector.cpp). OLAP deletes only surface here, not in the FE delta trait.
+    private static final String BE_DELETE_PREDICATE_MARKER = "DELETE_PREDICATE_FOUND";
 
     /**
      * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
-     * refresh (vs. a transient error), so a single caller can inactivate the MV. Walks the cause chain
-     * since the marker may be wrapped by the refresh pipeline.
+     * refresh (as opposed to a transient error). Covers both the FE-detected non-append-only change and
+     * the BE-detected delete on a cloud-native CHANGES scan, so a single caller handles OLAP and external
+     * tables the same way. Walks the cause chain because the marker may be wrapped by the refresh pipeline.
      */
     public static boolean isIncrementalBreakingFailure(Throwable e) {
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
             String msg = t.getMessage();
-            if (msg != null && msg.contains(FE_NON_APPEND_ONLY_MARKER)) {
+            if (msg != null
+                    && (msg.contains(FE_NON_APPEND_ONLY_MARKER) || msg.contains(BE_DELETE_PREDICATE_MARKER))) {
                 return true;
             }
         }
