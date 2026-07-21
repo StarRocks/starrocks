@@ -1456,6 +1456,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：StarRocks が `information_schema.task_runs` の TaskRun 履歴行を逆シリアル化する際、破損または無効な JSON 行は通常、逆シリアル化が警告をログに記録し、RuntimeException をスローします。この項目が `true` に設定されている場合、システムは逆シリアル化エラーをキャッチし、不正な形式のレコードをスキップし、クエリを失敗させるのではなく、残りの行の処理を続行します。これにより、`information_schema.task_runs` クエリは `_statistics_.task_run_history` テーブル内の不正なエントリに対して寛容になります。ただし、これを有効にすると、破損した履歴レコードが明示的なエラーを表面化する代わりにサイレントにドロップされることになります (潜在的なデータ損失)。
 - 導入時期：v3.3.3, v3.4.0, v3.5.0
 
+### `leader_activation_drain_timeout_sec`
+
+- デフォルト：180
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：Follower が Leader に昇格する際、ノードが journal の書き込みを開始する前に、メタデータ回放（replay）スレッドが排出されて停止するのを待つタイムアウト時間です。この時間内に回放スレッドが停止しない場合（例えば、回放 applier が取得できないロックで停止している場合）、FE プロセスはクリーンな再起動のために終了されます。replayer がまだ journal エントリを適用している間に Leader として昇格すると、二重適用が発生してメタデータが破損するためです。最新のメタデータへの追随は journal replay 中に別途行われ、このタイムアウトの制約は受けません。
+- 導入時期：v4.1
+
+### `leader_demotion_drain_timeout_sec`
+
+- デフォルト：180
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：Leader の降格中に、journal writer を封印（seal）して停止し、進行中の leader WAL 適用が排出されるのを待つために使用されるタイムアウト時間です。この時間内に journal writer を封印できない場合、古い Leader の書き込みが WAL 適用フェンスをすり抜けるのを許す代わりに、降格ステージは失敗し、FE プロセスがクリーンな再起動のために終了されます。降格時に journal writer の封印や進行中の適用の排出に既定値を超える時間が恒常的にかかる場合は、この値を大きくしてください。
+- 導入時期：v4.1
+
 ### `lock_checker_interval_second`
 
 - デフォルト：30
