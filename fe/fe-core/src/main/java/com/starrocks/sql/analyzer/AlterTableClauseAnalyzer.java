@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -1278,6 +1279,45 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 }
             }
         }
+        // For a shared-data range-distribution rollup, the online rewrite writes only the rollup's own
+        // columns and cannot supply a value for base columns the rollup omits. Reject the two shapes it
+        // cannot build correctly, mirroring the DROP-key-column guards (a partition column cannot be
+        // dropped; a generated column's dependency cannot be dropped -- see visitDropColumnClause):
+        //   (a) a rollup omitting a partition column (for an automatic/expression partition column, the
+        //       expression's source columns, from which the hidden partition column is recomputed);
+        //   (b) a rollup generated column whose referenced columns are not all included -- else it would be
+        //       recomputed from unavailable (NULL) inputs and silently persist a wrong value.
+        if (table instanceof OlapTable && MaterializedViewHandler.isRangeRollupRoutable((OlapTable) table)) {
+            OlapTable olapTable = (OlapTable) table;
+            Set<String> rollupColumnNames = columnNames.stream()
+                    .map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+            for (Column partitionColumn : olapTable.getPartitionColumns()) {
+                if (partitionColumn.isGeneratedColumn()) {
+                    for (SlotRef ref : partitionColumn.getGeneratedColumnRef(olapTable.getIdToColumn())) {
+                        if (!rollupColumnNames.contains(ref.getColumnName().toLowerCase(Locale.ROOT))) {
+                            throw new SemanticException("Range-distribution rollup must contain partition column "
+                                    + "source '" + ref.getColumnName() + "'");
+                        }
+                    }
+                } else if (!rollupColumnNames.contains(partitionColumn.getName().toLowerCase(Locale.ROOT))) {
+                    throw new SemanticException("Range-distribution rollup must contain partition column '"
+                            + partitionColumn.getName() + "'");
+                }
+            }
+            for (String columnName : columnNames) {
+                Column column = olapTable.getColumn(columnName);
+                if (column != null && column.isGeneratedColumn()) {
+                    for (SlotRef ref : column.getGeneratedColumnRef(olapTable.getIdToColumn())) {
+                        if (!rollupColumnNames.contains(ref.getColumnName().toLowerCase(Locale.ROOT))) {
+                            throw new SemanticException("Range-distribution rollup generated column '"
+                                    + column.getName() + "' references '" + ref.getColumnName()
+                                    + "' which must also be in the rollup");
+                        }
+                    }
+                }
+            }
+        }
+
         clause.setBaseRollupName(Strings.emptyToNull(clause.getBaseRollupName()));
         return null;
     }
