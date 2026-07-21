@@ -488,8 +488,11 @@ private:
 // calls _cur_segment() -> get_segments() call #1 -> {} -> segment==nullptr -> early-return WITHOUT setting
 // _segment_range_iter (its _range stays nullptr). Re-eval: check 1 false; check 2 (_cur_segment()==nullptr)
 // calls get_segments() #2 -> real segment -> false; check 3 (num_rows()==0) -> false; control reaches
-// check 4 (!_segment_range_iter.has_more()). WITHOUT the fix, has_more() dereferences the null _range and
-// crashes; WITH the null-safe fix, try_get() returns cleanly.
+// check 4 (!_segment_range_iter.has_more()). WITHOUT any fix, has_more() dereferences the null _range and
+// crashes. WITH the source-level fix (get_segments_checked() primed once in _init_segment), the segment
+// list is materialized before check 4, so the range iterator is initialized and the segment's rows are
+// actually scanned. try_get() then returns a real split morsel instead of silently dropping the segment,
+// which is what the bare has_more() null-guard alone would do.
 TEST_F(PhysicalSplitMorselQueueTest, test_transient_get_segments_null_range_75203) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(DUP_KEYS);
@@ -524,10 +527,12 @@ TEST_F(PhysicalSplitMorselQueueTest, test_transient_get_segments_null_range_7520
     queue.set_tablet_rowsets(tablet_rowsets);
     queue.set_tablet_schema(tablet_schema);
 
-    // WITHOUT the fix: SIGSEGV in SparseRangeIterator::has_more(). WITH the fix: returns without crash.
+    // WITHOUT any fix: SIGSEGV in SparseRangeIterator::has_more(). WITH the source-level fix: the prime
+    // materializes the segment, so the split iterator is initialized and the segment's rows are scanned
+    // rather than dropped -- try_get() returns a real morsel instead of nullptr.
     auto result = queue.try_get();
     ASSERT_TRUE(result.ok());
-    ASSERT_EQ(result.value(), nullptr);
+    ASSERT_NE(result.value(), nullptr);
 }
 
 // prepare_olap_scan_ranges returns one TInternalScanRange* per queued root morsel.

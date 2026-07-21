@@ -756,17 +756,25 @@ RowsetId Rowset::rowset_id() const {
     return rowset_id;
 }
 
-std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
+StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    if (_segments_loaded) {
         return _segments;
     }
-
-    auto segments_or = segments(true);
-    if (!segments_or.ok()) {
-        return {};
-    }
-    _segments = std::move(segments_or.value());
+    // Lazily materialize the segments from object storage. Unlike get_segments() below, propagate a
+    // transient load failure as its real (retryable) Status instead of swallowing it (issue #75203).
+    // On failure we leave _segments_loaded false so a later retry re-attempts the load.
+    ASSIGN_OR_RETURN(auto segs, segments(true));
+    _segments = std::move(segs);
+    _segments_loaded = true;
     return _segments;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    // Best-effort shim over get_segments_checked() for callers that tolerate an empty result on a
+    // transient load failure (e.g. compaction flat-JSON path derivation). Callers that must not
+    // silently proceed on failure use get_segments_checked() and check the Status.
+    auto res = get_segments_checked();
+    return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
