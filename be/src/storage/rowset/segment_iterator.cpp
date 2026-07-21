@@ -1753,9 +1753,8 @@ Status SegmentIterator::_apply_del_predicate() {
         _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(survivors.cardinality());
     }
     if (!to_eval.isEmpty()) {
-        ASSIGN_OR_RETURN(auto live,
-                         evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema, _column_iterators,
-                                                             to_eval));
+        ASSIGN_OR_RETURN(auto live, evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema,
+                                                                        _column_iterators, to_eval));
         survivors |= live;
     }
     _scan_range = roaring2range(survivors);
