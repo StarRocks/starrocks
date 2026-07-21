@@ -327,6 +327,14 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         // pre-submit budget instead of failing fast and falling back.
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
+        // Pin the sample scan to the BASE index. setCurrentWarehouseId above re-clones the session
+        // variable, so (like the query_timeout below) disable BOTH async and sync MV/rollup rewrite
+        // AFTER the switch or the disable is dropped. Without this, once the table carries sibling
+        // rollups the sync-MV/rollup rewrite (on by default) could sample a coarser sibling and skew the
+        // tablet boundaries. Mirrors the rewrite-INSERT base pinning in
+        // LakeOnlineRewriteJobBase.runPartitionRewrite.
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        context.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }

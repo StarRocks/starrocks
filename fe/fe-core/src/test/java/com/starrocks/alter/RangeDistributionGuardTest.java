@@ -38,6 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -135,6 +136,23 @@ public class RangeDistributionGuardTest {
         handler.clearJobs();
         assertEquals(1, jobs.size(), "expected exactly one rollup job to be constructed");
         return jobs.get(0);
+    }
+
+    /**
+     * Inject a "finished" rollup into the table: register its meta + a NORMAL {@link MaterializedIndex}
+     * in every physical partition (mirrors the post-FINISHED catalog state {@code visualiseShadowIndex}
+     * produces). {@code schema} must have at least two columns (used as the sort-key prefix [0,1]).
+     */
+    private static long injectFinishedRollup(OlapTable table, String name, List<Column> schema) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
     }
 
     /**
@@ -285,6 +303,9 @@ public class RangeDistributionGuardTest {
                         "select k1, v1 from t_guard_syncmv"));
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
+        // A plain ADD ROLLUP IS supported now; the sync-MV message must not blanket-claim otherwise.
+        assertFalse(exception.getMessage().toLowerCase(Locale.ROOT).contains("rollup is not supported"),
+                "sync-MV message must not claim rollup is unsupported: " + exception.getMessage());
     }
 
     /**
@@ -720,31 +741,79 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A range table that already carries a secondary index/rollup ({@code getIndexMetaIdToMeta().size() > 1})
-     * is no longer routable to {@link LakeRangeRollupJob}: it falls through to the existing range rejection
-     * in {@code createMaterializedViewJob}. Asserted on the routing predicate directly (and via a real
-     * ALTER) since the additive path's shadow promotion bypasses the multi-job ROLLUP coordination.
+     * A range table that already carries a rollup ({@code getIndexMetaIdToMeta().size() > 1}) is STILL
+     * routable to {@link LakeRangeRollupJob}: a second (sequential) ADD ROLLUP is allowed. Each additive
+     * job is serialized by the table's OlapTableState and operates only on its own shadow index meta id,
+     * so a completed rollup does not interfere. Asserted on the predicate and via a real ALTER (which
+     * constructs, not runs, the job).
      */
     @Test
-    public void testRangeRollupWithExistingRollupNotRouted() throws Exception {
+    public void testRangeRollupWithExistingRollupIsRouted() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_existing"));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable("test", "t_guard_rollup_existing");
-        // Sanity: a fresh range table (only the base index) IS routable.
+        // Sanity: a fresh range table (only the base index) is routable.
         assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table));
 
-        // Inject a second index meta so the table now has two indexes.
-        long baseMetaId = table.getBaseIndexMetaId();
-        long extraMetaId = GlobalStateMgr.getCurrentState().getNextId();
-        List<Column> rollupSchema = table.getSchemaByIndexMetaId(baseMetaId).subList(0, 2);
-        table.setIndexMeta(extraMetaId, "r_existing", rollupSchema, 0, 0, (short) 1,
-                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        // Inject a finished rollup so the table now has two indexes.
+        injectFinishedRollup(table, "r_existing",
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
 
-        // With a second index present the table is no longer routable.
-        assertFalse(MaterializedViewHandler.isRangeRollupRoutable(table),
-                "a range table with an existing rollup must not be routed to LakeRangeRollupJob");
-        // A real ADD ROLLUP now falls through to the existing range rejection.
-        assertAlterRejectedWithRangeDistribution(
+        // With a second index present the table is STILL routable (multiple rollups supported).
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table),
+                "a range table with an existing rollup must still be routable to LakeRangeRollupJob");
+        // A real second ADD ROLLUP now constructs a LakeRangeRollupJob (previously rejected).
+        starRocksAssert.alterTable(
                 "alter table t_guard_rollup_existing add rollup r_new(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r_new", ((LakeRangeRollupJob) job).getRollupIndexName());
+    }
+
+    /**
+     * Scope confirmation: a UNIQUE-key range table is in scope (DUP/AGG/UNIQUE). {@code createRangeRollupJob}
+     * handles {@code isAggregationFamily()} = AGG and UNIQUE, so a UNIQUE range rollup routes to
+     * {@link LakeRangeRollupJob}. (Passes independently of the size()==1 relaxation — a fresh UNIQUE table
+     * has one index — but confirms the scope the message/docs claim.)
+     */
+    @Test
+    public void testUniqueKeyRangeRollupRouted() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_rollup_uniq (k1 int not null, k2 int not null, v1 int)\n"
+                + "unique key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_uniq add rollup r_uk(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob,
+                "Expected a LakeRangeRollupJob for a UNIQUE range table, got: " + job);
+    }
+
+    /**
+     * {@code ADD ROLLUP ... FROM <non-base index>} is rejected on a range table: a range-distribution
+     * rollup is always derived from the base index. The selected column {@code v1} is absent from the
+     * FROM source {@code r_src} on purpose — the FROM check must fire BEFORE column-schema validation,
+     * so the error is the base-index/FROM message, not "Column[v1] does not exist".
+     */
+    @Test
+    public void testRangeRollupFromNonBaseRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_from"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_from");
+        // Fully inject a finished rollup "r_src" whose schema is [k1, k2] (omits v1).
+        injectFinishedRollup(table, "r_src",
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+
+        // Explicit "duplicate key" is required here: without it, the pre-fix schema-validation branch's
+        // "does not exist in base index" wording coincidentally contains "base index" too, which would
+        // make this assertion pass for the wrong reason and mask the ordering bug being tested.
+        DdlException exception = assertThrowsDdlException(() ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_from add rollup r2(k1, k2, v1) duplicate key(k1, k2) "
+                                + "order by (k2, k1) from r_src"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("base index"),
+                "Expected 'base index' in: " + exception.getMessage());
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
     }
 }
