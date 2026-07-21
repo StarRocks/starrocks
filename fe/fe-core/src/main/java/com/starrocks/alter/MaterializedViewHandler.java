@@ -357,7 +357,7 @@ public class MaterializedViewHandler extends AlterHandler {
         // never a synchronous materialized view, which carries a query statement.)
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
-                && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
+                && !olapTable.hasColocateGroup()
                 && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
     }

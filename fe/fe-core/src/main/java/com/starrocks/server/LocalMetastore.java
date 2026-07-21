@@ -4480,7 +4480,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     // The caller need to hold the db write lock
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
@@ -4529,7 +4529,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throws DdlException {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
