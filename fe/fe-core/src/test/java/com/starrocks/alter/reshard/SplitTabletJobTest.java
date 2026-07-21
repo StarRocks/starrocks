@@ -143,9 +143,19 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+
+        // The superseded (old) split-parent index is scheduled for removal in the recycle bin (issue
+        // #75993) but LEFT INSTALLED on the partition, so an in-flight query planned against it can
+        // finish reading until the retention expires. Its tablets stay registered in the inverted
+        // index, and because the index is still on the partition its shards stay protected from the
+        // per-shard StarMgrMetaSyncer reaper.
         for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
+        Assertions.assertNotNull(physicalPartition.getIndex(materializedIndex.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .isMaterializedIndexRecycled(materializedIndex.getId()));
+
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
@@ -448,7 +458,9 @@ public class SplitTabletJobTest {
         MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
                 newMaterializedIndex.getTablets().size());
-        Assertions.assertNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
+        // The old tablet is retained (parked in the recycle bin with the superseded index), not deleted
+        // immediately, so an in-flight split-parent read can finish (issue #75993).
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
 
         // TabletRangePB (generated jprotobuf class) has no equals override;
         // compare the underlying Range<Tuple> which does. The values must
