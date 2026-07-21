@@ -18,6 +18,8 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
@@ -25,6 +27,8 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -64,6 +68,15 @@ import java.util.function.BooleanSupplier;
 final class PreSplitFlow {
 
     private static final Logger LOG = LogManager.getLogger(PreSplitFlow.class);
+
+    // Target total number of weighted (min,max) endpoint pairs the meta-tier multi-partition sampler
+    // emits, apportioned across row groups by row count so the boundary planner's row-quantiles
+    // reflect row DENSITY (not row-group count). Kept in the same order of magnitude as the data-tier
+    // reservoir target so per-partition boundary resolution is comparable.
+    private static final int META_WEIGHTED_ENDPOINT_BUDGET = 40_000;
+    // Per-row-group cap on emitted endpoint copies, so a single dominant row group cannot balloon the
+    // FE-side sample and the pair count stays bounded even for a heavily skewed input.
+    private static final long META_MAX_ENDPOINT_WEIGHT = 2048L;
 
     private PreSplitFlow() {
     }
@@ -119,7 +132,16 @@ final class PreSplitFlow {
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
                                       LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context) {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(prepared.computeResource());
-        SampleSet samples = runDataTierSampler(table, prepared, loadKind);
+        // Try the meta tier first (row-group footer statistics, no data scan), mirroring the
+        // single-partition flow's meta-tier-first routing; fall back to the exact data tier for
+        // any shape the footer path cannot serve.
+        SampleSet samples = runMetaTierMultiPartitionSampler(table, prepared, loadKind);
+        if (samples != null) {
+            LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) served by META tier "
+                    + "(row-group footer stats, no data scan) for table {}", loadKind, table.getName());
+        } else {
+            samples = runDataTierSampler(table, prepared, loadKind);
+        }
         if (samples == null) {
             return;
         }
@@ -163,5 +185,175 @@ final class PreSplitFlow {
             PreSplitMetrics.recordSamplerFailed(SkipReason.SAMPLE_FAILED);
             return null;
         }
+    }
+
+    /**
+     * Meta-tier producer for the multi-partition flow, tried before the data tier (mirroring the
+     * single-partition flow's meta-tier-first routing). Reads only Parquet row-group min/max
+     * footer statistics (no data scan) and emits one synthetic sample per row-group endpoint, so
+     * the existing {@link PartitionSampleGrouper} (partition attribution +
+     * auto-create) and {@link TabletPreSplitCoordinator} (boundary planning + submission) consume
+     * the result unchanged. The partition-source value for each endpoint is lifted out of the
+     * sort-key tuple — the partition source column is part of the sort key for time-partitioned
+     * tables — so the grouper applies the partition expression and buckets endpoints exactly as it
+     * would per-row samples; a row group straddling a boundary contributes its min endpoint to the
+     * lower partition and its max endpoint to the upper one. Boundaries stay full sort-key arity
+     * (the footer min/max tuples span the whole sort key), so the BE's {@code
+     * validate_new_tablet_ranges} accepts them just as it does data-tier boundaries.
+     *
+     * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
+     * the footer path cannot serve: a load kind without Parquet footers, a rollup target
+     * (secondary-index sort keys the footer path does not carry), a partition source column absent
+     * from the sort key, or too few usable footer statistics.
+     */
+    static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
+        if (loadKind != LoadKind.INSERT_FROM_FILES) {
+            return null;
+        }
+        if (!prepared.secondaryIndexSpecs().isEmpty()) {
+            return null;
+        }
+        List<Column> sortKeyColumns = prepared.sortKeyColumns();
+        List<Column> partitionSourceColumns = prepared.partitionColumns();
+        if (sortKeyColumns.isEmpty() || partitionSourceColumns.isEmpty()) {
+            return null;
+        }
+        int[] partitionSourceIndexInSortKey = new int[partitionSourceColumns.size()];
+        for (int i = 0; i < partitionSourceColumns.size(); i++) {
+            int indexInSortKey = indexOfColumnByName(sortKeyColumns, partitionSourceColumns.get(i).getName());
+            if (indexInSortKey < 0) {
+                // Partition source column is not part of the sort key, so its per-row-group value is
+                // absent from the min/max tuple: the footer path cannot attribute row groups to
+                // partitions. Let the data tier (which projects partition source columns) handle it.
+                return null;
+            }
+            partitionSourceIndexInSortKey[i] = indexInSortKey;
+        }
+        try {
+            SampleRequest request = new SampleRequest(
+                    prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
+                    partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
+                    .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
+            List<RowGroupStatistics> rowGroups = new InsertFromFilesRowGroupStatisticsProvider().fetch(request);
+            if (rowGroups == null || rowGroups.isEmpty()) {
+                return null;
+            }
+            long totalRows = 0L;
+            List<RowGroupStatistics> usableRowGroups = new ArrayList<>(rowGroups.size());
+            for (RowGroupStatistics rowGroup : rowGroups) {
+                if (rowGroup == null || rowGroup.getRowCount() <= 0L) {
+                    // No rows -> nothing to place a boundary from; safe to skip (empty / all-null group).
+                    continue;
+                }
+                if (rowGroup.isTruncated() || rowGroup.getMinTuple() == null || rowGroup.getMaxTuple() == null) {
+                    // A row group that HAS rows but no usable min/max would leave those rows
+                    // unrepresented in the boundaries (they could fall into an unsplit or mis-sized
+                    // partition). Fall back to the data tier -- matching the single-partition meta tier,
+                    // which treats any missing stats on a non-empty row group as meta-unavailable.
+                    return null;
+                }
+                usableRowGroups.add(rowGroup);
+                totalRows += rowGroup.getRowCount();
+            }
+            if (usableRowGroups.size() < 2) {
+                return null;
+            }
+            // Fall back to the data tier when the row groups' sort-key [min,max] ranges overlap too
+            // much: min/max endpoints then cannot place interior boundaries. This happens when the
+            // source is not ordered by the sort key -- every row group spans nearly the whole range,
+            // so the endpoints collapse to a couple of values and the boundary planner produces few,
+            // uneven tablets. Mirrors the single-partition meta tier's overlap gate
+            // (ParquetMetadataSampler + Config.tablet_pre_split_meta_tier_overlap_threshold).
+            double overlapFraction = rowGroupOverlapFraction(usableRowGroups);
+            if (overlapFraction > Config.tablet_pre_split_meta_tier_overlap_threshold) {
+                LOG.info("Pre-split meta tier (multi-partition) row-group overlap {} > threshold {} for "
+                                + "table {} (source likely unordered by sort key); falling back to data tier",
+                        overlapFraction, Config.tablet_pre_split_meta_tier_overlap_threshold, table.getName());
+                return null;
+            }
+            List<Tuple> sortKeyTuples = new ArrayList<>();
+            List<Tuple> partitionSourceTuples = new ArrayList<>();
+            for (RowGroupStatistics rowGroup : usableRowGroups) {
+                // Weight each group's endpoints by its share of total rows so the boundary planner's
+                // row-quantiles reflect row DENSITY, not row-group count (the data tier samples actual
+                // rows, density-weighted by construction; unweighted endpoints let a 1M-row group and a
+                // 100-row group each contribute the same two points, under-splitting the dense region).
+                // >= 1 so every group still contributes both ends; capped so one dominant group cannot
+                // balloon the FE-side sample, keeping the total pair count bounded regardless of skew.
+                long weight = Math.min(META_MAX_ENDPOINT_WEIGHT, Math.max(1L, Math.round(
+                        (double) rowGroup.getRowCount() / totalRows * META_WEIGHTED_ENDPOINT_BUDGET)));
+                for (long copy = 0; copy < weight; copy++) {
+                    addRowGroupEndpoint(rowGroup.getMinTuple(), partitionSourceIndexInSortKey,
+                            sortKeyTuples, partitionSourceTuples);
+                    addRowGroupEndpoint(rowGroup.getMaxTuple(), partitionSourceIndexInSortKey,
+                            sortKeyTuples, partitionSourceTuples);
+                }
+            }
+            if (sortKeyTuples.size() < 2) {
+                // Too few usable endpoints to place any interior boundary; let the data tier try.
+                return null;
+            }
+            return new SampleSet(sortKeyTuples, partitionSourceTuples,
+                    new Estimates(prepared.estimatedBytes(), 0L));
+        } catch (StarRocksException | RuntimeException metaTierFailure) {
+            LOG.info("Pre-split meta tier (multi-partition) unavailable for table {}; falling back to "
+                    + "data tier: {}", table.getName(), metaTierFailure.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Appends one synthetic sample built from a row-group endpoint tuple: the full sort-key tuple
+     * plus the partition-source values lifted out of it by their sort-key positions. The two lists
+     * grow in lock-step so {@code sortKeyTuples} and {@code partitionSourceTuples} stay parallel,
+     * as {@link SampleSet} requires.
+     */
+    private static void addRowGroupEndpoint(Tuple endpointTuple, int[] partitionSourceIndexInSortKey,
+                                            List<Tuple> sortKeyTuples, List<Tuple> partitionSourceTuples) {
+        if (endpointTuple == null) {
+            return;
+        }
+        List<Variant> sortKeyValues = endpointTuple.getValues();
+        List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceIndexInSortKey.length);
+        for (int indexInSortKey : partitionSourceIndexInSortKey) {
+            partitionSourceValues.add(sortKeyValues.get(indexInSortKey));
+        }
+        sortKeyTuples.add(endpointTuple);
+        partitionSourceTuples.add(new Tuple(partitionSourceValues));
+    }
+
+    private static int indexOfColumnByName(List<Column> columns, String columnName) {
+        for (int i = 0; i < columns.size(); i++) {
+            if (columns.get(i).getName().equalsIgnoreCase(columnName)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Fraction of row groups (sorted by sort-key min) whose min falls below the running max of the
+     * preceding groups — i.e. how much the row groups' sort-key ranges overlap. Near 0 means the
+     * source is well ordered by the sort key (tight, non-overlapping min/max, so endpoint boundaries
+     * are meaningful); near 1 means it is not (every group spans nearly the whole range, so min/max
+     * endpoints cannot place interior boundaries and the caller falls back to the data tier). Same
+     * definition the single-partition meta tier uses in {@link ParquetMetadataSampler}.
+     * Package-private so {@code PreSplitFlowTest} can assert the fraction directly.
+     */
+    static double rowGroupOverlapFraction(List<RowGroupStatistics> rowGroups) {
+        List<RowGroupStatistics> sorted = new ArrayList<>(rowGroups);
+        sorted.sort(Comparator.comparing(RowGroupStatistics::getMinTuple));
+        Tuple maxSeen = sorted.get(0).getMaxTuple();
+        int overlapping = 0;
+        for (int i = 1; i < sorted.size(); i++) {
+            RowGroupStatistics current = sorted.get(i);
+            if (current.getMinTuple().compareTo(maxSeen) < 0) {
+                overlapping++;
+            }
+            if (current.getMaxTuple().compareTo(maxSeen) > 0) {
+                maxSeen = current.getMaxTuple();
+            }
+        }
+        return (double) overlapping / (sorted.size() - 1);
     }
 }
