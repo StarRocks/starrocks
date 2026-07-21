@@ -477,7 +477,7 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
 
-## `starrocks_fe_statistics_cache_estimated_size`
+## `starrocks_fe_statistics_cache_entries`
 
 - 単位: カウント
 - タイプ: ゲージ
@@ -488,35 +488,35 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
 - 説明: 対象の統計情報キャッシュから（サイズまたは有効期限により）退避されたエントリの累積数。キャッシュサイズに対してこの値が継続的に増加する場合は、`statistic_cache_columns` の引き上げを検討してください。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_statistics_cache_hit_count`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
 - 説明: 統計情報キャッシュから提供されたルックアップの累積数。`starrocks_fe_statistics_cache_miss_count` と合わせてキャッシュヒット率を算出できます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_statistics_cache_load_failure_count`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
 - 説明: Caffeine ローダーが例外で完了したため失敗した統計情報キャッシュロードの累積数。欠落している統計情報行は空の結果としてキャッシュされ、ロード失敗ではなくロード成功としてカウントされます。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りでエラーが発生していることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_statistics_cache_load_success_count`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
 - 説明: 成功した統計情報キャッシュのロードの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_statistics_cache_miss_count`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_estimated_size` を参照してください。
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
 - 説明: キャッシュに見つからずロードをトリガーした統計情報キャッシュのルックアップの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`

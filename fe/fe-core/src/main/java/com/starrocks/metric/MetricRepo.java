@@ -1160,8 +1160,8 @@ public final class MetricRepo {
                         "Cumulative number of failed statistics cache loads",
                         c -> c.stats().loadFailureCount());
                 // Current cache occupancy — a point-in-time value, so it stays a GAUGE.
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_estimated_size",
-                        "Approximate number of entries currently held in the statistics cache",
+                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_entries",
+                        "Number of entries currently held in the statistics cache",
                         LoadingCache::estimatedSize);
             }
         }

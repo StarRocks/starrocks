@@ -761,7 +761,7 @@ public class CachedStatisticStorageTest {
                 "statistics_cache_eviction_count",
                 "statistics_cache_load_success_count",
                 "statistics_cache_load_failure_count");
-        final var gaugeMetrics = List.of("statistics_cache_estimated_size");
+        final var gaugeMetrics = List.of("statistics_cache_entries");
         // Each metric is registered once per named cache, so this is the expected series count per metric name.
         final int expectedCacheCount = new CachedStatisticStorage().getNamedCacheMap().size();
 
