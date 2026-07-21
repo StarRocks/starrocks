@@ -118,7 +118,7 @@ Status convert_arrow_array_to_column(ConvertFuncTree* conv_func, size_t num_elem
                                      Filter* chunk_filter, ArrowConvertContext* conv_ctx);
 
 struct ConvertFuncTree {
-    ConvertFuncTree(ConvertFunc f) : func(f) {};
+    ConvertFuncTree(ConvertFunc f) : func(f){};
     ConvertFuncTree() = default;
     ConvertFunc func = nullptr;
     std::vector<std::string> field_names; // used in struct
