@@ -37,6 +37,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Map;
 
 public class RoutineLoadJobMetaTest {
     private static ConnectContext connectContext;
@@ -162,7 +163,8 @@ public class RoutineLoadJobMetaTest {
                 .getTable(db.getFullName(), "site_access_auto");
         KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(102L, "kafka_arrow_rl_job", db.getId(),
                 table.getId(), "localhost:9092", "topic1");
-        job.setFormat("arrow");
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put("format", "arrow");
 
         String label = "kafka_arrow_rl_label";
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
@@ -188,7 +190,8 @@ public class RoutineLoadJobMetaTest {
                 .getTable(db.getFullName(), "site_access_auto");
         PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(103L, "pulsar_arrow_rl_job", db.getId(),
                 table.getId(), "pulsar://localhost:6650", "topic1", "sub1");
-        job.setFormat("arrow");
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put("format", "arrow");
 
         String label = "pulsar_arrow_rl_label";
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
@@ -214,7 +217,8 @@ public class RoutineLoadJobMetaTest {
                 .getTable(db.getFullName(), "site_access_auto");
         PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(104L, "pulsar_avro_rl_job", db.getId(),
                 table.getId(), "pulsar://localhost:6650", "topic1", "sub1");
-        job.setFormat("avro");
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put("format", "avro");
 
         String label = "pulsar_avro_rl_label";
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(

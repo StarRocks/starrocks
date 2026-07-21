@@ -33,9 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TRoutineLoadTask;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -46,7 +44,6 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Mockito.when;
