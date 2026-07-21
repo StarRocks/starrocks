@@ -641,6 +641,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             } else if (format.equalsIgnoreCase("avro")) {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
+            } else if (format.equalsIgnoreCase("arrow")) {
+                format = "arrow";
             } else {
                 throw new StarRocksException("Format type is invalid. format=`" + format + "`");
             }
@@ -792,10 +794,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 if (format != null) {
                     if (format.equalsIgnoreCase("avro")) {
                         format = "avro";
+                    } else if (format.equalsIgnoreCase("arrow")) {
+                        format = "arrow";
                     }
                 }
             }
-            if (format.equals("avro")) {
+            if (format != null && format.equals("avro")) {
                 throw new AnalysisException(CONFLUENT_SCHEMA_REGISTRY_URL + " is a required property");
             }
         } else {
