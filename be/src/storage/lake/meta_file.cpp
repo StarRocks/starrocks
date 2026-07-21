@@ -1112,7 +1112,10 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
     auto version = _tablet_meta->version();
 
     // Finalize delete vectors by updating their metadata and writing them to disk
-    RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("finalize_delvec_write_us");
+        RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+    }
 
     // Clean up SSTable metadata after an alter operation that changes the persistent index type
     _sstable_meta_clean_after_alter_type();
@@ -1122,6 +1125,7 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         (void)_tablet.tablet_mgr()->cache_tablet_metadata(_tablet_meta);
     } else {
         // Persist the updated tablet metadata
+        TRACE_COUNTER_SCOPE_LATENCY_US("put_tablet_metadata_us");
         RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     }
 
