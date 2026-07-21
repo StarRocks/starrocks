@@ -73,6 +73,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.IcebergMaintenanceMetricsMgr;
 import com.starrocks.metric.MetricRepo;
@@ -2645,6 +2646,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private org.apache.iceberg.DeleteFile buildPositionDeleteFile(
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
+        // Iceberg V3 deletion vector: a Puffin blob rather than a Parquet position-delete file.
+        if ("puffin".equalsIgnoreCase(dataFile.getFormat())) {
+            return IcebergDeletionVectorSupport.buildDeletionVectorFile(dataFile, partitionSpec, nativeTbl);
+        }
+
         FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(partitionSpec)
                 .ofPositionDeletes()
                 .withPath(dataFile.path)
@@ -2692,6 +2698,45 @@ public class IcebergMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
+    // Builds the RowDelta's DeleteFiles and configures its commit-time conflict validation. Called
+    // inside commitWithCleanup so a rejected deletion-vector entry cleans up the BE-written Puffin files.
+    private void prepareDeleteRowDelta(RowDelta rowDelta, List<TIcebergDataFile> dataFiles,
+                                       PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
+                                       Object extra, Long baseSnapshotId, ConnectContext context) {
+        ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
+        for (TIcebergDataFile dataFile : dataFiles) {
+            rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl));
+            if (dataFile.isSetReferenced_data_file()) {
+                referencedDataFiles.add(dataFile.getReferenced_data_file());
+            }
+        }
+        if (baseSnapshotId != null) {
+            rowDelta.validateFromSnapshot(baseSnapshotId);
+        }
+        rowDelta.validateDataFilesExist(referencedDataFiles.build());
+        rowDelta.validateDeletedFiles();
+        if (extra instanceof IcebergSinkExtra) {
+            Expression filter = ((IcebergSinkExtra) extra).getConflictDetectionFilter();
+            if (filter != null) {
+                rowDelta.conflictDetectionFilter(filter);
+            }
+        }
+        IsolationLevel isolationLevel = IsolationLevel.fromName(
+                nativeTbl.properties().getOrDefault(DELETE_ISOLATION_LEVEL, DELETE_ISOLATION_LEVEL_DEFAULT));
+        if (isolationLevel == IsolationLevel.SERIALIZABLE) {
+            rowDelta.validateNoConflictingDataFiles();
+        }
+        // Unlike additive V2 position deletes, a V3 DV is the file's complete delete set, so a concurrent
+        // DV on the same data file conflicts rather than being an idempotent no-op — reject it (Iceberg
+        // 1.10 does not).
+        if (IcebergDeletionVectorSupport.isDeletionVectorDelete(dataFiles)) {
+            rowDelta.validateNoConflictingDeleteFiles();
+        }
+        if (context != null) {
+            updateCommitInfo(rowDelta, context);
+        }
+    }
+
     private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
                                        List<TIcebergDataFile> dataFiles, String branch,
                                        String dbName, String tableName, Object extra,
@@ -2706,56 +2751,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         PartitionSpec partitionSpec = nativeTbl.spec();
-        ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
-        for (TIcebergDataFile dataFile : dataFiles) {
-            org.apache.iceberg.DeleteFile deleteFile = buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl);
-            rowDelta.addDeletes(deleteFile);
-            if (dataFile.isSetReferenced_data_file()) {
-                referencedDataFiles.add(dataFile.getReferenced_data_file());
-            }
-        }
 
-        // Use the base snapshot id frozen at plan time so conflict detection covers
-        // every commit landed between scan and commit. Falling back to currentSnapshot
-        // here would silently skip that window and defeat SERIALIZABLE isolation.
-        Long baseSnapshotId = extra instanceof IcebergSinkExtra
+        // Base snapshot id frozen at plan time so conflict detection covers every commit landed between
+        // scan and commit; falling back to currentSnapshot would defeat SERIALIZABLE isolation.
+        Long planBaseSnapshotId = extra instanceof IcebergSinkExtra
                 ? ((IcebergSinkExtra) extra).getBaseSnapshotId() : null;
-        if (baseSnapshotId == null) {
-            Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-            if (currentSnapshot != null) {
-                baseSnapshotId = currentSnapshot.snapshotId();
-            }
+        if (planBaseSnapshotId == null && nativeTbl.currentSnapshot() != null) {
+            planBaseSnapshotId = nativeTbl.currentSnapshot().snapshotId();
         }
-        if (baseSnapshotId != null) {
-            rowDelta.validateFromSnapshot(baseSnapshotId);
-        }
-
-        // Validate that referenced data files exist and haven't been deleted
-        rowDelta.validateDataFilesExist(referencedDataFiles.build());
-        rowDelta.validateDeletedFiles();
-
-        // Set conflict detection filter if available
-        // This filter defines which data files should be checked for conflicts during validation
-        if (extra instanceof IcebergSinkExtra) {
-            Expression conflictDetectionFilterObj = ((IcebergSinkExtra) extra).getConflictDetectionFilter();
-            if (conflictDetectionFilterObj != null) {
-                rowDelta.conflictDetectionFilter(conflictDetectionFilterObj);
-            }
-        }
-
-        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().
-                getOrDefault(DELETE_ISOLATION_LEVEL, DELETE_ISOLATION_LEVEL_DEFAULT));
-        if (isolationLevel == IsolationLevel.SERIALIZABLE) {
-            rowDelta.validateNoConflictingDataFiles();
-        }
-
-        // Set audit info for the commit
-        if (context != null) {
-            updateCommitInfo(rowDelta, context);
-        }
+        final Long baseSnapshotId = planBaseSnapshotId;
 
         try {
+            // Build and validate the RowDelta inside commitWithCleanup so any failure — a rejected DV
+            // entry, the duplicate-DV check, or the commit itself — deletes the BE-written Puffin files.
             commitWithCleanup(() -> {
+                prepareDeleteRowDelta(rowDelta, dataFiles, partitionSpec, nativeTbl, extra, baseSnapshotId, context);
+                IcebergDeletionVectorSupport.validateSingleDeletionVectorPerFile(dataFiles);
                 rowDelta.commit();
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);

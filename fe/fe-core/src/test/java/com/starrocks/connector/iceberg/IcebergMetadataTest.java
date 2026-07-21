@@ -3233,6 +3233,136 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testDeleteOperationRejectsDuplicateDeletionVector() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        // Deletion vectors are only accepted by Iceberg on V3 tables (addDeletes rejects a DV on
+        // V2), so this test needs its own V3 table rather than the shared V2 mock.
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_dup_dv", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), v3Table, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // Two Puffin deletion vectors referencing the SAME data file within one commit: the
+        // shuffle-by-_file invariant is violated. Iceberg does not reject this, so FE must.
+        String puffinPath = v3Table.location() + "/data/dv_file.puffin";
+        List<TSinkCommitInfo> commitInfos = Lists.newArrayList();
+        for (long offset : new long[] {4L, 60L}) {
+            TIcebergDataFile dv = new TIcebergDataFile();
+            dv.setPath(puffinPath);
+            dv.setFormat("puffin");
+            dv.setRecord_count(3);
+            dv.setFile_size_in_bytes(120);
+            dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
+            dv.setReferenced_data_file(FILE_A.path().toString());
+            dv.setContent_offset(offset);
+            dv.setContent_size_in_bytes(40);
+            // The table is partitioned (SPEC_A), so the entry must carry the referenced data
+            // file's partition, as the BE sink does.
+            dv.setPartition_path(v3Table.location() + "/data/data_bucket=0/");
+            dv.setPartition_null_fingerprint("0");
+            TSinkCommitInfo ci = new TSinkCommitInfo();
+            ci.setIceberg_data_file(dv);
+            commitInfos.add(ci);
+        }
+
+        // The commit path stamps audit info before the uniqueness check fires.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-dup-dv";
+            }
+        };
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", commitInfos, null, null, connectContext));
+        Assertions.assertTrue(ex.getMessage().contains("multiple deletion vectors"),
+                "expected duplicate-DV rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testDeleteOperationRejectsConcurrentDeletionVectorConflict() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        // Deletion vectors are only accepted by Iceberg on V3 tables, so this needs its own V3 table.
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_dv_conflict", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).commit();
+        // Freeze the plan-time base snapshot while the table is still clean, mirroring a DELETE that
+        // passed the no-existing-delete gate at plan time.
+        long baseSnapshotId = v3Table.currentSnapshot().snapshotId();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), v3Table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // A concurrent DELETE wins the race and lands a deletion vector on FILE_A after the frozen
+        // base snapshot.
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(buildDeletionVectorCommit(v3Table, "/data/dv_winner.puffin", 4L)), null);
+        v3Table.refresh();
+        long concurrentSnapshotId = v3Table.currentSnapshot().snapshotId();
+        Assertions.assertNotEquals(baseSnapshotId, concurrentSnapshotId,
+                "the winning concurrent delete must have committed a deletion vector");
+
+        // The losing DELETE was planned from the now-stale base snapshot. Under V3's one-DV-per-file
+        // semantics its DV would be a conflicting second delete on FILE_A, so validateNoConflictingDeleteFiles
+        // (wired in for DV deletes) must abort it rather than silently dropping the winner's deletes.
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(baseSnapshotId);
+        Assertions.assertThrows(Exception.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(buildDeletionVectorCommit(v3Table, "/data/dv_loser.puffin", 100L)), null, extra),
+                "a deletion-vector DELETE planned before a concurrent delete must be rejected at commit");
+
+        // The aborted commit must not advance the table past the concurrent writer's snapshot: no
+        // second deletion vector was layered onto the data file.
+        v3Table.refresh();
+        Assertions.assertEquals(concurrentSnapshotId, v3Table.currentSnapshot().snapshotId(),
+                "conflicting deletion-vector commit must not land a new snapshot");
+    }
+
+    private static TSinkCommitInfo buildDeletionVectorCommit(TestTables.TestTable v3Table, String relativePath, long offset) {
+        TIcebergDataFile dv = new TIcebergDataFile();
+        dv.setPath(v3Table.location() + relativePath);
+        dv.setFormat("puffin");
+        dv.setRecord_count(3);
+        dv.setFile_size_in_bytes(120);
+        dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        dv.setReferenced_data_file(FILE_A.path().toString());
+        dv.setContent_offset(offset);
+        dv.setContent_size_in_bytes(40);
+        dv.setPartition_path(v3Table.location() + "/data/data_bucket=0/");
+        dv.setPartition_null_fingerprint("0");
+        TSinkCommitInfo ci = new TSinkCommitInfo();
+        ci.setIceberg_data_file(dv);
+        return ci;
+    }
+
+    @Test
     public void testDeleteOperationWithConflictDetection() throws Exception {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 

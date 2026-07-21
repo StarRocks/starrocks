@@ -48,6 +48,7 @@ public class IcebergDeleteSink extends DataSink {
     private final String compressionType;
     private final long targetMaxFileSize;
     private final String tableIdentifier;
+    private final int formatVersion;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
 
@@ -57,9 +58,11 @@ public class IcebergDeleteSink extends DataSink {
      * @param icebergTable    The target Iceberg table
      * @param desc            Tuple descriptor containing operation columns
      * @param sessionVariable Session variables for configuration
+     * @param formatVersion   Iceberg table format version; BE selects the deletion-vector write
+     *                        sub-mode when this is >= 3
      */
     public IcebergDeleteSink(IcebergTable icebergTable, TupleDescriptor desc,
-                             SessionVariable sessionVariable) {
+                             SessionVariable sessionVariable, int formatVersion) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
@@ -67,6 +70,7 @@ public class IcebergDeleteSink extends DataSink {
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
+        this.formatVersion = formatVersion;
         // Priority: write.delete.parquet.compression-codec > write.parquet.compression-codec > session variable
         this.compressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION,
                 nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
@@ -137,6 +141,8 @@ public class IcebergDeleteSink extends DataSink {
         tIcebergTableSink.setData_location(dataLocation);
         tIcebergTableSink.setFile_format("parquet"); // Delete files are always parquet
         tIcebergTableSink.setIs_static_partition_sink(false);
+        // >= 3 => BE writes a Puffin deletion vector instead of a Parquet position-delete file.
+        tIcebergTableSink.setFormat_version(formatVersion);
         // DeleteSink only emits position-delete files; the codec belongs in the
         // delete-file slot. `compression_type` is reserved for data files now.
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);

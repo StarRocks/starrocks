@@ -136,6 +136,7 @@ add_executable(connector_iceberg_test
         iceberg/iceberg_test_main.cpp
         iceberg/iceberg_chunk_sink_test.cpp
         iceberg/iceberg_delete_sink_test.cpp
+        iceberg/iceberg_dv_sink_test.cpp
         iceberg/iceberg_row_delta_sink_test.cpp
 )
 target_link_libraries(connector_iceberg_test ${CONNECTOR_ICEBERG_TEST_LINK_LIBS})

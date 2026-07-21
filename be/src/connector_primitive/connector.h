@@ -48,6 +48,7 @@ enum class ConnectorSinkProviderType {
     DATA,
     DELETE,
     ROW_DELTA,
+    DV,
 };
 
 class Connector {

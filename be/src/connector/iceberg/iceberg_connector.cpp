@@ -16,6 +16,7 @@
 
 #include "connector/iceberg/iceberg_chunk_sink.h"
 #include "connector/iceberg/iceberg_delete_sink.h"
+#include "connector/iceberg/iceberg_dv_sink.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 
 namespace starrocks::connector {
@@ -45,6 +46,14 @@ StatusOr<std::unique_ptr<ConnectorSinkProvider>> IcebergConnector::create_sink_p
             return Status::InternalError("Iceberg connector row-delta sink requires IcebergRowDeltaSinkContext");
         }
         std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergRowDeltaSinkProvider>(std::move(ctx));
+        return provider;
+    }
+    case ConnectorSinkProviderType::DV: {
+        auto ctx = std::dynamic_pointer_cast<IcebergDvSinkContext>(context);
+        if (ctx == nullptr) {
+            return Status::InternalError("Iceberg connector deletion-vector sink requires IcebergDvSinkContext");
+        }
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergDvSinkProvider>(std::move(ctx));
         return provider;
     }
     }

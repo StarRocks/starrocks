@@ -26,6 +26,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -109,9 +110,16 @@ public class DeletePlanner {
                 }
             }
 
-            // For Iceberg, create shuffled property based on partitioning
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-            requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
+            if (IcebergDeletionVectorSupport.isV3(icebergTable)) {
+                // V3 DELETE writes deletion vectors: fail fast on the not-yet-supported cases,
+                // then shuffle by _file so a data file yields a single deletion vector.
+                IcebergDeletionVectorSupport.assertV3DeleteSupported(icebergTable);
+                requiredProperty = IcebergDeletionVectorSupport.createFileHashShuffleProperty(outputColumns);
+            } else {
+                // For V2 Iceberg, create shuffled property based on partitioning.
+                requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
+            }
         } else {
             // For other tables, use default empty property
             requiredProperty = new PhysicalPropertySet();
@@ -303,12 +311,15 @@ public class DeletePlanner {
         }
         deleteTuple.computeMemLayout();
 
-        // Initialize IcebergDeleteSink
+        // Initialize IcebergDeleteSink. BE selects the deletion-vector write sub-mode when
+        // format_version >= 3.
         descriptorTable.addReferencedTable(icebergTable);
+        int formatVersion = icebergTable.getFormatVersion();
         IcebergDeleteSink dataSink = new IcebergDeleteSink(
                 icebergTable,
                 deleteTuple,
-                session.getSessionVariable()
+                session.getSessionVariable(),
+                formatVersion
         );
         dataSink.init();
         // Create IcebergSinkExtra for DELETE operations

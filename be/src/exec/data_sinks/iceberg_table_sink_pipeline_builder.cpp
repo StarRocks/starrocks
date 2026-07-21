@@ -18,6 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "connector/iceberg/iceberg_connector.h"
+#include "connector/iceberg/iceberg_dv_sink.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "connector/iceberg/iceberg_utils.h"
 #include "data_sink/external/iceberg_table_sink.h"
@@ -99,6 +100,14 @@ private:
                                       std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
                                       std::vector<TExpr>& partition_expr);
 
+    // DV sub-mode of ICEBERG_DELETE_SINK (Iceberg V3 deletion vectors). Builds an
+    // IcebergDvSinkContext. Takes no partition_expr: the DV path keys its local exchange by
+    // _file, not by the partition expression.
+    Status create_dv_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                         pipeline::PipelineBuilderContext* context,
+                                         IcebergTableDescriptor* iceberg_table_desc,
+                                         std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider);
+
     Status create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
                                     pipeline::PipelineBuilderContext* context,
                                     IcebergTableDescriptor* iceberg_table_desc,
@@ -129,13 +138,21 @@ Status IcebergTableSinkPipelineBuilder::decompose_to_pipeline(pipeline::OpFactor
     std::unique_ptr<connector::ConnectorSinkProvider> sink_provider;
     std::vector<TExpr> partition_expr;
     std::vector<std::string> transform_exprs = iceberg_table_desc->get_transform_exprs();
+    bool is_dv_delete = false;
 
     if (thrift_sink.type == TDataSinkType::ICEBERG_ROW_DELTA_SINK) {
         RETURN_IF_ERROR(create_row_delta_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
                                                       sink_provider, partition_expr));
     } else if (thrift_sink.type == TDataSinkType::ICEBERG_DELETE_SINK) {
-        RETURN_IF_ERROR(create_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
-                                                   sink_provider, partition_expr));
+        // Iceberg V3 tables write deletion vectors: select the DV sub-mode by format_version.
+        if (t_iceberg_sink.__isset.format_version && t_iceberg_sink.format_version >= 3) {
+            RETURN_IF_ERROR(create_dv_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
+                                                          sink_provider));
+            is_dv_delete = true;
+        } else {
+            RETURN_IF_ERROR(create_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
+                                                       sink_provider, partition_expr));
+        }
     } else {
         RETURN_IF_ERROR(create_data_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc, sink_provider,
                                                  partition_expr));
@@ -145,7 +162,29 @@ Status IcebergTableSinkPipelineBuilder::decompose_to_pipeline(pipeline::OpFactor
                                                                        std::move(sink_provider), fragment_ctx);
     size_t sink_dop = context->data_sink_dop();
 
-    if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
+    if (is_dv_delete) {
+        // DV keys its local exchange by _file (output_exprs[0]) so a data file is never split
+        // across sink drivers (single DV per file), matching the FE _file global shuffle. This
+        // holds for both partitioned and unpartitioned tables.
+        const auto& output_exprs = _sink.get_output_expr();
+        if (output_exprs.empty()) {
+            return Status::InternalError("DV delete sink expects at least the _file output expression");
+        }
+        std::vector<TExpr> file_key_exprs = {output_exprs[0]};
+        std::vector<ExprContext*> file_key_ctxs;
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), file_key_exprs, &file_key_ctxs,
+                                                       runtime_state));
+        for (int i = 0; i < file_key_ctxs.size(); i++) {
+            if (file_key_ctxs[i] == nullptr || file_key_ctxs[i]->root() == nullptr) {
+                return Status::InternalError(fmt::format("DV _file exchange expression at index {} is nullptr", i));
+            }
+        }
+        auto ops = ::starrocks::pipeline::builder::interpolate_local_key_partition_exchange(
+                context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+                file_key_ctxs, sink_dop, /*transform_exprs=*/{});
+        ops.emplace_back(std::move(op));
+        context->add_pipeline(ops);
+    } else if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
         auto ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
                 context, runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 sink_dop, pipeline::LocalExchanger::PassThroughType::SCALE);
@@ -248,6 +287,69 @@ Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
     connector::IcebergConnector iceberg_connector;
     ASSIGN_OR_RETURN(auto provider, iceberg_connector.create_sink_provider(
                                             starrocks::connector::ConnectorSinkProviderType::DELETE, delete_sink_ctx));
+    sink_provider = std::move(provider);
+
+    return Status::OK();
+}
+
+Status IcebergTableSinkPipelineBuilder::create_dv_delete_sink_context(
+        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
+        IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider) {
+    auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
+
+    auto dv_sink_ctx = std::make_shared<connector::IcebergDvSinkContext>();
+    dv_sink_ctx->path = t_iceberg_sink.data_location;
+    dv_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
+    dv_sink_ctx->runtime_state = runtime_state;
+    dv_sink_ctx->writer_tag = "delete";
+
+    // Delete rows carry columns: _file, _pos, and (for partitioned tables) partition columns.
+    const auto& output_exprs = _sink.get_output_expr();
+    dv_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
+    dv_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
+
+    // Build column name → slot reference map so IcebergDvSink::add() can locate _file/_pos.
+    TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
+    if (tuple_desc == nullptr) {
+        return Status::InternalError(
+                fmt::format("Failed to find tuple descriptor with id {}", t_iceberg_sink.tuple_id));
+    }
+    const auto& slots = tuple_desc->slots();
+    if (slots.size() != output_exprs.size()) {
+        return Status::InternalError(fmt::format("Mismatched slot and output expression counts: {} vs {}", slots.size(),
+                                                 output_exprs.size()));
+    }
+    for (size_t i = 0; i < slots.size(); ++i) {
+        const auto& expr = output_exprs[i];
+        for (const auto& node : expr.nodes) {
+            if (node.node_type == TExprNodeType::SLOT_REF && node.__isset.slot_ref) {
+                dv_sink_ctx->column_slot_map[std::string(slots[i]->col_name())] = node;
+                break;
+            }
+        }
+    }
+
+    // The DV local exchange keys on output_exprs[0] (see decompose_to_pipeline), while the sink
+    // groups rows by the "_file" slot. Enforce that these are the same column so a future FE
+    // reordering of the delete SELECT list cannot silently split a data file across sink drivers
+    // (which would produce multiple DVs per file).
+    if (slots.empty() || slots[0]->col_name() != "_file") {
+        return Status::InternalError("DV delete sink expects the _file column as the first output expression");
+    }
+
+    // Partition evaluators let the sink compute each data file's partition_path (the DV entry
+    // partition), even though the DV shuffle key is _file, not the partition columns.
+    if (!iceberg_table_desc->is_unpartitioned_table()) {
+        std::vector<TExpr> partition_expr = iceberg_table_desc->get_partition_exprs();
+        const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
+        RETURN_IF_ERROR(update_iceberg_partition_expr_slot_refs_by_map(partition_expr, dv_sink_ctx->column_slot_map,
+                                                                       partition_source_column_names));
+        dv_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
+    }
+
+    connector::IcebergConnector iceberg_connector;
+    ASSIGN_OR_RETURN(auto provider, iceberg_connector.create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::DV, dv_sink_ctx));
     sink_provider = std::move(provider);
 
     return Status::OK();

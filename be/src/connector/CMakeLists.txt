@@ -92,6 +92,7 @@ ADD_BE_LIB(ConnectorIceberg
         iceberg/iceberg_chunk_sink.cpp
         iceberg/iceberg_utils.cpp
         iceberg/iceberg_delete_sink.cpp
+        iceberg/iceberg_dv_sink.cpp
         iceberg/iceberg_row_delta_sink.cpp
 )
 

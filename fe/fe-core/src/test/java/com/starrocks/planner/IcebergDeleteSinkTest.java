@@ -93,7 +93,7 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
         // Should not throw exception
-        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
         assertNotNull(sink);
     }
 
@@ -115,7 +115,7 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
         // Should throw exception
-        IcebergDeleteSink deleteSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink deleteSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
         StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class, deleteSink::init);
         assertTrue(exception.getMessage().contains("_file"));
     }
@@ -142,7 +142,7 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("hdfs://localhost:9000/iceberg");
         when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
 
-        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
         sink.init();
 
         // Check thrift serialization
@@ -177,7 +177,7 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
         when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
 
-        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
 
         String explainString = sink.getExplainString("", TExplainLevel.NORMAL);
         assertTrue(explainString.contains("ICEBERG DELETE SINK"));
@@ -205,7 +205,7 @@ public class IcebergDeleteSinkTest {
         when(icebergTable.getNativeTable()).thenReturn(nativeTable);
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
-        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
 
         // Initially, sink extra info should be null
         assertNull(sink.getSinkExtraInfo());
@@ -240,12 +240,41 @@ public class IcebergDeleteSinkTest {
         when(nativeTable.location()).thenReturn("/tmp/iceberg");
 
         when(icebergTable.isPartitioned()).thenReturn(false);
-        IcebergDeleteSink unpartitionedSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink unpartitionedSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
         assertTrue(unpartitionedSink.isUnpartitionedTable());
 
         when(icebergTable.isPartitioned()).thenReturn(true);
-        IcebergDeleteSink partitionedSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        IcebergDeleteSink partitionedSink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
         assertFalse(partitionedSink.isUnpartitionedTable());
+    }
+
+    @Test
+    public void testFormatVersionPropagatedToThrift() {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+        Column fileColumn = new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(0), desc);
+        fileSlot.setColumn(fileColumn);
+        desc.addSlot(fileSlot);
+        Column posColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT);
+        SlotDescriptor posSlot = new SlotDescriptor(new SlotId(1), desc);
+        posSlot.setColumn(posColumn);
+        desc.addSlot(posSlot);
+
+        for (int version : new int[] {2, 3}) {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+            when(nativeTable.properties()).thenReturn(new HashMap<>());
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), version);
+            sink.init();
+
+            TIcebergTableSink icebergSink = sink.toThrift().getIceberg_table_sink();
+            assertTrue(icebergSink.isSetFormat_version());
+            assertEquals(version, icebergSink.getFormat_version());
+        }
     }
 
     @Test
@@ -275,7 +304,7 @@ public class IcebergDeleteSinkTest {
             properties.put("write.delete.parquet.compression-codec", "zstd");
             when(nativeTable.properties()).thenReturn(properties);
 
-            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
             sink.init();
 
             TDataSink tDataSink = sink.toThrift();
@@ -295,7 +324,7 @@ public class IcebergDeleteSinkTest {
             properties.put("write.parquet.compression-codec", "snappy");
             when(nativeTable.properties()).thenReturn(properties);
 
-            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
             sink.init();
 
             TDataSink tDataSink = sink.toThrift();
@@ -316,7 +345,7 @@ public class IcebergDeleteSinkTest {
             properties.put("write.parquet.compression-codec", "snappy");
             when(nativeTable.properties()).thenReturn(properties);
 
-            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
             sink.init();
 
             TDataSink tDataSink = sink.toThrift();
@@ -336,7 +365,7 @@ public class IcebergDeleteSinkTest {
             Map<String, String> properties = new HashMap<>();
             when(nativeTable.properties()).thenReturn(properties);
 
-            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable(), 2);
             sink.init();
 
             TDataSink tDataSink = sink.toThrift();
@@ -358,7 +387,7 @@ public class IcebergDeleteSinkTest {
             SessionVariable sessionVariable = new SessionVariable();
             sessionVariable.setConnectorSinkCompressionCodec("lz4");
 
-            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, sessionVariable);
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, sessionVariable, 2);
             sink.init();
 
             TDataSink tDataSink = sink.toThrift();
