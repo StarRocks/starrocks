@@ -108,9 +108,9 @@ set(BASE_TEST_FILES
     status_test.cpp
 )
 
-if (USE_AVX512)
-    list(APPEND BASE_TEST_FILES simd/delta_decode_test.cpp)
-endif()
+# delta_decode_test guards each ISA kernel with a runtime __builtin_cpu_supports check, so it is
+# built (and meaningfully exercises the AVX2/AVX-512 kernels on capable CPUs) regardless of USE_AVX512.
+list(APPEND BASE_TEST_FILES simd/delta_decode_test.cpp)
 
 set(BASE_TEST_LINK_LIBS
     Base
