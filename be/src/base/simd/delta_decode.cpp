@@ -84,10 +84,8 @@ DD_TARGET_AVX2 void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t m
 }
 
 // Though we handle 256bit as a unit, we still use some instructions of avx512f + avx512vl.
-DD_TARGET_AVX512VL static __m256i prefix_and_accumulate_int32_avx2(int32_t* p, __m256i s,
-                                                                   const __m256i& v_min_delta,
-                                                                   const __m256i& v_zero,
-                                                                   const __m256i& v_perm7) {
+DD_TARGET_AVX512VL static __m256i prefix_and_accumulate_int32_avx2(int32_t* p, __m256i s, const __m256i& v_min_delta,
+                                                                   const __m256i& v_zero, const __m256i& v_perm7) {
     __m256i x = _mm256_loadu_si256((__m256i*)p);
     x = _mm256_add_epi32(x, v_min_delta);
     x = _mm256_add_epi32(x, _mm256_alignr_epi32(x, v_zero, 8 - 1));
@@ -124,10 +122,8 @@ DD_TARGET_AVX512VL void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int3
 }
 
 // reference: https://www.adms-conf.org/2020-camera-ready/ADMS20_05.pdf
-DD_TARGET_AVX512F static __m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s,
-                                                                   const __m512i& v_min_delta,
-                                                                   const __m512i& v_zero,
-                                                                   const __m512i& v_perm15) {
+DD_TARGET_AVX512F static __m512i prefix_and_accumulate_int32_avx512(int32_t* p, __m512i s, const __m512i& v_min_delta,
+                                                                    const __m512i& v_zero, const __m512i& v_perm15) {
     // prefix
     __m512i x = _mm512_loadu_si512(p);
     x = _mm512_add_epi32(x, v_min_delta);
@@ -169,10 +165,8 @@ DD_TARGET_AVX512F void delta_decode_chain_int32_avx512(int32_t* buf, int n, int3
 
 // ==========================================
 
-DD_TARGET_AVX512F static __m512i prefix_and_accumulate_int64_avx512(int64_t* p, __m512i s,
-                                                                   const __m512i& v_min_delta,
-                                                                   const __m512i& v_zero,
-                                                                   const __m512i& v_perm7) {
+DD_TARGET_AVX512F static __m512i prefix_and_accumulate_int64_avx512(int64_t* p, __m512i s, const __m512i& v_min_delta,
+                                                                    const __m512i& v_zero, const __m512i& v_perm7) {
     // prefix
     __m512i x = _mm512_loadu_si512(p);
     x = _mm512_add_epi64(x, v_min_delta);
