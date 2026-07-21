@@ -570,7 +570,7 @@ public class PreSplitFlowTest {
     private static PreSplitFlow.Prepared preparedWithPartitionInSortKey(ScanContext scanContext) {
         Column sortCol = bigintColumn("sort_col");
         return new PreSplitFlow.Prepared(scanContext, List.of(sortCol), List.of(sortCol),
-                /*estimatedBytes*/ 4096L, mock(ComputeResource.class));
+                /*estimatedBytes*/ 4096L, mock(ComputeResource.class), List.of());
     }
 
     /** Stub PreSplitTargets.findEligibleTarget to resolve a single-partition target for {@code table}. */
