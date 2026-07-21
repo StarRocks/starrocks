@@ -145,14 +145,26 @@ public class SplitTabletJobColocateTest {
         }
     }
 
+    /**
+     * A within-prefix (Level 2) pre-split adds no ColocateRange boundary and leaves the group stable,
+     * but because pre-split creates its new shards in the SPREAD group ONLY (root fix so they spread
+     * across CNs at creation), the post-publish reconcile must STILL place each child into the existing
+     * owning PACK group. Otherwise a boundary-less split would strand them SPREAD-only and lose
+     * colocation permanently — the group is stable, so the periodic ColocateChecker backstop never
+     * revisits it (this is the case the reconcile-always fix addresses).
+     */
     @Test
-    public void testLevelTwoSplitDoesNotChangeColocateRangeMgr() throws Exception {
-        ColocateRangeMgr rangeMgr = GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRangeMgr();
+    public void testLevelTwoPreSplitReconcilesChildIntoExistingPackGroup() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long existingPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size());
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             // Two new tablets, both with WITHIN-PREFIX (non-canonical) lower bounds —
-            // a Level 2 split that does NOT cross any colocate boundary.
+            // a Level 2 split that does NOT cross any colocate boundary (both stay in the one range).
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
                     new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
@@ -160,11 +172,23 @@ public class SplitTabletJobColocateTest {
                     new TabletRange(Range.ge(makeTwoColTuple(100, 50))).toProto());
             return result;
         });
-        boolean[] reassignCalled = {false};
+        // Pre-split created the children in the SPREAD group ONLY (no PACK group).
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
         new MockUp<StarOSAgent>() {
             @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(spreadGroup).build());
+                }
+                return infos;
+            }
+
+            @Mock
             public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
-                reassignCalled[0] = true;
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
             }
         };
 
@@ -172,10 +196,16 @@ public class SplitTabletJobColocateTest {
 
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size(),
                 "Level 2 split must not add a ColocateRange entry");
-        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
+        Assertions.assertFalse(idx.isGroupUnstable(groupId),
                 "Level 2 split must leave the group stable");
-        Assertions.assertFalse(reassignCalled[0],
-                "no boundary spliced -> no immediate PACK reassignment");
+        Assertions.assertFalse(reassignedAdd.isEmpty(),
+                "SPREAD-only pre-split children must be reconciled into the existing PACK group");
+        for (Map.Entry<Long, List<Long>> e : reassignedAdd.entrySet()) {
+            Assertions.assertEquals(List.of(existingPackGroup), e.getValue(),
+                    "child " + e.getKey() + " must be added to the existing owning PACK group");
+            Assertions.assertEquals(List.of(), reassignedRemove.get(e.getKey()),
+                    "child " + e.getKey() + " had no PACK group, so nothing is removed");
+        }
     }
 
     @Test

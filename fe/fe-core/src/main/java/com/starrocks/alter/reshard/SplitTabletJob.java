@@ -679,24 +679,32 @@ public class SplitTabletJob extends TabletReshardJob {
         boolean hasNewCanonical = canonicalLowers.stream().anyMatch(lower ->
                 !ColocateRangeMgr.hasBoundaryAt(currentRanges,
                         new Tuple(lower.getValues().subList(0, colocateColumnCount))));
-        if (!hasNewCanonical && !oldStradlesBoundary && !nonCanonicalCrossing) {
-            return;
-        }
-        try {
-            colocateTableIndex.applyRangeSplitResult(grpId, canonicalLowers, colocateColumnCount,
-                    () -> GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
-                            dbId, tableId, 0L, 0L, PlacementPolicy.PACK));
-        } catch (DdlException e) {
-            throw new TabletReshardException(
-                    "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+        // Splice a new colocate boundary + mark the group unstable ONLY when this split actually
+        // introduced or crossed one. A within-prefix (Level-2) split introduces no boundary, so this
+        // block is skipped and the group stays stable — but the PACK reconcile below still runs.
+        if (hasNewCanonical || oldStradlesBoundary || nonCanonicalCrossing) {
+            try {
+                colocateTableIndex.applyRangeSplitResult(grpId, canonicalLowers, colocateColumnCount,
+                        () -> GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                                dbId, tableId, 0L, 0L, PlacementPolicy.PACK));
+            } catch (DdlException e) {
+                throw new TabletReshardException(
+                        "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+            }
         }
 
-        // Best-effort: immediately move this split's originating-partition children that now belong in a
-        // newly-created PACK shard group, removing the cross-tick delay before the colocate checker
-        // backstop would reconcile them. Correctness does not depend on this — the backstop reaches the
-        // same terminal state — so a failure here must never abort the split (already published). The
-        // outer catch is what guarantees best-effort: the shared helper catches expected StarOS checked
-        // failures but is intentionally not blanket-wrapped, so an unexpected bug still surfaces here.
+        // Place each new child into its owning ColocateRange's PACK shard group. This MUST run for every
+        // range-colocate split, not only when a boundary was spliced above: a pre-split creates its new
+        // shards in the SPREAD group ONLY (so StarOS spreads them across CNs at creation), so even a
+        // within-prefix (Level-2) split — whose boundary is not spliced, leaving the group stable so the
+        // periodic ColocateChecker backstop never revisits it — still needs its children reconciled into
+        // the existing owning PACK group, or their colocate placement is lost permanently.
+        // reconcileTabletPackPlacement is idempotent: for an online split (children already carry the
+        // right PACK group) it is a no-op; for a SPREAD-only pre-split child it adds the owning PACK group
+        // (removing none). Best-effort: a failure here must never abort the already-published split — for
+        // a boundary-splicing split the group is left unstable so the backstop still converges it; a
+        // within-prefix split relies on this immediate pass, so the shared helper logs and retries on the
+        // expected StarOS checked failures but is intentionally not blanket-wrapped.
         try {
             List<ColocateRange> updatedRanges = colocateTableIndex.getColocateRanges(grpId);
             // Only reconcile children that map cleanly into exactly one post-split ColocateRange. A child
