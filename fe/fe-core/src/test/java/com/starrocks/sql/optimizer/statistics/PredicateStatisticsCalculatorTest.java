@@ -411,8 +411,8 @@ public class PredicateStatisticsCalculatorTest {
                         .setAverageRowSize(10)
                         .build())
                 .addColumnStatistic(bColumn, ColumnStatistic.builder()
-                        .setNullsFraction(0.3).
-                        setDistinctValuesCount(1_000_000)
+                        .setNullsFraction(0.3)
+                        .setDistinctValuesCount(1_000_000)
                         .setAverageRowSize(10)
                         .build())
                 .build();
