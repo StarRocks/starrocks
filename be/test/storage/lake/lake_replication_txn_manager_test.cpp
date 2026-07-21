@@ -759,8 +759,6 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_bundle_fallback_success) {
     // Write bundled metadata (no individual file)
-    auto metadata_pb = std::make_shared<TabletMetadataPB>();
-    _tablet_metadata->SerializeToString(metadata_pb.get());
     std::map<int64_t, TabletMetadataPB> metas;
     metas.emplace(_src_tablet_id, *_tablet_metadata);
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
