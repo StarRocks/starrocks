@@ -13,8 +13,14 @@ SHOW CATALOGS queries all catalogs in the current StarRocks cluster, including t
 ## Syntax
 
 ```SQL
-SHOW CATALOGS
+SHOW CATALOGS [LIKE '<pattern>']
 ```
+
+## Parameters
+
+| **Parameter** | **Description**                                              |
+| ------------- | ------------------------------------------------------------ |
+| pattern       | Optional. The pattern used to match catalog names by using the `LIKE` clause. `%` matches any number of characters and `_` matches a single character. Only the catalogs whose names match the pattern are returned. |
 
 ## Output
 
@@ -47,6 +53,16 @@ Catalog: hudi_catalog
    Type: Hudi
 Comment: NULL
 *************************** 3. row ***************************
+Catalog: iceberg_catalog
+   Type: Iceberg
+Comment: NULL
+```
+
+Query the catalogs whose names match a specific pattern.
+
+```SQL
+SHOW CATALOGS LIKE 'iceberg%'\G
+*************************** 1. row ***************************
 Catalog: iceberg_catalog
    Type: Iceberg
 Comment: NULL
