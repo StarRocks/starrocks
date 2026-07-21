@@ -488,6 +488,48 @@ All transaction metrics share the following labels:
 - Labels: None
 - Description: Total number of scoped synchronous statistics waits that could not continue because the per-query stats wait budget was exhausted, or because a scoped wait reached its remaining budget timeout. Per-call waits that run without a per-query budget scope are not counted.
 
+## `starrocks_fe_statistics_cache_entries`
+
+- Unit: Count
+- Type: Gauge
+- Labels: `cache` — the statistics cache: `table_stats`, `column_stats`, `partition_stats`, `connector_table_stats`, `histogram_stats`, `connector_histogram_stats`, or `multi_column_stats`.
+- Description: Approximate number of entries currently held in the given statistics cache (backed by Caffeine). The maximum per cache is controlled by the FE config `statistic_cache_columns`. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of entries evicted from the given statistics cache (due to size or expiration). A consistently rising value relative to the cache size suggests raising `statistic_cache_columns`. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were served from the cache. Together with `starrocks_fe_statistics_cache_miss_count` this yields the cache hit ratio. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache loads that failed because the Caffeine loader completed exceptionally. Missing statistics rows are cached as empty results and count as successful loads, not failures. A non-zero, growing value points to errors reading from the statistics tables. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache loads that completed successfully. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were not found in the cache and triggered a load. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - Unit: Count

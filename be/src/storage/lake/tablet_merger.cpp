@@ -856,6 +856,7 @@ using tablet_reshard_helper::DcgRowWindow;
 Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int64_t new_tablet_id,
                                               const RowsetMetadataPB& target_rowset, int target_segment_position,
                                               const TabletSchemaCSPtr& full_tablet_schema,
+                                              const TabletSchemaCSPtr& current_schema,
                                               const std::vector<DcgSourceRowsetReference>& source_references,
                                               const roaring::Roaring* gap_bits,
                                               std::shared_ptr<Segment>* out_base_segment,
@@ -889,9 +890,15 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
     for (const auto& source_reference : source_references) {
         Range<rowid_t> window{0, num_rows_in_target};
         if (source_reference.effective_range != nullptr) {
+            // Decode with full_tablet_schema -- the schema the base segment is opened with above -- so the
+            // SeekRange's positional field ids align with that segment. A reshard that ran after a
+            // metadata-only trailing key add can stamp a per-rowset range at a larger sort-key arity than
+            // this rowset's schema; create_seek_range_from then projects the wider bound onto this segment's
+            // sort key, comparing the added columns' defaults (from current_schema) against the dropped
+            // trailing bound values so a boundary-prefix row routes exactly as under the full-arity range.
             ASSIGN_OR_RETURN(auto seek_range, TabletRangeHelper::create_seek_range_from(
                                                       *source_reference.effective_range, full_tablet_schema,
-                                                      /*mem_pool=*/nullptr));
+                                                      /*mem_pool=*/nullptr, current_schema));
             LakeIOOptions lake_io_options{.fill_data_cache = false};
             ASSIGN_OR_RETURN(auto rowid_range_opt,
                              segment_seek_range_to_rowid_range(base_segment, seek_range, lake_io_options));
@@ -1045,11 +1052,15 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target_segment(
                 rebuild_columns.size(), rebuild_schema->num_columns()));
     }
 
-    // Step C — compute row windows.
+    // Step C — compute row windows. `current_schema` (the current tablet schema, which contains any
+    // later-added trailing key columns) lets a source range written at a wider sort-key arity than
+    // full_tablet_schema be projected onto the base segment's sort key using those columns' defaults.
+    TabletSchemaCSPtr current_schema =
+            new_metadata.has_schema() ? TabletSchema::create(new_metadata.schema()) : full_tablet_schema;
     std::vector<DcgRowWindow> windows;
     std::shared_ptr<Segment> base_segment;
     RETURN_IF_ERROR(compute_row_windows_for_source_rowsets(tablet_manager, new_tablet_id, target_rowset,
-                                                           target_segment_position, full_tablet_schema,
+                                                           target_segment_position, full_tablet_schema, current_schema,
                                                            source_references, gap_bits, &base_segment, &windows));
     const rowid_t num_rows_in_target = static_cast<rowid_t>(base_segment->num_rows());
 
@@ -2890,6 +2901,30 @@ void merge_schemas(const std::vector<TabletMergeContext>& merge_contexts, Tablet
     }
 }
 
+// Reconcile the async vector-index build watermark across ALL merge sources into new_metadata.
+// The merged tablet contains rowsets from every source, so a rowset is only guaranteed built if
+// it was built in its OWN source. Inheriting source[0]'s watermark alone (via the CopyFrom that
+// seeds new_metadata) could falsely claim another source's unbuilt rowsets are built, permanently
+// skipping their .vi build. MIN over sources is the largest value that holds for every merged
+// rowset; the build task's per-.vi existence check skips already-built ones, so a conservative
+// (lower) watermark only re-examines, never rebuilds needlessly. A source without the field
+// guarantees nothing is built and contributes 0; if no source has the field, leave it unset.
+void reconcile_vector_index_built_version(const std::vector<TabletMergeContext>& merge_contexts,
+                                          TabletMetadataPB* new_metadata) {
+    bool any_has_built_version = false;
+    int64_t min_built_version = std::numeric_limits<int64_t>::max();
+    for (const auto& ctx : merge_contexts) {
+        int64_t v = ctx.metadata()->has_vector_index_built_version() ? ctx.metadata()->vector_index_built_version() : 0;
+        any_has_built_version |= ctx.metadata()->has_vector_index_built_version();
+        min_built_version = std::min(min_built_version, v);
+    }
+    if (any_has_built_version) {
+        new_metadata->set_vector_index_built_version(min_built_version);
+    } else {
+        new_metadata->clear_vector_index_built_version();
+    }
+}
+
 } // namespace
 
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
@@ -2924,6 +2959,10 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_orphan_files();
     new_tablet_metadata->clear_prev_garbage_version();
     new_tablet_metadata->set_cumulative_point(0);
+
+    // Reconcile the async vector-index build watermark to the MIN over all merge sources so the
+    // build task never skips another source's unbuilt rowsets (see the helper for the invariant).
+    reconcile_vector_index_built_version(merge_contexts, new_tablet_metadata.get());
 
     // Phase 1: Prepare rssid offsets and merged range. For each ctx[i],
     // set new_tablet_metadata.next_rowset_id to the watermark of all

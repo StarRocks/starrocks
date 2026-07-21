@@ -34,6 +34,20 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testStatsSourceInExplain() throws Exception {
+        // External (connector) scan nodes surface their StatsSource in `explain costs` / `explain verbose`.
+        // The mocked hive metadata does not tag a source, so it renders as NONE here; the point is that
+        // the line is emitted for the connector scan node.
+        String hiveSql = "select * from hive0.tpch.region";
+        String costPlan = getCostExplain(hiveSql);
+        assertContains(costPlan, "HdfsScanNode");
+        assertContains(costPlan, "stats source:");
+        assertContains(getVerboseExplain(hiveSql), "stats source:");
+        // OlapScanNode is intentionally excluded (its source is always ANALYZE and would churn plan
+        // tests); that exclusion is covered by the OlapScan-based plan suites such as ExplainTest.
+    }
+
+    @Test
     public void testPruneColumnTest() throws Exception {
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         String[] sqlString = {

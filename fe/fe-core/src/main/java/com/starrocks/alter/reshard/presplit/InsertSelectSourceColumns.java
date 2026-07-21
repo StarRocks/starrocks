@@ -30,32 +30,22 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Maps each target sort-key / partition column to the source column name to sample,
- * given a parsed {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}.
+ * Resolves the full target-&gt;source column-name map (lower-cased target name -&gt; source column
+ * name, total over the target's non-generated base columns) for a parsed
+ * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
+ * the map to project any index's sort key (base or rollup) and the partition columns by their
+ * source-table column names.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
  */
 final class InsertSelectSourceColumns {
-    private final List<String> sortKeySourceColumnNames;
-    private final List<String> partitionSourceColumnNames;
 
-    private InsertSelectSourceColumns(List<String> sortKeySourceColumnNames,
-                                      List<String> partitionSourceColumnNames) {
-        this.sortKeySourceColumnNames = sortKeySourceColumnNames;
-        this.partitionSourceColumnNames = partitionSourceColumnNames;
-    }
-
-    List<String> sortKeySourceColumnNames() {
-        return sortKeySourceColumnNames;
-    }
-
-    List<String> partitionSourceColumnNames() {
-        return partitionSourceColumnNames;
+    private InsertSelectSourceColumns() {
     }
 
     /**
-     * Resolves the source-column names for each sort-key and partition column of the target table.
+     * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
      *
      * @param insertStmt          the parsed INSERT statement
      * @param selectRelation      the SELECT body of the INSERT
@@ -65,9 +55,10 @@ final class InsertSelectSourceColumns {
      * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
      * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
      * @param partitionColumns    partition columns of the target
-     * @return resolved mapping, or {@code null} when the projection is ambiguous or unsafe
+     * @return the target-&gt;source column-name map, or {@code null} when the projection is
+     *         ambiguous or unsafe
      */
-    static InsertSelectSourceColumns resolve(
+    static Map<String, String> resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
             OlapTable targetTable, OlapTable sourceTable,
             TableName normalizedSourceName, String sourceAlias,
@@ -148,15 +139,13 @@ final class InsertSelectSourceColumns {
             }
         }
 
-        List<String> sortKeyNames = lookup(sortKeyColumns, targetToSource);
-        if (sortKeyNames == null) {
+        // A sort-key or partition column with no source mapping cannot be sampled -> skip pre-split.
+        // The executor derives both projections from the map at sample time (see mapToSource), so
+        // only the presence gate matters here.
+        if (lookup(sortKeyColumns, targetToSource) == null || lookup(partitionColumns, targetToSource) == null) {
             return null;
         }
-        List<String> partitionNames = lookup(partitionColumns, targetToSource);
-        if (partitionNames == null) {
-            return null;
-        }
-        return new InsertSelectSourceColumns(sortKeyNames, partitionNames);
+        return Map.copyOf(targetToSource);
     }
 
     private static Set<String> targetNames(List<Column> targetCols) {
@@ -167,7 +156,14 @@ final class InsertSelectSourceColumns {
         return names;
     }
 
-    private static List<String> lookup(List<Column> columns, Map<String, String> targetToSource) {
+    /**
+     * Maps each target column to its source-table column name via {@code targetToSource}
+     * (keyed by lower-cased target name), or returns {@code null} when ANY column is absent from
+     * the map. The shared primitive for every "are these columns mappable to source names?" gate
+     * and for the executor's sample-time remap; package-private so those same-package callers
+     * share one implementation of the map-key convention.
+     */
+    static List<String> lookup(List<Column> columns, Map<String, String> targetToSource) {
         List<String> names = new ArrayList<>(columns.size());
         for (Column column : columns) {
             String sourceName = targetToSource.get(column.getName().toLowerCase());

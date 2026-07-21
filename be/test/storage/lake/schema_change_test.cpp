@@ -2946,12 +2946,13 @@ TEST_F(SchemaChangeAddIndexOnlyTest, missing_txn_id_returns_invalid_argument) {
     EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
 }
 
-TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_returns_invalid_argument) {
-    // Empty indexes_to_add must surface as InvalidArgument and NOT fall
-    // back to do_process_alter_tablet — the fast-path request has
-    // base_tablet_id == new_tablet_id with no schema diff, and the legacy
-    // rewrite path treats that as self-targeted alter, appending duplicate
-    // rowsets and doubling the row count.
+TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_is_explicit_noop) {
+    // An EMPTY indexes_to_add set is the FE's way of saying "this materialized
+    // index (rollup / sync MV) does not carry the indexed column(s)": BE must
+    // write a no-op txn log (version advance only) so the reserved alter
+    // version still publishes on this tablet — and must NOT fall back to
+    // do_process_alter_tablet (base_tablet_id == new_tablet_id would make the
+    // legacy rewrite self-target the tablet and duplicate rowsets).
     TAlterTabletReqV2 request;
     request.__set_new_tablet_id(5002);
     request.__set_base_tablet_id(5000);
@@ -2960,9 +2961,13 @@ TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_returns_invalid_argume
     // indexes_to_add intentionally unset
 
     SchemaChangeHandler handler(_tablet_manager.get());
-    Status st = handler.process_alter_tablet(request);
-    ASSERT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(5002, 800002),
+                                                                /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    EXPECT_EQ(0, txn_log->op_add_index().new_indexes_size());
+    EXPECT_EQ(0, txn_log->op_add_index().segment_entries_size());
 }
 
 TEST_F(SchemaChangeAddIndexOnlyTest, index_without_type_rejected) {

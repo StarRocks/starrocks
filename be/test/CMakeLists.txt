@@ -128,10 +128,6 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
-        ./runtime/batch_write/batch_write_mgr_test.cpp
-        ./runtime/batch_write/batch_write_util_test.cpp
-        ./runtime/batch_write/isomorphic_batch_write_test.cpp
-        ./runtime/batch_write/txn_state_cache_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp

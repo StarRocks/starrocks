@@ -393,7 +393,7 @@ public class PredicateStatisticsCalculator {
                             andStatistics.getOutputRowCount();
                     rowCount = Math.min(rowCount, statistics.getOutputRowCount());
                     cumulativeStatistics =
-                            computeOrPredicateStatistics(cumulativeStatistics, orItemStatistics, rowCount);
+                            computeOrPredicateStatistics(cumulativeStatistics, orItemStatistics, andStatistics, rowCount);
                 }
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(cumulativeStatistics, rowCount);
@@ -405,7 +405,7 @@ public class PredicateStatisticsCalculator {
         }
 
         protected Statistics computeOrPredicateStatistics(Statistics cumulativeStatistics, Statistics orItemStatistics,
-                                                          double rowCount) {
+                                                          Statistics andStatistics, double rowCount) {
             Statistics.Builder builder = Statistics.buildFrom(cumulativeStatistics);
             builder.setOutputRowCount(rowCount);
 
@@ -417,6 +417,21 @@ public class PredicateStatisticsCalculator {
                 double originalNdv = statistics.getColumnStatistic(columnRefOperator).getDistinctValuesCount();
                 double accumulatedNdv = columnStatistic.getDistinctValuesCount() + rightColumnStatistic.getDistinctValuesCount();
                 columnBuilder.setDistinctValuesCount(Math.min(originalNdv, accumulatedNdv));
+                double origNulls =
+                        statistics.getColumnStatistic(columnRefOperator).getNullsFraction() * statistics.getOutputRowCount();
+                double leftNulls = cumulativeStatistics.getOutputRowCount() * columnStatistic.getNullsFraction();
+                double rightNulls = orItemStatistics.getOutputRowCount() * rightColumnStatistic.getNullsFraction();
+                // Without counting intersection, overlapping null rows are counted twice and the propagated
+                // null fraction is inflated.
+                double intersectionNulls = andStatistics == null ? 0.0 : andStatistics.getOutputRowCount() *
+                        andStatistics.getColumnStatistic(columnRefOperator).getNullsFraction();
+                // The intersection can't hold more null rows than either arm
+                double cappedIntersectionNulls = Math.min(intersectionNulls, Math.min(leftNulls, rightNulls));
+                double unionNulls = Math.max(0.0, leftNulls + rightNulls - cappedIntersectionNulls);
+                double cappedUnionNulls = Math.min(unionNulls, Math.min(origNulls, rowCount));
+                double nullsFraction = rowCount > 0 ? Math.min(1.0, cappedUnionNulls / rowCount) : 0.0;
+                columnBuilder.setNullsFraction(nullsFraction);
+
                 builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
             });
             return builder.build();
@@ -524,7 +539,9 @@ public class PredicateStatisticsCalculator {
                     rowCount = Math.max(rowCount, baseStatistics.getOutputRowCount());
                     rowCount = Math.max(rowCount, orStatistics.getOutputRowCount());
                     rowCount = Math.min(rowCount, statistics.getOutputRowCount());
-                    baseStatistics = computeOrPredicateStatistics(baseStatistics, orStatistics, rowCount);
+                    // This path uses an averaging heuristic and does not estimate the arms' intersection,
+                    // so no inclusion/exclusion adjustment is applied here (andStatistics is null).
+                    baseStatistics = computeOrPredicateStatistics(baseStatistics, orStatistics, null, rowCount);
                 }
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(baseStatistics, rowCount);
@@ -537,7 +554,7 @@ public class PredicateStatisticsCalculator {
 
         @Override
         protected Statistics computeOrPredicateStatistics(Statistics baseStatistics, Statistics orItemStatistics,
-                                                          double rowCount) {
+                                                          Statistics andStatistics, double rowCount) {
             // support simple avg statistics
             Statistics.Builder builder = Statistics.buildFrom(baseStatistics);
             builder.setOutputRowCount(rowCount);

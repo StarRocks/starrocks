@@ -164,12 +164,11 @@ public class RangeKeyColumnRoutingTest {
     @Test
     public void testAddKeyColumnAfterValueColumnRejected() throws Exception {
         // The added column is still routed (it is KEY and the sort key is key-derived), but placing it
-        // AFTER the value column v1 would break the key prefix (schema becomes [k1, v1, k2]). Routing
-        // must re-validate the post-add schema itself and reject precisely, rather than silently
-        // building a job on an invalid schema.
+        // AFTER the value column v1 would break the key prefix (schema becomes [k1, v1, k2]). The routed
+        // add now flows through finalAnalyze, which rejects the invalid column order before any job is
+        // built.
         OlapTable dup = buildLakeRangeTable(KeysType.DUP_KEYS, List.of("k1"));
-        assertThrowsDdl("ADD COLUMN produced an invalid key schema (keys must be a contiguous prefix) "
-                        + "on range-distribution table " + dup.getName(),
+        assertThrowsDdl("Invalid column order. value should be after key",
                 () -> alter(dup, "ADD COLUMN k2 INT KEY DEFAULT '0' AFTER v1"));
     }
 

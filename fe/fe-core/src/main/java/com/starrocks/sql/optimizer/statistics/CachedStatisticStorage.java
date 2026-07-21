@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -767,6 +768,18 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .build();
     }
 
+    public Map<String, LoadingCache<?, ?>> getNamedCacheMap() {
+        return ImmutableMap.<String, LoadingCache<?, ?>>builder()
+                .put("table_stats", tableStatsCache.synchronous())
+                .put("column_stats", columnStatistics.synchronous())
+                .put("partition_stats", partitionStatistics.synchronous())
+                .put("connector_table_stats", connectorTableCachedStatistics.synchronous())
+                .put("histogram_stats", histogramCache.synchronous())
+                .put("connector_histogram_stats", connectorHistogramCache.synchronous())
+                .put("multi_column_stats", multiColumnStats.synchronous())
+                .build();
+    }
+
     private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
         Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
                 .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
@@ -776,6 +789,10 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         // Only enable refreshAfterWrite if the config is enabled
         if (Config.enable_statistic_cache_refresh_after_write) {
             cacheBuilder.refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS);
+        }
+
+        if (Config.enable_statistic_cache_metrics) {
+            cacheBuilder.recordStats();
         }
 
         return cacheBuilder.buildAsync(cacheLoader);

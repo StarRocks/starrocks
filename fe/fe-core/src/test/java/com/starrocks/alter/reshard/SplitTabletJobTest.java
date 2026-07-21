@@ -143,9 +143,19 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+
+        // The superseded (old) split-parent index is scheduled for removal in the recycle bin (issue
+        // #75993) but LEFT INSTALLED on the partition, so an in-flight query planned against it can
+        // finish reading until the retention expires. Its tablets stay registered in the inverted
+        // index, and because the index is still on the partition its shards stay protected from the
+        // per-shard StarMgrMetaSyncer reaper.
         for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
+        Assertions.assertNotNull(physicalPartition.getIndex(materializedIndex.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .isMaterializedIndexRecycled(materializedIndex.getId()));
+
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
@@ -411,7 +421,7 @@ public class SplitTabletJobTest {
                 tabletRangeLowerOnly(200));
 
         TabletReshardJob tabletReshardJob = SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTabletId, newTabletRanges);
+                db, table, Map.of(oldTabletId, newTabletRanges));
         Assertions.assertNotNull(tabletReshardJob);
 
         // The SplittingTablet inside the job must carry the FE-supplied
@@ -448,7 +458,9 @@ public class SplitTabletJobTest {
         MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
                 newMaterializedIndex.getTablets().size());
-        Assertions.assertNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
+        // The old tablet is retained (parked in the recycle bin with the superseded index), not deleted
+        // immediately, so an in-flight split-parent read can finish (issue #75993).
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
 
         // TabletRangePB (generated jprotobuf class) has no equals override;
         // compare the underlying Range<Tuple> which does. The values must
@@ -469,15 +481,15 @@ public class SplitTabletJobTest {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId,
-                        List.of(tabletRange(0, 100))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(oldTabletId, List.of(tabletRange(0, 100)))));
     }
 
     @Test
     public void testForExternalBoundariesRejectsUnknownTablet() {
         Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, /*oldTabletId=*/Long.MAX_VALUE,
-                        List.of(tabletRange(0, 100), tabletRange(100, 200))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(/*oldTabletId=*/Long.MAX_VALUE, List.of(tabletRange(0, 100), tabletRange(100, 200)))));
     }
 
     // external boundaries must respect the tablet_reshard_max_split_count cap that the
@@ -493,7 +505,7 @@ public class SplitTabletJobTest {
             tooMany.add(tabletRange(i * 100, (i + 1) * 100));
         }
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, tooMany));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, Map.of(oldTabletId, tooMany)));
     }
 
     // Installs a MockUp on MockLakeService that intercepts both publishVersion and

@@ -178,6 +178,7 @@ import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -1781,18 +1782,80 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         try {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(context, db, (OlapTable) table, streamLoadInfo);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
-            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                    getSyncSteamLoadTaskByTxnId(request.getTxnId());
-            if (streamLoadTask == null) {
-                throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+            TExecPlanFragmentParams plan;
+            Coordinator coord;
+            StreamLoadTask streamLoadTask;
+            // Only take the pipeline path when the requesting BE id is known, so the scan can be
+            // pinned to the BE that owns the StreamLoadPipe. Otherwise fall back to the legacy path.
+            if (Config.enable_pipeline_stream_load && request.isSetBackend_id()) {
+                // The pipeline LoadPlanner needs the task's id + label, so look it up before planning.
+                streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                        .getSyncSteamLoadTaskByTxnId(request.getTxnId());
+                if (streamLoadTask == null) {
+                    throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+                }
+                // Resource-group resolution on the pipeline path reads ctx.getQualifiedUser();
+                // set it here (pipeline path only, so the legacy path is unchanged).
+                context.setQualifiedUser(request.getUser());
+                // The LoadPlanner/JobSpec path derives query_globals.time_zone from the context
+                // session variable, not from streamLoadInfo; set it so the load honors its timezone.
+                context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
+                // Run the classic synchronous stream load on the pipeline engine. Reuse LoadPlanner
+                // (the pipeline-correct planner used by the transaction stream load) so the FILE_STREAM
+                // scan range is assigned as a pipeline morsel, then materialize a single BE-local
+                // TExecPlanFragmentParams WITHOUT an RPC deploy; the receiving BE runs it in-process
+                // (params.is_pipeline routes it to the pipeline engine in StreamLoadOrchestrator).
+                LoadPlanner loadPlanner = new LoadPlanner(streamLoadTask.getId(), streamLoadInfo.getId(),
+                        request.getTxnId(), db.getId(), dbName, (OlapTable) table, streamLoadInfo.isStrictMode(),
+                        streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(), context, null,
+                        streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(), streamLoadInfo.getNegative(),
+                        1, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, streamLoadTask.getLabel(),
+                        streamLoadInfo.getTimeout());
+                loadPlanner.setSyncStreamLoad(true);
+                loadPlanner.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+                // Pin the scan to the BE that received the HTTP body and owns the pipe
+                // (backend_id is guaranteed set by the branch condition above).
+                loadPlanner.setSyncStreamLoadBackendId(request.getBackend_id());
+                loadPlanner.plan();
+                DefaultCoordinator streamLoadCoord =
+                        (DefaultCoordinator) getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
+                plan = streamLoadCoord.buildLocalStreamLoadParams();
+                // Carry over load-specific query options the LoadPlanner/JobSpec path does not set
+                // (it reads them from a session-variable map we do not pass), matching legacy StreamLoadPlanner.
+                plan.query_options.setLoad_transmission_compression_type(
+                        streamLoadInfo.getTransmisionCompressionType());
+                plan.query_options.setLog_rejected_record_num(streamLoadInfo.getLogRejectedRecordNum());
+                // Honor table-level / session load-profile collection (matching legacy StreamLoadPlanner),
+                // with the same collect-interval throttle. The pipeline engine reports the profile to the
+                // coordinator, which StreamLoadTask surfaces to ProfileManager on commit.
+                boolean enableLoadProfile = ((OlapTable) table).enableLoadProfile()
+                        || context.getSessionVariable().isEnableLoadProfile();
+                if (Config.load_profile_collect_interval_second > 0
+                        && System.currentTimeMillis() - ((OlapTable) table).getLastCollectProfileTime()
+                                < Config.load_profile_collect_interval_second * 1000) {
+                    enableLoadProfile = false;
+                }
+                if (enableLoadProfile) {
+                    plan.query_options.setEnable_profile(true);
+                    plan.query_options.setLoad_profile_collect_second(
+                            Config.stream_load_profile_collect_threshold_second);
+                    ((OlapTable) table).updateLastCollectProfileTime();
+                }
+                coord = streamLoadCoord;
+            } else {
+                // Legacy path: plan first so a column-map / analysis error surfaces before the task
+                // lookup (relied on by FrontendServiceImplTest.testStreamLoadPutColumnMapException).
+                StreamLoadPlanner planner = new StreamLoadPlanner(context, db, (OlapTable) table, streamLoadInfo);
+                plan = planner.plan(streamLoadInfo.getId());
+                coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
+                streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                        .getSyncSteamLoadTaskByTxnId(request.getTxnId());
+                if (streamLoadTask == null) {
+                    throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+                }
             }
-
             streamLoadTask.setTUniqueId(request.getLoadId());
-
-            Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
             streamLoadTask.setCoordinator(coord);
             try {
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);

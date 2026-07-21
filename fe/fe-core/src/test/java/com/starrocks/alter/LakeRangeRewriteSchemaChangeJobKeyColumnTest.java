@@ -148,10 +148,11 @@ public class LakeRangeRewriteSchemaChangeJobKeyColumnTest {
 
     @Test
     public void testAddKeyColumnBuildsPrefixedShadowSchemaFreshUniqueIdNoAggKey() throws Exception {
-        // AGG range table: v1 SUM (no explicit key), so ADD COLUMN k2 INT KEY joins a key-derived range
-        // sort key and is routed to the range rewrite job with a prefixed shadow schema.
-        String sql = "create table t_range_agg (k1 int, v1 int sum)\n"
-                + "aggregate key(k1)\n"
+        // DUP range table with an explicit ORDER BY: ADD COLUMN k2 INT KEY does not extend the explicit
+        // sort key, so it is not metadata-only and stays on the range rewrite job with a prefixed shadow
+        // schema (AGG/UNIQUE and key-derived DUP adds now take the metadata-only path instead).
+        String sql = "create table t_range_agg (k1 int, v1 int)\n"
+                + "duplicate key(k1)\n"
                 + "order by(k1)\n"
                 + "properties('replication_num' = '1');";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -178,10 +179,10 @@ public class LakeRangeRewriteSchemaChangeJobKeyColumnTest {
 
     @Test
     public void testRegisterShadowExposesPrefixedAddedColumnHiddenFromUser() throws Exception {
-        // AGG range table (v1 SUM, no explicit key): ADD COLUMN k2 INT KEY routes to the range rewrite
-        // job with a prefixed shadow schema (see testAddKeyColumnBuildsPrefixedShadowSchemaFreshUniqueIdNoAggKey).
-        String sql = "create table t_range_agg_add (k1 int, v1 int sum)\n"
-                + "aggregate key(k1)\n"
+        // DUP range table with an explicit ORDER BY: ADD COLUMN k2 INT KEY stays on the range rewrite job
+        // with a prefixed shadow schema (see testAddKeyColumnBuildsPrefixedShadowSchemaFreshUniqueIdNoAggKey).
+        String sql = "create table t_range_agg_add (k1 int, v1 int)\n"
+                + "duplicate key(k1)\n"
                 + "order by(k1)\n"
                 + "properties('replication_num' = '1');";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

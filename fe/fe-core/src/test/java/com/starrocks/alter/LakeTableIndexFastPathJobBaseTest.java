@@ -41,6 +41,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionIdGenerator;
 import com.starrocks.warehouse.Warehouse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -64,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -1172,6 +1174,9 @@ public class LakeTableIndexFastPathJobBaseTest {
 
         Database db = new Database(2L, "db");
         OlapTable table = mock(OlapTable.class);
+        // Stub isFileBundling so lakePublishVersion reaches the partition lookup
+        // rather than unboxing a null and returning false from the catch.
+        when(table.isFileBundling()).thenReturn(false);
         when(table.getPhysicalPartition(100L)).thenReturn(null);
 
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
@@ -1182,6 +1187,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             assertFalse(job.lakePublishVersion());
+            // Confirm we returned false via the partition-disappeared branch, not the catch.
+            verify(table).getPhysicalPartition(100L);
         }
     }
 
@@ -1195,6 +1202,10 @@ public class LakeTableIndexFastPathJobBaseTest {
 
         Database db = new Database(2L, "db");
         OlapTable table = mock(OlapTable.class);
+        // Non-file-bundling table: the per-tablet publish path (useAggregatePublish=false)
+        // must be used, unchanged. isFileBundling() returns a boxed Boolean, so it must be
+        // stubbed or the new unbox would NPE into lakePublishVersion's catch and return false.
+        when(table.isFileBundling()).thenReturn(false);
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
@@ -1216,8 +1227,11 @@ public class LakeTableIndexFastPathJobBaseTest {
             utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), anyBoolean()),
+            // Per-tablet publish (useAggregatePublish=false); the aggregate path is NOT used.
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false)),
                     times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+                    never());
         }
     }
 
@@ -1230,6 +1244,7 @@ public class LakeTableIndexFastPathJobBaseTest {
 
         Database db = new Database(2L, "db");
         OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
@@ -1248,6 +1263,193 @@ public class LakeTableIndexFastPathJobBaseTest {
             utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_FileBundlingUsesAggregateForAllTablets() throws Exception {
+        // A file-bundling table stores every version as a single bundle
+        // {0}_{version}.meta written by the aggregate publish path. The index
+        // fast path must publish that way too (like loads and meta-alters), or
+        // it writes per-tablet {tablet}_{version}.meta files that the bundling
+        // metadata vacuum never reclaims. All of the partition's tablets (across
+        // every visible index) must go into ONE aggregate publish, because BE
+        // truncate-overwrites the bundle -- a per-index aggregate call would drop
+        // earlier indexes' tablets.
+        LakeTableAddIndexJob job = newJob();
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        // Two visible indexes, each with a distinct tablet.
+        Tablet t1 = mock(Tablet.class);
+        Tablet t2 = mock(Tablet.class);
+        MaterializedIndex idx1 = mock(MaterializedIndex.class);
+        when(idx1.getTablets()).thenReturn(Collections.singletonList(t1));
+        MaterializedIndex idx2 = mock(MaterializedIndex.class);
+        when(idx2.getTablets()).thenReturn(Collections.singletonList(t2));
+        List<MaterializedIndex> indices = new ArrayList<>();
+        indices.add(idx1);
+        indices.add(idx2);
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)).thenReturn(indices);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+                    .thenAnswer(inv -> null);
+
+            assertTrue(job.lakePublishVersion());
+
+            // Exactly one aggregate publish (useAggregatePublish=true) for the partition,
+            // carrying every tablet from both indexes; the per-tablet path is NOT used.
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
+            utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L),
+                    any(), eq(true)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    never());
+            List<Tablet> published = tabletsCaptor.getValue();
+            assertEquals(2, published.size());
+            assertTrue(published.contains(t1));
+            assertTrue(published.contains(t2));
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_FileBundlingIsolatesPartitions() throws Exception {
+        // Each physical partition writes its own bundle at its own commit version;
+        // the per-partition tablet list must reset so one partition's tablets never
+        // leak into another's aggregate publish.
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>());
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        commit.put(101L, 8L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(true);
+
+        Tablet tA = mock(Tablet.class);
+        MaterializedIndex idxA = mock(MaterializedIndex.class);
+        when(idxA.getTablets()).thenReturn(Collections.singletonList(tA));
+        PhysicalPartition ppA = mock(PhysicalPartition.class);
+        when(ppA.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idxA));
+        when(table.getPhysicalPartition(100L)).thenReturn(ppA);
+
+        Tablet tB = mock(Tablet.class);
+        MaterializedIndex idxB = mock(MaterializedIndex.class);
+        when(idxB.getTablets()).thenReturn(Collections.singletonList(tB));
+        PhysicalPartition ppB = mock(PhysicalPartition.class);
+        when(ppB.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idxB));
+        when(table.getPhysicalPartition(101L)).thenReturn(ppB);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+                    .thenAnswer(inv -> null);
+
+            assertTrue(job.lakePublishVersion());
+
+            // Exactly one aggregate publish per partition, each carrying only its own
+            // tablet at its own base->commit version; no cross-partition mixing.
+            utilsStatic.verify(() -> Utils.publishVersion(
+                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(
+                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+                    times(2));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    never());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_FileBundlingAggregateThrowsReturnsFalse() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        Tablet t1 = mock(Tablet.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(Collections.singletonList(t1));
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)))
+                    .thenThrow(new RuntimeException("rpc fail"));
+            assertFalse(job.lakePublishVersion());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_DropIndexFileBundlingUsesAggregate() throws Exception {
+        // The bundling-aware publish lives in the shared base, so DROP INDEX
+        // inherits it too.
+        LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        Tablet t1 = mock(Tablet.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(Collections.singletonList(t1));
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+                    .thenAnswer(inv -> null);
+            assertTrue(job.lakePublishVersion());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true)),
+                    times(1));
         }
     }
 

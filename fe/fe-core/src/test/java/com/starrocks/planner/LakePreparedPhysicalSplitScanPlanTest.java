@@ -56,6 +56,7 @@ public class LakePreparedPhysicalSplitScanPlanTest {
     public void resetSessionVariable() {
         connectContext.getSessionVariable().setEnableLakePreparedPhysicalSplitScan(false);
         connectContext.getSessionVariable().setEnableQueryCache(false);
+        connectContext.getSessionVariable().setEnableLakePreparedSplitOnDupTableScan(false);
     }
 
     private String getFragmentPlan(String sql) throws Exception {
@@ -89,5 +90,27 @@ public class LakePreparedPhysicalSplitScanPlanTest {
         connectContext.getSessionVariable().setEnableQueryCache(true);
         String plan = getFragmentPlan("SELECT k1 FROM lake_t0");
         Assertions.assertFalse(plan.contains(MARKER), plan);
+    }
+
+    // A lake table scanned by two scan operators in the same query (self-join) is a duplicated scan.
+    // By default it must NOT enable the optimization (no marker) because the shared prepared read state
+    // is unsafe to reuse across the sibling scans of the same table.
+    @Test
+    public void testDisabledForDuplicatedTableScanByDefault() throws Exception {
+        connectContext.getSessionVariable().setEnableLakePreparedPhysicalSplitScan(true);
+        connectContext.getSessionVariable().setEnableQueryCache(false);
+        String plan = getFragmentPlan("SELECT a.k1 FROM lake_t0 a JOIN lake_t0 b ON a.k1 = b.k2");
+        Assertions.assertFalse(plan.contains(MARKER), plan);
+    }
+
+    // enable_lake_prepared_split_on_dup_table_scan opts duplicated scans back into the optimization,
+    // so the same self-join now carries the marker.
+    @Test
+    public void testEnabledForDuplicatedTableScanWhenDupFlagOn() throws Exception {
+        connectContext.getSessionVariable().setEnableLakePreparedPhysicalSplitScan(true);
+        connectContext.getSessionVariable().setEnableQueryCache(false);
+        connectContext.getSessionVariable().setEnableLakePreparedSplitOnDupTableScan(true);
+        String plan = getFragmentPlan("SELECT a.k1 FROM lake_t0 a JOIN lake_t0 b ON a.k1 = b.k2");
+        Assertions.assertTrue(plan.contains(MARKER), plan);
     }
 }

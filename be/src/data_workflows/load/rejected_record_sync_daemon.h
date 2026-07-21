@@ -26,6 +26,7 @@
 
 namespace starrocks {
 
+class BatchWriteMgr;
 class ExecEnv;
 
 // Phase 3 of the rejected records system table feature.
@@ -62,7 +63,7 @@ class ExecEnv;
 // the shared HttpClient layer.
 class RejectedRecordSyncDaemon {
 public:
-    explicit RejectedRecordSyncDaemon(ExecEnv* env);
+    explicit RejectedRecordSyncDaemon(ExecEnv* env, BatchWriteMgr* batch_write_mgr = nullptr);
     virtual ~RejectedRecordSyncDaemon();
 
     RejectedRecordSyncDaemon(const RejectedRecordSyncDaemon&) = delete;
@@ -175,6 +176,7 @@ private:
     void tick_loop();
 
     ExecEnv* _env;
+    BatchWriteMgr* _batch_write_mgr;
     std::promise<bool> _stop;
     std::future<bool> _stop_future;
     pthread_t _thread_id = 0;
