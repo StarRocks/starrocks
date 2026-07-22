@@ -939,7 +939,7 @@ This topic introduces the following types of FE configurations:
 
 ### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
+- Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
@@ -1092,7 +1092,7 @@ This topic introduces the following types of FE configurations:
 
 ### `jwt_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1218,7 +1218,7 @@ This topic introduces the following types of FE configurations:
 
 ### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
+- Default: 8
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1290,7 +1290,7 @@ This topic introduces the following types of FE configurations:
 
 ### `oauth2_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
