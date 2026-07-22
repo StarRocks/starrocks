@@ -111,6 +111,14 @@ PROPERTIES(
    "histogram_mcv_size" = "32",
    "histogram_sample_ratio" = "0.5"
 );
+
+-- 手动异步采集 v3 列的直方图信息，指定 32 个分桶，采样比例为 50%。
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+WITH ASYNC MODE
+WITH 32 BUCKETS
+PROPERTIES(
+   "histogram_sample_ratio" = "0.5"
+);
 ```
 
 ## 相关文档

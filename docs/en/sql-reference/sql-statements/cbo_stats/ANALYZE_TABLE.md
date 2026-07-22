@@ -112,6 +112,14 @@ PROPERTIES(
    "histogram_mcv_size" = "32",
    "histogram_sample_ratio" = "0.5"
 );
+
+-- Manually collect histograms on v3 in asynchronous mode, with 32 buckets and 50% sampling ratio.
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+WITH ASYNC MODE
+WITH 32 BUCKETS
+PROPERTIES(
+   "histogram_sample_ratio" = "0.5"
+);
 ```
 
 ## References

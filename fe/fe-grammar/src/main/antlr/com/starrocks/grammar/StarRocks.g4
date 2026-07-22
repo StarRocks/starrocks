@@ -1509,8 +1509,10 @@ histogramStatement:
     ;
 
 analyzeHistogramStatement
-    : histogramStatement
+    : ANALYZE TABLE tableName UPDATE HISTOGRAM ON analyzeColumnClause
         (WITH (SYNC | ASYNC) MODE)?
+        (WITH bucket=INTEGER_VALUE BUCKETS)?
+        properties?
     ;
 
 dropHistogramStatement

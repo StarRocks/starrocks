@@ -346,6 +346,14 @@ PROPERTIES(
    "histogram_sample_ratio" = "0.5"
 );
 
+-- 手动异步采集 v3 列的直方图信息，指定 32 个分桶，采样比例为 50%。
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+WITH ASYNC MODE
+WITH 32 BUCKETS
+PROPERTIES(
+   "histogram_sample_ratio" = "0.5"
+);
+
 -- 采集 v3 列的直方图，对每个桶使用 'hll' 模式进行精准去重估算。
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
 PROPERTIES(

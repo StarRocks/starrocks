@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -36,12 +37,41 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Optional;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeCreateAnalyzeJobTest {
     private static StarRocksAssert starRocksAssert;
+
+    private static CreateAnalyzeJobStmt assertCreateAnalyzeStmt(String sql, StatsConstants.AnalyzeType expectedAnalyzeType,
+                                                                String expectedSampleCollectRows) {
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+        Assertions.assertEquals(expectedAnalyzeType, analyzeStmt.getAnalyzeType(), sql);
+        if (expectedSampleCollectRows == null) {
+            Assertions.assertTrue(
+                    !analyzeStmt.getProperties().containsKey(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS), sql);
+        } else {
+            Assertions.assertEquals(expectedSampleCollectRows,
+                    analyzeStmt.getProperties().get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS), sql);
+        }
+        return analyzeStmt;
+    }
+
+    private static CreateAnalyzeJobStmt assertCreateHistogramAnalyzeStmt(String sql, long expectedBuckets,
+                                                                         Boolean expectSampleRatioProperty) {
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.HISTOGRAM, analyzeStmt.getAnalyzeType(), sql);
+        Assertions.assertTrue(analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc, sql);
+        Assertions.assertEquals(expectedBuckets,
+                ((AnalyzeHistogramDesc) analyzeStmt.getAnalyzeTypeDesc()).getBuckets(), sql);
+        if (expectSampleRatioProperty != null) {
+            Assertions.assertEquals(expectSampleRatioProperty,
+                    analyzeStmt.getProperties().containsKey(StatsConstants.HISTOGRAM_SAMPLE_RATIO), sql);
+        }
+        return analyzeStmt;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -113,6 +143,47 @@ public class AnalyzeCreateAnalyzeJobTest {
         DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
         Assertions.assertEquals(2,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
+    }
+
+    @Test
+    public void testCreateAnalyzeSyntaxMatrix() {
+        assertCreateAnalyzeStmt("create analyze table db.tbl",
+                StatsConstants.AnalyzeType.FULL, null);
+        assertCreateAnalyzeStmt("create analyze full table db.tbl",
+                StatsConstants.AnalyzeType.FULL, null);
+        assertCreateAnalyzeStmt("create analyze sample table db.tbl",
+                StatsConstants.AnalyzeType.SAMPLE, null);
+        assertCreateAnalyzeStmt("create analyze full table db.tbl " +
+                        "properties(\"statistic_sample_collect_rows\"=\"100000\")",
+                StatsConstants.AnalyzeType.FULL, "100000");
+        assertCreateAnalyzeStmt("create analyze sample table db.tbl " +
+                        "properties(\"statistic_sample_collect_rows\"=\"100000\")",
+                StatsConstants.AnalyzeType.SAMPLE, "100000");
+    }
+
+    @Test
+    public void testCreateAnalyzeHistogramSyntaxMatrix() {
+        assertCreateHistogramAnalyzeStmt("create analyze table db.tbl1 update histogram on c1,c2",
+                Config.histogram_buckets_size, null);
+        assertCreateHistogramAnalyzeStmt("create analyze table db.tbl1 update histogram on c1,c2 with 128 buckets",
+                128, null);
+        assertCreateHistogramAnalyzeStmt(
+                "create analyze table db.tbl1 update histogram on c1,c2 " +
+                        "properties(\"histogram_sample_ratio\"=\"0.1\")",
+                Config.histogram_buckets_size, true);
+        assertCreateHistogramAnalyzeStmt(
+                "create analyze table db.tbl1 update histogram on c1,c2 with 128 buckets " +
+                        "properties(\"histogram_sample_ratio\"=\"0.1\")",
+                128, true);
+
+        analyzeFail("create analyze table db.tbl1 update histogram on c1,c2 with async mode",
+                "Unexpected input 'async'");
+        analyzeFail("create analyze table db.tbl1 update histogram on c1,c2 with async mode " +
+                        "properties(\"histogram_sample_ratio\"=\"0.1\")",
+                "Unexpected input 'async'");
+        analyzeFail("create analyze table db.tbl1 update histogram on c1,c2 with sync mode with 128 buckets " +
+                        "properties(\"histogram_sample_ratio\"=\"0.1\")",
+                "Unexpected input 'sync'");
     }
 
     @Test
