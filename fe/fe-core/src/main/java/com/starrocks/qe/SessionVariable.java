@@ -633,6 +633,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
+    public static final String ENABLE_ICEBERG_V3_DELETION_VECTOR = "enable_iceberg_v3_deletion_vector";
+
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
@@ -3341,6 +3343,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
     private boolean enableReadIcebergPuffinNdv = true;
 
+    @VarAttr(name = ENABLE_ICEBERG_V3_DELETION_VECTOR)
+    private boolean enableIcebergV3DeletionVector = true;
+
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
@@ -3495,6 +3500,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
         this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean enableIcebergV3DeletionVector() {
+        return enableIcebergV3DeletionVector;
+    }
+
+    public void setEnableIcebergV3DeletionVector(boolean enableIcebergV3DeletionVector) {
+        this.enableIcebergV3DeletionVector = enableIcebergV3DeletionVector;
     }
 
     public boolean enableDeltaLakeColumnStatistics() {

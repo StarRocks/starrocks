@@ -24,6 +24,12 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.THdfsFileFormat;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergFileContent;
+import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
@@ -51,8 +57,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Tests for handling unsupported Iceberg V3 features:
- * 1. Deletion Vectors (fail-fast)
+ * Tests for handling Iceberg V3 features:
+ * 1. Deletion Vectors (read support; opt-out via enable_iceberg_v3_deletion_vector)
  * 2. Extended Types (graceful degradation to UNKNOWN_TYPE)
  * 3. Multi-argument transforms (fail-fast)
  * 4. Table encryption (fail-fast)
@@ -92,26 +98,28 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 "Puffin position delete with referencedDataFile should be detected as DV");
     }
 
-    @Test
-    public void testDeletionVectorFailsFastInScanRanges() {
-        // Mock a DV delete file
+    private FileScanTask mockDataFileTaskWithDV() {
         DeleteFile dvDeleteFile = mock(DeleteFile.class);
         when(dvDeleteFile.content()).thenReturn(FileContent.POSITION_DELETES);
         when(dvDeleteFile.format()).thenReturn(FileFormat.PUFFIN);
         when(dvDeleteFile.referencedDataFile()).thenReturn("/path/to/data-a.parquet");
         when(dvDeleteFile.path()).thenReturn("/path/to/dv-file.puffin");
         when(dvDeleteFile.fileSizeInBytes()).thenReturn(100L);
+        when(dvDeleteFile.contentOffset()).thenReturn(4L);
+        when(dvDeleteFile.contentSizeInBytes()).thenReturn(40L);
         when(dvDeleteFile.specId()).thenReturn(0);
         when(dvDeleteFile.partition()).thenReturn(FILE_A.partition());
         when(dvDeleteFile.pos()).thenReturn(null);
 
-        // Mock a FileScanTask that includes the DV delete file
         FileScanTask taskWithDV = mock(FileScanTask.class);
         when(taskWithDV.file()).thenReturn(FILE_A);
         when(taskWithDV.deletes()).thenReturn(Lists.newArrayList(dvDeleteFile));
         when(taskWithDV.spec()).thenReturn(SPEC_A);
         when(taskWithDV.partition()).thenReturn(FILE_A.partition());
+        return taskWithDV;
+    }
 
+    private IcebergConnectorScanRangeSource newScanRangeSource() {
         List<Column> columns = new ArrayList<>();
         columns.add(new Column("id", INT));
         columns.add(new Column("data", VARCHAR));
@@ -123,7 +131,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 .setCatalogTableName("test_table")
                 .build();
 
-        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(
+        return new IcebergConnectorScanRangeSource(
                 icebergTable,
                 RemoteFileInfoDefaultSource.EMPTY,
                 IcebergMORParams.EMPTY,
@@ -132,16 +140,48 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
                 PartitionIdGenerator.of(),
                 false,
                 false);
+    }
 
-        // toScanRanges wraps exceptions: "build scan range failed" with cause containing DV message
-        StarRocksConnectorException ex = Assertions.assertThrows(
-                StarRocksConnectorException.class,
-                () -> scanRangeSource.toScanRanges(taskWithDV));
-        // The DV error is wrapped by toScanRanges, check either the message or the cause
-        boolean hasDvMessage = ex.getMessage().contains("Deletion Vectors are not supported") ||
-                (ex.getCause() != null && ex.getCause().getMessage().contains("Deletion Vectors are not supported"));
-        Assertions.assertTrue(hasDvMessage,
-                "Expected DV error message, got: " + ex.getMessage());
+    @Test
+    public void testDeletionVectorProducesPuffinScanRange() {
+        FileScanTask taskWithDV = mockDataFileTaskWithDV();
+        IcebergConnectorScanRangeSource scanRangeSource = newScanRangeSource();
+
+        List<TScanRangeLocations> ranges = scanRangeSource.toScanRanges(taskWithDV);
+        Assertions.assertEquals(1, ranges.size());
+
+        THdfsScanRange scanRange = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(scanRange.isSetDelete_files(), "expected a deletion-vector delete file");
+        Assertions.assertEquals(1, scanRange.getDelete_files().size());
+
+        TIcebergDeleteFile df = scanRange.getDelete_files().get(0);
+        Assertions.assertEquals(THdfsFileFormat.PUFFIN, df.getFile_format());
+        Assertions.assertEquals(TIcebergFileContent.POSITION_DELETES, df.getFile_content());
+        Assertions.assertEquals("/path/to/dv-file.puffin", df.getFull_path());
+        Assertions.assertEquals(4L, df.getContent_offset());
+        Assertions.assertEquals(40L, df.getContent_size_in_bytes());
+        Assertions.assertEquals("/path/to/data-a.parquet", df.getReferenced_data_file());
+    }
+
+    @Test
+    public void testDeletionVectorFailsFastWhenDisabled() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setEnableIcebergV3DeletionVector(false);
+        ctx.setThreadLocalInfo();
+        try {
+            FileScanTask taskWithDV = mockDataFileTaskWithDV();
+            IcebergConnectorScanRangeSource scanRangeSource = newScanRangeSource();
+
+            StarRocksConnectorException ex = Assertions.assertThrows(
+                    StarRocksConnectorException.class,
+                    () -> scanRangeSource.toScanRanges(taskWithDV));
+            boolean hasDvMessage = ex.getMessage().contains("Deletion Vectors are not supported") ||
+                    (ex.getCause() != null &&
+                            ex.getCause().getMessage().contains("Deletion Vectors are not supported"));
+            Assertions.assertTrue(hasDvMessage, "Expected DV error message, got: " + ex.getMessage());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     @Test
@@ -174,6 +214,34 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertEquals("/path/to/data.parquet", wrapper.referencedDataFile());
         Assertions.assertEquals(1024L, wrapper.contentOffset());
         Assertions.assertEquals(2048L, wrapper.contentSizeInBytes());
+    }
+
+    @Test
+    public void testDeleteFileWrapperDistinguishesDVsSharingPuffinPath() {
+        // DVs sharing a Puffin path (same path, different contentOffset) must stay distinct.
+        DeleteFile dv1 = mock(DeleteFile.class);
+        when(dv1.path()).thenReturn("/path/to/deletes.puffin");
+        when(dv1.content()).thenReturn(FileContent.POSITION_DELETES);
+        when(dv1.format()).thenReturn(FileFormat.PUFFIN);
+        when(dv1.contentOffset()).thenReturn(4L);
+
+        DeleteFile dv2 = mock(DeleteFile.class);
+        when(dv2.path()).thenReturn("/path/to/deletes.puffin"); // same Puffin file
+        when(dv2.content()).thenReturn(FileContent.POSITION_DELETES);
+        when(dv2.format()).thenReturn(FileFormat.PUFFIN);
+        when(dv2.contentOffset()).thenReturn(40L); // different blob
+
+        DeleteFileWrapper w1 = DeleteFileWrapper.wrap(dv1);
+        DeleteFileWrapper w2 = DeleteFileWrapper.wrap(dv2);
+
+        Assertions.assertNotEquals(w1, w2, "DVs in the same Puffin file must be distinct");
+        Assertions.assertNotEquals(w1.hashCode(), w2.hashCode(),
+                "DVs sharing a Puffin path must hash differently");
+
+        java.util.Set<DeleteFileWrapper> set = new java.util.HashSet<>();
+        set.add(w1);
+        set.add(w2);
+        Assertions.assertEquals(2, set.size(), "both DVs must survive in a HashSet");
     }
 
     // ========== 2. Extended Types ==========

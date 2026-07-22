@@ -14,16 +14,21 @@
 
 #include "formats/iceberg/iceberg_delete_builder.h"
 
+#include <roaring/roaring64.h>
+
+#include "base/utility/defer_op.h"
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "formats/deletion_bitmap.h"
 #include "formats/file_input_stream.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/scan_context.h"
 #include "gen_cpp/Types_types.h"
+#include "gutil/endian.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -65,6 +70,100 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_ac
 
     RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
     return file;
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_deletion_vector_file(
+        const TIcebergDeleteFile& delete_file, int64_t offset, int64_t size, FormatScannerStats& fs_stats,
+        FormatScannerStats& app_stats, std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
+    const FileInputStreamOptions options{.fs = _ctx.fs,
+                                         .file_path = delete_file.full_path,
+                                         .file_size = delete_file.length,
+                                         .fs_stats = &fs_stats,
+                                         .app_stats = &app_stats,
+                                         .datacache_options = _ctx.datacache_options};
+    ASSIGN_OR_RETURN(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
+    int64_t cur = offset;
+    const int64_t end = offset + size;
+    while (cur < end) {
+        const int64_t remain_length =
+                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), end - cur);
+        io_ranges.emplace_back(cur, remain_length);
+        cur += remain_length;
+    }
+    RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
+    return file;
+}
+
+// deletion-vector-v1 blob: [4B BE length][4B magic][roaring64 bitmap][4B BE CRC-32C].
+static constexpr int64_t kDvLengthSize = 4;
+static constexpr int64_t kDvMagicSize = 4;
+static constexpr int64_t kDvCrcSize = 4;
+static constexpr uint32_t kDvMagic = 1681511377; // bytes {0xD1, 0xD3, 0x39, 0x64}
+
+Status IcebergDeleteBuilder::parse_deletion_vector_blob(const uint8_t* blob, int64_t content_size,
+                                                        DeletionBitmap* bitmap) {
+    if (content_size < kDvLengthSize + kDvMagicSize + kDvCrcSize) {
+        return Status::InternalError(
+                strings::Substitute("Iceberg deletion vector blob too small: content_size_in_bytes=$0", content_size));
+    }
+
+    uint32_t blob_length;
+    memcpy(&blob_length, blob, kDvLengthSize);
+    if (LittleEndian::IsLittleEndian()) {
+        blob_length = BigEndian::ToHost32(blob_length);
+    }
+    const int64_t expected_length = content_size - kDvLengthSize - kDvCrcSize;
+    if (static_cast<int64_t>(blob_length) != expected_length) {
+        return Status::InternalError(strings::Substitute(
+                "Iceberg deletion vector length mismatch: prefix=$0, expected=$1", blob_length, expected_length));
+    }
+
+    uint32_t magic_number;
+    memcpy(&magic_number, blob + kDvLengthSize, kDvMagicSize);
+    if (!LittleEndian::IsLittleEndian()) {
+        magic_number = LittleEndian::ToHost32(magic_number);
+    }
+    if (magic_number != kDvMagic) {
+        return Status::InternalError(
+                strings::Substitute("Iceberg deletion vector unexpected magic number: $0", magic_number));
+    }
+
+    const char* bitmap_ptr = reinterpret_cast<const char*>(blob) + kDvLengthSize + kDvMagicSize;
+    const int64_t bitmap_length = content_size - kDvLengthSize - kDvMagicSize - kDvCrcSize;
+    roaring64_bitmap_t* deserialized = roaring64_bitmap_portable_deserialize_safe(bitmap_ptr, bitmap_length);
+    if (deserialized == nullptr) {
+        return Status::InternalError("Failed to deserialize Iceberg deletion vector roaring64 bitmap");
+    }
+    DeferOp free_bitmap([&deserialized] { roaring64_bitmap_free(deserialized); });
+
+    bitmap->merge(deserialized);
+    return Status::OK();
+}
+
+Status IcebergDeleteBuilder::build_deletion_vector(const TIcebergDeleteFile& delete_file) const {
+    if (!delete_file.__isset.content_offset || !delete_file.__isset.content_size_in_bytes) {
+        return Status::InternalError("Iceberg deletion vector missing content_offset/content_size_in_bytes");
+    }
+    const int64_t content_offset = delete_file.content_offset;
+    const int64_t content_size = delete_file.content_size_in_bytes;
+
+    FormatScannerStats app_stats;
+    FormatScannerStats fs_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
+    ASSIGN_OR_RETURN(auto file, open_deletion_vector_file(delete_file, content_offset, content_size, fs_stats,
+                                                          app_stats, shared_buffered_input_stream, cache_input_stream));
+
+    std::vector<uint8_t> blob(content_size);
+    RETURN_IF_ERROR(file->read_at_fully(content_offset, blob.data(), content_size));
+
+    RETURN_IF_ERROR(parse_deletion_vector_blob(blob.data(), content_size, _deletion_bitmap.get()));
+
+    update_delete_file_io_counter(_ctx.runtime_profile, app_stats, fs_stats, cache_input_stream,
+                                  shared_buffered_input_stream);
+    return Status::OK();
 }
 
 Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
