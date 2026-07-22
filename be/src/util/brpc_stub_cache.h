@@ -78,8 +78,8 @@ public:
         }
         int64_t now_us = butil::gettimeofday_us();
         if (now_us >= _deadline) {
-            LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for "
-                      << (now_us - _deadline) / 1000 << " ms past deadline";
+            LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for " << (now_us - _deadline) / 1000
+                      << " ms past deadline";
             _cache->_stub_map.erase(_endpoint);
             return;
         }
