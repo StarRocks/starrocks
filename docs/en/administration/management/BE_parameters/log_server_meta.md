@@ -142,7 +142,7 @@ This topic introduces the following types of BE configurations:
 
 ### sys_log_verbose_modules
 
-- Default: 
+- Default: Empty string
 - Type: Strings
 - Unit: -
 - Is mutable: No
@@ -593,7 +593,7 @@ This topic introduces the following types of BE configurations:
 
 ### ssl_certificate_path
 
-- Default: 
+- Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
