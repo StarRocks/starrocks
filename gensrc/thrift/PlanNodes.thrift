@@ -726,6 +726,8 @@ struct TLakeScanNode {
   45: optional bool enable_gin_filter
 
   46: optional i32 next_uniq_id
+
+  63: optional TTableSampleOptions sample_options
 }
 
 struct TEqJoinCondition {
