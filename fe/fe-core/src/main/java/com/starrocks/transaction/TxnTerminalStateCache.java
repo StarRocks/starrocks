@@ -16,7 +16,6 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -62,42 +61,37 @@ class TxnTerminalStateCache {
         }
     }
 
-    // Access-order LRU keyed by transaction id.
+    // Two independent access-order LRUs over the SAME Record objects: one keyed by transaction id,
+    // one keyed by label. Keeping them independent (rather than a byTxnId map plus a label->txnId
+    // pointer) avoids a drift bug: if a label is reused across two cached transactions, evicting the
+    // newer one from a shared pointer index could strand the older one, making getByLabel return
+    // nothing even though a record for that label is still cached. Each map self-evicts by capacity;
+    // a miss in either simply falls back to "not found", which is always safe.
     private final LinkedHashMap<Long, Record> byTxnId;
-    // Secondary index: label -> latest terminal txn id currently in the cache.
-    private final Map<String, Long> labelToTxnId;
+    private final LinkedHashMap<String, Record> byLabel;
 
     TxnTerminalStateCache() {
-        labelToTxnId = new HashMap<>();
         byTxnId = new LinkedHashMap<Long, Record>(16, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<Long, Record> eldest) {
                 int capacity = Config.transaction_terminal_state_cache_num;
-                if (capacity <= 0) {
-                    // Disabled: drop whatever slips in and keep the label index clean.
-                    Record r = eldest.getValue();
-                    Long mapped = labelToTxnId.get(r.label);
-                    if (mapped != null && mapped == r.txnId) {
-                        labelToTxnId.remove(r.label);
-                    }
-                    return true;
-                }
-                if (size() > capacity) {
-                    Record r = eldest.getValue();
-                    Long mapped = labelToTxnId.get(r.label);
-                    if (mapped != null && mapped == r.txnId) {
-                        labelToTxnId.remove(r.label);
-                    }
-                    return true;
-                }
-                return false;
+                return capacity <= 0 || size() > capacity;
+            }
+        };
+        byLabel = new LinkedHashMap<String, Record>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Record> eldest) {
+                int capacity = Config.transaction_terminal_state_cache_num;
+                return capacity <= 0 || size() > capacity;
             }
         };
     }
 
     /**
      * Record a terminal outcome. No-op unless the transaction is in a final status
-     * ({@code VISIBLE} or {@code ABORTED}) and the cache is enabled.
+     * ({@code VISIBLE} or {@code ABORTED}), the cache is enabled, and the outcome is still young
+     * enough to satisfy a future read (a "born-dead" entry already past {@code label_keep_max_second}
+     * could never be returned by {@link #valid}, so caching it would only waste capacity).
      */
     synchronized void put(TransactionState state) {
         if (Config.transaction_terminal_state_cache_num <= 0) {
@@ -107,13 +101,18 @@ class TxnTerminalStateCache {
         if (status != TransactionStatus.VISIBLE && status != TransactionStatus.ABORTED) {
             return;
         }
+        long finishTime = state.getFinishTime();
+        if (finishTime > 0 && (System.currentTimeMillis() - finishTime) / 1000 > Config.label_keep_max_second) {
+            // Born dead: already older than the read window, so it would never satisfy a read.
+            return;
+        }
         long txnId = state.getTransactionId();
-        Record r = new Record(txnId, state.getLabel(), status, state.getReason(), state.getFinishTime());
+        Record r = new Record(txnId, state.getLabel(), status, state.getReason(), finishTime);
         byTxnId.put(txnId, r);
-        // Latest txn id wins, matching getLabelState()'s "largest id" semantics.
-        Long cur = labelToTxnId.get(r.label);
-        if (cur == null || txnId >= cur) {
-            labelToTxnId.put(r.label, txnId);
+        // Largest txn id wins for a reused label, matching getLabelState()'s "largest id" semantics.
+        Record existing = byLabel.get(r.label);
+        if (existing == null || txnId >= existing.txnId) {
+            byLabel.put(r.label, r);
         }
     }
 
@@ -129,11 +128,7 @@ class TxnTerminalStateCache {
      * @return the latest cached outcome for {@code label}, or null if absent or too old.
      */
     synchronized Record getByLabel(String label) {
-        Long txnId = labelToTxnId.get(label);
-        if (txnId == null) {
-            return null;
-        }
-        Record r = byTxnId.get(txnId);
+        Record r = byLabel.get(label);
         return valid(r) ? r : null;
     }
 
