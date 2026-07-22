@@ -1046,7 +1046,8 @@ public class ExpressionStatisticCalculator {
                             .sum());
             double coalesceMin = Double.NEGATIVE_INFINITY;
             double coalesceMax = Double.POSITIVE_INFINITY;
-            if (callOperator.getChildren().stream().allMatch(c -> c.getType().isNumericType())) {
+            final Type resultType = callOperator.getType();
+            if (resultType.isNumericType() || resultType.isDateType() || resultType.isTime()) {
                 coalesceMin = inputs.stream()
                         .filter(s -> s.getNullsFraction() < 1.0)
                         .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
