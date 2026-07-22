@@ -40,6 +40,7 @@
 #include <memory>
 
 #include "base/metrics.h"
+#include "base/testutil/assert.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/status.h"
@@ -49,12 +50,15 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/fragment_context_manager.h"
 #include "exec/runtime/query_context_manager.h"
-#include "orchestration/fragment_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_env_test_util.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::orchestration {
 
@@ -115,13 +119,11 @@ protected:
         options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
         ASSERT_TRUE(_compute_env.init(options).ok());
         _exec_env.set_compute_env(&_compute_env);
-        _fragment_mgr = std::make_unique<FragmentMgr>(&_exec_env, nullptr);
         _exec_env._query_context_mgr = new pipeline::QueryContextManager(5);
         _exec_env._refresh_service_contexts();
     }
 
     void TearDown() override {
-        _fragment_mgr.reset();
         delete _exec_env._query_context_mgr;
         _exec_env._query_context_mgr = nullptr;
         _exec_env.set_compute_env(nullptr);
@@ -131,7 +133,6 @@ protected:
 private:
     ExecEnv _exec_env;
     ComputeEnv _compute_env;
-    std::unique_ptr<FragmentMgr> _fragment_mgr;
     static std::shared_ptr<MemTracker> _previous_process_mem_tracker;
     static std::shared_ptr<MemTracker> _previous_query_pool_mem_tracker;
     static std::shared_ptr<MemTracker> _process_mem_tracker;
@@ -145,7 +146,7 @@ std::shared_ptr<MemTracker> ExternalScanContextMgrTest::_query_pool_mem_tracker;
 
 TEST_F(ExternalScanContextMgrTest, create_normal) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -153,7 +154,7 @@ TEST_F(ExternalScanContextMgrTest, create_normal) {
 
 TEST_F(ExternalScanContextMgrTest, get_normal) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -168,7 +169,7 @@ TEST_F(ExternalScanContextMgrTest, get_normal) {
 TEST_F(ExternalScanContextMgrTest, get_abnormal) {
     std::string context_id = "not_exist";
     std::shared_ptr<ScanContext> result;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
     Status st = context_mgr.get_scan_context(context_id, &result);
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
@@ -176,7 +177,7 @@ TEST_F(ExternalScanContextMgrTest, get_abnormal) {
 
 TEST_F(ExternalScanContextMgrTest, clear_context) {
     std::shared_ptr<ScanContext> context;
-    ExternalScanContextMgr context_mgr(&_exec_env, nullptr, _fragment_mgr.get());
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
     Status st = context_mgr.create_scan_context(&context);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(context != nullptr);
@@ -189,5 +190,45 @@ TEST_F(ExternalScanContextMgrTest, clear_context) {
     st = context_mgr.get_scan_context(context_id, &result);
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
+}
+
+TEST_F(ExternalScanContextMgrTest, clear_scan_context_cancels_pipeline_fragment) {
+    TUniqueId query_id;
+    query_id.__set_hi(2026);
+    query_id.__set_lo(715);
+    TUniqueId fragment_id;
+    fragment_id.__set_hi(2026);
+    fragment_id.__set_lo(716);
+
+    pipeline::QueryContext* query_ctx = nullptr;
+    ASSIGN_OR_ASSERT_FAIL(query_ctx, _exec_env.query_context_mgr()->get_or_register(query_id));
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(60);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
+    query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                RuntimeEnv::GetInstance()->query_pool_mem_tracker());
+
+    auto fragment_ctx = std::make_shared<pipeline::FragmentContext>();
+    auto* raw_fragment_ctx = fragment_ctx.get();
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_id);
+    fragment_ctx->set_workgroup(_exec_env.workgroup_manager()->get_default_workgroup());
+    fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_id, TQueryOptions(),
+                                                                   TQueryGlobals(),
+                                                                   &_exec_env.query_execution_services(), &_exec_env));
+    ASSERT_OK(query_ctx->fragment_mgr()->register_ctx(fragment_id, std::move(fragment_ctx)));
+
+    ExternalScanContextMgr context_mgr(&_exec_env, nullptr);
+    std::shared_ptr<ScanContext> context;
+    ASSERT_OK(context_mgr.create_scan_context(&context));
+    context->query_id = query_id;
+    context->fragment_instance_id = fragment_id;
+
+    // clear_scan_context and the expired-context reaper share the same cancellation path
+    // (_cancel_scan_context): the pipeline fragment must be cancelled, not the non-pipeline one.
+    ASSERT_OK(context_mgr.clear_scan_context(context->context_id));
+
+    ASSERT_TRUE(raw_fragment_ctx->final_status().is_cancelled());
 }
 } // namespace starrocks::orchestration
