@@ -21,6 +21,7 @@ import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -42,6 +43,9 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
     private final List<Long> selectedLogicalPartitionId;
     // Selected tablet ids after tablet pruning; null means all tablets in the selected partitions.
     private final List<Long> selectedTabletId;
+    // The table's distribution. The optimizer reads it to advertise this scan's output distribution
+    // property, so a co-distributed aggregation or join above the scan needs no shuffle.
+    private final DistributionSpec distributionSpec;
 
     public PhysicalChangesScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -53,7 +57,8 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                                        BookmarkChange delta,
                                        List<ChangesMetaDescriptor> changesMetaDescriptors,
                                        List<Long> selectedLogicalPartitionId,
-                                       List<Long> selectedTabletId) {
+                                       List<Long> selectedTabletId,
+                                       DistributionSpec distributionSpec) {
         super(OperatorType.PHYSICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, limit, predicate, projection);
         this.base = base;
@@ -62,6 +67,7 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
         this.changesMetaDescriptors = changesMetaDescriptors;
         this.selectedLogicalPartitionId = selectedLogicalPartitionId;
         this.selectedTabletId = selectedTabletId;
+        this.distributionSpec = distributionSpec;
     }
 
     public Bookmark getBase() {
@@ -88,6 +94,10 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
         return selectedTabletId;
     }
 
+    public DistributionSpec getDistributionSpec() {
+        return distributionSpec;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -101,13 +111,14 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                 && head.getBookmarkId() == that.head.getBookmarkId()
                 && Objects.equals(changesMetaDescriptors, that.changesMetaDescriptors)
                 && Objects.equals(selectedLogicalPartitionId, that.selectedLogicalPartitionId)
-                && Objects.equals(selectedTabletId, that.selectedTabletId);
+                && Objects.equals(selectedTabletId, that.selectedTabletId)
+                && Objects.equals(distributionSpec, that.distributionSpec);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
-                changesMetaDescriptors, selectedLogicalPartitionId, selectedTabletId);
+                changesMetaDescriptors, selectedLogicalPartitionId, selectedTabletId, distributionSpec);
     }
 
     @Override

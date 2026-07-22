@@ -14,13 +14,18 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
@@ -42,10 +47,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -70,6 +77,13 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     // Tablet ids surviving tablet pruning; null means scan every tablet in the selected partitions.
     private final Set<Long> selectedTabletIds;
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    // Tablet id -> bucket sequence, numbered over each physical partition's full base-index tablet
+    // order (getTabletIdsInOrder(), before the selectedTabletIds filter) and accumulated into one
+    // map across every changed partition because tablet ids are globally unique. The bucket sequence
+    // keys bucketSeq2locations, the map colocate scheduling uses to co-place matching buckets.
+    private final Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
+    private final ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
 
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
                            BookmarkChange delta, Bookmark base, Bookmark head,
@@ -89,19 +103,94 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     public void computeScanRanges(ComputeResource computeResource) {
         long dbId = getSchemaKey().getDb_id();
         long tableId = olapTable.getId();
-        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
-                delta.getChanges().entrySet()) {
+        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
+        RangeColocateScanDispatch dispatch = distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE
+                ? RangeColocateScanDispatch.forTable(olapTable) : null;
+        List<SelectedPhysicalPartition> selectedPartitions = getSelectedPhysicalPartitions(false);
+        for (SelectedPhysicalPartition selected : selectedPartitions) {
+            PhysicalPartition partition = selected.getPartition();
+            BookmarkChange.PhysicalPartitionChange change = selected.getChange();
+            long ppId = change.getPhysicalPartitionId();
+            Pair<Long, Long> versions = change.versionRange().orElseThrow(() ->
+                    new IllegalStateException(String.format(
+                            "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
+                            olapTable.getName(), ppId, change.getChangeType())));
+            long baseVersion = versions.first;
+            long headVersion = versions.second;
+
+            MaterializedIndex index = partition.getLatestBaseIndex();
+            // Number buckets over the FULL tablet order (before the selectedTabletIds filter) so a
+            // tablet's bucket sequence does not depend on which tablets survive pruning; a
+            // pruning-dependent numbering would assign the same tablet different bucket seqs across
+            // scans and break colocation between co-distributed tables.
+            fillTabletId2BucketSeq(dispatch, index, index.getTabletIdsInOrder(), tabletId2BucketSeq);
+            List<Tablet> tablets = index.getTablets();
+
+            for (Tablet tablet : tablets) {
+                if (selectedTabletIds != null && !selectedTabletIds.contains(tablet.getId())) {
+                    continue;
+                }
+                TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+                TChangesScanRange changesScanRange = new TChangesScanRange();
+                changesScanRange.setDb_id(dbId);
+                changesScanRange.setTable_id(tableId);
+                changesScanRange.setPartition_id(ppId);
+                changesScanRange.setTablet_id(tablet.getId());
+                changesScanRange.setBase_version(baseVersion);
+                changesScanRange.setHead_version(headVersion);
+
+                TScanRange scanRange = new TScanRange();
+                scanRange.setChanges_scan_range(changesScanRange);
+                scanRangeLocations.setScan_range(scanRange);
+
+                List<Replica> allQueryableReplicas = Lists.newArrayList();
+                tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                        headVersion, -1, -1, computeResource, null);
+                if (allQueryableReplicas.isEmpty()) {
+                    throw new StarRocksPlannerException(
+                            "No queryable replica found for CDC scan on tablet " + tablet.getId() +
+                                    ". Check if compute nodes are available in the warehouse.",
+                            ErrorType.INTERNAL_ERROR);
+                }
+                Collections.shuffle(allQueryableReplicas);
+                boolean hasAliveReplica = false;
+                for (Replica replica : allQueryableReplicas) {
+                    ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
+                            .getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                    if (node == null) {
+                        LOG.debug("replica {} not exists", replica.getBackendId());
+                        continue;
+                    }
+                    TScanRangeLocation location = new TScanRangeLocation(
+                            new TNetworkAddress(node.getHost(), node.getBePort()));
+                    location.setBackend_id(replica.getBackendId());
+                    scanRangeLocations.addToLocations(location);
+                    hasAliveReplica = true;
+                }
+                if (!hasAliveReplica) {
+                    throw new StarRocksPlannerException(
+                            "tablet " + tablet.getId() + " have no alive replicas",
+                            ErrorType.INTERNAL_ERROR);
+                }
+
+                bucketSeq2locations.put(tabletId2BucketSeq.get(tablet.getId()), scanRangeLocations);
+                result.add(scanRangeLocations);
+            }
+        }
+    }
+
+    // Each physical partition under a selected logical partition, paired with its delta change.
+    // When skipEmptyTabletPartitions is set, a partition whose tablets were all pruned away is left out.
+    private List<SelectedPhysicalPartition> getSelectedPhysicalPartitions(boolean skipEmptyTabletPartitions) {
+        List<SelectedPhysicalPartition> selectedPartitions = new ArrayList<>();
+        Set<Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>>> changeEntries = delta.getChanges().entrySet();
+        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry : changeEntries) {
             if (selectedLogicalPartitionIds != null && !selectedLogicalPartitionIds.contains(entry.getKey())) {
                 continue;
             }
-            for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
-                Pair<Long, Long> versions = change.versionRange().orElseThrow(() ->
-                        new IllegalStateException(String.format(
-                                "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
-                                olapTable.getName(), change.getPhysicalPartitionId(), change.getChangeType())));
-                long baseVersion = versions.first;
-                long headVersion = versions.second;
-
+            List<BookmarkChange.PhysicalPartitionChange> partitionChanges = entry.getValue();
+            for (BookmarkChange.PhysicalPartitionChange change : partitionChanges) {
                 long ppId = change.getPhysicalPartitionId();
                 PhysicalPartition partition = olapTable.getPhysicalPartition(ppId);
                 if (partition == null) {
@@ -109,62 +198,37 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                             "physical partition " + ppId + " missing from bookmark-scoped table '"
                                     + olapTable.getName() + "'");
                 }
-
-                MaterializedIndex index = partition.getLatestBaseIndex();
-                List<Tablet> tablets = index.getTablets();
-
-                for (Tablet tablet : tablets) {
-                    if (selectedTabletIds != null && !selectedTabletIds.contains(tablet.getId())) {
-                        continue;
-                    }
-                    TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-
-                    TChangesScanRange changesScanRange = new TChangesScanRange();
-                    changesScanRange.setDb_id(dbId);
-                    changesScanRange.setTable_id(tableId);
-                    changesScanRange.setPartition_id(ppId);
-                    changesScanRange.setTablet_id(tablet.getId());
-                    changesScanRange.setBase_version(baseVersion);
-                    changesScanRange.setHead_version(headVersion);
-
-                    TScanRange scanRange = new TScanRange();
-                    scanRange.setChanges_scan_range(changesScanRange);
-                    scanRangeLocations.setScan_range(scanRange);
-
-                    List<Replica> allQueryableReplicas = Lists.newArrayList();
-                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            headVersion, -1, -1, computeResource, null);
-                    if (allQueryableReplicas.isEmpty()) {
-                        throw new StarRocksPlannerException(
-                                "No queryable replica found for CDC scan on tablet " + tablet.getId() +
-                                        ". Check if compute nodes are available in the warehouse.",
-                                ErrorType.INTERNAL_ERROR);
-                    }
-                    Collections.shuffle(allQueryableReplicas);
-                    boolean hasAliveReplica = false;
-                    for (Replica replica : allQueryableReplicas) {
-                        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
-                                .getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
-                        if (node == null) {
-                            LOG.debug("replica {} not exists", replica.getBackendId());
-                            continue;
-                        }
-                        TScanRangeLocation location = new TScanRangeLocation(
-                                new TNetworkAddress(node.getHost(), node.getBePort()));
-                        location.setBackend_id(replica.getBackendId());
-                        scanRangeLocations.addToLocations(location);
-                        hasAliveReplica = true;
-                    }
-                    if (!hasAliveReplica) {
-                        throw new StarRocksPlannerException(
-                                "tablet " + tablet.getId() + " have no alive replicas",
-                                ErrorType.INTERNAL_ERROR);
-                    }
-
-                    result.add(scanRangeLocations);
+                if (skipEmptyTabletPartitions && selectedTabletIds != null
+                        && partition.getLatestBaseIndex().getTablets().stream()
+                                .noneMatch(t -> selectedTabletIds.contains(t.getId()))) {
+                    continue;
                 }
+                selectedPartitions.add(new SelectedPhysicalPartition(partition, change));
             }
         }
+        return selectedPartitions;
+    }
+
+    @Override
+    public ArrayListMultimap<Integer, TScanRangeLocations> getBucketSeqToLocations() {
+        return bucketSeq2locations;
+    }
+
+    @Override
+    public int getBucketNums() {
+        Collection<Long> selectedLogicalPartitions = selectedLogicalPartitionIds != null
+                ? selectedLogicalPartitionIds : delta.getChanges().keySet();
+        // Skip fully tablet-pruned partitions: the range-colocate alignment check in computeBucketNums
+        // must only see partitions that actually contribute scan tablets.
+        List<PhysicalPartition> scannedPartitions = getSelectedPhysicalPartitions(true).stream()
+                .map(SelectedPhysicalPartition::getPartition).toList();
+        return computeBucketNums(olapTable, index.indexMetaId, selectedLogicalPartitions,
+                scannedPartitions, tabletId2BucketSeq);
+    }
+
+    @Override
+    public Optional<List<BucketProperty>> getBucketProperties() throws StarRocksException {
+        return Optional.empty();
     }
 
     @Override
@@ -190,21 +254,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitions, totalPartitions));
 
         int totalTablets = 0;
-        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
-                delta.getChanges().entrySet()) {
-            if (selectedLogicalPartitionIds != null && !selectedLogicalPartitionIds.contains(entry.getKey())) {
-                continue;
-            }
-            for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
-                long ppId = change.getPhysicalPartitionId();
-                PhysicalPartition pp = olapTable.getPhysicalPartition(ppId);
-                if (pp == null) {
-                    throw new IllegalStateException(
-                            "physical partition " + ppId + " missing from bookmark-scoped table '"
-                                    + olapTable.getName() + "'");
-                }
-                totalTablets += pp.getLatestBaseIndex().getTablets().size();
-            }
+        List<SelectedPhysicalPartition> selectedPhysicalPartitions = getSelectedPhysicalPartitions(false);
+        for (SelectedPhysicalPartition selected : selectedPhysicalPartitions) {
+            totalTablets += selected.getPartition().getLatestBaseIndex().getTablets().size();
         }
         int selectedTablets = result.size();
         output.append(prefix).append(String.format("tabletRatio=%s/%s\n", selectedTablets, totalTablets));
@@ -237,5 +289,24 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return false;
+    }
+
+    // A physical partition surviving logical-partition pruning, paired with its delta change.
+    private static class SelectedPhysicalPartition {
+        private final PhysicalPartition partition;
+        private final BookmarkChange.PhysicalPartitionChange change;
+
+        SelectedPhysicalPartition(PhysicalPartition partition, BookmarkChange.PhysicalPartitionChange change) {
+            this.partition = partition;
+            this.change = change;
+        }
+
+        PhysicalPartition getPartition() {
+            return partition;
+        }
+
+        BookmarkChange.PhysicalPartitionChange getChange() {
+            return change;
+        }
     }
 }

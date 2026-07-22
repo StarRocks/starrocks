@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.optimizer.transformer;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
@@ -29,6 +31,10 @@ import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.planner.AnalyticEvalNode;
+import com.starrocks.planner.ChangesScanNode;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionRef;
@@ -37,11 +43,14 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -62,6 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -176,7 +186,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null));
+                        List.of(), null, null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d dropped",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, phantomPhysicalId);
@@ -203,7 +213,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null));
+                        List.of(), null, null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d rewritten",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -230,7 +240,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null));
+                        List.of(), null, null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d resharded",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -267,7 +277,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), keyPartitionHint, null));
+                            List.of(), keyPartitionHint, null, null));
             assertTrue(ex.getMessage().contains("does not support a PARTITION hint by column value"),
                     "got: " + ex.getMessage());
         } finally {
@@ -297,10 +307,115 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
                     new HashMap<>(),
-                    List.of(), null, null);
+                    List.of(), null, null, null);
             assertNotNull(op);
             assertEquals(base.getBookmarkId(), op.getBase().getBookmarkId());
             assertEquals(head.getBookmarkId(), op.getHead().getBookmarkId());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testBuildScanOperatorCarriesDistributionSpec() throws Exception {
+        String tableName = "dup_dist_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("dist_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("dist_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 4L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            // table is DISTRIBUTED BY HASH(k); build a ref for the bucket column the way
+            // RelationTransformer does, then thread it through as a hash-local DistributionSpec.
+            Column bucketColumn = table.getColumn("k");
+            ColumnRefOperator bucketRef = new ColumnRefFactory()
+                    .create(bucketColumn.getName(), bucketColumn.getType(), bucketColumn.isAllowNull());
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+            colRefToColumnMetaMap.put(bucketRef, bucketColumn);
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+            columnMetaToColRefMap.put(bucketColumn, bucketRef);
+            DistributionSpec hashLocal = DistributionSpec.createHashDistributionSpec(
+                    new HashDistributionDesc(List.of(bucketRef.getId()), HashDistributionDesc.SourceType.LOCAL));
+
+            LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
+                    table,
+                    new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                    colRefToColumnMetaMap,
+                    columnMetaToColRefMap,
+                    List.of(), null, null, hashLocal);
+            assertSame(hashLocal, op.getDistributionSpec());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testGetBucketNumsWithTabletPrunedPartition() throws Exception {
+        // A HASH-distributed table whose delta spans two range partitions. Constructing the physical
+        // node with only one partition's tablets selected drives getSelectedPhysicalPartitions(true)'s
+        // fully-tablet-pruned skip (the other partition contributes no scan tablet), and getBucketNums
+        // still reports the table's bucket count without needing computeScanRanges / live backends.
+        String tableName = "dup_bucket_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createHashRangeTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("bucket_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("bucket_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
+                    table,
+                    new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                    new HashMap<>(),
+                    new HashMap<>(),
+                    List.of(), null, null, null);
+            // Both partitions must show up in the delta so one can be fully tablet-pruned.
+            assertTrue(op.getDelta().getChanges().size() >= 2,
+                    "delta must span both partitions, got: " + op.getDelta().getChanges().keySet());
+
+            List<Long> logicalPartitionIds = new ArrayList<>(op.getDelta().getChanges().keySet());
+            long keptLogicalId = logicalPartitionIds.get(0);
+            // Only the kept partition's tablets are selected; the other partition's tablets are all
+            // pruned away, making it the "empty" partition the skip in getSelectedPhysicalPartitions
+            // must drop.
+            List<Long> keptTabletIds = new ArrayList<>();
+            for (PhysicalPartition pp : table.getPartition(keptLogicalId).getSubPartitions()) {
+                for (Tablet t : pp.getLatestBaseIndex().getTablets()) {
+                    keptTabletIds.add(t.getId());
+                }
+            }
+
+            TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor("changes_scan");
+            ChangesScanNode prunedNode = new ChangesScanNode(
+                    new PlanNodeId(1), tuple, table, op.getDelta(), op.getBase(), op.getHead(),
+                    op.getChangesMetaDescriptors(), logicalPartitionIds, keptTabletIds);
+            // >= 2 selected logical partitions on a HASH table report the table's bucket count (BUCKETS 3),
+            // reached only after the empty tablet-pruned partition is skipped.
+            assertEquals(3, prunedNode.getBucketNums());
+            assertFalse(prunedNode.getBucketProperties().isPresent());
+
+            // No tablet pruning: the selectedTabletIds == null short-circuit keeps every partition, and
+            // the bucket count is unchanged.
+            ChangesScanNode unprunedNode = new ChangesScanNode(
+                    new PlanNodeId(2), tuple, table, op.getDelta(), op.getBase(), op.getHead(),
+                    op.getChangesMetaDescriptors(), logicalPartitionIds, null);
+            assertEquals(3, unprunedNode.getBucketNums());
+            assertFalse(unprunedNode.getBucketProperties().isPresent());
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
@@ -333,9 +448,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         try {
             BookmarkRange range = new BookmarkRange(b1.getBookmarkId(), b2.getBookmarkId());
             LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null);
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
             LogicalChangesScanOperator same = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null);
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
 
             // Reflexive, and two unpruned scans over the same (table, base, head)
             // are equal with matching hashCode — the equality the Cascades memo
@@ -352,10 +467,10 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // only thing distinguishing these from op at the operator level.
             LogicalChangesScanOperator baseDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b0.getBookmarkId(), b2.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of(), null, null);
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
             LogicalChangesScanOperator headDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b1.getBookmarkId(), b3.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of(), null, null);
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
             assertNotEquals(op, baseDiff);
             assertNotEquals(op, headDiff);
 
@@ -363,7 +478,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // are part of the scan's output identity.
             LogicalChangesScanOperator metaDiff = ChangesScanBuilder.buildScanOperator(
                     table, range, new HashMap<>(), new HashMap<>(),
-                    ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null);
+                    ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null);
             assertNotEquals(op, metaDiff);
 
             // The selected ids are what make a pruned scan a distinct memo
@@ -374,6 +489,20 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     .withOperator(op).setSelectedTabletId(List.of(10L)).build();
             assertNotEquals(op, partitionPruned);
             assertNotEquals(op, tabletPruned);
+
+            // distributionSpec is part of the scan's identity: it decides the advertised output
+            // property (LOCAL hash vs none), so two scans differing only in it are unequal AND must
+            // hash differently. The hashCode assertion fails if distributionSpec is dropped from
+            // hashCode while kept in equals (op here carries a null spec, distDiff a hash-local one).
+            Column bucketColumn = table.getColumn("k");
+            ColumnRefOperator bucketRef = new ColumnRefFactory()
+                    .create(bucketColumn.getName(), bucketColumn.getType(), bucketColumn.isAllowNull());
+            DistributionSpec hashLocal = DistributionSpec.createHashDistributionSpec(
+                    new HashDistributionDesc(List.of(bucketRef.getId()), HashDistributionDesc.SourceType.LOCAL));
+            LogicalChangesScanOperator distDiff = new LogicalChangesScanOperator.Builder()
+                    .withOperator(op).setDistributionSpec(hashLocal).build();
+            assertNotEquals(op, distDiff);
+            assertNotEquals(op.hashCode(), distDiff.hashCode());
 
             // delta is intentionally excluded from equals: it is a pure function
             // of (table, base, head), so it cannot be varied alone to assert on.
@@ -413,10 +542,10 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // base/head), so it is passed as null throughout.
             PhysicalChangesScanOperator op = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, null);
+                    b1, b2, null, List.of(), null, null, null);
             PhysicalChangesScanOperator same = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, null);
+                    b1, b2, null, List.of(), null, null, null);
 
             // Reflexive, and two unpruned scans over the same (table, base, head) are
             // equal with matching hashCode — the equality the Cascades memo relies on
@@ -431,27 +560,27 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // A different bookmark window is a different scan.
             PhysicalChangesScanOperator baseDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b0, b2, null, List.of(), null, null);
+                    b0, b2, null, List.of(), null, null, null);
             PhysicalChangesScanOperator headDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b3, null, List.of(), null, null);
+                    b1, b3, null, List.of(), null, null, null);
             assertNotEquals(op, baseDiff);
             assertNotEquals(op, headDiff);
 
             // Different CHANGES metadata columns are part of the scan's output identity.
             PhysicalChangesScanOperator metaDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null);
+                    b1, b2, null, ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null);
             assertNotEquals(op, metaDiff);
 
             // The selected ids are what make a pruned physical scan a distinct memo
             // alternative from the unpruned op — exactly the dedup bug this guards against.
             PhysicalChangesScanOperator partitionPruned = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), List.of(1L, 2L), null);
+                    b1, b2, null, List.of(), List.of(1L, 2L), null, null);
             PhysicalChangesScanOperator tabletPruned = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, List.of(10L));
+                    b1, b2, null, List.of(), null, List.of(10L), null);
             assertNotEquals(op, partitionPruned);
             assertNotEquals(op, tabletPruned);
         } finally {
@@ -481,7 +610,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(99999L, real.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), null, null));
+                            List.of(), null, null, null));
             assertTrue(baseEx.getMessage().contains("bookmark 99999 not found"),
                     "actual: " + baseEx.getMessage());
 
@@ -491,7 +620,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(real.getBookmarkId(), 99998L),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), null, null));
+                            List.of(), null, null, null));
             assertTrue(headEx.getMessage().contains("bookmark 99998 not found"),
                     "actual: " + headEx.getMessage());
         } finally {
@@ -516,7 +645,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(1L, 2L),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null));
+                        List.of(), null, null, null));
         assertTrue(ex.getMessage().contains("dbId missing on " + tableName),
                 "actual: " + ex.getMessage());
     }
@@ -983,6 +1112,19 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                 + "PARTITION p1 VALUES LESS THAN ('2024-02-01'), "
                 + "PARTITION p2 VALUES LESS THAN ('2024-03-01')) "
                 + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');";
+        return createTable(ddl);
+    }
+
+    /**
+     * Create a two-range-partition (p1, p2) DUP cloud-native table HASH-distributed over 3 buckets
+     * and return its id. A HASH distribution keeps getBucketNums off the range-colocate alignment path.
+     */
+    private long createHashRangeTable(String name) throws Exception {
+        String ddl = "CREATE TABLE " + name + " (k int NOT NULL, dt date NOT NULL, v int) "
+                + "DUPLICATE KEY(k, dt) PARTITION BY RANGE(dt) ("
+                + "PARTITION p1 VALUES LESS THAN ('2024-02-01'), "
+                + "PARTITION p2 VALUES LESS THAN ('2024-03-01')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 3 PROPERTIES ('replication_num' = '1');";
         return createTable(ddl);
     }
 

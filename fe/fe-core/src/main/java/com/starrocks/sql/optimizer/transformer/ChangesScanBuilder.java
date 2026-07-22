@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
@@ -84,7 +85,8 @@ public final class ChangesScanBuilder {
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             List<ChangesMetaDescriptor> metaDescriptors,
             PartitionRef partitionNameHint,
-            List<Long> tabletIdHint) {
+            List<Long> tabletIdHint,
+            DistributionSpec distributionSpec) {
         long dbId = table.mayGetDatabaseId().orElseThrow(() ->
                 new IllegalStateException(
                         String.format("dbId missing on %s", table.getName())));
@@ -113,6 +115,7 @@ public final class ChangesScanBuilder {
                 .withOperator(op)
                 .setPartitionNameHints(partitionNames)
                 .setTabletIdHints(tabletIdHint)
+                .setDistributionSpec(distributionSpec)
                 .build();
     }
 

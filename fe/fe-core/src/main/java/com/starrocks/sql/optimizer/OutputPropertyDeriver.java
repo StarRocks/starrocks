@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -582,6 +583,26 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             return PhysicalPropertySet.EMPTY;
         } else {
             return createPropertySetByDistribution(olapDistributionSpec);
+        }
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalChangesScan(PhysicalChangesScanOperator node, ExpressionContext context) {
+        DistributionSpec spec = node.getDistributionSpec();
+        if (spec instanceof HashDistributionSpec) {
+            EquivalentDescriptor equivDesc = new EquivalentDescriptor(
+                    node.getTable().getId(), node.getSelectedLogicalPartitionId());
+            return createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(((HashDistributionSpec) spec).getShuffleColumns(),
+                            HashDistributionDesc.SourceType.LOCAL), equivDesc));
+        } else if (spec instanceof RangeDistributionSpec) {
+            RangeDistributionSpec skeleton = (RangeDistributionSpec) spec;
+            EquivalentDescriptor equivDesc = new EquivalentDescriptor(
+                    node.getTable().getId(), node.getSelectedLogicalPartitionId());
+            equivDesc.initDistributionUnionFind(skeleton.getColocateColumns());
+            return createPropertySetByDistribution(new RangeDistributionSpec(skeleton.getColocateColumns(), equivDesc));
+        } else {
+            return PhysicalPropertySet.EMPTY;
         }
     }
 

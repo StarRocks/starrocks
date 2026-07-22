@@ -1,0 +1,103 @@
+-- name: test_changes_colocate_join @cloud
+
+-- A CHANGES scan over a table in a colocate group must get the same bucket/
+-- distribution property as an OlapScan, so it can colocate-join a co-bucketed
+-- dimension table. Correctness (not just plan shape) is what matters here:
+-- the colocate join result must be byte-identical to the same join forced
+-- through shuffle (disable_colocate_join), proving the CHANGES scan's bucket
+-- assignment lines up with the base table's, not merely that a join happens.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE delta_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1', 'colocate_with' = 'grp_changes_colocate_join_${uuid0}');
+
+CREATE TABLE dim_t (k int, d int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1', 'colocate_with' = 'grp_changes_colocate_join_${uuid0}');
+
+INSERT INTO delta_t VALUES (1, 100), (2, 200), (3, 300);
+INSERT INTO dim_t VALUES (1, 11), (2, 22), (3, 33), (4, 44);
+
+[UC]base=SELECT bookmark_create("${db[0]}", "delta_t", "sql_test", "1800000");
+
+-- The changes: k=2,3 updated, k=4,5 newly inserted. k=5 has no dim match.
+INSERT INTO delta_t VALUES (2, 201), (3, 301), (4, 400), (5, 500);
+
+[UC]head=SELECT bookmark_create("${db[0]}", "delta_t", "sql_test", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "delta_t", "${base}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "delta_t", "${head}", "sql_test");
+    SET disable_colocate_join = false;
+    DROP TABLE delta_t FORCE;
+    DROP TABLE dim_t FORCE;
+} END CLEANUP
+
+-- Plan-shape assertion: the CHANGES scan participates in a COLOCATE join.
+function: assert_explain_contains("SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k", "colocate: true")
+
+-- Correctness assertion: colocate join (default) result.
+SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k ORDER BY c.k, c.v, d.d;
+
+-- Same query forced through shuffle -- must return the identical 3 rows,
+-- proving the colocate bucket assignment (not just the join mechanism) is correct.
+SET disable_colocate_join = true;
+SELECT c.k, c.v, d.d FROM delta_t c [_CHANGES_${base}_${head}_] JOIN dim_t d ON c.k = d.k ORDER BY c.k, c.v, d.d;
+SET disable_colocate_join = false;
+
+
+-- name: test_changes_colocate_join_both_changes @cloud
+
+-- Both join sides are CHANGES scans over co-bucketed tables in one colocate group
+-- (the case above joins a CHANGES scan to a plain OlapScan dim table). This proves
+-- two CHANGES scans that each advertise the same HASH bucket property colocate-join
+-- each other with no shuffle. Correctness is cross-checked against the same join
+-- forced through shuffle (disable_colocate_join), so a byte-identical result proves
+-- the two CHANGES scans' bucket assignments line up, not merely that a join happens.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE delta_a (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1', 'colocate_with' = 'grp_changes_both_${uuid0}');
+
+CREATE TABLE delta_b (k int, w int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1', 'colocate_with' = 'grp_changes_both_${uuid0}');
+
+INSERT INTO delta_a VALUES (1, 100), (2, 200), (3, 300);
+INSERT INTO delta_b VALUES (1, 11), (2, 12), (3, 13);
+
+[UC]base_a=SELECT bookmark_create("${db[0]}", "delta_a", "sql_test", "1800000");
+[UC]base_b=SELECT bookmark_create("${db[0]}", "delta_b", "sql_test", "1800000");
+
+-- Changes on both sides. delta_a: k=2,3 updated, k=4,5 new. delta_b: k=2,3,4 new.
+-- Joined on k over the two deltas: k=2,3,4 match; k=5 has no delta_b row.
+INSERT INTO delta_a VALUES (2, 201), (3, 301), (4, 400), (5, 500);
+INSERT INTO delta_b VALUES (2, 22), (3, 33), (4, 44);
+
+[UC]head_a=SELECT bookmark_create("${db[0]}", "delta_a", "sql_test", "1800000");
+[UC]head_b=SELECT bookmark_create("${db[0]}", "delta_b", "sql_test", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "delta_a", "${base_a}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "delta_a", "${head_a}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "delta_b", "${base_b}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "delta_b", "${head_b}", "sql_test");
+    SET disable_colocate_join = false;
+    DROP TABLE delta_a FORCE;
+    DROP TABLE delta_b FORCE;
+} END CLEANUP
+
+-- Plan-shape assertion: the two CHANGES scans participate in a COLOCATE join.
+function: assert_explain_contains("SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k", "colocate: true")
+
+-- Correctness assertion: colocate join (default) result.
+SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k ORDER BY a.k, a.v, b.w;
+
+-- Same query forced through shuffle -- must return the identical 3 rows.
+SET disable_colocate_join = true;
+SELECT a.k, a.v, b.w FROM delta_a a [_CHANGES_${base_a}_${head_a}_] JOIN delta_b b [_CHANGES_${base_b}_${head_b}_] ON a.k = b.k ORDER BY a.k, a.v, b.w;
+SET disable_colocate_join = false;

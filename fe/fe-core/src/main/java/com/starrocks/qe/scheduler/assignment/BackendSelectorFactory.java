@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler.assignment;
 
 import com.starrocks.common.StarRocksException;
-import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.BackendSelector;
@@ -86,9 +86,9 @@ public class BackendSelectorFactory {
                         execFragment.getColocatedAssignment());
             } else if (hasColocate || hasBucket) {
                 ColocatedBackendSelector.Assignment colocatedAssignment =
-                        execFragment.getOrCreateColocatedAssignment((OlapScanNode) scanNode);
+                        execFragment.getOrCreateColocatedAssignment(scanNode);
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
-                return new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
+                return new ColocatedBackendSelector((AbstractOlapTableScanNode) scanNode, assignment,
                         colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,
                         sessionVariable.getMaxBucketsPerBeToUseBalancerAssignment());
             } else {

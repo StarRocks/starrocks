@@ -1,0 +1,75 @@
+-- name: test_changes_bucket_aware_aggregation @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE agg_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO agg_t VALUES (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+[UC]base=SELECT bookmark_create("${db[0]}", "agg_t", "sql_test", "1800000");
+INSERT INTO agg_t VALUES (2, 201), (2, 202), (3, 301), (4, 400);
+-- result:
+-- !result
+[UC]head=SELECT bookmark_create("${db[0]}", "agg_t", "sql_test", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "agg_t", "${base}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "agg_t", "${head}", "sql_test");
+    DROP TABLE agg_t FORCE;
+} END CLEANUP
+
+function: assert_explain_contains("SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k", "AGGREGATE (update finalize)")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k", "merge finalize", "update serialize")
+-- result:
+None
+-- !result
+SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k ORDER BY k;
+-- result:
+2	403
+3	301
+4	400
+-- !result
+-- name: test_changes_bucket_aware_window @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE win_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO win_t VALUES (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+[UC]base=SELECT bookmark_create("${db[0]}", "win_t", "sql_test", "1800000");
+INSERT INTO win_t VALUES (2, 201), (2, 202), (3, 301), (4, 400);
+-- result:
+-- !result
+[UC]head=SELECT bookmark_create("${db[0]}", "win_t", "sql_test", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "win_t", "${base}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "win_t", "${head}", "sql_test");
+    DROP TABLE win_t FORCE;
+} END CLEANUP
+
+function: assert_explain_contains("SELECT k, v, sum(v) OVER (PARTITION BY k) FROM win_t [_CHANGES_${base}_${head}_]", "ANALYTIC")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("SELECT k, v, sum(v) OVER (PARTITION BY k) FROM win_t [_CHANGES_${base}_${head}_]", "HASH_PARTITIONED")
+-- result:
+None
+-- !result
+function: assert_explain_contains("SELECT k, v, sum(k) OVER (PARTITION BY v) FROM win_t [_CHANGES_${base}_${head}_]", "HASH_PARTITIONED")
+-- result:
+None
+-- !result
+SELECT k, v, sum(v) OVER (PARTITION BY k) AS s FROM win_t [_CHANGES_${base}_${head}_] ORDER BY k, v;
+-- result:
+2	201	403
+2	202	403
+3	301	301
+4	400	400
+-- !result

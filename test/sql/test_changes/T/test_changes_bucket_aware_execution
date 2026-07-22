@@ -1,0 +1,77 @@
+-- name: test_changes_bucket_aware_aggregation @cloud
+
+-- Aggregation grouped by the bucket key over a CHANGES scan. The scan advertises a
+-- LOCAL hash property on its distribution key, so grouping by that key collapses to
+-- a single-phase aggregate with no pre-agg shuffle EXCHANGE. A two-phase (shuffled)
+-- aggregate would instead show "update serialize" + "merge finalize" around the
+-- shuffle; their absence is the proof. The only remaining EXCHANGE is the top-level
+-- result gather above the aggregate, present in both shapes.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE agg_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO agg_t VALUES (1, 100), (2, 200), (3, 300);
+
+[UC]base=SELECT bookmark_create("${db[0]}", "agg_t", "sql_test", "1800000");
+
+-- Delta rows: k=2 gets two, k=3 one, k=4 one. sum(v) grouped by k over the delta.
+INSERT INTO agg_t VALUES (2, 201), (2, 202), (3, 301), (4, 400);
+
+[UC]head=SELECT bookmark_create("${db[0]}", "agg_t", "sql_test", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "agg_t", "${base}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "agg_t", "${head}", "sql_test");
+    DROP TABLE agg_t FORCE;
+} END CLEANUP
+
+-- Plan-shape assertion: single-phase aggregate directly over the CHANGES scan.
+function: assert_explain_contains("SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k", "AGGREGATE (update finalize)")
+function: assert_explain_not_contains("SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k", "merge finalize", "update serialize")
+
+-- Correctness assertion.
+SELECT k, sum(v) FROM agg_t [_CHANGES_${base}_${head}_] GROUP BY k ORDER BY k;
+
+
+-- name: test_changes_bucket_aware_window @cloud
+
+-- A window function partitioned by the bucket key over a CHANGES scan. The scan's
+-- LOCAL hash property on its distribution key satisfies the ANALYTIC operator's
+-- required hash distribution, so no shuffle EXCHANGE is inserted below it: the plan
+-- carries no HASH_PARTITIONED exchange, only the top-level UNPARTITIONED result
+-- gather. The negative control (PARTITION BY a non-bucket column) shows the same
+-- window shuffles -- its plan DOES carry a HASH_PARTITIONED exchange -- so the
+-- absence in the bucket-key case is meaningful, not a token that never appears.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE win_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO win_t VALUES (1, 100), (2, 200), (3, 300);
+
+[UC]base=SELECT bookmark_create("${db[0]}", "win_t", "sql_test", "1800000");
+
+INSERT INTO win_t VALUES (2, 201), (2, 202), (3, 301), (4, 400);
+
+[UC]head=SELECT bookmark_create("${db[0]}", "win_t", "sql_test", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "win_t", "${base}", "sql_test");
+    SELECT bookmark_release("${db[0]}", "win_t", "${head}", "sql_test");
+    DROP TABLE win_t FORCE;
+} END CLEANUP
+
+-- Plan-shape assertion: PARTITION BY the bucket key k -> ANALYTIC with no shuffle.
+function: assert_explain_contains("SELECT k, v, sum(v) OVER (PARTITION BY k) FROM win_t [_CHANGES_${base}_${head}_]", "ANALYTIC")
+function: assert_explain_not_contains("SELECT k, v, sum(v) OVER (PARTITION BY k) FROM win_t [_CHANGES_${base}_${head}_]", "HASH_PARTITIONED")
+
+-- Negative control: PARTITION BY a non-bucket column v -> the window must shuffle.
+function: assert_explain_contains("SELECT k, v, sum(k) OVER (PARTITION BY v) FROM win_t [_CHANGES_${base}_${head}_]", "HASH_PARTITIONED")
+
+-- Correctness assertion for the bucket-aware (no-shuffle) window.
+SELECT k, v, sum(v) OVER (PARTITION BY k) AS s FROM win_t [_CHANGES_${base}_${head}_] ORDER BY k, v;

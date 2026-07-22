@@ -60,6 +60,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -2778,9 +2779,9 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
-            if (node instanceof OlapScanNode scanNode) {
+            if (node instanceof OlapScanNode || node instanceof ChangesScanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-                if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                if (colocateIndex.isColocateTable(((AbstractOlapTableScanNode) node).getOlapTable().getId())) {
                     return true;
                 }
             }
@@ -4587,7 +4588,7 @@ public class PlanFragmentBuilder {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
 
-            currentExecGroup.add(scanNode, true);
+            currentExecGroup.add(scanNode);
             context.getScanNodes().add(scanNode);
 
             PlanFragment fragment = new PlanFragment(

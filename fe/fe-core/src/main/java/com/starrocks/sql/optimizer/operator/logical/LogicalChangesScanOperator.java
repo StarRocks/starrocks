@@ -23,6 +23,7 @@ import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -43,6 +44,9 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     // kept verbatim until partition/tablet pruning consumes them; Optional.empty() means the hint was not given.
     private Optional<PartitionNames> partitionNameHints = Optional.empty();
     private Optional<List<Long>> tabletIdHints = Optional.empty();
+    // The table's distribution, captured during transformation and carried through implementation
+    // onto the physical scan, which advertises it as an output distribution property.
+    private DistributionSpec distributionSpec;
 
     // Selected logical-partition ids after partition pruning on the delta;
     // null means no pruning was applied, so all delta partitions are scanned.
@@ -102,6 +106,10 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return tabletIdHints;
     }
 
+    public DistributionSpec getDistributionSpec() {
+        return distributionSpec;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -117,14 +125,15 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
                 && Objects.equals(partitionNameHints, that.partitionNameHints)
                 && Objects.equals(tabletIdHints, that.tabletIdHints)
                 && Objects.equals(selectedLogicalPartitionId, that.selectedLogicalPartitionId)
-                && Objects.equals(selectedTabletId, that.selectedTabletId);
+                && Objects.equals(selectedTabletId, that.selectedTabletId)
+                && Objects.equals(distributionSpec, that.distributionSpec);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
                 changesMetaDescriptors, partitionNameHints, tabletIdHints,
-                selectedLogicalPartitionId, selectedTabletId);
+                selectedLogicalPartitionId, selectedTabletId, distributionSpec);
     }
 
     @Override
@@ -156,6 +165,12 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.tabletIdHints = operator.tabletIdHints;
             builder.selectedLogicalPartitionId = operator.selectedLogicalPartitionId;
             builder.selectedTabletId = operator.selectedTabletId;
+            builder.distributionSpec = operator.distributionSpec;
+            return this;
+        }
+
+        public Builder setDistributionSpec(DistributionSpec distributionSpec) {
+            builder.distributionSpec = distributionSpec;
             return this;
         }
 

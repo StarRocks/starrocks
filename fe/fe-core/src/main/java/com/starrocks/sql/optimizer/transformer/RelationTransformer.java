@@ -687,7 +687,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 new IllegalStateException("CHANGES metadata descriptors "
                                         + "not resolved on " + node.getName())),
                         node.getPartitionNames(),
-                        node.getTabletIds());
+                        node.getTabletIds(),
+                        distributionSpec);
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {
