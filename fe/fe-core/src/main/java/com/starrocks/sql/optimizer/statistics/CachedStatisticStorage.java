@@ -57,6 +57,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
+
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
@@ -788,18 +790,54 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     private <T> void waitForStatsFutureIfWaitEnabled(CompletableFuture<T> future, Supplier<String> contextSupplier)
             throws InterruptedException, ExecutionException {
-        try {
-            if (Config.enable_sync_statistics_load) {
-                final var timeoutMs = Config.sync_statistics_load_timeout_ms;
-                if (timeoutMs <= 0) {
-                    return;
-                }
-                future.get(timeoutMs, TimeUnit.MILLISECONDS);
-            }
-        } catch (TimeoutException e) {
-            LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
-                    Config.sync_statistics_load_timeout_ms, contextSupplier.get());
+        if (!Config.enable_sync_statistics_load) {
+            return;
         }
+
+        final var desiredTimeoutMs = Config.sync_statistics_load_timeout_ms;
+        if (desiredTimeoutMs <= 0) {
+            return;
+        }
+
+        final var statisticsLoadBudget = getStatisticsLoadBudget();
+        final var hasStatisticsLoadBudget = statisticsLoadBudget != null;
+        final var timeoutMs = hasStatisticsLoadBudget ?
+                statisticsLoadBudget.getRemainingTimeoutMs(desiredTimeoutMs) : desiredTimeoutMs;
+        if (timeoutMs <= 0) {
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
+            return;
+        }
+
+        long startNanos = System.nanoTime();
+        boolean isTimeout = false;
+        try {
+            future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            isTimeout = true;
+            LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
+                    timeoutMs, contextSupplier.get());
+        } finally {
+            if (hasStatisticsLoadBudget) {
+                statisticsLoadBudget.recordWait(System.nanoTime() - startNanos);
+            }
+        }
+        if (isTimeout) {
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
+        }
+    }
+
+    private void increaseSyncStatsBudgetExceededIfBudgetExhausted(StatisticsLoadBudget statisticsLoadBudget) {
+        if (statisticsLoadBudget != null && statisticsLoadBudget.getRemainingBudgetMs() <= 0) {
+            SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.increase(1L);
+        }
+    }
+
+    private StatisticsLoadBudget getStatisticsLoadBudget() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return null;
+        }
+        return connectContext.getStatisticsLoadBudget();
     }
 
     private static String stringifyColumnCacheKeys(Collection<ColumnStatsCacheKey> columnStatsCacheKeys) {

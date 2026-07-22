@@ -2488,6 +2488,10 @@ public class Config extends ConfigBase {
             "(when `enable_sync_statistics_load` is enabled)")
     public static int sync_statistics_load_timeout_ms = 5000;
 
+    @ConfField(mutable = true, comment = "Total timeout budget per query to synchronously wait for stats " +
+            "(when `enable_sync_statistics_load` is enabled). A negative value uses `sync_statistics_load_timeout_ms`.")
+    public static int sync_statistics_load_per_query_budget_ms = -1;
+
     /**
      * default bucket size of histogram statistics
      */
