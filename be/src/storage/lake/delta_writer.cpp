@@ -28,6 +28,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/system/master_info.h"
 #include "compute_env/load_spill/load_spill_block_manager.h"
 #include "fs/bundle_file.h"
@@ -312,7 +313,14 @@ private:
     bool _miss_auto_increment_column;
 
     PartialUpdateMode _partial_update_mode;
+    // True when partial_update_mode=auto (AUTO_MODE) was resolved to a concrete storage mode for a
+    // partial-update load; recorded into op_write txn_meta so the apply-side handler runs the adaptive
+    // write-mode cost model instead of the static heuristic.
+    bool _auto_resolved = false;
     bool _partial_schema_with_sort_key_conflict = false;
+    // SDCG flexible partial update: true when "__cset__" was injected by FE (detected from
+    // the slot order in init_write_schema). Drives the synthetic "__cset__" column append.
+    bool _flexible_partial_update = false;
 
     int64_t _last_write_ts = 0;
 
@@ -750,22 +758,101 @@ Status DeltaWriterImpl::init_write_schema() {
     const auto has_op_column = (this->_slots->size() > 0 && this->_slots->back()->col_name() == "__op");
     const auto write_columns = has_op_column ? _slots->size() - 1 : _slots->size();
 
-    // maybe partial update, change to partial tablet schema
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && write_columns < _tablet_schema->num_columns()) {
+    // SDCG flexible partial update: FE injects the hidden "__cset__" SMALLINT slot directly
+    // before "__op". Detect it from the slot order -- this is self-contained and matches the
+    // FE-only injection (the flag is also mirrored on PTabletWriterOpenRequest, but is not
+    // threaded into this lake writer's ctor in the POC; slot presence is equivalent).
+    const size_t cset_slot_pos = has_op_column ? (_slots->size() >= 2 ? _slots->size() - 2 : _slots->size())
+                                               : (_slots->empty() ? 0 : _slots->size() - 1);
+    _flexible_partial_update =
+            cset_slot_pos < _slots->size() && (*_slots)[cset_slot_pos]->col_name() == LOAD_CSET_COLUMN;
+
+    // Reject flexible + merge_condition up front (fail before any data is written): there is no
+    // flexible-aware apply path for it -- a merge_condition disables both the packed `.spcols` and the
+    // masked-dense emit in the column-mode handler, so the load would otherwise crash or silently clobber
+    // omitted columns at apply. See ColumnModePartialUpdateHandler::execute.
+    if (_flexible_partial_update && !_merge_condition.empty()) {
+        return Status::NotSupported("flexible partial update combined with merge_condition is not supported");
+    }
+
+    // maybe partial update, change to partial tablet schema.
+    // SDCG flexible: when the flexible load lists the UNION of all base columns, write_columns
+    // (which counts "__cset__" but not "__op") is NOT < num_columns, so the legacy gate would skip
+    // this branch -- leaving "__cset__" un-appended to _write_schema. MemTable::convert_schema then
+    // assumes "__cset__" is already in _write_schema and builds a chunk with one fewer column than
+    // _slots, and MemTable::insert reads past the chunk's columns -> OOB crash at write time. Force
+    // the partial-schema branch whenever flexible so "__cset__" is always appended.
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+        (write_columns < _tablet_schema->num_columns() || _flexible_partial_update)) {
         _write_column_ids.reserve(write_columns);
         for (auto i = 0; i < write_columns; ++i) {
             const auto& slot_col_name = (*_slots)[i]->col_name();
+            // "__cset__" is not a real tablet column; exclude it from _write_column_ids (the
+            // UNION of real value columns) and append it synthetically below.
+            if (_flexible_partial_update && slot_col_name == LOAD_CSET_COLUMN) {
+                continue;
+            }
             int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 return Status::InvalidArgument(strings::Substitute("Invalid column name: $0", slot_col_name));
             }
             _write_column_ids.push_back(index);
         }
+        // partial_update_mode=auto (AUTO_MODE): resolve to a concrete storage mode. AUTO_MODE is ALSO the
+        // default mode for FULL upserts, so resolve ONLY when this load is actually a PARTIAL update; a full
+        // write keeps AUTO_MODE and follows the normal (non-partial) path untouched.
+        //
+        // Level-1 (per-load) column-vs-ROW decision: ROW mode (masked full-row rewrite) gives flat,
+        // chain-free reads at the cost of rewriting whole rows; COLUMN mode writes a compact delta but adds
+        // overlay-chain read-amp. The per-table read budget (sdcg_read_amp_budget) is the user's
+        // read-sensitivity knob: budget==0 (read-strict) => ROW; otherwise => COLUMN, whose per-segment
+        // format (dense/sparse) is then chosen at apply by the cost model. Flexible (heterogeneous) auto
+        // stays on the COLUMN/packed path in v1 (flexible 3-way cost ranking is a follow-up). Note ROW mode
+        // needs no __cset__ for the homogeneous case: it takes the standard non-flexible masked full-row
+        // rewrite path (rewrite_segment/rewrite_partial_update).
+        const bool auto_is_partial_update =
+                _flexible_partial_update ||
+                _write_column_ids.size() < static_cast<size_t>(_tablet_schema->num_columns());
+        if (_partial_update_mode == PartialUpdateMode::AUTO_MODE && auto_is_partial_update) {
+            // Level-1 (per-load) column-vs-ROW decision by UPDATE WIDTH -- NOT by read-strictness. ROW mode
+            // (masked full-row rewrite) writes flat, chain-free segments; it wins over the column overlays
+            // once the update is WIDE, because sparse pays per-column machinery (bitmap + column file + DCG
+            // merge per updated column) and dense pays M_seg*W_upd -- both exceed row's bulk rewrite at width.
+            // NARROW updates -> COLUMN, whose per-segment format (dense/sparse; packed/masked for hetero) the
+            // apply-time cost model picks, where read-strict is honored by preferring the read-flat dense
+            // (sparse/packed hard-excluded there). ROW mode carries __cset__ for the flexible-on-row masked
+            // rewrite (single set for homogeneous).
+            const int num_key = _tablet_schema->num_key_columns();
+            const int total_value = std::max(1, static_cast<int>(_tablet_schema->num_columns()) - num_key);
+            const int upd_value = std::max(0, static_cast<int>(_write_column_ids.size()) - num_key);
+            const double frac = static_cast<double>(upd_value) / static_cast<double>(total_value);
+            // "wide" iff many columns absolutely (>= min_cols) OR a large FRACTION of a small table. The
+            // fraction branch needs an absolute floor (>=2 updated cols): otherwise on a few-column table a
+            // single-column update (e.g. 1 of 4 = 0.25) trips the fraction and mis-routes a genuinely NARROW
+            // update to ROW. A 1-column update is never "wide". (calibration)
+            const bool wide = (upd_value >= config::sdcg_auto_row_width_min_cols) ||
+                              (upd_value >= 2 && frac >= config::sdcg_auto_row_width_frac);
+            _partial_update_mode = wide ? PartialUpdateMode::ROW_MODE : PartialUpdateMode::COLUMN_UPDATE_MODE;
+            _auto_resolved = true; // recorded into txn_meta so apply runs the adaptive cost model
+            if (wide) {
+                StorageMetrics::instance()->sdcg_write_mode_row_total.increment(1);
+            }
+        }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         _partial_schema_with_sort_key_conflict = starrocks::DeltaWriter::is_partial_update_with_sort_key_conflict(
                 _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns());
-        _write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
+        auto write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
+        // Append the synthetic "__cset__" set-id column (reserved uid) so the set-id flows
+        // into the op_write .dat (lake's update payload), mirroring the local .upt path.
+        if (_flexible_partial_update) {
+            TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, LogicalType::TYPE_SMALLINT, /*is_nullable=*/false);
+            cset_col.set_name(LOAD_CSET_COLUMN);
+            cset_col.set_unique_id(kCsetReservedColumnUid);
+            cset_col.set_length(sizeof(int16_t));
+            write_schema->append_column(cset_col);
+        }
+        _write_schema = write_schema;
     }
 
     auto sort_key_idxes = _write_schema->sort_key_idxes();
@@ -787,7 +874,11 @@ Status DeltaWriterImpl::init_write_schema() {
 }
 
 bool DeltaWriterImpl::is_partial_update() const {
-    return _write_schema->num_columns() < _tablet_schema->num_columns();
+    // SDCG flexible: when the union of per-row column sets covers every base column, _write_schema
+    // (= base columns + appended synthetic "__cset__") has >= num_columns, so the column-count test
+    // alone would mis-classify the load as a full upsert. It is still a column-mode partial update
+    // (per-row presence decides which columns each row actually writes), so force partial here.
+    return _flexible_partial_update || _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 
 Status DeltaWriterImpl::merge_blocks_to_segments() {
@@ -930,6 +1021,12 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
             for (auto i = 0; i < _write_schema->columns().size(); ++i) {
                 const auto& tablet_column = _write_schema->column(i);
+                // SDCG flexible: the trailing synthetic "__cset__" column (reserved uid) is
+                // physical in the op_write .dat but maps to no base column, so it is excluded
+                // from partial_update_column_ids/unique_ids (which keep meaning the UNION).
+                if (tablet_column.unique_id() == kCsetReservedColumnUid) {
+                    continue;
+                }
                 op_write->mutable_txn_meta()->add_partial_update_column_ids(_write_column_ids[i]);
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
@@ -941,10 +1038,34 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
+            if (_auto_resolved) {
+                op_write->mutable_txn_meta()->set_partial_update_auto_resolved(true);
+            }
             if (_column_to_expr_value != nullptr) {
                 for (auto& [name, value] : (*_column_to_expr_value)) {
                     op_write->mutable_txn_meta()->mutable_column_to_expr_value()->insert({name, value});
                 }
+            }
+            // SDCG flexible partial update: fold the per-load set-id dictionary (interned by
+            // the JSON scanner, keyed by txn_id) into txn_meta.distinct_column_sets. The
+            // registry's presence-with-sets is the flexible signal (see rowset_writer.cpp
+            // and the registry cross-node note). partial_update_column_unique_ids above keep
+            // meaning the UNION, so legacy / old-CN readers degrade to one wider homogeneous
+            // partial update. _tablet_schema is the full schema, authoritative for uids.
+            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(_txn_id);
+                dict != nullptr && dict->size() > 0) {
+                auto sets = dict->snapshot();
+                for (const auto& names : sets) {
+                    auto* set_pb = op_write->mutable_txn_meta()->add_distinct_column_sets();
+                    for (const auto& name : names) {
+                        size_t idx = _tablet_schema->field_index(name);
+                        if (idx >= _tablet_schema->num_columns()) {
+                            continue;
+                        }
+                        set_pb->add_column_unique_ids(_tablet_schema->column(idx).unique_id());
+                    }
+                }
+                op_write->mutable_txn_meta()->set_flexible_partial_update(true);
             }
         }
         // handle condition update

@@ -49,6 +49,17 @@ public:
 
     Status execute_index_major_compaction(TxnLogPB* txn_log);
 
+    // SDCG lightweight overlay-chain convergence (lake PK only). When the scheduled compaction's input
+    // is a single non-overlapped rowset whose deepest sparse `.spcols` overlay chain is at/above
+    // SDCG_COMPACTION_TRIGGER_DEPTH, instead of a full read+rewrite this reads each base segment's
+    // sparse overlay layers, merges them (last-write-wins per (source_rowid, column)) into ONE packed
+    // `.spcols`, and emits a TxnLogPB op_dcg_compaction (publish side rebuilds the DCG). The base
+    // segment is never read. Returns true if it HANDLED the compaction (produced + emitted the txn log),
+    // false to fall through to normal compaction (gate failed, or no segment was eligible to merge).
+    // Always-correct fallback: any segment it cannot represent (inline patches, encrypted DCG, a layer
+    // newer than compact_version, dense/packed layers, < 2 sparse layers) is left unmerged.
+    StatusOr<bool> try_execute_dcg_overlay_merge();
+
     inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
     inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
 

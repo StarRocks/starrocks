@@ -756,6 +756,33 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
 - Introduced in: -
 
+### enable_sparse_dcg
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Master switch for the Sparse Delta Column Group (SDCG) write path used by column-mode partial updates (including `partial_update_mode` values `column`, `auto`, and `flexible`). Shared-data (lake) tables only. When `false` (the default), column-mode partial updates always write dense column files and behavior is unchanged from before SDCG was introduced. When `true`, eligible partial updates may write sparse delta column files instead.
+- Introduced in: -
+
+### sdcg_enable_per_column_zone_map
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Enables an opt-in per-column zone-map pruning refinement for the SDCG read path. Only takes effect when `enable_sparse_dcg` is `true`. When `false` (the default), historical zone-map pruning behavior is preserved.
+- Introduced in: -
+
+### enable_sdcg_compaction_conflict_replay
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Allows lake Primary Key compaction to replay sparse column-group overlays that race with an in-progress compaction onto the compaction output, instead of discarding them. Requires `enable_sparse_dcg` to be `true`; has no effect otherwise.
+- Introduced in: -
+
 ### enable_load_spill_parallel_merge
 
 - Default: true

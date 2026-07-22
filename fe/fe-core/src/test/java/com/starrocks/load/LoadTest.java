@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportMetadataStmt;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
@@ -51,6 +53,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TRoutineLoadMetaColumn;
 import com.starrocks.thrift.TStreamSourceMetaKind;
 import com.starrocks.type.ArrayType;
@@ -145,6 +148,105 @@ public class LoadTest {
         Assertions.assertEquals(2, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
         Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
+    }
+
+    // SDCG flexible partial update: when the flexible flag is set, initColumns must inject the hidden
+    // per-row column-set id "__cset__" as a synthetic SOURCE field (mirroring "__op") and fix its slot
+    // to a materialized SMALLINT so the json scanner has a source slot to fill and the dest slot maps to it.
+    @Test
+    public void testInitColumnsFlexible() throws StarRocksException {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c0Name, null));
+
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, IntegerType.INT, false, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c1Name, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                minTimes = 0;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                minTimes = 0;
+                table.getColumn(c1Name);
+                result = columns.get(1);
+                minTimes = 0;
+                // The hidden set-id column is a source-only field, not a table column.
+                table.getColumn(Load.LOAD_CSET_COLUMN);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        // flexible=true (last arg) + partialUpdate=true drives the __cset__ injection branch.
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, false, true, true);
+
+        SlotDescriptor csetSlot = slotDescByName.get(Load.LOAD_CSET_COLUMN);
+        Assertions.assertNotNull(csetSlot);
+        Assertions.assertTrue(csetSlot.getColumn().getType().equals(IntegerType.SMALLINT));
+        Assertions.assertTrue(csetSlot.isMaterialized());
+    }
+
+    // Exercises the 13-arg initColumns overload (partialUpdate, no flexible flag) so its delegate is covered.
+    @Test
+    public void testInitColumnsPartialUpdateOverload() throws StarRocksException {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c0Name, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                minTimes = 0;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                minTimes = 0;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, false, true);
+        Assertions.assertNotNull(slotDescByName.get(c0Name));
+    }
+
+    // SDCG flexible partial update: getPartialUpateColumns(..., flexible=true, mergeCondition) must
+    // force-include the merge-condition column into the returned union so condition evaluation never
+    // reads a missing column, even when the caller did not list it. Also exercises the legacy 3-arg
+    // overload delegate.
+    @Test
+    public void testGetPartialUpdateColumnsFlexible() throws StarRocksException {
+        Column c0 = new Column("c0", IntegerType.INT, true, null, true, null, "");
+        Column c1 = new Column("c1", IntegerType.INT, false, null, true, null, "");
+        Column mc = new Column("mc", IntegerType.INT, false, null, true, null, "");
+        List<Column> schema = Lists.newArrayList(c0, c1, mc);
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = schema;
+                minTimes = 0;
+            }
+        };
+
+        // The load lists only c0 and c1; "mc" is the merge-condition column and is NOT specified.
+        List<ImportColumnDesc> exprs = Lists.newArrayList(
+                new ImportColumnDesc("c0", null), new ImportColumnDesc("c1", null));
+        List<Column> flexUnion = Load.getPartialUpateColumns(table, exprs, null, true, "mc");
+        // Flexible force-includes the merge-condition column into the union.
+        Assertions.assertEquals(3, flexUnion.size());
+        Assertions.assertTrue(flexUnion.stream().anyMatch(c -> c.getName().equals("mc")));
+
+        // Legacy 3-arg overload (flexible=false, no merge condition): full column list, no throw.
+        List<ImportColumnDesc> fullExprs = Lists.newArrayList(
+                new ImportColumnDesc("c0", null), new ImportColumnDesc("c1", null),
+                new ImportColumnDesc("mc", null));
+        List<Column> union = Load.getPartialUpateColumns(table, fullExprs, null);
+        Assertions.assertEquals(3, union.size());
     }
 
     // A routine-load INCLUDE METADATA clause appends each alias as a hidden source column, fixed to the
@@ -814,5 +916,110 @@ public class LoadTest {
 
         Assertions.assertNull(exprsByName.get(Load.LOAD_OP_COLUMN));
         Assertions.assertNull(slotDescByName.get(Load.LOAD_OP_COLUMN));
+    }
+
+    // SDCG: a partial update touching a GIN-indexed column must be forced to ROW mode (a column-mode
+    // overlay carries no inverted index). Covers Load.forceRowModeForInvertedIndexedColumn.
+    @Test
+    public void testForceRowModeForInvertedIndexedColumn(@Mocked OlapTable ginTable, @Mocked OlapTable noIdxTable,
+            @Mocked OlapTable bitmapTable, @Mocked OlapTable nullIdxTable) {
+        Column c0 = new Column("c0", IntegerType.INT, true, null, false, null, "");
+        Column c1 = new Column("c1", VarcharType.VARCHAR, false, null, true, null, "");
+        Index gin = new Index("gin_idx", Lists.newArrayList(c1.getColumnId()), IndexDef.IndexType.GIN, "");
+        Index bitmap = new Index("bm_idx", Lists.newArrayList(c1.getColumnId()), IndexDef.IndexType.BITMAP, "");
+
+        new Expectations() {
+            {
+                ginTable.getIndexes();
+                result = Lists.newArrayList(gin);
+                minTimes = 0;
+                noIdxTable.getIndexes();
+                result = Lists.newArrayList();
+                minTimes = 0;
+                // A non-GIN (BITMAP) index does not force ROW: the ginColumns set stays empty.
+                bitmapTable.getIndexes();
+                result = Lists.newArrayList(bitmap);
+                minTimes = 0;
+                // getIndexes() may return null; must be treated as "no index".
+                nullIdxTable.getIndexes();
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        // No index at all: mode is unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(noIdxTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+        // Update set includes the GIN column -> forced to ROW.
+        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+        // AUTO is also overridden to ROW when a GIN column is touched.
+        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.AUTO_MODE));
+        // Update touches only the non-GIN column -> unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c0),
+                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+        // Already ROW mode -> early return, unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.ROW_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.ROW_MODE));
+        // Empty update columns -> early return, unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.AUTO_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(ginTable, Lists.newArrayList(),
+                        TPartialUpdateMode.AUTO_MODE));
+        // Non-GIN index only -> ginColumns empty -> unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(bitmapTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+        // getIndexes() == null -> treated as no index, unchanged.
+        Assertions.assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                Load.forceRowModeForInvertedIndexedColumn(nullIdxTable, Lists.newArrayList(c1),
+                        TPartialUpdateMode.COLUMN_UPDATE_MODE));
+    }
+
+    // SDCG: flexible (per-row heterogeneous) partial update is rejected on a non-cloud-native table, with
+    // a merge_condition, or on an auto-increment table. Covers Load.checkFlexiblePartialUpdate.
+    @Test
+    public void testCheckFlexiblePartialUpdate(@Mocked OlapTable localTbl, @Mocked OlapTable cnValid,
+                                               @Mocked OlapTable cnAi) {
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        Column ai = new Column("id", IntegerType.BIGINT, true, null, false, null, "");
+        ai.setIsAutoIncrement(true);
+
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(v);
+                minTimes = 0;
+                cnAi.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnAi.getBaseSchema();
+                result = Lists.newArrayList(ai);
+                minTimes = 0;
+            }
+        };
+
+        // (1) non-cloud-native table (unstubbed mock -> isCloudNative defaults false) -> rejected.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data",
+                () -> Load.checkFlexiblePartialUpdate(localTbl, null));
+
+        // Cloud-native table, no auto-increment, no merge_condition -> valid.
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, null));
+
+        // (2) merge_condition present -> rejected.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
+                () -> Load.checkFlexiblePartialUpdate(cnValid, "v"));
+
+        // (3) auto-increment column present -> rejected.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "auto-increment",
+                () -> Load.checkFlexiblePartialUpdate(cnAi, null));
     }
 }

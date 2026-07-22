@@ -751,6 +751,34 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：部分更新（partial update）每个工作线程的内存上限，用于限制单个 worker 在处理 partial update 时的内存占用。
+
+### enable_sparse_dcg
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 列模式部分更新（包括 `partial_update_mode` 取值为 `column`、`auto`、`flexible` 时）所使用的稀疏 Delta Column Group（Sparse Delta Column Group，SDCG）写入路径的总开关。仅适用于存算分离（lake）表。默认值为 `false`，此时列模式部分更新始终写入稠密（dense）列文件，行为与引入 SDCG 之前保持一致。设置为 `true` 后，符合条件的部分更新可能改为写入稀疏列文件。
+- 引入版本：-
+
+### sdcg_enable_per_column_zone_map
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 为 SDCG 读取路径启用可选的按列 Zone Map 剪枝优化。仅在 `enable_sparse_dcg` 为 `true` 时生效。默认值为 `false`，此时保留历史的 Zone Map 剪枝行为。
+- 引入版本：-
+
+### enable_sdcg_compaction_conflict_replay
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 允许 Lake 主键表 Compaction 在执行过程中，将与之竞争的稀疏列组（sparse column group）重放（replay）到 Compaction 输出中，而不是直接丢弃这些变更。依赖 `enable_sparse_dcg` 为 `true`，否则不生效。
+- 引入版本：-
+
 ### enable_load_spill_parallel_merge
 
 - 默认值：true

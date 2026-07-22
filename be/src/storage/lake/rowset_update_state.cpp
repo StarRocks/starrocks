@@ -21,6 +21,8 @@
 #include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
+#include "common/constexpr.h"
+#include "common/flexible_partial_update.h"
 #include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -239,10 +241,45 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     return Status::OK();
 }
 
+// FLEXIBLE-on-ROW signal: a flexible load whose per-row column-set dictionary was folded into
+// txn_meta. Decoupled from partial_update_mode (the storage MODE is ROW_MODE for this path).
+// Static free function so file-local helpers below can share it; the header exposes the same
+// predicate as RowsetUpdateState::_is_flexible_partial_update for callers outside this file.
+static bool flexible_partial_update_enabled(const TxnLogPB_OpWrite& op_write) {
+    return op_write.has_txn_meta() && op_write.txn_meta().flexible_partial_update() &&
+           op_write.txn_meta().distinct_column_sets_size() > 0;
+}
+
 // Return the id, i.e, position index, of unmodified columns in the |tablet_schema|
 static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_write,
                                                   const TabletSchemaCSPtr& tablet_schema) {
     const auto& txn_meta = op_write.txn_meta();
+
+    // FLEXIBLE-on-ROW: under a flexible load NO value column is guaranteed present for every row
+    // (each row updates a different subset, and the .upt is a DENSE UNION with NULL placeholders
+    // for omitted cells). So the masked full-row rewrite must have a base fallback for EVERY
+    // non-key value column: a row that did not touch column c keeps its base value (or DEFAULT for
+    // a brand-new key). Return the full non-key value-column complement (every non-key, non-auto-
+    // increment column). Key columns are carried separately (they are identical per row). This is
+    // intentionally wider than the homogeneous complement, which only reads columns NOT in the
+    // union; here even union columns need a base read because the union is per-load, not per-row.
+    if (flexible_partial_update_enabled(op_write)) {
+        std::vector<ColumnId> base_read_column_ids;
+        for (uint32_t i = 0, num_cols = tablet_schema->num_columns(); i < num_cols; i++) {
+            const auto& col = tablet_schema->column(i);
+            if (col.is_key()) {
+                continue;
+            }
+            // Auto-increment + flexible is rejected up-front in rewrite_segment; keep the same
+            // shape as the homogeneous path (auto-increment columns are handled separately) so
+            // the complement stays a pure value-column list.
+            if (col.is_auto_increment()) {
+                continue;
+            }
+            base_read_column_ids.push_back(i);
+        }
+        return base_read_column_ids;
+    }
 
     std::set<ColumnUID> modified_column_unique_ids(txn_meta.partial_update_column_unique_ids().begin(),
                                                    txn_meta.partial_update_column_unique_ids().end());
@@ -256,6 +293,110 @@ static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     }
 
     return unmodified_column_ids;
+}
+
+// Drain a `.upt` segment iterator fully into |result_chunk| in physical (upsert) row order.
+// Mirrors ColumnModePartialUpdateHandler::read_chunk_from_update_file (file-local there).
+static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const ChunkUniquePtr& result_chunk) {
+    auto chunk = result_chunk->clone_empty(1024);
+    while (true) {
+        chunk->reset();
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        } else {
+            result_chunk->append(*chunk);
+        }
+    }
+    return Status::OK();
+}
+
+bool RowsetUpdateState::_is_flexible_partial_update(const TxnLogPB_OpWrite& op_write) {
+    return flexible_partial_update_enabled(op_write);
+}
+
+std::vector<std::set<ColumnUID>> RowsetUpdateState::_decode_distinct_column_sets(const RowsetTxnMetaPB& txn_meta) {
+    std::vector<std::set<ColumnUID>> covered;
+    covered.reserve(txn_meta.distinct_column_sets_size());
+    for (const auto& set_pb : txn_meta.distinct_column_sets()) {
+        std::set<ColumnUID> uids;
+        for (uint32_t uid : set_pb.column_unique_ids()) {
+            uids.insert(static_cast<ColumnUID>(uid));
+        }
+        covered.push_back(std::move(uids));
+    }
+    return covered;
+}
+
+StatusOr<std::vector<int32_t>> RowsetUpdateState::_read_cset_column_from_upt(uint32_t segment_id) {
+    // Read the hidden "__cset__" per-row set-id column for this `.upt` segment. The `.upt` carries it
+    // as a real Segment v2 column with the RESERVED unique-id kCsetReservedColumnUid (see
+    // flexible_partial_update.h and the lake delta_writer's synthetic-column append). The Rowset's
+    // tablet_schema() is the FULL base schema and does NOT contain "__cset__", so we synthesize a
+    // single-column TabletSchema carrying "__cset__" (reserved uid + SMALLINT) and let segment
+    // iteration resolve it against the `.upt` footer BY UNIQUE-ID. Ports
+    // ColumnModePartialUpdateHandler::_read_cset_column_from_upt verbatim.
+    DCHECK(_rowset_ptr != nullptr);
+    TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, TYPE_SMALLINT, /*is_nullable=*/false,
+                          static_cast<int32_t>(kCsetReservedColumnUid), sizeof(int16_t));
+    cset_col.set_name(LOAD_CSET_COLUMN);
+    cset_col.set_is_key(false);
+    std::vector<TabletColumn> cset_cols;
+    cset_cols.emplace_back(std::move(cset_col));
+    auto cset_tschema = TabletSchema::copy(*_rowset_ptr->tablet_schema(), cset_cols);
+    // TabletSchema::copy inherits the base schema's num_short_key_columns (e.g. 1 for the PK) but
+    // leaves only the single non-key "__cset__" column (num_key_columns becomes 0). Opening a Segment
+    // with that inconsistency (1 short key over 0 key columns) is unsafe, so pin it to 0 -- mirroring
+    // Segment::new_sparse_dcg_segment / the column-mode handler's reserved-uid read schema.
+    cset_tschema->set_num_short_key_columns(0);
+    Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
+
+    OlapReaderStatistics stats;
+    // Read "__cset__" via a cache-bypassing open bound to cset_tschema: the metacache already holds a
+    // base-schema Segment for this .upt path (loaded earlier in apply) which has NO reader for the
+    // reserved-uid column; a plain get_each_segment_iterator would reuse it and fail.
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator_with_schema(cset_schema, cset_tschema, true, &stats));
+    if (segment_id >= segment_iters.size()) {
+        return Status::InternalError(
+                strings::Substitute("FLEXIBLE-on-ROW: segment_id $0 out of range ($1 segments) reading `$2`",
+                                    segment_id, segment_iters.size(), LOAD_CSET_COLUMN));
+    }
+    DeferOp close_iters([&]() {
+        for (auto& it : segment_iters) {
+            if (it != nullptr) {
+                it->close();
+            }
+        }
+    });
+
+    ChunkUniquePtr cset_chunk = ChunkFactory::new_chunk(cset_schema, DEFAULT_CHUNK_SIZE);
+    RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[segment_id], cset_chunk));
+    const auto& col = cset_chunk->get_column_by_index(0);
+    const LogicalType cset_type = cset_tschema->column(0).type();
+    std::vector<int32_t> set_ids;
+    set_ids.reserve(col->size());
+    for (size_t i = 0; i < col->size(); ++i) {
+        const auto datum = col->get(i);
+        switch (cset_type) {
+        case TYPE_SMALLINT:
+            set_ids.push_back(static_cast<int32_t>(datum.get_int16()));
+            break;
+        case TYPE_INT:
+            set_ids.push_back(datum.get_int32());
+            break;
+        case TYPE_BIGINT:
+            set_ids.push_back(static_cast<int32_t>(datum.get_int64()));
+            break;
+        default:
+            return Status::InternalError(strings::Substitute(
+                    "FLEXIBLE-on-ROW: `$0` column has unexpected type $1 (expected SMALLINT/INT/BIGINT)",
+                    LOAD_CSET_COLUMN, static_cast<int>(cset_type)));
+        }
+    }
+    return set_ids;
 }
 
 // Resolve the rewrite-path vector index options for the dest segment, mirroring the normal lake
@@ -543,9 +684,167 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
     const bool defer_vector_index_build = vector_index_opts.defer_build;
 
+    const bool flexible = _is_flexible_partial_update(params.op_write);
+
     int64_t t_rewrite_start = MonotonicMillis();
-    if (has_auto_increment_partial_update_state(params) &&
-        !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+    if (flexible) {
+        // ============================ FLEXIBLE-on-ROW masked full-row rewrite ============================
+        // Each row of this load updated a DIFFERENT subset of value columns. The .upt is a DENSE UNION
+        // (partial_update_column_unique_ids) with NULL placeholders for cells a row did NOT touch. Feeding
+        // those placeholders verbatim into the rewrite would overwrite base with NULL => SILENT DATA LOSS.
+        // So we apply a per-ROW covered-column MASK: a cell takes the .upt value ONLY if the row's set-id
+        // covers that column; otherwise it keeps the base value already in write_columns (or DEFAULT for a
+        // brand-new key, which get_column_values filled via the with_default path). The result is a complete
+        // set of value columns, which rewrite_full_row_lake writes as a FRESH full segment.
+        //
+        // v1 scope: auto-increment + flexible is rejected (the auto-increment write_column machinery is not
+        // wired through the masked merge). Version-gate is DEFERRED for this POC (homogeneous cluster).
+        // TODO(flexible-row): add a version gate before mixing old/new CN apply of flexible+ROW rowsets.
+        if (has_auto_increment_col) {
+            return Status::NotSupported("FLEXIBLE-on-ROW partial update does not support auto-increment columns in v1");
+        }
+        RETURN_ERROR_IF_FALSE(has_partial_update_state(params),
+                              "FLEXIBLE-on-ROW: expected populated partial update state (union non-empty)");
+
+        // write_columns holds the base values of EVERY non-key value column (see get_read_columns_ids
+        // flexible branch), in unmodified_column_ids order == schema order. They are in UPSERT/physical row
+        // order, the SAME order as the .upt rows and the set_ids vector.
+        MutableColumns& write_columns = _partial_update_states[segment_id].write_columns;
+        RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size(),
+                              "FLEXIBLE-on-ROW: write_columns/unmodified_column_ids length mismatch");
+        const size_t num_upsert_rows = write_columns.empty() ? 0 : write_columns[0]->size();
+        // Release-build OOB backstop: update_rows below only DCHECKs the destination index, so any
+        // per-column length divergence would be a raw out-of-bounds write (the historical OOB class).
+        // _prepare_partial_update_states fills every column with the same append_selective(idxes), so this
+        // holds today; assert it loudly so a future divergence fails instead of corrupting memory.
+        for (size_t p = 0; p < write_columns.size(); ++p) {
+            RETURN_ERROR_IF_FALSE(write_columns[p] != nullptr && write_columns[p]->size() == num_upsert_rows,
+                                  "FLEXIBLE-on-ROW: write_column row count != num_upsert_rows");
+        }
+
+        // (a) per-row set-id vector for this .upt segment, physical row order. ASSERT equal length: set_ids[r],
+        //     write_columns[*][r] and the .upt row r all refer to the SAME upsert row.
+        ASSIGN_OR_RETURN(std::vector<int32_t> set_ids, _read_cset_column_from_upt(segment_id));
+        RETURN_ERROR_IF_FALSE(set_ids.size() == num_upsert_rows,
+                              strings::Substitute("FLEXIBLE-on-ROW: __cset__ row count $0 != upsert row count $1",
+                                                  set_ids.size(), num_upsert_rows));
+
+        // (b) decode the per-set covered value-column uid sets.
+        std::vector<std::set<ColumnUID>> covered = _decode_distinct_column_sets(txn_meta);
+
+        // Map base value-column uid -> its position in write_columns (== position in unmodified_column_ids).
+        std::unordered_map<ColumnUID, size_t> uid_to_write_pos;
+        uid_to_write_pos.reserve(unmodified_column_ids.size());
+        for (size_t p = 0; p < unmodified_column_ids.size(); ++p) {
+            uid_to_write_pos.emplace(params.tablet_schema->column(unmodified_column_ids[p]).unique_id(), p);
+        }
+
+        // (c) read the .upt UNION value columns (partial_update_column_unique_ids, excluding the reserved
+        //     __cset__ uid which is never in that list) into one chunk, in .upt physical row order. Rows
+        //     align with write_columns by bare index r. NOTE: TabletSchema::create_with_uid emits columns in
+        //     SCHEMA (cid) order, NOT in union_uids order, so we resolve each read column's uid from the
+        //     resulting schema (union_schema_ts->column(uc).unique_id()), never by assuming union_uids order.
+        // partial_update_column_unique_ids is the UNION and INCLUDES the PK/key column uids (the load
+        // carries the key per row) and the per-row set-ids in distinct_column_sets also list the key.
+        // The masked merge only overlays NON-KEY value columns (keys are read straight from the .upt by
+        // rewrite_full_row_lake and never live in write_columns), so the key/auto-increment uids must be
+        // filtered out of union_uids here -- exactly as the column-mode handler does
+        // (column_mode_partial_update_handler.cpp:987). Without this, a union column at uid==key has no
+        // write_columns slot and the merge errors, the publish retries forever, and no update lands.
+        std::vector<ColumnUID> union_uids;
+        union_uids.reserve(txn_meta.partial_update_column_unique_ids_size());
+        for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
+            if (static_cast<int32_t>(uid) == kCsetReservedColumnUid) {
+                continue; // defensive: writer already excludes it
+            }
+            int32_t cid = params.tablet_schema->field_index(static_cast<ColumnUID>(uid));
+            if (cid < 0 || params.tablet_schema->column(cid).is_key() ||
+                params.tablet_schema->column(cid).is_auto_increment()) {
+                continue; // keys are read from the .upt by the full-row writer; not overlaid here
+            }
+            union_uids.push_back(static_cast<ColumnUID>(uid));
+        }
+        auto union_schema_ts = TabletSchema::create_with_uid(params.tablet_schema, union_uids);
+        Schema union_schema = ChunkHelper::convert_schema(union_schema_ts);
+
+        OlapReaderStatistics upt_stats;
+        // Read the union value columns via the schema-BOUND (cache-bypassing) iterator, resolving each
+        // column against the .upt footer BY UNIQUE-ID -- exactly like the __cset__ read above. The plain
+        // get_each_segment_iterator opens the .upt with the rowset's BASE schema and resolves the read
+        // columns POSITIONALLY, which mis-reads a partial .upt whose physical layout is the write schema
+        // [keys..., union value cols..., __cset__]: union_schema [c1,c2,c3] would read segment positions
+        // 0,1,2 = [id,c1,c2], shifting every value column by the key count.
+        ASSIGN_OR_RETURN(auto upt_iters, _rowset_ptr->get_each_segment_iterator_with_schema(
+                                                 union_schema, union_schema_ts, true, &upt_stats));
+        RETURN_ERROR_IF_FALSE(segment_id < upt_iters.size(),
+                              "FLEXIBLE-on-ROW: segment_id out of range reading .upt union columns");
+        DeferOp close_upt_iters([&]() {
+            for (auto& it : upt_iters) {
+                if (it != nullptr) {
+                    it->close();
+                }
+            }
+        });
+        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(union_schema, DEFAULT_CHUNK_SIZE);
+        RETURN_IF_ERROR(read_chunk_from_update_file(upt_iters[segment_id], upt_chunk));
+        RETURN_ERROR_IF_FALSE(upt_chunk->num_rows() == num_upsert_rows,
+                              strings::Substitute("FLEXIBLE-on-ROW: .upt union row count $0 != upsert row count $1",
+                                                  upt_chunk->num_rows(), num_upsert_rows));
+        RETURN_ERROR_IF_FALSE(upt_chunk->num_columns() == union_schema_ts->num_columns(),
+                              "FLEXIBLE-on-ROW: .upt union chunk column count != union schema column count");
+
+        // (d) MASKED MERGE: for each union value column (uid u), write_columns[p][r] takes the .upt value
+        //     ONLY for rows r whose set-id covers u; every other row keeps its base value. We build the
+        //     covered-row index list I and gather the corresponding .upt rows, then update_rows lands them
+        //     at exactly those destination positions. uc indexes the read schema; u is read FROM that schema.
+        for (size_t uc = 0; uc < union_schema_ts->num_columns(); ++uc) {
+            const ColumnUID u = union_schema_ts->column(uc).unique_id();
+            auto pos_it = uid_to_write_pos.find(u);
+            // Every union value-column uid is a non-key value column, so it must have a write_columns slot.
+            RETURN_ERROR_IF_FALSE(pos_it != uid_to_write_pos.end(),
+                                  strings::Substitute("FLEXIBLE-on-ROW: union uid $0 has no base column slot", u));
+            const size_t p = pos_it->second;
+            const auto& upt_col = upt_chunk->get_column_by_index(uc);
+
+            std::vector<uint32_t> covered_rows;
+            covered_rows.reserve(num_upsert_rows);
+            for (uint32_t r = 0; r < num_upsert_rows; ++r) {
+                const int32_t set_id = set_ids[r];
+                // (e) bounds-guard set_id (mirror handler.cpp:622-626). upt_rowid==r is bounded by the equal-
+                //     length asserts above.
+                if (set_id < 0 || static_cast<size_t>(set_id) >= covered.size()) {
+                    return Status::InternalError(strings::Substitute(
+                            "FLEXIBLE-on-ROW: set-id $0 out of range of distinct_column_sets (size $1)", set_id,
+                            covered.size()));
+                }
+                if (covered[set_id].count(u) > 0) {
+                    covered_rows.push_back(r);
+                }
+            }
+            if (covered_rows.empty()) {
+                continue; // no row updated this column; base values (already in write_columns) stand.
+            }
+            // Gather the covered rows' .upt values, then overlay them onto the base write_column.
+            auto gathered = upt_col->clone_empty();
+            TRY_CATCH_BAD_ALLOC(gathered->append_selective(*upt_col, covered_rows.data(), 0, covered_rows.size()));
+            RETURN_IF_EXCEPTION(write_columns[p]->update_rows(*gathered, covered_rows.data()));
+        }
+
+        // (f) route to the FRESH full-row writer: key columns read from base + the merged full value
+        //     columns. __cset__ is naturally DROPPED (its reserved uid is not in tablet_schema).
+        SegmentFileInfo file_info;
+        file_info.path = params.tablet->segment_location(dest_path);
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_full_row_lake(
+                src, &file_info, params.tablet_schema, unmodified_column_ids, write_columns, segment_id, params.tablet,
+                std::move(vector_index_opts), &file_info.vector_index_ids));
+        file_info.path = dest_path;
+        // The dest is a complete fresh segment written through column writers for the whole schema, so any
+        // sync vector index is built inline here (its ids captured into file_info.vector_index_ids by
+        // rewrite_full_row_lake), carrying nothing from src -- mirrors rewrite_auto_increment_lake.
+        stamp_rewrite_vector_index_owner(params, &file_info);
+        (*replace_segments)[segment_id] = file_info;
+    } else if (has_auto_increment_partial_update_state(params) &&
+               !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(

@@ -207,7 +207,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 | timezone | 否 | 加载作业使用的时区。默认值：`Asia/Shanghai`。此参数的值会影响 strftime、alignment_timestamp 和 from_unixtime 等函数返回的结果。此参数指定的时区为会话级时区。更多信息，请参见[配置时区](../../../administration/management/timezone.md)。|
 | load_mem_limit | 否 | 可分配给加载作业的最大内存量。单位：字节。默认情况下，加载作业的最大内存大小为 2 GB。此参数的值不能超过每个 BE 或 CN 可分配的最大内存量。|
 | partial_update | 否 | 是否使用部分更新。有效值：`TRUE` 和 `FALSE`。默认值：`FALSE`，表示禁用此功能。|
-| partial_update_mode | 否 | 指定部分更新的模式。有效值：`row` 和 `column`。<ul><li> 值 `row`（默认）表示行模式的部分更新，更适合列数较多、批量较小的实时更新场景。</li><li>值 `column` 表示列模式的部分更新，更适合列数较少、行数较多的批量更新场景。在此类场景中，启用列模式可提供更快的更新速度。例如，在一张有 100 列的表中，如果只更新 10 列（占总列数的 10%）的所有行，列模式的更新速度是行模式的 10 倍。</li></ul> |
+| partial_update_mode | 否 | 指定部分更新的模式。有效值：`row`、`column`、`auto`、`flexible` 和 `flexible_row`。<ul><li> 值 `row`（默认）表示行模式的部分更新，更适合列数较多、批量较小的实时更新场景。</li><li>值 `column` 表示列模式的部分更新，更适合列数较少、行数较多的批量更新场景。在此类场景中，启用列模式可提供更快的更新速度。例如，在一张有 100 列的表中，如果只更新 10 列（占总列数的 10%）的所有行，列模式的更新速度是行模式的 10 倍。</li><li>值 `auto`（实验性）表示由 StarRocks 根据更新列宽度以及读写敏感度，自动为每次导入选择行模式或列模式。对于主键表上 JSON 格式的部分更新，`auto` 还会启用按行的异构列集合更新（详见下方 `flexible`）。</li><li>值 `flexible`（实验性；仅支持存算分离/云原生主键表）允许 JSON 格式部分更新中的每一行更新不同的列子集（即异构部分更新），行中未涉及的列保留原值。该模式通过列模式（稀疏）写入路径实现。</li><li>值 `flexible_row`（实验性；仅支持存算分离）与 `flexible` 具有相同的按行异构更新语义，但通过行模式（重写整行）实现。</li></ul>**注意**<br />`auto`、`flexible` 和 `flexible_row` 均为实验性特性。<br />`flexible` 和 `flexible_row` 仅支持存算分离（云原生）主键表，不能与 `merge_condition` 同时使用，且不支持包含 AUTO_INCREMENT 列的表。<br />如果部分更新涉及的列上存在 GIN（倒排）索引，StarRocks 会自动以行模式执行该更新，以保证索引的一致性。<br />`column`/`auto`/`flexible` 底层依赖的稀疏写入路径默认关闭，由 BE 配置项 `enable_sparse_dcg` 控制。 |
 | merge_condition | 否 | 指定用作条件的列名，以确定更新是否生效。只有当源数据记录在指定列中的值大于或等于目标数据记录时，从源记录到目标记录的更新才会生效。系统从 v2.5 版本开始支持条件更新。<br />**注意**<br />您指定的列不能是主键列。此外，只有使用主键表的表才支持条件更新。|
 
 ## 列映射

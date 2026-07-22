@@ -248,6 +248,11 @@ struct TOlapTableSink {
     // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
     // it knows every target CN supports the mode (rolling-upgrade interlock).
     35: optional bool enable_lake_per_partition_coordinator_txn_log
+    // SDCG flexible partial update: when true, different rows of one load may update
+    // different column subsets. FE injects a hidden "__cset__" SMALLINT slot (per-row
+    // set-id) immediately before the "__op" slot so "__op" stays the last column.
+    // Only set when the load is a JSON/CDC partial update in flexible mode.
+    36: optional bool flexible_partial_update
 }
 
 struct TSchemaTableSink {
