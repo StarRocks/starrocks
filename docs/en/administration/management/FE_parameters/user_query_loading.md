@@ -229,7 +229,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `enable_active_materialized_view_schema_strict_check`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -641,18 +641,18 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `max_scalar_operator_flat_children`
 
-- Default：10000
-- Type：Int
-- Unit：-
+- Default: 10000
+- Type: Int
+- Unit: -
 - Is mutable: Yes
-- Description：The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
+- Description: The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
 - Introduced in: -
 
 ### `max_scalar_operator_optimize_depth`
 
-- Default：256
-- Type：Int
-- Unit：-
+- Default: 256
+- Type: Int
+- Unit: -
 - Is mutable: Yes
 - Description: The maximum depth that ScalarOperator optimization can be applied.
 - Introduced in: -
@@ -744,7 +744,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `slow_query_analyze_threshold`
 
-- Default: 5
+- Default: 5000
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -816,7 +816,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `statistic_collect_interval_sec`
 
-- Default: 5 * 60
+- Default: 10 * 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes

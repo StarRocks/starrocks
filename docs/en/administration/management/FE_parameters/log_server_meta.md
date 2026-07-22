@@ -1311,7 +1311,7 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_background_refresh_connector_metadata`
 
-- Default: true in v3.0 and later and false in v2.5
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
