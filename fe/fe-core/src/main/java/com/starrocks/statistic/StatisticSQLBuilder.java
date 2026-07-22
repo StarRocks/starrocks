@@ -64,10 +64,15 @@ public class StatisticSQLBuilder {
                     + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
+    // Collection jobs persist min/max as IFNULL(MAX(col), ''), so an all-NULL partition stores ''
+    // rather than NULL. The '' must be mapped back to NULL before the $type cast: the internal
+    // statistics session inherits the global sql_mode, and under ERROR_IF_OVERFLOW casting '' to a
+    // numeric/date type aborts the whole batched load instead of yielding NULL.
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION_V2 + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
                     + " cast(avg(collection_size) as bigint)"
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
@@ -81,10 +86,26 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+<<<<<<< HEAD
+=======
+    // table_uuid isn't part of the projection and the predicate already scopes rows to a single
+    // logical table via table_uuid in (hash, raw) (see buildTableUUIDInPredicate), so grouping by
+    // column_name alone is enough to merge a table's data regardless of which representation any
+    // given partition currently uses.
+    //
+    // The inner subquery additionally dedups to at most one row per (partition_name, column_name),
+    // keeping only the one with the latest update_time. This is what actually prevents double-
+    // counting when a partition has been re-collected (fresh row under the hashed key) but its
+    // superseded raw-keyed row hasn't been cleaned up yet - correctness does not depend on that
+    // best-effort cleanup (see ExternalFullStatisticsCollectJob#cleanupStaleRawKeyedRows) succeeding.
+    // nullif(x, '') for the same reason as QUERY_FULL_STATISTIC_TEMPLATE: '' is the persisted
+    // representation of "no min/max" and must not reach the $type cast.
+>>>>>>> a80d4b2037 ([BugFix] Fix statistics cache load failure on empty min/max under ERROR_IF_OVERFLOW (#76684))
     private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
                     + " max(update_time)"
                     + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
