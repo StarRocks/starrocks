@@ -1026,13 +1026,18 @@ public class ExpressionStatisticCalculator {
                     .mapToDouble(ColumnStatistic::getNullsFraction)
                     .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
             double distinctValues = Math.min(rowCount,
-                    inputs.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
+                    inputs.stream()
+                            .filter(s -> s.getNullsFraction() < 1.0)
+                            .mapToDouble(ColumnStatistic::getDistinctValuesCount)
+                            .sum());
             double coalesceMin = Double.NEGATIVE_INFINITY;
             double coalesceMax = Double.POSITIVE_INFINITY;
             if (callOperator.getChildren().stream().allMatch(c -> c.getType().isNumericType())) {
                 coalesceMin = inputs.stream()
+                        .filter(s -> s.getNullsFraction() < 1.0)
                         .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
                 coalesceMax = inputs.stream()
+                        .filter(s -> s.getNullsFraction() < 1.0)
                         .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
             }
             Map<String, Long> mcv = buildCoalesceMcv(inputs);
@@ -1044,7 +1049,7 @@ public class ExpressionStatisticCalculator {
                     .setDistinctValuesCount(distinctValues);
 
             if (!mcv.isEmpty()) {
-                builder.setHistogram(new Histogram(Collections.emptyList(), buildCoalesceMcv(inputs)));
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
             }
 
             return builder.build();
