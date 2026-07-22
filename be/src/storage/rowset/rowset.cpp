@@ -816,6 +816,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.bm25_score_max = options.bm25_score_max;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.inverted_index_non_scored_limit = options.inverted_index_non_scored_limit;
+    seg_options.inverted_index_non_scored_limit_budget = options.inverted_index_non_scored_limit_budget;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());

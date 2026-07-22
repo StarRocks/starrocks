@@ -14,8 +14,10 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string_view>
 #include <unordered_map>
 
@@ -351,6 +353,17 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
+    }
+
+    // Non-scored LIMIT pushdown into the inverted index. Only a candidate: SegmentIterator
+    // re-checks that the index alone answers the predicate before honouring it. Any conjunct
+    // this scan evaluates ABOVE the segment iterator can drop rows, so a truncated hit set
+    // would under-fill the result -- require the scan output to be final.
+    if (_limit > 0 && !_use_bm25_score && not_pushdown_conjuncts.empty() && _non_pushdown_pred_tree.empty()) {
+        _params.inverted_index_non_scored_limit =
+                static_cast<int32_t>(std::min<int64_t>(_limit, std::numeric_limits<int32_t>::max()));
+        _params.inverted_index_non_scored_limit_budget = _scan_ctx->non_scored_limit_budget();
+        _runtime_profile->add_info_string("InvertedIndexNonScoredLimitCandidate", std::to_string(_limit));
     }
 
     // Range

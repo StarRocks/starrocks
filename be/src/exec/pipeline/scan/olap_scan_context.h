@@ -85,12 +85,14 @@ private:
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
-                             BalancedChunkBuffer& chunk_buffer, ConcurrentJitRewriter& jit_rewriter)
+                             BalancedChunkBuffer& chunk_buffer, ConcurrentJitRewriter& jit_rewriter,
+                             std::shared_ptr<std::atomic<int64_t>> non_scored_limit_budget)
             : _scan_node(scan_node),
               _scan_table_id(scan_table_id),
               _chunk_buffer(chunk_buffer),
               _shared_scan(shared_scan),
-              _jit_rewriter(jit_rewriter) {}
+              _jit_rewriter(jit_rewriter),
+              _non_scored_limit_budget(std::move(non_scored_limit_budget)) {}
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -125,6 +127,9 @@ public:
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
+    const std::shared_ptr<std::atomic<int64_t>>& non_scored_limit_budget() const {
+        return _non_scored_limit_budget;
+    }
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_source_observers(); }
@@ -168,6 +173,10 @@ private:
     std::vector<TabletSharedPtr> _tablets;
     MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
+    // One budget per physical scan node, shared by every driver/tablet/segment.
+    // Tantivy claims from it while decoding postings so a non-scored LIMIT can
+    // stop globally instead of materializing limit rows in every segment.
+    std::shared_ptr<std::atomic<int64_t>> _non_scored_limit_budget;
 
     // the scan operator observe when task finished
     Observable _observable;
@@ -178,15 +187,7 @@ private:
 class OlapScanContextFactory {
 public:
     OlapScanContextFactory(OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue, bool shared_scan,
-                           ChunkBufferLimiterPtr chunk_buffer_limiter)
-            : _scan_node(scan_node),
-              _dop(dop),
-              _shared_morsel_queue(shared_morsel_queue),
-              _shared_scan(shared_scan),
-              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
-                            std::move(chunk_buffer_limiter)),
-              _contexts(shared_morsel_queue ? 1 : dop),
-              _jit_rewriter(dop) {}
+                           ChunkBufferLimiterPtr chunk_buffer_limiter);
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
@@ -202,6 +203,7 @@ private:
     int64_t _scan_table_id = -1;
     std::vector<OlapScanContextPtr> _contexts;
     ConcurrentJitRewriter _jit_rewriter;
+    std::shared_ptr<std::atomic<int64_t>> _non_scored_limit_budget;
 };
 
 } // namespace pipeline

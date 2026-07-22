@@ -34,10 +34,17 @@ fn build(values: &[&str]) -> TempDir {
 // a thread-local so a test can compare against the Vec-returning query.
 thread_local! {
     static SINK_IDS: std::cell::RefCell<Vec<u32>> = std::cell::RefCell::new(Vec::new());
+    static SINK_BUDGET: std::cell::Cell<usize> = const { std::cell::Cell::new(usize::MAX) };
 }
-extern "C" fn test_sink(_ctx: *mut std::ffi::c_void, ids: *const u32, len: usize) {
-    let s = unsafe { std::slice::from_raw_parts(ids, len) };
+extern "C" fn test_sink(_ctx: *mut std::ffi::c_void, ids: *const u32, len: usize) -> usize {
+    let accepted = SINK_BUDGET.with(|budget| {
+        let accepted = len.min(budget.get());
+        budget.set(budget.get() - accepted);
+        accepted
+    });
+    let s = unsafe { std::slice::from_raw_parts(ids, accepted) };
     SINK_IDS.with(|b| b.borrow_mut().extend_from_slice(s));
+    accepted
 }
 fn drain_sink() -> Vec<u32> {
     SINK_IDS.with(|b| {
@@ -49,6 +56,16 @@ fn drain_sink() -> Vec<u32> {
 }
 fn test_bitmap_sink() -> BitmapSink {
     SINK_IDS.with(|b| b.borrow_mut().clear());
+    SINK_BUDGET.with(|b| b.set(usize::MAX));
+    BitmapSink {
+        ctx: std::ptr::null_mut(),
+        append: test_sink,
+    }
+}
+
+fn limited_bitmap_sink(budget: usize) -> BitmapSink {
+    SINK_IDS.with(|b| b.borrow_mut().clear());
+    SINK_BUDGET.with(|b| b.set(budget));
     BitmapSink {
         ctx: std::ptr::null_mut(),
         append: test_sink,
@@ -86,15 +103,15 @@ fn bitmap_variants_match_vec_variants() {
     let mut want = r.match_all_query(&["alpha", "beta"]).expect("all");
     want.sort_unstable();
     // ratio 0.5 → bitmap-AND path (alpha/beta both high-freq in this tiny index)
-    r.match_all_query_bitmap(&["alpha", "beta"], 0.5, test_bitmap_sink())
+    r.match_all_query_bitmap(&["alpha", "beta"], 0.5, 0, test_bitmap_sink())
         .expect("all bitmap");
     assert_eq!(drain_sink(), want, "match_all bitmap-AND == vec");
     // ratio 1.0 → leapfrog fallback (general collector)
-    r.match_all_query_bitmap(&["alpha", "beta"], 1.0, test_bitmap_sink())
+    r.match_all_query_bitmap(&["alpha", "beta"], 1.0, 0, test_bitmap_sink())
         .expect("all leapfrog");
     assert_eq!(drain_sink(), want, "match_all leapfrog == vec");
     // absent MUST term → empty
-    r.match_all_query_bitmap(&["alpha", "zzz"], 0.5, test_bitmap_sink())
+    r.match_all_query_bitmap(&["alpha", "zzz"], 0.5, 0, test_bitmap_sink())
         .expect("all absent");
     assert_eq!(
         drain_sink(),
@@ -105,25 +122,40 @@ fn bitmap_variants_match_vec_variants() {
     // MATCH_ANY
     let mut want = r.match_any_query(&["beta", "delta"]).expect("any");
     want.sort_unstable();
-    r.match_any_query_bitmap(&["beta", "delta"], test_bitmap_sink())
+    r.match_any_query_bitmap(&["beta", "delta"], 0, test_bitmap_sink())
         .expect("any bitmap");
     assert_eq!(drain_sink(), want, "match_any bitmap == vec");
 
     // EQUAL / term
     let mut want = r.term_query("gamma").expect("term");
     want.sort_unstable();
-    r.term_query_bitmap("gamma", test_bitmap_sink())
+    r.term_query_bitmap("gamma", 0, test_bitmap_sink())
         .expect("term bitmap");
     assert_eq!(drain_sink(), want, "term bitmap == vec");
 
     // absent term → empty
-    r.term_query_bitmap("zzz", test_bitmap_sink())
+    r.term_query_bitmap("zzz", 0, test_bitmap_sink())
         .expect("absent bitmap");
     assert_eq!(
         drain_sink(),
         Vec::<u32>::new(),
         "absent term → empty bitmap"
     );
+}
+
+#[test]
+fn bitmap_limit_stops_on_shared_sink_budget() {
+    let tmp = build(&["alpha", "alpha", "alpha", "alpha", "alpha"]);
+    let r = IndexReaderWrapper::load(tmp.path(), "f", "english").expect("load");
+
+    r.term_query_bitmap("alpha", 5, limited_bitmap_sink(2))
+        .expect("limited term");
+    assert_eq!(drain_sink().len(), 2);
+
+    // The local limit is also enforced when the caller accepts every row.
+    r.term_query_bitmap("alpha", 3, test_bitmap_sink())
+        .expect("local limit");
+    assert_eq!(drain_sink().len(), 3);
 }
 
 #[test]

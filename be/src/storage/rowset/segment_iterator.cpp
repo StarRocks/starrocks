@@ -2447,8 +2447,23 @@ Status SegmentIterator::_apply_inverted_index() {
         cid_2_fid.emplace(_schema.field(i)->id(), i);
     }
 
-    for (const auto& [cid, pred_list] : _opts.pred_tree.get_immediate_column_predicate_map()) {
-        InvertedIndexIterator* inverted_iter = inverted_index_iterators[cid];
+    const auto& immediate_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
+    const bool can_pushdown_non_scored_limit =
+            _opts.inverted_index_non_scored_limit > 0 &&
+            _opts.inverted_index_non_scored_limit_budget != nullptr &&
+            _opts.inverted_index_non_scored_limit_budget->load(std::memory_order_relaxed) > 0 &&
+            !_opts.use_bm25_score && !_opts.is_primary_keys && !_opts.has_preaggregation &&
+            _opts.delete_predicates.empty() && _opts.runtime_filter_preds.empty() &&
+            !_opts.runtime_range_pruner.has_runtime_filters() &&
+            !_opts.sample_options.enable_sampling && _scan_range.span_size() == num_rows() &&
+            _opts.pred_tree.size() == 1 && immediate_predicates.size() == 1 &&
+            immediate_predicates.begin()->second.size() == 1 &&
+            immediate_predicates.begin()->second[0]->type() == PredicateType::kExpr &&
+            down_cast<const ColumnExprPredicate*>(immediate_predicates.begin()->second[0])
+                    ->can_pushdown_non_scored_limit();
+
+    for (const auto& [cid, pred_list] : immediate_predicates) {
+        InvertedIndexIterator* inverted_iter = _inverted_index_ctx->inverted_index_iterators[cid];
         if (inverted_iter == nullptr) {
             continue;
         }
@@ -2456,6 +2471,10 @@ Status SegmentIterator::_apply_inverted_index() {
         RETURN_IF(it == cid_2_fid.end(),
                   Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
         std::string column_name(_schema.field(it->second)->name());
+        if (can_pushdown_non_scored_limit) {
+            inverted_iter->set_non_scored_limit(_opts.inverted_index_non_scored_limit,
+                                                _opts.inverted_index_non_scored_limit_budget.get());
+        }
         if (_inverted_index_ctx->bm25_score_requested) {
             // Push the SQL LIMIT into the scored GIN query so tantivy returns only
             // the top-k rows (see InvertedIndexIterator::set_bm25_topk_limit).

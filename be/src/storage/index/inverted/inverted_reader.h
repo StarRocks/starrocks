@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <unordered_map>
 #include <utility>
 
@@ -44,6 +45,14 @@ public:
 
     virtual Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
                          InvertedIndexQueryType query_type, roaring::Roaring* bit_map) = 0;
+
+    // Non-scored query with an index-side row limit. Implementations that do
+    // not support scorer early termination fall back to the complete query.
+    virtual Status query_limited(OlapReaderStatistics* stats, const std::string& column_name,
+                                 const void* query_value, InvertedIndexQueryType query_type, int32_t limit,
+                                 std::atomic<int64_t>* global_budget, roaring::Roaring* bit_map) {
+        return query(stats, column_name, query_value, query_type, bit_map);
+    }
 
     // Like query(), but also emits a BM25 relevance score per matched row into
     // `row_to_score` (segment-local row id -> score), to back a SQL score()

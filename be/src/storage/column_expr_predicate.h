@@ -65,6 +65,11 @@ public:
                                roaring::Roaring* row_bitmap,
                                std::unordered_map<uint32_t, float>* row_to_score = nullptr) const override;
 
+    // True only for a positive MATCH/LIKE expression that can be answered
+    // completely by the inverted index. NOT predicates cannot use a limited
+    // hit set because their complement needs every matching row id.
+    bool can_pushdown_non_scored_limit() const;
+
     const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
 
 private:

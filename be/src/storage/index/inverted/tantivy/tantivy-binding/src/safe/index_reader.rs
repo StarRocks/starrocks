@@ -35,7 +35,9 @@ use std::path::Path;
 use tantivy::collector::{Collector, SegmentCollector, TopDocs};
 use tantivy::columnar::Column;
 use tantivy::directory::MmapDirectory;
-use tantivy::query::{BooleanQuery, Occur, PhraseQuery, Query, RegexQuery, TermQuery};
+use tantivy::query::{
+    BooleanQuery, EnableScoring, Occur, PhraseQuery, Query, RegexQuery, TermQuery,
+};
 use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::{
     Directory, DocSet, Index, IndexReader, InvertedIndexReader, ReloadPolicy, Score,
@@ -51,7 +53,7 @@ const BITMAP_FLUSH_BLOCK: usize = 4096;
 /// (the C++ side does `roaring::Roaring::addMany`).
 /// `set_bitset` callback so tantivy hits stream straight into the result bitmap
 /// without a `Vec<u32>` round-trip.
-pub type SetBitmapFn = extern "C" fn(ctx: *mut c_void, ids: *const u32, len: usize);
+pub type SetBitmapFn = extern "C" fn(ctx: *mut c_void, ids: *const u32, len: usize) -> usize;
 
 /// Opaque bitmap pointer + append callback handed to the direct-bitmap
 /// collector. Holds raw pointers, but the reader uses tantivy's single-threaded
@@ -68,10 +70,11 @@ unsafe impl Sync for BitmapSink {}
 
 impl BitmapSink {
     #[inline]
-    fn flush(&self, ids: &[u32]) {
-        if !ids.is_empty() {
-            (self.append)(self.ctx, ids.as_ptr(), ids.len());
+    fn flush(&self, ids: &[u32]) -> usize {
+        if ids.is_empty() {
+            return 0;
         }
+        (self.append)(self.ctx, ids.as_ptr(), ids.len())
     }
 }
 
@@ -279,20 +282,81 @@ impl IndexReaderWrapper {
     // caller's bitmap via `sink`, block by block, through one generic collector
     // that works for any tantivy Query (EQUAL/ANY/ALL/PHRASE/WILDCARD).
 
-    fn collect_to_bitmap(&self, query: &dyn Query, sink: BitmapSink) -> Result<()> {
+    fn collect_to_bitmap(&self, query: &dyn Query, limit: usize, sink: BitmapSink) -> Result<()> {
         let searcher = self.reader.searcher();
+        if limit > 0 {
+            // Collector::collect_segment cannot interrupt Weight iteration. Walk
+            // each scorer directly so reaching either the local LIMIT or the
+            // caller's shared budget stops posting-list decoding immediately.
+            let weight = query.weight(EnableScoring::disabled_from_searcher(&searcher))?;
+            let mut remaining = limit;
+            let mut docs = [0u32; COLLECT_BLOCK_BUFFER_LEN];
+            let mut ids = Vec::with_capacity(COLLECT_BLOCK_BUFFER_LEN);
+            for seg in searcher.segment_readers() {
+                let mut scorer = weight.scorer(seg, 1.0)?;
+                let row_id = seg.fast_fields().u64("row_id")?;
+                let max_doc = seg.max_doc();
+                let base = if max_doc > 0 {
+                    row_id.values_for_doc(0).next()
+                } else {
+                    None
+                };
+                let last = if max_doc > 0 {
+                    row_id.values_for_doc(max_doc - 1).next()
+                } else {
+                    None
+                };
+                let contiguous = max_doc > 0
+                    && matches!((base, last), (Some(b), Some(l)) if l == b + (max_doc as u64 - 1));
+                let base = base.unwrap_or(0) as u32;
+                loop {
+                    let count = scorer.fill_buffer(&mut docs);
+                    ids.clear();
+                    for &doc in &docs[..count] {
+                        if seg
+                            .alive_bitset()
+                            .is_some_and(|alive| alive.is_deleted(doc))
+                        {
+                            continue;
+                        }
+                        if contiguous {
+                            ids.push(base + doc);
+                        } else if let Some(rid) = row_id.values_for_doc(doc).next() {
+                            ids.push(rid as u32);
+                        }
+                        if ids.len() >= remaining {
+                            break;
+                        }
+                    }
+                    let accepted = sink.flush(&ids);
+                    remaining = remaining.saturating_sub(accepted);
+                    if accepted < ids.len() || remaining == 0 {
+                        return Ok(());
+                    }
+                    if count < COLLECT_BLOCK_BUFFER_LEN {
+                        break;
+                    }
+                }
+            }
+            return Ok(());
+        }
         searcher.search(query, &BitmapCollector { sink })?;
         Ok(())
     }
 
     /// EQUAL / single-term, streamed into `sink`.
-    pub fn term_query_bitmap(&self, term_text: &str, sink: BitmapSink) -> Result<()> {
+    pub fn term_query_bitmap(&self, term_text: &str, limit: usize, sink: BitmapSink) -> Result<()> {
         let term = Term::from_field_text(self.text_field, term_text);
-        self.collect_to_bitmap(&TermQuery::new(term, IndexRecordOption::Basic), sink)
+        self.collect_to_bitmap(&TermQuery::new(term, IndexRecordOption::Basic), limit, sink)
     }
 
     /// MATCH_ANY (BooleanQuery SHOULD), streamed into `sink`.
-    pub fn match_any_query_bitmap(&self, terms: &[&str], sink: BitmapSink) -> Result<()> {
+    pub fn match_any_query_bitmap(
+        &self,
+        terms: &[&str],
+        limit: usize,
+        sink: BitmapSink,
+    ) -> Result<()> {
         let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
             .iter()
             .map(|t| {
@@ -301,7 +365,7 @@ impl IndexReaderWrapper {
                 (Occur::Should, q)
             })
             .collect();
-        self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink)
+        self.collect_to_bitmap(&BooleanQuery::new(subqueries), limit, sink)
     }
 
     /// MATCH_ALL, streamed into `sink`. When every term is high-frequency (the
@@ -315,10 +379,23 @@ impl IndexReaderWrapper {
         &self,
         terms: &[&str],
         min_df_ratio: f64,
+        limit: usize,
         sink: BitmapSink,
     ) -> Result<()> {
         if terms.is_empty() {
             return Ok(());
+        }
+        if limit > 0 {
+            let subqueries: Vec<(Occur, Box<dyn Query>)> = terms
+                .iter()
+                .map(|t| {
+                    let term = Term::from_field_text(self.text_field, t);
+                    let q: Box<dyn Query> =
+                        Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+                    (Occur::Must, q)
+                })
+                .collect();
+            return self.collect_to_bitmap(&BooleanQuery::new(subqueries), limit, sink);
         }
         let searcher = self.reader.searcher();
         let num_docs = searcher.num_docs();
@@ -342,7 +419,7 @@ impl IndexReaderWrapper {
                     (Occur::Must, q)
                 })
                 .collect();
-            return self.collect_to_bitmap(&BooleanQuery::new(subqueries), sink);
+            return self.collect_to_bitmap(&BooleanQuery::new(subqueries), 0, sink);
         }
 
         // Bitmap-AND path: all terms high-frequency, no selective lead.
@@ -421,8 +498,14 @@ impl IndexReaderWrapper {
     }
 
     /// MATCH_PHRASE, streamed into `sink`.
-    pub fn phrase_query_bitmap(&self, terms: &[&str], slop: u32, sink: BitmapSink) -> Result<()> {
-        self.phrase_query_bitmap_with_positions(terms, None, slop, sink)
+    pub fn phrase_query_bitmap(
+        &self,
+        terms: &[&str],
+        slop: u32,
+        limit: usize,
+        sink: BitmapSink,
+    ) -> Result<()> {
+        self.phrase_query_bitmap_with_positions(terms, None, slop, limit, sink)
     }
 
     pub fn phrase_query_bitmap_with_positions(
@@ -430,18 +513,19 @@ impl IndexReaderWrapper {
         terms: &[&str],
         positions: Option<&[u32]>,
         slop: u32,
+        limit: usize,
         sink: BitmapSink,
     ) -> Result<()> {
         if terms.is_empty() {
             return Ok(());
         }
         if terms.len() == 1 {
-            return self.term_query_bitmap(terms[0], sink);
+            return self.term_query_bitmap(terms[0], limit, sink);
         }
         let mut pq =
             PhraseQuery::new_with_offset(self.phrase_terms_with_positions(terms, positions)?);
         pq.set_slop(slop);
-        self.collect_to_bitmap(&pq, sink)
+        self.collect_to_bitmap(&pq, limit, sink)
     }
 
     fn phrase_terms_with_positions(
@@ -481,14 +565,19 @@ impl IndexReaderWrapper {
     }
 
     /// MATCH_WILDCARD, streamed into `sink`.
-    pub fn wildcard_query_bitmap(&self, pattern: &str, sink: BitmapSink) -> Result<()> {
+    pub fn wildcard_query_bitmap(
+        &self,
+        pattern: &str,
+        limit: usize,
+        sink: BitmapSink,
+    ) -> Result<()> {
         let regex = match like_pattern_to_regex(pattern) {
             Some(r) => r,
             None => return Ok(()),
         };
         let query = RegexQuery::from_pattern(&regex, self.text_field)
             .map_err(|err| TantivyBindingError::Internal(format!("RegexQueryError: {err}")))?;
-        self.collect_to_bitmap(&query, sink)
+        self.collect_to_bitmap(&query, limit, sink)
     }
 
     fn collect_doc_ids(&self, query: &dyn Query) -> Result<Vec<u32>> {

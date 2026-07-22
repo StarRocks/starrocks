@@ -460,12 +460,13 @@ unsafe fn with_bitmap_terms<F>(
     reader: *const c_void,
     terms: *const FFISlice,
     count: usize,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
     query_fn: F,
 ) -> RustResult
 where
-    F: FnOnce(&IndexReaderWrapper, &[&str], BitmapSink) -> Result<()>,
+    F: FnOnce(&IndexReaderWrapper, &[&str], usize, BitmapSink) -> Result<()>,
 {
     let r: &IndexReaderWrapper = match as_ref(reader) {
         Some(r) => r,
@@ -476,7 +477,7 @@ where
         Err(e) => return RustResult::err(e),
     };
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    match query_fn(r, &refs, BitmapSink { ctx, append }) {
+    match query_fn(r, &refs, limit, BitmapSink { ctx, append }) {
         Ok(()) => RustResult::ok_none(),
         Err(e) => RustResult::err(e.to_string()),
     }
@@ -489,6 +490,7 @@ pub unsafe extern "C" fn tantivy_term_query_bitmap(
     reader: *const c_void,
     term_ptr: *const u8,
     term_len: usize,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
@@ -501,7 +503,7 @@ pub unsafe extern "C" fn tantivy_term_query_bitmap(
             Ok(s) => s,
             Err(e) => return RustResult::err(format!("term: {e}")),
         };
-        match r.term_query_bitmap(term, BitmapSink { ctx, append }) {
+        match r.term_query_bitmap(term, limit, BitmapSink { ctx, append }) {
             Ok(()) => RustResult::ok_none(),
             Err(e) => RustResult::err(e.to_string()),
         }
@@ -514,12 +516,13 @@ pub unsafe extern "C" fn tantivy_match_query_bitmap(
     reader: *const c_void,
     terms: *const FFISlice,
     count: usize,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
     catch_ffi(|| {
-        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
-            r.match_any_query_bitmap(t, s)
+        with_bitmap_terms(reader, terms, count, limit, ctx, append, |r, t, l, s| {
+            r.match_any_query_bitmap(t, l, s)
         })
     })
 }
@@ -531,12 +534,13 @@ pub unsafe extern "C" fn tantivy_match_all_query_bitmap(
     terms: *const FFISlice,
     count: usize,
     min_df_ratio: f64,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
     catch_ffi(|| {
-        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
-            r.match_all_query_bitmap(t, min_df_ratio, s)
+        with_bitmap_terms(reader, terms, count, limit, ctx, append, |r, t, l, s| {
+            r.match_all_query_bitmap(t, min_df_ratio, l, s)
         })
     })
 }
@@ -549,6 +553,7 @@ pub unsafe extern "C" fn tantivy_phrase_match_query_bitmap(
     count: usize,
     positions: *const u32,
     slop: u32,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
@@ -558,8 +563,8 @@ pub unsafe extern "C" fn tantivy_phrase_match_query_bitmap(
         } else {
             Some(std::slice::from_raw_parts(positions, count))
         };
-        with_bitmap_terms(reader, terms, count, ctx, append, |r, t, s| {
-            r.phrase_query_bitmap_with_positions(t, positions, slop, s)
+        with_bitmap_terms(reader, terms, count, limit, ctx, append, |r, t, l, s| {
+            r.phrase_query_bitmap_with_positions(t, positions, slop, l, s)
         })
     })
 }
@@ -570,6 +575,7 @@ pub unsafe extern "C" fn tantivy_wildcard_query_bitmap(
     reader: *const c_void,
     pattern_ptr: *const u8,
     pattern_len: usize,
+    limit: usize,
     ctx: *mut c_void,
     append: SetBitmapFn,
 ) -> RustResult {
@@ -582,7 +588,7 @@ pub unsafe extern "C" fn tantivy_wildcard_query_bitmap(
             Ok(s) => s,
             Err(e) => return RustResult::err(format!("pattern: {e}")),
         };
-        match r.wildcard_query_bitmap(pattern, BitmapSink { ctx, append }) {
+        match r.wildcard_query_bitmap(pattern, limit, BitmapSink { ctx, append }) {
             Ok(()) => RustResult::ok_none(),
             Err(e) => RustResult::err(e.to_string()),
         }

@@ -380,6 +380,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.bm25_score_max = params.bm25_score_max;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.inverted_index_non_scored_limit = params.inverted_index_non_scored_limit;
+    rs_opts.inverted_index_non_scored_limit_budget = params.inverted_index_non_scored_limit_budget;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;

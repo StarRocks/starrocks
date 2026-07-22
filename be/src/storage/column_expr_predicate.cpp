@@ -427,6 +427,23 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     return Status::OK();
 }
 
+bool ColumnExprPredicate::can_pushdown_non_scored_limit() const {
+    if (_expr_ctxs.size() != 1 || _expr_ctxs[0] == nullptr || _expr_ctxs[0]->root() == nullptr) {
+        return false;
+    }
+    Expr* expr = _expr_ctxs[0]->root();
+    if (expr->node_type() == TExprNodeType::COMPOUND_PRED) {
+        return false;
+    }
+    if (expr->node_type() == TExprNodeType::MATCH_EXPR) {
+        return true;
+    }
+    auto* function = expr->node_type() == TExprNodeType::FUNCTION_CALL
+                             ? down_cast<VectorizedFunctionCallExpr*>(expr)
+                             : nullptr;
+    return function != nullptr && boost::iequals(function->get_function_desc()->name, LIKE_FN_NAME);
+}
+
 Status ColumnTruePredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
     memset(selection + from, 0x1, to - from);
     return Status::OK();

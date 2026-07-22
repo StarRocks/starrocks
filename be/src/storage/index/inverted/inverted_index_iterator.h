@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include <atomic>
 #include <limits>
 #include <string>
 #include <unordered_map>
@@ -51,6 +52,11 @@ public:
     // the best `limit` rows (0 = score every hit). Mirrors the vector ANN top-k.
     void set_bm25_topk_limit(int32_t limit) { _bm25_topk_limit = limit; }
 
+    void set_non_scored_limit(int32_t limit, std::atomic<int64_t>* global_budget) {
+        _non_scored_limit = limit;
+        _non_scored_limit_budget = global_budget;
+    }
+
     // Min/max BM25 score gate for the scored path: a `WHERE score() > c`
     // predicate is pushed here so the scored query only materializes hits whose
     // score is in [min, max] (-/+INFINITY = unbounded), filtered inside tantivy.
@@ -75,6 +81,8 @@ protected:
     InvertedReader* _reader;
     InvertedIndexParserType _analyser_type;
     int32_t _bm25_topk_limit = 0;
+    int32_t _non_scored_limit = 0;
+    std::atomic<int64_t>* _non_scored_limit_budget = nullptr;
     float _bm25_score_min = -std::numeric_limits<float>::infinity();
     float _bm25_score_max = std::numeric_limits<float>::infinity();
 };

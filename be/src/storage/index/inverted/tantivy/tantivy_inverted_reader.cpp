@@ -34,9 +34,29 @@
 
 // FFI callback for the direct-to-bitmap query variants: Rust streams matched BE
 // row ids here in blocks and we add them straight into the roaring result,
-// avoiding a Vec<u32> round-trip. `ctx` is the target `roaring::Roaring*`.
-extern "C" void sr_tantivy_append_rowids(void* ctx, const uint32_t* ids, size_t len) {
+// avoiding a Vec<u32> round-trip. The return value tells Rust how many ids were
+// accepted, allowing the limited scorer to stop when a shared budget is empty.
+extern "C" size_t sr_tantivy_append_rowids(void* ctx, const uint32_t* ids, size_t len) {
     reinterpret_cast<roaring::Roaring*>(ctx)->addMany(len, ids);
+    return len;
+}
+
+struct TantivyLimitedBitmapSink {
+    roaring::Roaring* bitmap;
+    std::atomic<int64_t>* remaining;
+};
+
+extern "C" size_t sr_tantivy_append_rowids_limited(void* ctx, const uint32_t* ids, size_t len) {
+    auto* sink = reinterpret_cast<TantivyLimitedBitmapSink*>(ctx);
+    int64_t remaining = sink->remaining->load(std::memory_order_relaxed);
+    while (remaining > 0) {
+        const size_t accepted = std::min<size_t>(len, static_cast<size_t>(remaining));
+        if (sink->remaining->compare_exchange_weak(remaining, remaining - accepted, std::memory_order_relaxed)) {
+            sink->bitmap->addMany(accepted, ids);
+            return accepted;
+        }
+    }
+    return 0;
 }
 
 namespace starrocks {
@@ -207,7 +227,20 @@ Status TantivyInvertedReader::query(OlapReaderStatistics* /*stats*/, const std::
     if (handle == nullptr) {
         return Status::InternalError(_is_compound ? "tantivy compound reader not loaded" : "tantivy reader not loaded");
     }
-    return _query_impl(handle, query_value, query_type, bit_map);
+    return _query_impl(handle, query_value, query_type, 0, nullptr, bit_map);
+}
+
+Status TantivyInvertedReader::query_limited(OlapReaderStatistics* /*stats*/, const std::string& /*column_name*/,
+                                            const void* query_value, InvertedIndexQueryType query_type, int32_t limit,
+                                            std::atomic<int64_t>* global_budget, roaring::Roaring* bit_map) {
+    void* handle = _is_compound ? _compound_reader.get() : _reader.get();
+    if (handle == nullptr) {
+        return Status::InternalError(_is_compound ? "tantivy compound reader not loaded" : "tantivy reader not loaded");
+    }
+    if (limit <= 0 || (global_budget != nullptr && global_budget->load(std::memory_order_relaxed) <= 0)) {
+        return Status::OK();
+    }
+    return _query_impl(handle, query_value, query_type, limit, global_budget, bit_map);
 }
 
 Status TantivyInvertedReader::query_scored(OlapReaderStatistics* /*stats*/, const std::string& /*column_name*/,
@@ -266,12 +299,17 @@ TokenizedTerms use_tokenized_query(const TokenizedQueryValue& query) {
 } // namespace
 
 Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query_value,
-                                          InvertedIndexQueryType query_type, roaring::Roaring* bit_map) {
+                                          InvertedIndexQueryType query_type, int32_t limit,
+                                          std::atomic<int64_t>* global_budget, roaring::Roaring* bit_map) {
+    TantivyLimitedBitmapSink limited_sink{bit_map, global_budget};
+    void* sink_ctx = global_budget != nullptr ? static_cast<void*>(&limited_sink) : static_cast<void*>(bit_map);
+    tb::SetBitmapFn append = global_budget != nullptr ? sr_tantivy_append_rowids_limited : sr_tantivy_append_rowids;
+    const size_t rust_limit = limit > 0 ? static_cast<size_t>(limit) : 0;
     switch (query_type) {
     case InvertedIndexQueryType::EQUAL_QUERY: {
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         tb::RustResult r = tb::tantivy_term_query_bitmap(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
-                                                         slice->size, bit_map, sr_tantivy_append_rowids);
+                                                         slice->size, rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -281,7 +319,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_analyzer.get(), std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_match_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
-                                                          bit_map, sr_tantivy_append_rowids);
+                                                          rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -291,7 +329,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         auto terms = use_tokenized_query(*query);
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_match_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
-                                                          bit_map, sr_tantivy_append_rowids);
+                                                          rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -300,9 +338,9 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         ASSIGN_OR_RETURN(auto terms, tokenize_query(_analyzer.get(), std::string(slice->data, slice->size)));
         if (terms.slices.empty()) return Status::OK();
-        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
-                                                              config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
-                                                              sr_tantivy_append_rowids);
+        tb::RustResult r = tb::tantivy_match_all_query_bitmap(
+                reader_handle, terms.slices.data(), terms.slices.size(), config::tantivy_match_all_bitmap_min_df_ratio,
+                rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -311,9 +349,9 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         const auto* query = reinterpret_cast<const TokenizedQueryValue*>(query_value);
         auto terms = use_tokenized_query(*query);
         if (terms.slices.empty()) return Status::OK();
-        tb::RustResult r = tb::tantivy_match_all_query_bitmap(reader_handle, terms.slices.data(), terms.slices.size(),
-                                                              config::tantivy_match_all_bitmap_min_df_ratio, bit_map,
-                                                              sr_tantivy_append_rowids);
+        tb::RustResult r = tb::tantivy_match_all_query_bitmap(
+                reader_handle, terms.slices.data(), terms.slices.size(), config::tantivy_match_all_bitmap_min_df_ratio,
+                rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -324,7 +362,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         if (terms.slices.empty()) return Status::OK();
         tb::RustResult r = tb::tantivy_phrase_match_query_bitmap(
                 reader_handle, terms.slices.data(), terms.slices.size(), terms.positions.data(),
-                static_cast<uint32_t>(pqv->slop), bit_map, sr_tantivy_append_rowids);
+                static_cast<uint32_t>(pqv->slop), rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         return Status::OK();
@@ -333,7 +371,7 @@ Status TantivyInvertedReader::_query_impl(void* reader_handle, const void* query
         const auto* slice = reinterpret_cast<const Slice*>(query_value);
         tb::RustResult r =
                 tb::tantivy_wildcard_query_bitmap(reader_handle, reinterpret_cast<const uint8_t*>(slice->data),
-                                                  slice->size, bit_map, sr_tantivy_append_rowids);
+                                                  slice->size, rust_limit, sink_ctx, append);
         TantivyResultGuard rg(r);
         RETURN_IF_ERROR(tantivy_status_from_error(r));
         *bit_map -= _null_bitmap;
