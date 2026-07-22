@@ -42,6 +42,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
@@ -52,8 +53,6 @@ namespace starrocks {
 class MetricRegistry;
 
 namespace orchestration {
-
-class FragmentMgr;
 
 struct ScanContext {
 public:
@@ -70,7 +69,7 @@ public:
 
 class ExternalScanContextMgr {
 public:
-    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics, FragmentMgr* fragment_mgr);
+    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
 
     ~ExternalScanContextMgr();
 
@@ -81,8 +80,12 @@ public:
     Status clear_scan_context(const std::string& context_id);
 
 private:
+    // Cancel the pipeline fragment of the scan context and clear its result queue. Shared by
+    // close_scanner (clear_scan_context) and the keep-alive reaper (gc_expired_context); the caller
+    // must have already removed the context from the active map.
+    Status _cancel_scan_context(const std::shared_ptr<ScanContext>& context, const std::string& reason);
+
     ExecEnv* _exec_env;
-    [[maybe_unused]] FragmentMgr* _fragment_mgr;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
     std::unique_ptr<std::thread> _keep_alive_reaper;
