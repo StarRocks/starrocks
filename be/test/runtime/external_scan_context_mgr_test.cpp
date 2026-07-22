@@ -40,9 +40,13 @@
 
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -116,4 +120,42 @@ TEST_F(ExternalScanContextMgrTest, clear_context) {
     ASSERT_TRUE(!st.ok());
     ASSERT_TRUE(result == nullptr);
 }
+
+TEST_F(ExternalScanContextMgrTest, clear_scan_context_cancels_pipeline_fragment) {
+    TUniqueId query_id;
+    query_id.__set_hi(2026);
+    query_id.__set_lo(715);
+    TUniqueId fragment_id;
+    fragment_id.__set_hi(2026);
+    fragment_id.__set_lo(716);
+
+    pipeline::QueryContext* query_ctx = nullptr;
+    ASSIGN_OR_ASSERT_FAIL(query_ctx, _exec_env.query_context_mgr()->get_or_register(query_id));
+    query_ctx->set_delivery_expire_seconds(60);
+    query_ctx->set_query_expire_seconds(60);
+    query_ctx->extend_delivery_lifetime();
+    query_ctx->extend_query_lifetime();
+    query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+
+    auto* fragment_ctx = query_ctx->fragment_mgr()->get_or_register(fragment_id);
+    fragment_ctx->set_query_id(query_id);
+    fragment_ctx->set_fragment_instance_id(fragment_id);
+    fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
+    fragment_ctx->set_runtime_state(
+            std::make_unique<RuntimeState>(query_id, fragment_id, TQueryOptions(), TQueryGlobals(), &_exec_env));
+
+    ExternalScanContextMgr context_mgr(&_exec_env);
+    std::shared_ptr<ScanContext> context;
+    ASSERT_OK(context_mgr.create_scan_context(&context));
+    context->query_id = query_id;
+    context->fragment_instance_id = fragment_id;
+
+    // clear_scan_context and the expired-context reaper share the same cancellation path
+    // (_cancel_scan_context): the pipeline fragment must be cancelled, not the non-pipeline one.
+    ASSERT_OK(context_mgr.clear_scan_context(context->context_id));
+
+    ASSERT_TRUE(fragment_ctx->final_status().is_cancelled());
+}
+
 } // namespace starrocks
