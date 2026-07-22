@@ -431,8 +431,14 @@ public class StatisticsSQLTest extends PlanTestBase {
     @Test
     public void testExternalTableCollectionStatsType() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
+<<<<<<< HEAD
                 Lists.newArrayList(Type.ARRAY_INT, new MapType(Type.INT, Type.STRING)));
         assertContains(sql, "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string)");
+=======
+                Lists.newArrayList(ArrayType.ARRAY_INT, new MapType(IntegerType.INT, StringType.STRING)));
+        assertContains(sql, "cast(max(cast(nullif(max, '') as string)) as string)," +
+                " cast(min(cast(nullif(min, '') as string)) as string)");
+>>>>>>> a80d4b2037 ([BugFix] Fix statistics cache load failure on empty min/max under ERROR_IF_OVERFLOW (#76684))
     }
 
     @Test
