@@ -555,8 +555,9 @@ public class AnalyzeStmtTest {
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as bigint)) as string), " +
-                        "cast(min(cast(min as bigint)) as string), cast(avg(collection_size) as bigint) FROM column_statistics " +
+                        "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                        "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                        "cast(avg(collection_size) as bigint) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
@@ -763,13 +764,13 @@ public class AnalyzeStmtTest {
 
         String pattern = String.format("SELECT cast(10 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                 "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string), " +
+                "cast(max(cast(nullif(max, '') as string)) as string), cast(min(cast(nullif(min, '') as string)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
                 "UNION ALL SELECT cast(10 as INT), now(), db_id, table_id, column_name, " +
                 "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string), " +
+                "cast(max(cast(nullif(max, '') as bigint)) as string), cast(min(cast(nullif(min, '') as bigint)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());
