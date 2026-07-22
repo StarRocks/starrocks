@@ -171,4 +171,26 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     ASSERT_NE(*stub3, *stub1);
 }
 
+// Regression test for the lazy-reschedule fix: while an endpoint is being
+// accessed within the expire window, the timer fires, sees the stub is still
+// active (deadline not yet past), and reschedules instead of evicting, so the
+// stub must survive across multiple timer periods.
+TEST_F(BrpcStubCacheTest, test_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    BrpcStubCache cache(&_env);
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+
+    // Repeatedly access within the window; each access refreshes the deadline,
+    // and the single scheduled timer reschedules instead of evicting.
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(address);
+        ASSERT_EQ(stub1, stub) << "stub must not be evicted while being accessed";
+    }
+}
+
 } // namespace starrocks
