@@ -1031,6 +1031,8 @@ public class ExpressionStatisticCalculator {
                     return calculateDateTruncStats(callOperator, right);
                 case FunctionSet.LTRIM:
                 case FunctionSet.LTRIM_STRING:
+                case FunctionSet.RTRIM:
+                case FunctionSet.RTRIM_STRING:
                     minValue = Double.NEGATIVE_INFINITY;
                     maxValue = Double.POSITIVE_INFINITY;
                     averageRowSize = left.getAverageRowSize();
