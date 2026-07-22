@@ -86,6 +86,36 @@ public class ConfigTest {
     }
 
     @Test
+    public void testMaxVarcharLengthUpperBoundaries() throws Exception {
+        final int previousValue = Config.max_varchar_length;
+        final int maxAllowed = Integer.MAX_VALUE - 1023;
+        try {
+            Config.setMutableConfig("max_varchar_length", Integer.toString(maxAllowed - 1), false, "");
+            Assertions.assertEquals(maxAllowed - 1, Config.max_varchar_length);
+
+            Config.setMutableConfig("max_varchar_length", Integer.toString(maxAllowed), false, "");
+            Assertions.assertEquals(maxAllowed, Config.max_varchar_length);
+
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> Config.setMutableConfig(
+                            "max_varchar_length", Integer.toString(maxAllowed + 1), false, ""));
+            Assertions.assertEquals(maxAllowed, Config.max_varchar_length);
+
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> Config.setMutableConfig(
+                            "max_varchar_length", Integer.toString(Integer.MAX_VALUE), false, ""));
+            Assertions.assertEquals(maxAllowed, Config.max_varchar_length);
+
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> Config.setMutableConfig(
+                            "max_varchar_length", Long.toString((long) Integer.MAX_VALUE + 1), false, ""));
+            Assertions.assertEquals(maxAllowed, Config.max_varchar_length);
+        } finally {
+            Config.max_varchar_length = previousValue;
+        }
+    }
+
+    @Test
     public void testMutableConfig() throws Exception {
         // Skip test if persistence is not available (container environments)
         Assumptions.assumeTrue(ConfigBase.isIsPersisted(),

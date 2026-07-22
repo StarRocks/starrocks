@@ -54,6 +54,7 @@
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/range.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -77,7 +78,7 @@ bool BinaryDictPageBuilder::is_page_full() {
     if (_data_page_builder->is_page_full()) {
         return true;
     }
-    return _encoding_type == DICT_ENCODING && _dict_builder->is_page_full();
+    return _encoding_type == DICT_ENCODING && (_dict_builder->is_page_full() || _force_dict_page_full);
 }
 
 uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
@@ -89,13 +90,16 @@ uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
         // Manually devirtualization.
         auto* code_page = down_cast<BitshufflePageBuilder<TYPE_INT>*>(_data_page_builder.get());
 
-        if (_data_page_builder->count() == 0) {
-            auto s = unaligned_load<Slice>(src);
-            _first_value.assign_copy(reinterpret_cast<const uint8_t*>(s.get_data()), s.get_size());
-        }
-
         for (int i = 0; i < count; ++i, ++src) {
             auto s = unaligned_load<Slice>(src);
+            if (s.size > TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD) {
+                _force_dict_page_full = true;
+                if (_data_page_builder->count() > 0) {
+                    return i;
+                }
+                reset();
+                return _data_page_builder->add(reinterpret_cast<const uint8_t*>(src), count - i);
+            }
             auto iter = _dictionary.find(s);
             if (iter != _dictionary.end()) {
                 value_code = iter->second;
@@ -127,7 +131,7 @@ faststring* BinaryDictPageBuilder::finish() {
 
 void BinaryDictPageBuilder::reset() {
     _finished = false;
-    if (_encoding_type == DICT_ENCODING && _dict_builder->is_page_full()) {
+    if (_encoding_type == DICT_ENCODING && (_dict_builder->is_page_full() || _force_dict_page_full)) {
         _data_page_builder = std::make_unique<BinaryPlainPageBuilder>(_options);
         _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
         _encoding_type = PLAIN_ENCODING;
@@ -157,7 +161,9 @@ Status BinaryDictPageBuilder::get_first_value(void* value) const {
     if (_encoding_type != DICT_ENCODING) {
         return _data_page_builder->get_first_value(value);
     }
-    *reinterpret_cast<Slice*>(value) = Slice(_first_value);
+    uint32_t value_code;
+    RETURN_IF_ERROR(_data_page_builder->get_first_value(&value_code));
+    *reinterpret_cast<Slice*>(value) = _dict_builder->get_value(value_code);
     return Status::OK();
 }
 
@@ -176,6 +182,9 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
 }
 
 bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dict) const {
+    if (_encoding_type != DICT_ENCODING) {
+        return false;
+    }
     for (const auto& it : _dictionary) {
         if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
             return false;
@@ -482,7 +491,7 @@ void BinaryDictPageDecoder<Type>::reserve_col(size_t n, Column* column) {
 
     if (data_col->is_binary()) {
         BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-        binary_col->reserve(n, estimated_row_size * n);
+        binary_col->reserve(n, binary_page_reserve_bytes(n, estimated_row_size));
     }
 }
 

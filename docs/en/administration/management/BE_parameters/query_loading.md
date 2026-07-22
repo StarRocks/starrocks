@@ -73,7 +73,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Rows
 - Is mutable: No
-- Description: Minimum number of rows (chunk size) used by StringColumnWriter and DictColumnWriter to trigger dictionary-encoding speculation. If an incoming column (or the accumulated buffer plus incoming rows) has size larger than or equal `dictionary_speculate_min_chunk_size` the writer will run speculation immediately and set an encoding (DICT, PLAIN or BIT_SHUFFLE) rather than buffering more rows. Speculation uses `dictionary_encoding_ratio` for string columns and `dictionary_encoding_ratio_for_non_string_column` for numeric/non-string columns to decide whether dictionary encoding is beneficial. Also, a large column byte_size (larger than or equal to UINT32_MAX) forces immediate speculation to avoid `BinaryColumn<uint32_t>` overflow.
+- Description: Minimum number of rows (chunk size) used by StringColumnWriter and DictColumnWriter to trigger dictionary-encoding speculation. If an incoming column (or the accumulated buffer plus incoming rows) has size larger than or equal `dictionary_speculate_min_chunk_size` the writer will run speculation immediately and set an encoding (DICT, PLAIN or BIT_SHUFFLE) rather than buffering more rows. Speculation uses `dictionary_encoding_ratio` for string columns and `dictionary_encoding_ratio_for_non_string_column` for numeric/non-string columns to decide whether dictionary encoding is beneficial. A string value larger than 1 MiB also triggers immediate speculation and forces plain encoding. In addition, a column byte size larger than or equal to UINT32_MAX forces immediate speculation to avoid `BinaryColumn<uint32_t>` overflow.
 - Introduced in: v3.2.0
 
 ### disable_storage_page_cache
@@ -167,7 +167,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max. For non-key string columns, the min/max values are truncated to a fixed prefix length configured by `string_prefix_zonemap_prefix_len`.
+- Description: Whether to enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max. For non-key string columns, the min/max values are truncated to a fixed prefix length configured by `string_prefix_zonemap_prefix_len`. If any value in a CHAR/VARCHAR column exceeds 1 MiB, StarRocks does not write a ZoneMap for that column in the entire segment, regardless of this setting.
 - Introduced in: -
 
 ### enable_zonemap_index_memory_page_cache

@@ -55,6 +55,26 @@ TEST_F(BufferControlBlockTest, add_one_get_one) {
     ASSERT_STREQ("hello test", get_result.result_batch.rows[0].c_str());
 }
 
+TEST_F(BufferControlBlockTest, add_to_result_buffer_round_trip) {
+    BufferControlBlock control_block(TUniqueId(), 1024);
+    ASSERT_TRUE(control_block.init().ok());
+
+    std::vector<std::unique_ptr<TFetchDataResult>> results;
+    auto result = std::make_unique<TFetchDataResult>();
+    result->result_batch.rows.emplace_back("hello pipeline");
+    result->result_batch.rows.emplace_back("large result memory release");
+    results.emplace_back(std::move(result));
+
+    ASSERT_TRUE(control_block.add_to_result_buffer(std::move(results)).ok());
+
+    TFetchDataResult get_result;
+    ASSERT_TRUE(control_block.get_batch(&get_result).ok());
+    ASSERT_FALSE(get_result.eos);
+    ASSERT_EQ(2U, get_result.result_batch.rows.size());
+    EXPECT_EQ("hello pipeline", get_result.result_batch.rows[0]);
+    EXPECT_EQ("large result memory release", get_result.result_batch.rows[1]);
+}
+
 TEST_F(BufferControlBlockTest, get_one_after_close) {
     BufferControlBlock control_block(TUniqueId(), 1024);
     ASSERT_TRUE(control_block.init().ok());

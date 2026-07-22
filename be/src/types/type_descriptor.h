@@ -35,11 +35,15 @@ struct TypeDescriptor {
     LogicalType type{TYPE_UNKNOWN};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
-    static constexpr int MAX_VARCHAR_LENGTH = 1048576;
+    // 2 GiB minus 1 KiB.
+    static constexpr int MAX_VARCHAR_LENGTH = 2147482624;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
     static constexpr int DEFAULT_BITMAP_LENGTH = 128;
     static constexpr int LARGE_VARCHAR_LENGTH_THRESHOLD = 1048576;
+    // The SQL VARBINARY limit: 1 MiB. VARBINARY keeps the historical bound while
+    // VARCHAR supports larger values.
+    static constexpr int MAX_VARBINARY_LENGTH = 1048576;
 
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
@@ -380,7 +384,7 @@ static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYP
 static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
-        TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH);
 static const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
 
 static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);

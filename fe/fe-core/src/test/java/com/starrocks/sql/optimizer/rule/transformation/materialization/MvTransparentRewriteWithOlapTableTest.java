@@ -1066,7 +1066,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             String plan = getFragmentPlan("select dt from t3", TExplainLevel.COSTS, "");
                             PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
                             PlanTestBase.assertContains(plan, "|  output exprs:\n" +
-                                    "  |      [7, VARCHAR(1048576), false]\n" +
+                                    "  |      [7, VARCHAR(2147482624), false]\n" +
                                     "  |  child exprs:\n" +
                                     "  |      [11: dt, VARCHAR, false]\n" +
                                     "  |      [17: cast, VARCHAR(10), false]");
@@ -1097,7 +1097,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
                             PlanTestBase.assertContains(plan, "  0:UNION\n" +
                                     "  |  output exprs:\n" +
-                                    "  |      [6, VARCHAR(1048576), false] | [8, SMALLINT, true]\n" +
+                                    "  |      [6, VARCHAR(2147482624), false] | [8, SMALLINT, true]\n" +
                                     "  |  child exprs:\n" +
                                     "  |      [9: province, VARCHAR, false] | [11: min(age), SMALLINT, true]\n" +
                                     "  |      [17: cast, VARCHAR(64), false] | [16: min, SMALLINT, true]");

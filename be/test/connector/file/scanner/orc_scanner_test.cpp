@@ -175,7 +175,7 @@ TEST_F(ORCScannerTest, get_schema) {
     st = scanner->get_schema(&schemas);
     EXPECT_TRUE(st.ok());
 
-    EXPECT_EQ("VARCHAR(1048576)", schemas[0].type().debug_string());
+    EXPECT_EQ("VARCHAR(2147482624)", schemas[0].type().debug_string());
 
     ASSERT_GT(counter.file_read_count, 0);
     ASSERT_GT(counter.file_read_ns, 0);

@@ -492,7 +492,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testEqStringCast() throws Exception {
         String sql = "select 'a' = v1 from t0";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) = 'a'\n"));
+        Assertions.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(2147482624)) = 'a'\n"));
     }
 
     @Test
@@ -533,7 +533,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testNotEqStringCast() throws Exception {
         String sql = "select 'a' != v1 from t0";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) != 'a'\n"));
+        Assertions.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(2147482624)) != 'a'\n"));
     }
 
     @Test
@@ -541,7 +541,7 @@ public class ExpressionTest extends PlanTestBase {
         // v1 is bigint, bigint in varchar will cast bigint as varchar
         String sql = "select *  from t0 where v1 in ('a','b')";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')");
+        assertContains(plan, "CAST(1: v1 AS VARCHAR(2147482624)) IN ('a', 'b')");
     }
 
     @Test
@@ -1416,7 +1416,7 @@ public class ExpressionTest extends PlanTestBase {
                 "qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() > 1");
-        assertContains(plan, "PREDICATES: 3: tc > 3, CAST(2: tb AS VARCHAR(1048576)) != ''");
+        assertContains(plan, "PREDICATES: 3: tc > 3, CAST(2: tb AS VARCHAR(2147482624)) != ''");
 
         sql = "select tc from tall qualify qualify row_number() OVER(PARTITION by ta order by tg) = 1;";
         plan = getFragmentPlan(sql);
@@ -1888,7 +1888,7 @@ public class ExpressionTest extends PlanTestBase {
 
             sql = "select t1g = 'abc' from test_all_type";
             plan = getVerboseExplain(sql);
-            assertContains(plan, "cast([7: t1g, BIGINT, true] as VARCHAR(1048576)) = 'abc'");
+            assertContains(plan, "cast([7: t1g, BIGINT, true] as VARCHAR(2147482624)) = 'abc'");
 
             sql = "select id_bool = 'abc' from test_bool";
             plan = getVerboseExplain(sql);

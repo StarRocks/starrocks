@@ -122,7 +122,7 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         } else if (logical_type->is_JSON()) {
             *type_desc = TypeDescriptor::create_json_type();
         } else {
-            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH);
         }
         break;
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
@@ -139,13 +139,13 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         } else {
             // INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
             // VARBINARY is the correct SR type for all of these.
-            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH);
         }
         break;
     }
     default:
         // Treat unsupported types as varbinary type.
-        *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH);
     }
 
     return Status::OK();

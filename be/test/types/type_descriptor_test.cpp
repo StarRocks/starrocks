@@ -14,6 +14,7 @@
 
 #include "types/type_descriptor.h"
 
+#include <limits>
 #include <tuple>
 
 #include "gtest/gtest.h"
@@ -23,6 +24,13 @@ namespace starrocks {
 class TypeDescriptorTest : public ::testing::Test {
 public:
 };
+
+TEST_F(TypeDescriptorTest, large_varchar_limit_invariants) {
+    EXPECT_EQ(std::numeric_limits<int32_t>::max() - 1023, TypeDescriptor::MAX_VARCHAR_LENGTH);
+    EXPECT_EQ(1024 * 1024, TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD);
+    EXPECT_LT(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, TypeDescriptor::MAX_VARCHAR_LENGTH);
+    EXPECT_EQ(std::numeric_limits<int32_t>::max(), TypeDescriptor::MAX_VARCHAR_LENGTH + 1023);
+}
 
 // NOLINTNEXTLINE
 TEST_F(TypeDescriptorTest, test_from_thrift) {

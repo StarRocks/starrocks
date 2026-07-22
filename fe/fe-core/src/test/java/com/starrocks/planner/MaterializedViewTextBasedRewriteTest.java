@@ -401,7 +401,7 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                     PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
                             "     TABLE: mv0\n" +
                             "     PREAGGREGATION: ON\n" +
-                            "     PREDICATES: CAST(6: user_id AS VARCHAR(1048576)) != 'xxxx'");
+                            "     PREDICATES: CAST(6: user_id AS VARCHAR(2147482624)) != 'xxxx'");
                 });
     }
 

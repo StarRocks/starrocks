@@ -347,13 +347,13 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
-                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''\n" +
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(2147482624)) = ''\n" +
                 "  |  \n" +
                 "  |----19:EXCHANGE");
         assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''");
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(2147482624)) = ''");
     }
 
     @Test
@@ -2059,7 +2059,7 @@ public class SubqueryTest extends PlanTestBase {
                 + "      SELECT if(count(t1.v5) > 0, 'a', 'b') FROM t1"
                 + "      WHERE t0.v1 = t1.v4)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(2: v2 AS VARCHAR(1048576)) = if(ifnull(7: count, 0) > 0, 'a', 'b')");
+        assertContains(plan, "CAST(2: v2 AS VARCHAR(2147482624)) = if(ifnull(7: count, 0) > 0, 'a', 'b')");
     }
 
     @Test

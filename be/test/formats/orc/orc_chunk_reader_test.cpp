@@ -2474,7 +2474,7 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
               {"col_char", TypeDescriptor::create_char_type(10)},
               {"col_varchar", TypeDescriptor::create_varchar_type(10)},
-              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH)},
               {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
               {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
               {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
@@ -2488,14 +2488,15 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
                                                TypeDescriptor::from_logical_type(TYPE_INT))},
               {"col_map_string_map_string_int",
                TypeDescriptor::create_map_type(
-                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
                        TypeDescriptor::create_map_type(
                                TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
                                TypeDescriptor::from_logical_type(TYPE_INT)))},
               {"col_struct_string_int",
                TypeDescriptor::create_struct_type(
                        {"field_string", "field_int"},
-                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+                       {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                        TypeDescriptor::from_logical_type(TYPE_INT)})},
               {"col_struct_struct_string_int_string",
                TypeDescriptor::create_struct_type(
                        {"filed_struct", "field_string2"},
@@ -2503,7 +2504,7 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
                                 {"field_string1", "field_int"},
                                 {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
                                  TypeDescriptor::from_logical_type(TYPE_INT)}),
-                        TypeDescriptor::create_varchar_type(1048576)})}}}};
+                        TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)})}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);

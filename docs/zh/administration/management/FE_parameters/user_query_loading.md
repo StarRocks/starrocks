@@ -693,6 +693,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: ScalarOperator 优化可以应用的最大深度。
 - 引入版本: -
 
+### `max_varchar_length`
+
+- 默认值: 2147482624
+- 类型: Int
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: OLAP 表中 VARCHAR 列支持的最大长度。该值同时也是 FE 推导或物化 CHAR/VARCHAR 类型时的长度上限。允许设置的最大值为 2147482624（2 GiB 减 1 KiB）。
+- 引入版本: -
+
 ### `mv_active_checker_interval_seconds`
 
 - 默认值: 60

@@ -386,7 +386,7 @@ public class GroupingSetsTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  6:REPEAT_NODE\n" +
                     "  |  repeat: repeat 2 lines [[], [15], [16, 15]]\n" +
-                    "  |  PREDICATES: CAST(18: GROUPING AS VARCHAR(1048576)) = 'aa'");
+                    "  |  PREDICATES: CAST(18: GROUPING AS VARCHAR(2147482624)) = 'aa'");
             assertNotContains(plan, "UNION");
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);

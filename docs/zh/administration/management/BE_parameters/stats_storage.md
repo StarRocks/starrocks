@@ -310,7 +310,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
+- 描述：string/varchar 列因高基数或存在超过 1 MiB 的实际值而回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
 - 引入版本：v4.2.0
 
 ### enable_binary_column_serde_overflow_check
@@ -346,7 +346,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Double
 - 单位：-
 - 是否动态：否
-- 描述：字符串列在推测编码阶段决定是否使用字典编码的阈值。计算 `max_card = row_count * dictionary_encoding_ratio`，当去重基数超过该值时改用 PLAIN_ENCODING，否则使用 DICT_ENCODING。仅在行数超过 `dictionary_speculate_min_chunk_size` 且大于字典最小行数时生效。值越高越偏向字典编码，1.0 基本强制字典。
+- 描述：字符串列在推测编码阶段决定是否使用字典编码的阈值。计算 `max_card = row_count * dictionary_encoding_ratio`，当去重基数超过该值时改用 PLAIN_ENCODING，否则使用 DICT_ENCODING。仅在行数超过 `dictionary_speculate_min_chunk_size` 且大于字典最小行数时生效。值越高越偏向字典编码。值为 1.0 时，长度不超过 1 MiB 的值通常会使用字典编码，但任一实际值超过 1 MiB 仍会强制回退到 Plain Encoding。
 - 引入版本：v3.2.0
 
 ### dictionary_encoding_ratio_for_non_string_column

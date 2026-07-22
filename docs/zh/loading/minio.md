@@ -186,15 +186,15 @@ DESCRIBE user_behavior_inferred;
 系统返回如下查询结果：
 
 ```Plain
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
++--------------+---------------------+------+-------+---------+-------+
+| Field        | Type                | Null | Key   | Default | Extra |
++--------------+---------------------+------+-------+---------+-------+
+| UserID       | bigint              | YES  | true  | NULL    |       |
+| ItemID       | bigint              | YES  | true  | NULL    |       |
+| CategoryID   | bigint              | YES  | true  | NULL    |       |
+| BehaviorType | varchar(2147482624) | YES  | false | NULL    |       |
+| Timestamp    | varchar(2147482624) | YES  | false | NULL    |       |
++--------------+---------------------+------+-------+---------+-------+
 ```
 
 您可以查询新建表中的数据，验证数据已成功导入。例如：

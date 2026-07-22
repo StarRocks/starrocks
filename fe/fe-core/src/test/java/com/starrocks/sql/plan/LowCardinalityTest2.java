@@ -927,7 +927,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         // DictExpr return varchar and int
         sql = "select if(S_SUPPKEY='kks', upper(S_ADDRESS), S_COMMENT), upper(S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        Assertions.assertTrue(plan.contains("9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', "
+        Assertions.assertTrue(plan.contains("9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(2147482624)) = 'kks', "
                 + "[12: expr, VARCHAR, true], [7: S_COMMENT, VARCHAR, false]); args: BOOLEAN,VARCHAR,VARCHAR; result: "
                 + "VARCHAR; args nullable: true; result nullable: true]\n"
                 + "  |  10 <-> [12: expr, VARCHAR, true]\n"

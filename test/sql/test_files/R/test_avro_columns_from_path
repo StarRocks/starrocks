@@ -21,14 +21,14 @@ desc files(
     "aws.s3.endpoint" = "${oss_endpoint}",
     "columns_from_path" = "dt");
 -- result:
-null_field	varchar(1048576)	YES
+null_field	varchar(2147482624)	YES
 bool_field	boolean	YES
 int_field	int	YES
 long_field	bigint	YES
 float_field	float	YES
 double_field	double	YES
 bytes_field	varbinary(1048576)	YES
-string_field	varchar(1048576)	YES
+string_field	varchar(2147482624)	YES
 dt	varchar(65533)	YES
 -- !result
 

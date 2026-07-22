@@ -202,7 +202,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### brpc_max_body_size
 
-- デフォルト: 2147483648
+- デフォルト: 2147483647
 - タイプ: Int
 - 単位: バイト
 - 変更可能: いいえ

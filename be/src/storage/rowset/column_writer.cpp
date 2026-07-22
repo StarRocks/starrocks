@@ -72,8 +72,23 @@
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
+
+namespace {
+
+bool has_large_value(const Column& column) {
+    if (column.byte_size() <= TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD) {
+        return false;
+    }
+
+    const Column* data_column = ColumnHelper::get_data_column(&column);
+    return data_column->max_one_element_serialize_size() >
+           TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + sizeof(uint32_t);
+}
+
+} // namespace
 
 ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
 
@@ -267,9 +282,6 @@ public:
     Status check_string_lengths(const Column& column);
 
 private:
-    int _declared_string_length() const;
-    bool _exceeds_large_string_threshold() const;
-
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
     MutableColumnPtr _buf_column = nullptr;
@@ -575,7 +587,7 @@ Status ScalarColumnWriter::write_ordinal_index() {
 
 Status ScalarColumnWriter::write_zone_map() {
     if (_zone_map_index_builder != nullptr) {
-        return _zone_map_index_builder->finish(_wfile, _opts.meta->add_indexes());
+        return _zone_map_index_builder->finish(_wfile, _opts.meta);
     }
     return Status::OK();
 }
@@ -868,22 +880,6 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _scalar_column_writer(std::move(column_writer)) {}
 
-int StringColumnWriter::_declared_string_length() const {
-    int declared_length = length();
-    if (type_info()->type() == TYPE_VARCHAR || type_info()->type() == TYPE_VARBINARY) {
-        if (declared_length >= static_cast<int>(sizeof(uint32_t))) {
-            declared_length -= static_cast<int>(sizeof(uint32_t));
-        } else {
-            declared_length = 0;
-        }
-    }
-    return declared_length;
-}
-
-bool StringColumnWriter::_exceeds_large_string_threshold() const {
-    return _declared_string_length() > TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD;
-}
-
 Status StringColumnWriter::append(const Column& column) {
     if (config::enable_check_string_lengths) {
         RETURN_IF_ERROR(check_string_lengths(column));
@@ -895,10 +891,8 @@ Status StringColumnWriter::append(const Column& column) {
     if (_buf_column == nullptr) {
         // First column size is greater than speculate size or byte size large than UINT32_MAX.
         // Because if columns' byte size than UINT32_MAX, that will cause BinaryColumn<uint32_t> overflow
-        // Additionally, if the declared length of the column is greater than
-        // TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, use PLAIN_ENCODING directly.
         if (column.size() >= config::dictionary_speculate_min_chunk_size || column.byte_size() >= UINT32_MAX ||
-            _exceeds_large_string_threshold()) {
+            has_large_value(column)) {
             _is_speculated = true;
             speculate_column_and_set_encoding(column);
             return _scalar_column_writer->append(column);
@@ -909,7 +903,7 @@ Status StringColumnWriter::append(const Column& column) {
         }
     }
     if (column.size() + _buf_column->size() >= config::dictionary_speculate_min_chunk_size ||
-        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX) {
+        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX || has_large_value(column)) {
         // If it is predicted that _buf_column will exceed the limit after append column,
         // skip append column
         _is_speculated = true;
@@ -939,10 +933,6 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
 }
 
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
-    if (_exceeds_large_string_threshold()) {
-        return PLAIN_ENCODING;
-    }
-
     auto row_count = bin_col.size();
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
@@ -953,6 +943,10 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const Binary
     // far better. The choice is recorded in the column meta encoding.
     const EncodingTypePB plain_encoding =
             config::enable_binary_plain_delta_offset ? PLAIN_ENCODING_DELTA_OFFSET : PLAIN_ENCODING;
+
+    if (has_large_value(bin_col)) {
+        return plain_encoding;
+    }
 
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;

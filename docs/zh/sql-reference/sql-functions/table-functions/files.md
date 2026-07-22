@@ -982,27 +982,27 @@ DESC FILES(
     "aws.s3.region" = "us-west-2"
 );
 
-+------------------+------------------+------+
-| Field            | Type             | Null |
-+------------------+------------------+------+
-| lo_orderkey      | int              | YES  |
-| lo_linenumber    | int              | YES  |
-| lo_custkey       | int              | YES  |
-| lo_partkey       | int              | YES  |
-| lo_suppkey       | int              | YES  |
-| lo_orderdate     | int              | YES  |
-| lo_orderpriority | varchar(1048576) | YES  |
-| lo_shippriority  | int              | YES  |
-| lo_quantity      | int              | YES  |
-| lo_extendedprice | int              | YES  |
-| lo_ordtotalprice | int              | YES  |
-| lo_discount      | int              | YES  |
-| lo_revenue       | int              | YES  |
-| lo_supplycost    | int              | YES  |
-| lo_tax           | int              | YES  |
-| lo_commitdate    | int              | YES  |
-| lo_shipmode      | varchar(1048576) | YES  |
-+------------------+------------------+------+
++------------------+---------------------+------+
+| Field            | Type                | Null |
++------------------+---------------------+------+
+| lo_orderkey      | int                 | YES  |
+| lo_linenumber    | int                 | YES  |
+| lo_custkey       | int                 | YES  |
+| lo_partkey       | int                 | YES  |
+| lo_suppkey       | int                 | YES  |
+| lo_orderdate     | int                 | YES  |
+| lo_orderpriority | varchar(2147482624) | YES  |
+| lo_shippriority  | int                 | YES  |
+| lo_quantity      | int                 | YES  |
+| lo_extendedprice | int                 | YES  |
+| lo_ordtotalprice | int                 | YES  |
+| lo_discount      | int                 | YES  |
+| lo_revenue       | int                 | YES  |
+| lo_supplycost    | int                 | YES  |
+| lo_tax           | int                 | YES  |
+| lo_commitdate    | int                 | YES  |
+| lo_shipmode      | varchar(2147482624) | YES  |
++------------------+---------------------+------+
 17 rows in set (0.05 sec)
 ```
 
@@ -1015,14 +1015,14 @@ DESC FILES(
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
     "list_files_only" = "true"
 );
-+-------------------+------------------+------+
-| Field             | Type             | Null |
-+-------------------+------------------+------+
-| PATH              | varchar(1048576) | YES  |
-| SIZE              | bigint           | YES  |
-| IS_DIR            | boolean          | YES  |
-| MODIFICATION_TIME | datetime         | YES  |
-+-------------------+------------------+------+
++-------------------+---------------------+------+
+| Field             | Type                | Null |
++-------------------+---------------------+------+
+| PATH              | varchar(2147482624) | YES  |
+| SIZE              | bigint              | YES  |
+| IS_DIR            | boolean             | YES  |
+| MODIFICATION_TIME | datetime            | YES  |
++-------------------+---------------------+------+
 4 rows in set (0.00 sec)
 ```
 
@@ -1240,7 +1240,7 @@ SHOW CREATE TABLE test_ctas_parquet\G
 Create Table: CREATE TABLE `test_ctas_parquet` (
   `c1` bigint(20) NULL COMMENT "",
   `c2` decimal(38, 9) NULL COMMENT "",
-  `c3` varchar(1048576) NULL COMMENT ""
+  `c3` varchar(2147482624) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`c1`, `c2`)
 COMMENT "OLAP"
@@ -1277,7 +1277,7 @@ SHOW CREATE TABLE test_ctas_csv\G
 Create Table: CREATE TABLE `test_ctas_csv` (
   `c1` bigint(20) NULL COMMENT "",
   `c2` decimal(38, 9) NULL COMMENT "",
-  `c3` varchar(1048576) NULL COMMENT ""
+  `c3` varchar(2147482624) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`c1`, `c2`)
 COMMENT "OLAP"
@@ -1324,27 +1324,27 @@ DESC FILES(
     "aws.s3.region" = "us-west-2"
 );
 
-+------------------+------------------+------+
-| Field            | Type             | Null |
-+------------------+------------------+------+
-| lo_orderkey      | int              | YES  |
-| lo_linenumber    | int              | YES  |
-| lo_custkey       | int              | YES  |
-| lo_partkey       | int              | YES  |
-| lo_suppkey       | int              | YES  |
-| lo_orderdate     | int              | YES  |
-| lo_orderpriority | varchar(1048576) | YES  |
-| lo_shippriority  | int              | YES  |
-| lo_quantity      | int              | YES  |
-| lo_extendedprice | int              | YES  |
-| lo_ordtotalprice | int              | YES  |
-| lo_discount      | int              | YES  |
-| lo_revenue       | int              | YES  |
-| lo_supplycost    | int              | YES  |
-| lo_tax           | int              | YES  |
-| lo_commitdate    | int              | YES  |
-| lo_shipmode      | varchar(1048576) | YES  |
-+------------------+------------------+------+
++------------------+---------------------+------+
+| Field            | Type                | Null |
++------------------+---------------------+------+
+| lo_orderkey      | int                 | YES  |
+| lo_linenumber    | int                 | YES  |
+| lo_custkey       | int                 | YES  |
+| lo_partkey       | int                 | YES  |
+| lo_suppkey       | int                 | YES  |
+| lo_orderdate     | int                 | YES  |
+| lo_orderpriority | varchar(2147482624) | YES  |
+| lo_shippriority  | int                 | YES  |
+| lo_quantity      | int                 | YES  |
+| lo_extendedprice | int                 | YES  |
+| lo_ordtotalprice | int                 | YES  |
+| lo_discount      | int                 | YES  |
+| lo_revenue       | int                 | YES  |
+| lo_supplycost    | int                 | YES  |
+| lo_tax           | int                 | YES  |
+| lo_commitdate    | int                 | YES  |
+| lo_shipmode      | varchar(2147482624) | YES  |
++------------------+---------------------+------+
 17 rows in set (0.05 sec)
 ```
 
@@ -1415,21 +1415,21 @@ record_field: {"id":1,"name":"avro"}
 
 ```SQL
 DESC FILES("path" = "hdfs://xxx.xx.xx.x:yyyy/avro/logical.avro", "format" = "avro");
-+------------------------+------------------+------+
-| Field                  | Type             | Null |
-+------------------------+------------------+------+
-| decimal_bytes          | decimal(10,2)    | YES  |
-| decimal_fixed          | decimal(10,2)    | YES  |
-| uuid_string            | varchar(1048576) | YES  |
-| date                   | date             | YES  |
-| time_millis            | int              | YES  |
-| time_micros            | bigint           | YES  |
-| timestamp_millis       | datetime         | YES  |
-| timestamp_micros       | datetime         | YES  |
-| local_timestamp_millis | bigint           | YES  |
-| local_timestamp_micros | bigint           | YES  |
-| duration               | varbinary(12)    | YES  |
-+------------------------+------------------+------+
++------------------------+---------------------+------+
+| Field                  | Type                | Null |
++------------------------+---------------------+------+
+| decimal_bytes          | decimal(10,2)       | YES  |
+| decimal_fixed          | decimal(10,2)       | YES  |
+| uuid_string            | varchar(2147482624) | YES  |
+| date                   | date                | YES  |
+| time_millis            | int                 | YES  |
+| time_micros            | bigint              | YES  |
+| timestamp_millis       | datetime            | YES  |
+| timestamp_micros       | datetime            | YES  |
+| local_timestamp_millis | bigint              | YES  |
+| local_timestamp_micros | bigint              | YES  |
+| duration               | varbinary(12)       | YES  |
++------------------------+---------------------+------+
 ```
 
 #### 示例 9：使用托管身份和服务主体访问 Azure Blob Storage

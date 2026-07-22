@@ -47,6 +47,7 @@
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/tablet_schema_helper.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -87,7 +88,10 @@ protected:
         ColumnIndexMetaPB index_meta;
         {
             ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename))
-            ASSERT_TRUE(builder->finish(wfile.get(), &index_meta).ok());
+            ColumnMetaPB column_meta;
+            ASSERT_TRUE(builder->finish(wfile.get(), &column_meta).ok());
+            ASSERT_EQ(1, column_meta.indexes_size());
+            index_meta.CopyFrom(column_meta.indexes(0));
             ASSERT_EQ(ZONE_MAP_INDEX, index_meta.type());
             ASSERT_OK(wfile->close());
         }
@@ -155,7 +159,10 @@ void ColumnZoneMapTest::check_result(const ZoneMapPB& zone_map, bool has_min, bo
 
 void ColumnZoneMapTest::write_file(ZoneMapIndexWriter& builder, ColumnIndexMetaPB& meta, std::string filename) {
     ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(filename))
-    ASSERT_TRUE(builder.finish(file.get(), &meta).ok());
+    ColumnMetaPB column_meta;
+    ASSERT_TRUE(builder.finish(file.get(), &column_meta).ok());
+    ASSERT_EQ(1, column_meta.indexes_size());
+    meta.CopyFrom(column_meta.indexes(0));
     ASSERT_EQ(ZONE_MAP_INDEX, meta.type());
     ASSERT_OK(file->close());
 }
@@ -295,6 +302,70 @@ TEST_F(ColumnZoneMapTest, StringResize) {
     // segment zonemap
     const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
     check_result_prefix(segment_zonemap, true, true, str1, str4, false, true, pfx);
+}
+
+TEST_F(ColumnZoneMapTest, LargeVarcharThresholdEqualityRemainsValid) {
+    TabletColumn varchar_column = create_varchar_key(0);
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    writer->add_values(nullptr, 0);
+    EXPECT_TRUE(writer->is_valid());
+    EXPECT_EQ(0, writer->size());
+
+    std::string value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 'z');
+    Slice slice(value);
+    writer->add_values(&slice, 1);
+    EXPECT_TRUE(writer->is_valid());
+    ASSERT_TRUE(writer->flush().ok());
+    EXPECT_GT(writer->size(), 0);
+    ASSERT_TRUE(writer->get_last_zonemap().has_value());
+    EXPECT_TRUE(writer->get_last_zonemap()->has_not_null());
+
+    const std::string filename = kTestDir + "/LargeVarcharThresholdEqualityRemainsValid";
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+    EXPECT_EQ(ZONE_MAP_INDEX, index_meta.type());
+}
+
+TEST_F(ColumnZoneMapTest, LargeVarcharInvalidationClearsPreviousPagesAndIsSticky) {
+    TabletColumn varchar_column = create_varchar_key(0);
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    std::string small_value = "small";
+    Slice small_slice(small_value);
+    writer->add_values(&small_slice, 1);
+    writer->add_nulls(1);
+    ASSERT_TRUE(writer->flush().ok());
+    ASSERT_TRUE(writer->is_valid());
+    ASSERT_GT(writer->size(), 0);
+    ASSERT_TRUE(writer->get_last_zonemap().has_value());
+
+    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + 1, 'x');
+    Slice large_slice(large_value);
+    Slice mixed_values[] = {small_slice, large_slice};
+    writer->add_values(mixed_values, 2);
+    EXPECT_FALSE(writer->is_valid());
+    EXPECT_EQ(0, writer->size());
+    EXPECT_FALSE(writer->get_last_zonemap().has_value());
+
+    // Once invalid, subsequent values and nulls cannot recreate partial zone-map state.
+    writer->add_nulls(10);
+    writer->add_values(&small_slice, 1);
+    EXPECT_FALSE(writer->is_valid());
+    EXPECT_EQ(0, writer->size());
+    EXPECT_FALSE(writer->get_last_zonemap().has_value());
+    // flush() and finish() are no-ops once the writer is invalidated.
+    EXPECT_TRUE(writer->flush().ok());
+
+    const std::string filename = kTestDir + "/LargeVarcharInvalidationClearsPreviousPagesAndIsSticky";
+    ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(filename));
+    ColumnMetaPB column_meta;
+    EXPECT_TRUE(writer->finish(file.get(), &column_meta).ok());
+    // No zone map index entry is written for an invalidated writer.
+    EXPECT_EQ(0, column_meta.indexes_size());
+    ASSERT_OK(file->close());
 }
 
 TEST_F(ColumnZoneMapTest, AllNullPage) {

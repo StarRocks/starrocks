@@ -67,6 +67,20 @@ class Column;
 } // namespace starrocks
 
 namespace starrocks {
+// 16 MiB
+inline constexpr size_t kMaxBinaryPageReserveBytes = 16ULL << 20;
+
+// Byte reservation is only a performance hint. Bound it so a large page estimate
+// cannot be amplified by the requested chunk row count.
+inline size_t binary_page_reserve_bytes(size_t rows, size_t estimated_row_size) {
+    if (rows == 0 || estimated_row_size == 0) {
+        return 0;
+    }
+    if (rows > kMaxBinaryPageReserveBytes / estimated_row_size) {
+        return kMaxBinaryPageReserveBytes;
+    }
+    return rows * estimated_row_size;
+}
 
 class BinaryPlainPageBuilder final : public PageBuilder {
 public:
@@ -371,7 +385,7 @@ private:
 
         if (data_col->is_binary() && data_col->capacity() == 0) {
             BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
-            binary_col->reserve(n, n * _estimated_row_size);
+            binary_col->reserve(n, binary_page_reserve_bytes(n, _estimated_row_size));
         }
     }
 

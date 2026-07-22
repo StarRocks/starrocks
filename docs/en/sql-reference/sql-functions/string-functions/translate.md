@@ -33,7 +33,7 @@ Scenarios where the result is `NULL`:
 
 - Any of the input parameters is `NULL`.
 
-- The length of the result string after translation exceeds the maximum length (1048576) of `VARCHAR`.
+- The length of the result string after translation exceeds the maximum length (2147482624) of `VARCHAR`.
 
 ## Examples
 
@@ -77,15 +77,6 @@ mysql > select translate('abcabc', 'aba', '123') as test;
 +--------+
 | 12c12c |
 +--------+
-
--- Use this function with repeat() and concat(). The result string exceeds the maximum length of VARCHAR and NULL is returned.
-mysql > select translate(concat('bcde', repeat('a', 1024*1024-3)), 'a', 'z') as test;
-+--------+
-| test   |
-+--------+
-| NULL   |
-+--------+
-
 -- Use this function with length(), repeat(), and concat() to calculate the length of the result string.
 mysql > select length(translate(concat('bcd', repeat('a', 1024*1024-3)), 'a', 'z')) as test;
 +---------+

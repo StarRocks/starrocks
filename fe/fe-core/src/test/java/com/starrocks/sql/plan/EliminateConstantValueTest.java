@@ -119,7 +119,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01', CAST(2: L_PARTKEY AS VARCHAR(1048576)) = 'key1'");
+                    "     PREDICATES: 11: L_SHIPDATE = '2000-01-01', CAST(2: L_PARTKEY AS VARCHAR(2147482624)) = 'key1'");
         }
     }
 
@@ -166,7 +166,7 @@ public class EliminateConstantValueTest extends PlanTestBase {
                     "  |  <slot 20> : CASE WHEN 25: expr THEN 'key1' ELSE NULL END\n" +
                     "  |  common expressions:\n" +
                     "  |  <slot 21> : CAST(11: L_SHIPDATE AS DATETIME)\n" +
-                    "  |  <slot 22> : CAST(2: L_PARTKEY AS VARCHAR(1048576))\n" +
+                    "  |  <slot 22> : CAST(2: L_PARTKEY AS VARCHAR(2147482624))\n" +
                     "  |  <slot 23> : 21: cast = CAST('2000-01-01' AS DATETIME)\n" +
                     "  |  <slot 24> : 22: cast = 'key1'\n" +
                     "  |  <slot 25> : (23: expr) AND (24: expr)\n" +

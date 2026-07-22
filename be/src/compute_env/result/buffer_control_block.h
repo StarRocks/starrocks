@@ -139,7 +139,7 @@ private:
 
     void _process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result);
 
-    StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
+    StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*, bool release_result_rows);
 
     // as no idea of whether sending sorted results, can't use concurrentQueue here.
     typedef std::list<std::unique_ptr<SerializeRes>> ResultQueue;

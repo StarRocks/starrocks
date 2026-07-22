@@ -3376,7 +3376,9 @@ TEST_F(TabletUpdatesTest, get_missing_version_ranges) {
 }
 
 TEST_F(TabletUpdatesTest, column_with_row_update) {
-    auto tablet = create_tablet_column_with_row(rand(), rand());
+    // Declare a 1 MiB VARCHAR limit so the oversized-value check below does not need a
+    // multi-GiB string: the serialized full row (~1 MiB) exceeds the declared limit.
+    auto tablet = create_tablet_column_with_row(rand(), rand(), false, 1024 * 1024);
     std::vector<int64_t> keys;
     int N = 20;
     for (int i = 0; i < N; i++) {

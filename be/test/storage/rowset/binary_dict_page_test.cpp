@@ -53,6 +53,7 @@
 #include "storage/rowset/storage_page_decoder.h"
 #include "storage/types.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -479,6 +480,185 @@ TEST_F(BinaryDictPageTest, TestReadByRowids) {
     ASSERT_EQ("val_3", column->get(1).get_slice().to_string());
     ASSERT_EQ("val_5", column->get(2).get_slice().to_string());
     ASSERT_EQ("val_8", column->get(3).get_slice().to_string());
+}
+
+TEST_F(BinaryDictPageTest, LargeValueThresholdKeepsDictionaryAtEqualityAndFallsBackAboveIt) {
+    PageBuilderOptions options;
+    options.data_page_size = 4 * 1024 * 1024;
+    options.dict_page_size = 4 * 1024 * 1024;
+
+    const size_t threshold = TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD;
+    std::string at_threshold(threshold, 'd');
+    Slice at_threshold_slice(at_threshold);
+
+    {
+        BinaryDictPageBuilder builder(options);
+        ASSERT_EQ(1, builder.add(reinterpret_cast<const uint8_t*>(&at_threshold_slice), 1));
+        EXPECT_FALSE(builder.is_page_full());
+        EXPECT_TRUE(builder.all_dict_encoded());
+
+        GlobalDictMap complete_dict{{at_threshold, 0}};
+        GlobalDictMap empty_dict;
+        EXPECT_TRUE(builder.is_valid_global_dict(&complete_dict));
+        EXPECT_FALSE(builder.is_valid_global_dict(&empty_dict));
+
+        faststring* encoded = builder.finish();
+        Slice first;
+        Slice last;
+        ASSERT_TRUE(builder.get_first_value(&first).ok());
+        ASSERT_TRUE(builder.get_last_value(&last).ok());
+        EXPECT_EQ(at_threshold_slice, first);
+        EXPECT_EQ(at_threshold_slice, last);
+
+        OwnedSlice data_page = encoded->build();
+        OwnedSlice dict_page = builder.get_dictionary_page()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> dict_decoder(dict_page.slice());
+        ASSERT_TRUE(dict_decoder.init().ok());
+
+        Slice encoded_data = data_page.slice();
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        std::unique_ptr<std::vector<uint8_t>> decoded_page;
+        Status decode_status = StoragePageDecoder::decode_page(&footer, 0, DICT_ENCODING, &decoded_page, &encoded_data);
+        ASSERT_TRUE(decode_status.ok()) << decode_status;
+
+        BinaryDictPageDecoder<TYPE_VARCHAR> decoder(encoded_data);
+        ASSERT_TRUE(decoder.init().ok());
+        ASSERT_EQ(DICT_ENCODING, decoder.encoding_type());
+        decoder.set_dict_decoder(&dict_decoder);
+
+        auto output = BinaryColumn::create();
+        size_t count = 1;
+        ASSERT_TRUE(decoder.next_batch(&count, output.get()).ok());
+        ASSERT_EQ(1, count);
+        EXPECT_EQ(at_threshold_slice, output->get_slice(0));
+    }
+
+    std::string above_threshold(threshold + 1, 'p');
+    Slice above_threshold_slice(above_threshold);
+    {
+        BinaryDictPageBuilder builder(options);
+        ASSERT_EQ(1, builder.add(reinterpret_cast<const uint8_t*>(&above_threshold_slice), 1));
+        EXPECT_FALSE(builder.all_dict_encoded());
+        GlobalDictMap empty_dict;
+        EXPECT_FALSE(builder.is_valid_global_dict(&empty_dict));
+
+        faststring* encoded = builder.finish();
+        Slice first;
+        Slice last;
+        ASSERT_TRUE(builder.get_first_value(&first).ok());
+        ASSERT_TRUE(builder.get_last_value(&last).ok());
+        EXPECT_EQ(above_threshold_slice, first);
+        EXPECT_EQ(above_threshold_slice, last);
+
+        OwnedSlice data_page = encoded->build();
+        BinaryDictPageDecoder<TYPE_VARCHAR> decoder(data_page.slice());
+        ASSERT_TRUE(decoder.init().ok());
+        ASSERT_EQ(PLAIN_ENCODING, decoder.encoding_type());
+
+        auto output = BinaryColumn::create();
+        size_t count = 1;
+        ASSERT_TRUE(decoder.next_batch(&count, output.get()).ok());
+        ASSERT_EQ(1, count);
+        EXPECT_EQ(above_threshold_slice, output->get_slice(0));
+    }
+}
+
+TEST_F(BinaryDictPageTest, LargeValueAfterDictionaryRowsForcesPageBoundaryAndStickyPlainEncoding) {
+    PageBuilderOptions options;
+    options.data_page_size = 4 * 1024 * 1024;
+    options.dict_page_size = 4 * 1024 * 1024;
+
+    const std::string small_value = "dict-value";
+    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + 1, 'x');
+    Slice values[] = {Slice(small_value), Slice(large_value)};
+
+    BinaryDictPageBuilder builder(options);
+    ASSERT_EQ(1, builder.add(reinterpret_cast<const uint8_t*>(values), 2));
+    EXPECT_EQ(1, builder.count());
+    EXPECT_TRUE(builder.is_page_full());
+    EXPECT_TRUE(builder.all_dict_encoded());
+
+    faststring* dict_encoded = builder.finish();
+    Slice first;
+    Slice last;
+    ASSERT_TRUE(builder.get_first_value(&first).ok());
+    ASSERT_TRUE(builder.get_last_value(&last).ok());
+    EXPECT_EQ(values[0], first);
+    EXPECT_EQ(values[0], last);
+    OwnedSlice dict_data_page = dict_encoded->build();
+
+    Slice encoded_data = dict_data_page.slice();
+    PageFooterPB footer;
+    footer.set_type(DATA_PAGE);
+    footer.mutable_data_page_footer()->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    Status decode_status = StoragePageDecoder::decode_page(&footer, 0, DICT_ENCODING, &decoded_page, &encoded_data);
+    ASSERT_TRUE(decode_status.ok()) << decode_status;
+
+    BinaryDictPageDecoder<TYPE_VARCHAR> dict_data_decoder(encoded_data);
+    ASSERT_TRUE(dict_data_decoder.init().ok());
+    EXPECT_EQ(DICT_ENCODING, dict_data_decoder.encoding_type());
+
+    builder.reset();
+    ASSERT_EQ(1, builder.add(reinterpret_cast<const uint8_t*>(&values[1]), 1));
+    EXPECT_EQ(1, builder.count());
+    EXPECT_FALSE(builder.all_dict_encoded());
+    GlobalDictMap complete_dict{{small_value, 0}};
+    EXPECT_FALSE(builder.is_valid_global_dict(&complete_dict));
+
+    faststring* plain_encoded = builder.finish();
+    ASSERT_TRUE(builder.get_first_value(&first).ok());
+    ASSERT_TRUE(builder.get_last_value(&last).ok());
+    EXPECT_EQ(values[1], first);
+    EXPECT_EQ(values[1], last);
+    OwnedSlice plain_data_page = plain_encoded->build();
+    BinaryDictPageDecoder<TYPE_VARCHAR> plain_decoder(plain_data_page.slice());
+    ASSERT_TRUE(plain_decoder.init().ok());
+    EXPECT_EQ(PLAIN_ENCODING, plain_decoder.encoding_type());
+
+    auto output = BinaryColumn::create();
+    size_t count = 1;
+    ASSERT_TRUE(plain_decoder.next_batch(&count, output.get()).ok());
+    ASSERT_EQ(1, count);
+    EXPECT_EQ(values[1], output->get_slice(0));
+}
+
+TEST_F(BinaryDictPageTest, LargeValueAsFirstRowConsumesTheRemainingRowsInPlainEncoding) {
+    PageBuilderOptions options;
+    options.data_page_size = 4 * 1024 * 1024;
+    options.dict_page_size = 4 * 1024 * 1024;
+
+    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + 1, 'l');
+    const std::string small_value = "after-large";
+    Slice values[] = {Slice(large_value), Slice(small_value)};
+
+    BinaryDictPageBuilder builder(options);
+    ASSERT_EQ(2, builder.add(reinterpret_cast<const uint8_t*>(values), 2));
+    EXPECT_EQ(2, builder.count());
+    EXPECT_FALSE(builder.all_dict_encoded());
+
+    faststring* encoded = builder.finish();
+    Slice first;
+    Slice last;
+    ASSERT_TRUE(builder.get_first_value(&first).ok());
+    ASSERT_TRUE(builder.get_last_value(&last).ok());
+    EXPECT_EQ(values[0], first);
+    EXPECT_EQ(values[1], last);
+
+    OwnedSlice data_page = encoded->build();
+    BinaryDictPageDecoder<TYPE_VARCHAR> decoder(data_page.slice());
+    ASSERT_TRUE(decoder.init().ok());
+    ASSERT_EQ(PLAIN_ENCODING, decoder.encoding_type());
+
+    auto output = BinaryColumn::create();
+    size_t count = 2;
+    ASSERT_TRUE(decoder.next_batch(&count, output.get()).ok());
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, output->size());
+    EXPECT_EQ(values[0], output->get_slice(0));
+    EXPECT_EQ(values[1], output->get_slice(1));
 }
 
 } // namespace starrocks

@@ -1091,8 +1091,10 @@ TEST_P(CSVScannerTest, test_large_record_size) {
 }
 
 TEST_P(CSVScannerTest, test_record_length_exceed_limit) {
-    constexpr size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
-    constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    // BE_TEST keeps CSVReader's maximum buffer at 512 KiB. Keep this test's data size independent
+    // of the production VARCHAR limit so raising that limit does not turn the UT into a multi-GiB allocation.
+    constexpr size_t record_length = 1024 * 1024;
+    constexpr size_t field_length = record_length;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
 
     TypeDescriptor large_varchar_type;
@@ -1102,7 +1104,7 @@ TEST_P(CSVScannerTest, test_record_length_exceed_limit) {
     std::vector<TypeDescriptor> types(field_count, large_varchar_type);
 
     // Construct 1 record with |field_count| fixed-length fields and the
-    // total record length is greater than |TypeDescriptor::MAX_VARCHAR_LENGTH|.
+    // total record length is greater than CSVReader's test-only maximum buffer size.
     std::stringstream ss;
     std::string csv_field(field_length, 'x');
     for (int i = 0; i < field_count; i++) {

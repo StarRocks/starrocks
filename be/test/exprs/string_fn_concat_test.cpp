@@ -18,15 +18,21 @@
 #include <random>
 
 #include "butil/time.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/storage_define.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
 
+constexpr int32_t kTestOlapStringMaxLength = 64 * 1024;
+
 class StringFunctionConcatTest : public ::testing::Test {
 public:
     void SetUp() override {
+        _saved_olap_string_max_length = config::olap_string_max_length;
+        config::olap_string_max_length = kTestOlapStringMaxLength;
+
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -36,8 +42,13 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
+    void TearDown() override { config::olap_string_max_length = _saved_olap_string_max_length; }
+
 public:
     TExprNode expr_node;
+
+private:
+    int32_t _saved_olap_string_max_length = 0;
 };
 
 TEST_F(StringFunctionConcatTest, concatNormalTest) {
@@ -105,6 +116,89 @@ TEST_F(StringFunctionConcatTest, concatConstTest) {
     for (int k = 0; k < 20; ++k) {
         ASSERT_EQ("test" + std::to_string(k) + "_abcd_1234_道可道,非常道", v->get_slice(k).to_string());
     }
+}
+
+TEST_F(StringFunctionConcatTest, concatPrepareConstantTailBoundaries) {
+    const auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+
+    // The constant tail may be exactly as large as the configured OLAP string limit.
+    {
+        std::vector<FunctionContext::TypeDesc> arg_types(3, varchar_type);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context(std::move(arg_types), varchar_type));
+        const std::string prefix(kTestOlapStringMaxLength - 1, 'x');
+        context->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_VARCHAR>(prefix, 1),
+                                       ColumnHelper::create_const_column<TYPE_VARCHAR>("y", 1)});
+
+        ASSERT_TRUE(StringFunctions::concat_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        ASSERT_NE(nullptr, state);
+        EXPECT_TRUE(state->is_const);
+        EXPECT_FALSE(state->is_oversize);
+        ASSERT_EQ(kTestOlapStringMaxLength, state->tail.size());
+        EXPECT_EQ('x', state->tail.front());
+        EXPECT_EQ('y', state->tail.back());
+        ASSERT_TRUE(StringFunctions::concat_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+
+    // One byte over the limit is detected during the sizing pass, before any tail data is appended.
+    {
+        std::vector<FunctionContext::TypeDesc> arg_types(3, varchar_type);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context(std::move(arg_types), varchar_type));
+        const std::string at_limit(kTestOlapStringMaxLength, 'x');
+        context->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_VARCHAR>(at_limit, 1),
+                                       ColumnHelper::create_const_column<TYPE_VARCHAR>("y", 1)});
+
+        ASSERT_TRUE(StringFunctions::concat_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        ASSERT_NE(nullptr, state);
+        EXPECT_TRUE(state->is_const);
+        EXPECT_TRUE(state->is_oversize);
+        EXPECT_TRUE(state->tail.empty());
+        ASSERT_TRUE(StringFunctions::concat_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+
+    // No constant tail arguments is a valid zero-length boundary.
+    {
+        std::vector<FunctionContext::TypeDesc> arg_types(1, varchar_type);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context(std::move(arg_types), varchar_type));
+        context->set_constant_columns({nullptr});
+
+        ASSERT_TRUE(StringFunctions::concat_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        ASSERT_NE(nullptr, state);
+        EXPECT_TRUE(state->is_const);
+        EXPECT_FALSE(state->is_oversize);
+        EXPECT_TRUE(state->tail.empty());
+        ASSERT_TRUE(StringFunctions::concat_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(StringFunctionConcatTest, concatPrepareNonConstantAndNullTail) {
+    const auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+
+    for (const ColumnPtr& tail : {ColumnPtr(), ColumnPtr(ColumnHelper::create_const_null_column(1))}) {
+        std::vector<FunctionContext::TypeDesc> arg_types(2, varchar_type);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context(std::move(arg_types), varchar_type));
+        context->set_constant_columns({nullptr, tail});
+
+        ASSERT_TRUE(StringFunctions::concat_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        ASSERT_NE(nullptr, state);
+        EXPECT_FALSE(state->is_const);
+        EXPECT_FALSE(state->is_oversize);
+        EXPECT_TRUE(state->tail.empty());
+        ASSERT_TRUE(StringFunctions::concat_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+
+    std::vector<FunctionContext::TypeDesc> arg_types(2, varchar_type);
+    std::unique_ptr<FunctionContext> thread_context(
+            FunctionContext::create_test_context(std::move(arg_types), varchar_type));
+    EXPECT_TRUE(StringFunctions::concat_prepare(thread_context.get(), FunctionContext::THREAD_LOCAL).ok());
+    EXPECT_EQ(nullptr, thread_context->get_function_state(FunctionContext::THREAD_LOCAL));
 }
 
 TEST_F(StringFunctionConcatTest, concatNullTest) {

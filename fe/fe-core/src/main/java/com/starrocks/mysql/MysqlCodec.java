@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 public class MysqlCodec {
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
+    private static final long UNSIGNED_INT_MAX_VALUE = 0xffffffffL;
 
     public static byte readByte(ByteBuffer buffer) {
         return buffer.get();
@@ -338,7 +339,7 @@ public class MysqlCodec {
                     charLength = GlobalVariable.getMaxUnknownStringMetaLength();  // default 64
                 }
                 // utf8 charset
-                return charLength * 3;
+                return (int) Math.min((long) charLength * 3, UNSIGNED_INT_MAX_VALUE);
             default:
                 // Treat ARRAY/MAP/STRUCT as VARCHAR(-1)
                 return 60;

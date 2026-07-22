@@ -23,7 +23,7 @@ desc files(
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
-k2	varchar(1048576)	YES
+k2	varchar(2147482624)	YES
 k1	int	YES
 -- !result
 

@@ -21,17 +21,17 @@ desc files(
 -- result:
 record_of_record	struct<`inner` struct<`val` int(11)>>	YES
 record_of_array	struct<`list` array<int(11)>>	YES
-record_of_map	struct<`dict` map<varchar(1048576),varchar(1048576)>>	YES
-array_of_record	array<struct<`value` varchar(1048576)>>	YES
+record_of_map	struct<`dict` map<varchar(2147482624),varchar(2147482624)>>	YES
+array_of_record	array<struct<`value` varchar(2147482624)>>	YES
 array_of_array	array<array<int>>	YES
-array_of_map	array<map<varchar(1048576),int>>	YES
-map_of_record	map<varchar(1048576),struct<`id` int(11)>>	YES
-map_of_array	map<varchar(1048576),array<int>>	YES
-map_of_map	map<varchar(1048576),map<varchar(1048576),varchar(1048576)>>	YES
+array_of_map	array<map<varchar(2147482624),int>>	YES
+map_of_record	map<varchar(2147482624),struct<`id` int(11)>>	YES
+map_of_array	map<varchar(2147482624),array<int>>	YES
+map_of_map	map<varchar(2147482624),map<varchar(2147482624),varchar(2147482624)>>	YES
 record_array_of_record	struct<`entries` array<struct<`flag` boolean>>>	YES
-record_array_of_map	struct<`entries` array<map<varchar(1048576),varchar(1048576)>>>	YES
-array_map_record	array<map<varchar(1048576),struct<`ok` boolean>>>	YES
-map_array_record	map<varchar(1048576),array<struct<`score` float>>>	YES
+record_array_of_map	struct<`entries` array<map<varchar(2147482624),varchar(2147482624)>>>	YES
+array_map_record	array<map<varchar(2147482624),struct<`ok` boolean>>>	YES
+map_array_record	map<varchar(2147482624),array<struct<`score` float>>>	YES
 -- !result
 
 select * from files(

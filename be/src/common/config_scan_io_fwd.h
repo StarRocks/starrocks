@@ -155,8 +155,8 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
-// the max length supported for varchar type
-CONF_mInt32(olap_string_max_length, "1048576");
+// The max length supported for VARCHAR: 2 GiB minus 1 KiB.
+CONF_mInt32(olap_string_max_length, "2147482624");
 
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 

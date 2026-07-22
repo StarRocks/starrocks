@@ -233,7 +233,7 @@ public class AnalyzeAlterTableStatementTest {
         AddColumnClause clause = (AddColumnClause) alterTableStmt.getAlterClauseList().get(0);
         ScalarType type = (ScalarType) clause.getColumnDef().getType();
         Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+        Assertions.assertEquals(TypeFactory.getMaxVarbinaryLength(), type.getLength());
     }
 
     @Test

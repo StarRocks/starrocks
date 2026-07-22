@@ -400,27 +400,23 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
         return Status::OK();
     }
 
-    std::string tail;
-    // size of concatenation of tail columns(i.e. columns except the 1st one)
-    // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
-    // case NULL is returned according to mysql.
-    raw::make_room(&tail, get_olap_string_max_length());
-    auto* tail_begin = (uint8_t*)tail.data();
-    size_t tail_off = 0;
-
+    const size_t max_length = get_olap_string_max_length();
+    size_t tail_size = 0;
     for (auto i = 1; i < num_args; ++i) {
         auto const_arg = context->get_constant_column(i);
         auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
-        if (tail_off + s.size > get_olap_string_max_length()) {
-            //oversize
+        if (s.size > max_length - tail_size) {
             state->is_oversize = true;
-            break;
+            return Status::OK();
         }
-        strings::memcpy_inlined(tail_begin + tail_off, s.data, s.size);
-        tail_off += s.size;
+        tail_size += s.size;
     }
-    if (!state->is_oversize) {
-        state->tail.assign(tail_begin, tail_begin + tail_off);
+
+    state->tail.reserve(tail_size);
+    for (auto i = 1; i < num_args; ++i) {
+        auto const_arg = context->get_constant_column(i);
+        auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
+        state->tail.append(s.data, s.size);
     }
     return Status::OK();
 }
@@ -929,7 +925,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
                 size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
-                if (slice_sz * times < get_olap_string_max_length()) {
+                if (slice_sz * times <= get_olap_string_max_length()) {
                     reserved += slice_sz * times;
                 }
             }

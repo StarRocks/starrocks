@@ -433,8 +433,8 @@ public class MvRewriteJoinTest extends MVTestBase {
             // Bug repro: the lazily-fetched region slot used to be emitted as nullable=false
             // because it inherited from the pre-rewrite t1_s026.region (PK column, NOT NULL).
             // After the fix, the slot's nullable is widened by the storage column's isAllowNull.
-            PlanTestBase.assertNotContains(plan, "[region, VARCHAR(1048576), false]");
-            PlanTestBase.assertContains(plan, "[region, VARCHAR(1048576), true]");
+            PlanTestBase.assertNotContains(plan, "[region, VARCHAR(2147482624), false]");
+            PlanTestBase.assertContains(plan, "[region, VARCHAR(2147482624), true]");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(prevGlm);
             starRocksAssert.dropMaterializedView("mv_s026");

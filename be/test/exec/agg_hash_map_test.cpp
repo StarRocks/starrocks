@@ -18,15 +18,18 @@
 
 #include <any>
 
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
+#include "exec/partition/partition_hash_map.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "types/value_generator.h"
 
 namespace starrocks {
@@ -321,6 +324,49 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullOneString
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWithSerializedKey) {
     using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
     TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32) {
+    using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
+
+    RuntimeProfile profile("SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32");
+    AggStatistics statistics(&profile);
+    constexpr int kEstimatedChunkSize = 4096;
+    TestAggHashMapKey key(kEstimatedChunkSize, &statistics);
+
+    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 'x');
+    auto column = BinaryColumn::create();
+    column->append(Slice(large_value));
+    Columns key_columns{column};
+
+    Buffer<AggDataPtr> agg_states(1);
+    MemPool pool;
+    key.build_hash_map(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states);
+
+    EXPECT_EQ(0, key.max_one_row_size);
+    EXPECT_EQ(1, key.hash_map.size());
+    EXPECT_NE(nullptr, agg_states[0]);
+
+    Filter not_founds;
+    key.build_hash_map_with_selection(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states,
+                                      &not_founds);
+    ASSERT_EQ(1, not_founds.size());
+    EXPECT_EQ(0, not_founds[0]);
+}
+
+TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
+    PartitionHashMapWithSerializedKey<SlicePartitionHashMap<PhmapSeed1>> partition_map(4);
+
+    auto string_column = BinaryColumn::create();
+    string_column->append("abc");
+    auto int_column = Int32Column::create();
+    int_column->append(7);
+    Columns key_columns{string_column, int_column};
+
+    auto size_or = partition_map.get_max_serialize_size(key_columns);
+    ASSERT_TRUE(size_or.ok()) << size_or.status();
+    EXPECT_EQ(string_column->max_one_element_serialize_size() + int_column->max_one_element_serialize_size(),
+              size_or.value());
 }
 
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {

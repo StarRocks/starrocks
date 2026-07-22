@@ -151,7 +151,7 @@ public class SqlParserFilesSchemaTest {
     public void testRejectsInvalidTypes() {
         // schema -> optional substring the message must contain (null = no extra check)
         String[][] cases = new String[][] {
-                {"c VARCHAR(100000000)", null},             // length above MAX_VARCHAR_LENGTH
+                {"c VARCHAR(2147482625)", null},            // length above MAX_VARCHAR_LENGTH
                 {"c DECIMAL(80, 5)", null},                 // precision above DECIMAL256 max (76)
                 {"c DECIMAL(10, 11)", null},                // scale > precision
                 {"c HLL", "HLL"},                           // metric type at top level

@@ -675,6 +675,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ScalarOperator 最適化が適用できる最大深度。
 - 導入時期：-
 
+### `max_varchar_length`
+
+- Default：2147482624
+- Type：Int
+- Unit：Bytes
+- 変更可能：Yes
+- 説明：OLAP テーブルでサポートされる VARCHAR カラムの最大長。この値は、FE が CHAR/VARCHAR 型を推論またはマテリアライズする際の上限でもあります。設定可能な最大値は 2147482624（2 GiB マイナス 1 KiB）です。
+- 導入時期：-
+
 ### `mv_active_checker_interval_seconds`
 
 - デフォルト：60

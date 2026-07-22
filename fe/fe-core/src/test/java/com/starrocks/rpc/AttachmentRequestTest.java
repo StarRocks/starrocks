@@ -20,11 +20,18 @@ import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 
 class AttachmentRequestTest {
+    private int previousThriftMaxMessageSize;
+
+    @BeforeEach
+    void before() {
+        previousThriftMaxMessageSize = Config.thrift_max_message_size;
+    }
 
     @Test
     void readBinaryTest() throws TException {
@@ -47,6 +54,6 @@ class AttachmentRequestTest {
 
     @AfterEach
     public void after() {
-        Config.thrift_max_message_size = 1024 * 1024 * 1024;
+        Config.thrift_max_message_size = previousThriftMaxMessageSize;
     }
 }

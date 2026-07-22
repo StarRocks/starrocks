@@ -51,6 +51,7 @@
 #include "storage/types.h"
 #include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -190,19 +191,33 @@ public:
 
     void add_values(const void* values, size_t count) override;
 
-    void add_nulls(uint32_t count) override { _page_zone_map.has_null |= count > 0; }
+    void add_nulls(uint32_t count) override {
+        if (_valid) {
+            _page_zone_map.has_null |= count > 0;
+        }
+    }
 
     // mark the end of one data page so that we can finalize the corresponding zone map
     Status flush() override;
 
     std::optional<ZoneMapPB> get_last_zonemap() override;
 
-    Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) override;
+    Status finish(WritableFile* wfile, ColumnMetaPB* col_meta) override;
 
     uint64_t size() const override { return _estimated_size; }
 
+    bool is_valid() const override { return _valid; }
+
 private:
     void _truncate_string_minmax_if_needed(ZoneMap<type>* zm);
+
+    void _invalidate() {
+        _valid = false;
+        _values.clear();
+        _estimated_size = 0;
+        _reset_zone_map(&_page_zone_map);
+        _reset_zone_map(&_segment_zone_map);
+    }
 
     void _reset_zone_map(ZoneMap<type>* zone_map) {
         // we should allocate max varchar length and set to max for min value
@@ -223,6 +238,7 @@ private:
 
     // Whether truncate the string to `string_prefix_zonemap_prefix_len` length
     bool _truncate_string = false;
+    bool _valid = true;
 };
 
 template <LogicalType type>
@@ -255,8 +271,16 @@ void ZoneMapIndexWriterImpl<LT>::_truncate_string_minmax_if_needed(ZoneMap<LT>* 
 
 template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
-    if (count > 0) {
+    if (count > 0 && _valid) {
         const auto* vals = reinterpret_cast<const CppType*>(values);
+        if constexpr (is_string_type(type)) {
+            for (size_t i = 0; i < count; ++i) {
+                if (vals[i].size > TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD) {
+                    _invalidate();
+                    return;
+                }
+            }
+        }
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
 
         if (_page_zone_map.has_not_null) {
@@ -284,6 +308,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
 
 template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
+    RETURN_IF(!_valid, Status::OK());
     // Update segment zone map.
     if (_page_zone_map.has_not_null) {
         if (_segment_zone_map.has_not_null) {
@@ -328,7 +353,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 
 template <LogicalType type>
 std::optional<ZoneMapPB> ZoneMapIndexWriterImpl<type>::get_last_zonemap() {
-    if (_values.empty()) {
+    if (_values.empty() || !_valid) {
         return std::nullopt;
     }
     ZoneMapPB zone_map_pb;
@@ -350,7 +375,9 @@ std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(TypeInfo* type_in
 }
 
 template <LogicalType type>
-Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) {
+Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnMetaPB* col_meta) {
+    RETURN_IF(!_valid, Status::OK());
+    auto index_meta = col_meta->add_indexes();
     index_meta->set_type(ZONE_MAP_INDEX);
     ZoneMapIndexPB* meta = index_meta->mutable_zone_map_index();
     // store segment zone map

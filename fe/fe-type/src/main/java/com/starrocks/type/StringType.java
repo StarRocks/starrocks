@@ -15,7 +15,7 @@
 package com.starrocks.type;
 
 public class StringType extends ScalarType {
-    // Longest supported VARCHAR and CHAR, chosen to match Hive.
+    // Generic STRING lengths are compatibility defaults, not the OLAP storage limit.
     public static final int DEFAULT_STRING_LENGTH = 65533;
     public static final int MAX_STRING_LENGTH = 1048576;
 

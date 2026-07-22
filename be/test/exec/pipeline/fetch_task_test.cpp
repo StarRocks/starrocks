@@ -466,7 +466,7 @@ TEST(FetchTaskTest, lookup_http_fallback_enabled_for_max_varchar_fetch_slot) {
 TEST(FetchTaskTest, lookup_http_fallback_rejects_small_varchar_fetch_slot) {
     ScopedLookupHttpFallbackConfig config_guard(true);
     auto state = create_runtime_state_with_descs(
-            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH - 1)});
+            {TypeDescriptor::create_varchar_type(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD - 1)});
     RowPositionDescriptor row_pos_desc(RowPositionDescriptor::OLAP_SCAN, 1, -1, {}, {});
     auto row_pos_descs = create_row_pos_descs(&row_pos_desc);
 

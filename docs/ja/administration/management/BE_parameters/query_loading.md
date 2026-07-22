@@ -74,7 +74,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: 整数
 - 単位: 行
 - 変更可能: いいえ
-- 説明: StringColumnWriterとDictColumnWriterが辞書エンコーディングの推測をトリガーするために使用する最小行数（チャンクサイズ）。入力列（または蓄積されたバッファと入力行）のサイズが`dictionary_speculate_min_chunk_size`以上の場合、ライターはすぐに推測を実行し、より多くの行をバッファリングするのではなく、エンコーディング（DICT、PLAIN、またはBIT_SHUFFLE）を設定します。推測は、文字列列には`dictionary_encoding_ratio`を、数値/非文字列列には`dictionary_encoding_ratio_for_non_string_column`を使用して、辞書エンコーディングが有益かどうかを判断します。また、大きな列のbyte_size（UINT32_MAX以上）は、`BinaryColumn<uint32_t>`オーバーフローを避けるために即座の推測を強制します。
+- 説明: StringColumnWriterとDictColumnWriterが辞書エンコーディングの推測をトリガーするために使用する最小行数（チャンクサイズ）。入力列（または蓄積されたバッファと入力行）のサイズが`dictionary_speculate_min_chunk_size`以上の場合、ライターはすぐに推測を実行し、より多くの行をバッファリングするのではなく、エンコーディング（DICT、PLAIN、またはBIT_SHUFFLE）を設定します。推測は、文字列列には`dictionary_encoding_ratio`を、数値/非文字列列には`dictionary_encoding_ratio_for_non_string_column`を使用して、辞書エンコーディングが有益かどうかを判断します。1 MiB を超える文字列値も即座の推測をトリガーし、Plain Encoding を強制します。また、列の byte_size が UINT32_MAX 以上の場合も、`BinaryColumn<uint32_t>` のオーバーフローを避けるために即座の推測を強制します。
 - 導入バージョン: v3.2.0
 
 ### disable_storage_page_cache
@@ -159,7 +159,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 型: 真偽値
 - 単位: -
 - 変更可能: はい
-- 説明: プレフィックスベースの最小/最大値を使用して、文字列 (CHAR/VARCHAR) 列にZoneMapを有効にするかどうか。非キー文字列列の場合、最小/最大値は`string_prefix_zonemap_prefix_len`で設定された固定プレフィックス長に切り詰められます。
+- 説明: プレフィックスベースの最小/最大値を使用して、文字列 (CHAR/VARCHAR) 列にZoneMapを有効にするかどうか。非キー文字列列の場合、最小/最大値は`string_prefix_zonemap_prefix_len`で設定された固定プレフィックス長に切り詰められます。CHAR/VARCHAR 列に 1 MiB を超える値が 1 つでも存在する場合、この設定にかかわらず、StarRocks は Segment 全体のその列に ZoneMap を書き込みません。
 - 導入バージョン: -
 
 ### ゾーンマップインデックスメモリページキャッシュの有効化

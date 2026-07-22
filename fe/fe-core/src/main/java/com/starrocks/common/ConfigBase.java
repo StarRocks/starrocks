@@ -269,6 +269,13 @@ public class ConfigBase {
                             "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
+            case "max_varchar_length":
+                int maxVarcharLength = Integer.parseInt(confVal);
+                if (maxVarcharLength > Integer.MAX_VALUE - 1023) {
+                    throw new InvalidConfException("'max_varchar_length' must be no greater than " +
+                            (Integer.MAX_VALUE - 1023) + ", current value: " + confVal);
+                }
+                break;
             case "http_request_allow_private_in_allowlist":
                 if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
                     throw new InvalidConfException(

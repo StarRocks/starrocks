@@ -117,7 +117,7 @@ private:
     EncodingTypePB _encoding_type{DICT_ENCODING};
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
-    faststring _first_value;
+    bool _force_dict_page_full{false};
 };
 
 template <LogicalType Type>

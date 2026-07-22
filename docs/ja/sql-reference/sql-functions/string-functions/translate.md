@@ -31,7 +31,7 @@ TRANSLATE(source, from_string, to_string)
 
 - 入力パラメータのいずれかが `NULL` である場合。
 
-- 翻訳後の結果文字列の長さが `VARCHAR` の最大長（1048576）を超える場合。
+- 翻訳後の結果文字列の長さが `VARCHAR` の最大長（2147482624）を超える場合。
 
 ## Examples
 
@@ -75,15 +75,6 @@ mysql > select translate('abcabc', 'aba', '123') as test;
 +--------+
 | 12c12c |
 +--------+
-
--- repeat() と concat() を使用してこの関数を使用します。結果の文字列が VARCHAR の最大長を超え、NULL が返されます。
-mysql > select translate(concat('bcde', repeat('a', 1024*1024-3)), 'a', 'z') as test;
-+--------+
-| test   |
-+--------+
-| NULL   |
-+--------+
-
 -- length()、repeat()、concat() と共にこの関数を使用して、結果の文字列の長さを計算します。
 mysql > select length(translate(concat('bcd', repeat('a', 1024*1024-3)), 'a', 'z')) as test;
 +---------+

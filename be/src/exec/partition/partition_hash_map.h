@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
+#include <limits>
 #include <utility>
 
 #include "base/phmap/phmap.h"
@@ -496,7 +499,8 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
     PartitionHashMapWithSerializedKey(int32_t chunk_size)
             : PartitionHashMapBase(chunk_size),
               inner_mem_pool(std::make_unique<MemPool>()),
-              buffer(inner_mem_pool->allocate(max_one_row_size * chunk_size)) {}
+              buffer(inner_mem_pool->allocate(static_cast<size_t>(max_one_row_size) *
+                                              static_cast<size_t>(chunk_size))) {}
 
     template <bool EnablePassthrough, typename NewPartitionCallback, typename PartitionChunkConsumer>
     StatusOr<bool> append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool,
@@ -509,13 +513,14 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         size_t num_rows = chunk->num_rows();
         slice_sizes.assign(num_rows, 0);
 
-        uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        ASSIGN_OR_RETURN(uint32_t cur_max_one_row_size, get_max_serialize_size(key_columns));
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
             inner_mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = inner_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = inner_mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(chunk_size) +
+                                              SLICE_MEMEQUAL_OVERFLOW_PADDING);
         }
 
         for (const auto& key_column : key_columns) {
@@ -525,7 +530,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         RETURN_IF_ERROR(append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk,
                 [&](uint32_t offset) {
-                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
+                    return Slice{buffer + static_cast<size_t>(offset) * max_one_row_size, slice_sizes[offset]};
                 },
                 [&](const KeyType& key) {
                     uint8_t* pos = mem_pool->allocate(key.size);
@@ -538,12 +543,16 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         return is_passthrough;
     }
 
-    uint32_t get_max_serialize_size(const Columns& key_columns) {
-        uint32_t max_size = 0;
+    StatusOr<uint32_t> get_max_serialize_size(const Columns& key_columns) {
+        uint64_t max_size = 0;
         for (const auto& key_column : key_columns) {
             max_size += key_column->max_one_element_serialize_size();
         }
-        return max_size;
+        if (max_size > std::numeric_limits<uint32_t>::max()) {
+            return Status::NotSupported(
+                    fmt::format("serialized partition key size exceeds the uint32 limit: {}", max_size));
+        }
+        return static_cast<uint32_t>(max_size);
     }
 };
 

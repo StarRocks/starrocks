@@ -559,7 +559,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
-                db, olapTable, 100L, "v2", 0.1);
+                db, olapTable, 100L, "v2", IntegerType.BIGINT, 0.1);
         Assertions.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
                 "BIGINT), " +
                 "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
@@ -581,7 +581,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 normalize.apply(sql));
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
-                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
+                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6",
+                IntegerType.BIGINT);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v6', %d, " +
                         "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
@@ -616,7 +617,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                             "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                             "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                             "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM (   SELECT `v2` as column_key FROM " +
-                            "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null  and `v2` " +
+                            "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null " +
+                            "and LENGTH(`v2`) <= 1048576  and `v2` " +
                             "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
                     normalize.apply(sql));
         } finally {
@@ -682,6 +684,62 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(1, bucketQueryCalls.get());
         Assertions.assertEquals(1, collectedSql.size());
         Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
+    }
+
+    @Test
+    public void testHistogramVarcharValueGuard() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0_stats");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, table, Lists.newArrayList("v6"), Lists.newArrayList(VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        String lengthFilter = "LENGTH(`v6`) <= 1048576";
+
+        String sql = Deencapsulation.invoke(job, "buildCollectMCV",
+                db, table, 100L, "v6", VarcharType.VARCHAR, 0.1);
+        Assertions.assertTrue(sql.contains("`v6` as column_key"));
+        Assertions.assertTrue(sql.contains("count(`v6`) as column_value"));
+        Assertions.assertTrue(sql.contains("WHERE `v6` is not null and " + lengthFilter));
+        Assertions.assertTrue(sql.contains("GROUP BY `v6`"));
+        Assertions.assertTrue(sql.contains("ORDER BY count(`v6`)"));
+        Assertions.assertFalse(sql.contains("IF("));
+
+        sql = Deencapsulation.invoke(job, "buildCollectHistogram",
+                db, table, 0.1, 64L, Maps.newHashMap(), "v6", VarcharType.VARCHAR, false);
+        Assertions.assertTrue(sql.contains("SELECT `v6` as column_key"));
+        Assertions.assertTrue(sql.contains("and `v6` is not null and " + lengthFilter));
+        Assertions.assertTrue(sql.contains("ORDER BY `v6`"));
+        Assertions.assertFalse(sql.contains("IF("));
+
+        sql = Deencapsulation.invoke(job, "buildCollectBucketsWithoutNdv",
+                db, table, 0.1, 64L, Maps.newHashMap(), "v6", VarcharType.VARCHAR);
+        Assertions.assertTrue(sql.contains("SELECT `v6` as column_key"));
+        Assertions.assertTrue(sql.contains("and `v6` is not null and " + lengthFilter));
+        Assertions.assertTrue(sql.contains("ORDER BY `v6`"));
+        Assertions.assertFalse(sql.contains("IF("));
+
+        sql = Deencapsulation.invoke(job, "buildCollectHistogramWithHllNdv",
+                db, table, Maps.newHashMap(), "[]", "v6", VarcharType.VARCHAR);
+        Assertions.assertTrue(sql.contains("histogram_hll_ndv(`v6`, '[]')"));
+        Assertions.assertTrue(sql.contains("WHERE `v6` is not null and " + lengthFilter));
+        Assertions.assertFalse(sql.contains("IF("));
+
+        sql = Deencapsulation.invoke(job, "buildCollectMCV",
+                db, table, 100L, "v6", new VarcharType(1024), 0.1);
+        Assertions.assertTrue(sql.contains(lengthFilter));
+
+        sql = Deencapsulation.invoke(job, "buildCollectMCV",
+                db, table, 100L, "v6", new VarcharType(1024 * 1024), 0.1);
+        Assertions.assertTrue(sql.contains(lengthFilter));
+
+        sql = Deencapsulation.invoke(job, "buildCollectMCV",
+                db, table, 100L, "v6", new VarcharType(1024 * 1024 + 1), 0.1);
+        Assertions.assertTrue(sql.contains(lengthFilter));
+
+        sql = Deencapsulation.invoke(job, "buildCollectMCV",
+                db, table, 100L, "v6", IntegerType.BIGINT, 0.1);
+        Assertions.assertFalse(sql.contains("LENGTH("));
     }
 
     @Test

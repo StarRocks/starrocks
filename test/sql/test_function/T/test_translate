@@ -1,4 +1,4 @@
--- name: test_translate_exceed_OLAP_STRING_MAX_LENGTH
+-- name: test_translate_large_result_over_1MB
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(REPEAT('a', 1024*1024), 'a', 'b')
 )), 0);
@@ -8,7 +8,9 @@ SELECT ifnull(sum(murmur_hash3_32(
 SELECT ifnull(sum(murmur_hash3_32(
     TRANSLATE(CONCAT('a', REPEAT('b', 1024*1024 - 1 - 2)), 'a', '膨')
 )), 0);
-SELECT TRANSLATE(REPEAT('a', 1024*1024), 'a', '膨');
+-- The translated result is 3 MiB (1048576 replacements of 1-byte 'a' with 3-byte '膨'),
+-- which is now supported since the string limit is 2 GiB minus 1 KiB.
+SELECT LENGTH(TRANSLATE(REPEAT('a', 1024*1024), 'a', '膨'));
 
 CREATE TABLE `t1` (
   `src` varchar(65533) NULL COMMENT "",
@@ -43,7 +45,7 @@ truncate table t1;
 
 
 insert into t1 values ('placeholder', 'a', '膨');
-SELECT ifnull(sum(murmur_hash3_32(
+SELECT ifnull(sum(LENGTH(
     TRANSLATE(REPEAT('a', 1024*1024), from_str, to_str)
 )), 0) from t1; 
 truncate table t1;

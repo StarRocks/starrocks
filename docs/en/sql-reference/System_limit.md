@@ -42,7 +42,8 @@ This topic describes the rules and limits that apply when you use StarRocks.
 - The maximum length of a VARCHAR value varies in different versions:
 
   - In versions earlier than StarRocks 2.1, the length ranges from 1 to 65533 bytes.
-  - [Preview] In StarRocks 2.1 and later versions, the length ranges from 1 to 1048576 bytes. Maximum length of a VARCHAR value = Maximum row size (1048578 bytes) - Length prefix (2 bytes). The length prefix indicates the number of bytes in the value.
+  - From StarRocks 2.1 to 4.1, the length ranges from 1 to 1048576 bytes.
+  - From StarRocks 4.2 onwards, the length ranges from 1 to 2147482624 bytes (2 GiB minus 1 KiB).
   - The default length is 1 byte.
 
 - StarRocks supports only UTF-8 encoding, not GBK.

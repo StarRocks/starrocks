@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
 #include "types/type_descriptor.h"
@@ -28,8 +29,18 @@ public:
         _type.len = 6000;
     }
 
+    void SetUp() override {
+        _saved_enable_check_string_lengths = config::enable_check_string_lengths;
+        config::enable_check_string_lengths = true;
+    }
+
+    void TearDown() override { config::enable_check_string_lengths = _saved_enable_check_string_lengths; }
+
 protected:
     TypeDescriptor _type;
+
+private:
+    bool _saved_enable_check_string_lengths = true;
 };
 
 // NOLINTNEXTLINE
@@ -91,7 +102,8 @@ TEST_F(StringConverterTest, test_read_large_string01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH + 1, 'x');
+    char value = 'x';
+    Slice large_string(&value, static_cast<size_t>(TypeDescriptor::MAX_VARCHAR_LENGTH) + 1);
     EXPECT_FALSE(conv->read_string(col.get(), large_string, Converter::Options()));
 }
 
@@ -133,13 +145,15 @@ TEST_F(StringConverterTest, test_read_large_quoted_string01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH, 'x');
+    std::string large_string(_type.len, 'x');
     std::string quoted_string;
     quoted_string.reserve(large_string.size() + 2);
     quoted_string.push_back('"');
     quoted_string.append(large_string);
     quoted_string.push_back('"');
-    EXPECT_TRUE(conv->read_quoted_string(col.get(), quoted_string, Converter::Options()));
+    Converter::Options options;
+    options.type_desc = &_type;
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), quoted_string, options));
 }
 
 // NOLINTNEXTLINE
@@ -147,13 +161,15 @@ TEST_F(StringConverterTest, test_read_large_quoted_string02) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH + 1, 'x');
+    std::string large_string(_type.len + 1, 'x');
     std::string quoted_string;
     quoted_string.reserve(large_string.size() + 2);
     quoted_string.push_back('"');
     quoted_string.append(large_string);
     quoted_string.push_back('"');
-    EXPECT_FALSE(conv->read_quoted_string(col.get(), quoted_string, Converter::Options()));
+    Converter::Options options;
+    options.type_desc = &_type;
+    EXPECT_FALSE(conv->read_quoted_string(col.get(), quoted_string, options));
 }
 
 // NOLINTNEXTLINE
@@ -161,9 +177,9 @@ TEST_F(StringConverterTest, test_read_large_quoted_string03) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH + 1, 'x');
+    std::string large_string(_type.len + 1, 'x');
     // Two double quotas represent a single double quota, so the actual length of large_string
-    // is MAX_VARCHAR_LENGTH.
+    // is exactly the declared type length.
     large_string[100] = '"';
     large_string[101] = '"';
     std::string quoted_string;
@@ -171,7 +187,9 @@ TEST_F(StringConverterTest, test_read_large_quoted_string03) {
     quoted_string.push_back('"');
     quoted_string.append(large_string);
     quoted_string.push_back('"');
-    EXPECT_TRUE(conv->read_quoted_string(col.get(), quoted_string, Converter::Options()));
+    Converter::Options options;
+    options.type_desc = &_type;
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), quoted_string, options));
 }
 
 // NOLINTNEXTLINE

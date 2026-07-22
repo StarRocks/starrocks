@@ -117,7 +117,7 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
     // serialize first
-    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result))
+    ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result, false))
     // should delete it outside in abnormal cases
     if (need_free) {
         delete result;
@@ -151,13 +151,19 @@ Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& 
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TFetchDataResult* result) {
+StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TFetchDataResult* result,
+                                                                              bool release_result_rows) {
     uint8_t* buf = nullptr;
     uint32_t len = 0;
     auto ser_res = std::make_unique<SerializeRes>();
     ser_res->row_size = result->result_batch.rows.size();
     ThriftSerializer ser(false, 4096);
     RETURN_IF_ERROR(ser.serialize(&result->result_batch, &len, &buf));
+    if (release_result_rows) {
+        // serialize() has copied all row data into its own buffer. Releasing the strings before appending
+        // that buffer to IOBuf avoids retaining both copies during the append for large result rows.
+        result->result_batch.rows.clear();
+    }
     ser_res->attachment.append(buf, len);
     return std::move(ser_res);
 }
@@ -190,7 +196,7 @@ Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFet
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
     for (auto& result : results) {
-        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()));
+        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get(), true));
         result.reset();
         {
             std::unique_lock<std::mutex> l(_lock);

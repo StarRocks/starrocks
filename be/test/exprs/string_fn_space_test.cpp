@@ -14,12 +14,26 @@
 
 #include <gtest/gtest.h>
 
+#include "common/config_scan_io_fwd.h"
 #include "common/storage_define.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
 
-class StringFunctionSpaceTest : public ::testing::Test {};
+constexpr int32_t kTestOlapStringMaxLength = 64 * 1024;
+
+class StringFunctionSpaceTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        _saved_olap_string_max_length = config::olap_string_max_length;
+        config::olap_string_max_length = kTestOlapStringMaxLength;
+    }
+
+    void TearDown() override { config::olap_string_max_length = _saved_olap_string_max_length; }
+
+private:
+    int32_t _saved_olap_string_max_length = 0;
+};
 
 TEST_F(StringFunctionSpaceTest, spaceTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());

@@ -40,6 +40,9 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(HistogramStatisticsCollectJob.class);
+    // Filtering oversized values trades histogram accuracy for collection stability on affected columns.
+    // TODO: Preserve accurate statistics for oversized values without retaining them in aggregation state.
+    private static final int MAX_HISTOGRAM_VARCHAR_LENGTH_BYTES = 1024 * 1024;
 
     private static final String HISTOGRAM_FUNCTION_WITHOUT_NDV_TEMPLATE =
             "histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double))";
@@ -55,7 +58,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " FROM (" +
                     "   SELECT $columnName as column_key " +
                     "   FROM `$dbName`.`$tableName` $sampleClause " +
-                    "   WHERE $randFilter and $columnName is not null $MCVExclude" +
+                    "   WHERE $randFilter and $columnName is not null $columnLengthFilter $MCVExclude" +
                     "   ORDER BY $columnName LIMIT $totalRows) t";
 
     private static final String COLLECT_HISTOGRAM_WITH_HLL_NDV_STATISTIC_TEMPLATE =
@@ -63,14 +66,14 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " histogram_hll_ndv($columnName, '$buckets')," +
                     " $mcv," +
                     " NOW()" +
-                    " FROM `$dbName`.`$tableName`;";
+                    " FROM `$dbName`.`$tableName`$hllColumnFilter;";
 
     private static final String COLLECT_BUCKETS_WITHOUT_NDV_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT) as version," +
                     " cast($dbId  as BIGINT), cast($tableId as BIGINT), '$columnNameStr'," +
                     " $histogramFunction" +
                     " FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
-                    " and $columnName is not null $MCVExclude" +
+                    " and $columnName is not null $columnLengthFilter $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
     private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
@@ -86,7 +89,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "   $columnName as column_key, " +
                     "   count($columnName) as column_value " +
                     "FROM `$dbName`.`$tableName` $sampleClause " +
-                    "WHERE $columnName is not null " +
+                    "WHERE $columnName is not null $columnLengthFilter " +
                     "GROUP BY $columnName " +
                     "ORDER BY count($columnName) desc limit $topN ) t";
 
@@ -112,7 +115,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
-            String sql = buildCollectMCV(db, table, mcvSize, columnName, sampleRatio);
+            String sql = buildCollectMCV(db, table, mcvSize, columnName, columnType, sampleRatio);
             StatisticExecutor statisticExecutor = new StatisticExecutor();
             List<TStatisticData> mcv = statisticExecutor.queryMCV(context, sql);
 
@@ -138,7 +141,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.HLL) {
                 sql = buildCollectBucketsWithoutNdv(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
                 List<TStatisticData> buckets = statisticExecutor.executeStatisticDQL(context, sql);
-                sql = buildCollectHistogramWithHllNdv(db, table, mostCommonValues, buckets.get(0).histogram, columnName);
+                sql = buildCollectHistogramWithHllNdv(db, table, mostCommonValues, buckets.get(0).histogram,
+                        columnName, columnType);
             }
             collectStatisticSync(sql, context, analyzeStatus);
 
@@ -173,10 +177,13 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return percent.stripTrailingZeros().toPlainString();
     }
 
-    private String buildCollectMCV(Database database, Table table, Long topN, String columnName, double sampleRatio) {
+    private String buildCollectMCV(Database database, Table table, Long topN, String columnName, Type columnType,
+                                   double sampleRatio) {
         VelocityContext context = new VelocityContext();
+        String quotedColumnName = StatisticUtils.quoting(table, columnName);
         context.put("tableId", table.getId());
-        context.put("columnName", StatisticUtils.quoting(table, columnName));
+        context.put("columnName", quotedColumnName);
+        addHistogramColumnFilterToContext(context, quotedColumnName, columnType);
         context.put("dbId", database.getId());
 
         context.put("dbName", database.getOriginName());
@@ -217,6 +224,26 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
 
         return context;
+    }
+
+    private VelocityContext buildBaseContext(Database database, Table table, String columnName, Type columnType) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        String quotedColumnName = (String) context.get("columnName");
+        addHistogramColumnFilterToContext(context, quotedColumnName, columnType);
+        return context;
+    }
+
+    private void addHistogramColumnFilterToContext(VelocityContext context, String quotedColumnName, Type columnType) {
+        if (!columnType.isVarchar()) {
+            context.put("columnLengthFilter", "");
+            context.put("hllColumnFilter", "");
+            return;
+        }
+
+        String lengthFilter = String.format("LENGTH(%s) <= %d", quotedColumnName,
+                MAX_HISTOGRAM_VARCHAR_LENGTH_BYTES);
+        context.put("columnLengthFilter", "and " + lengthFilter);
+        context.put("hllColumnFilter", String.format(" WHERE %s is not null and %s", quotedColumnName, lengthFilter));
     }
 
     private void addMcvToContext(VelocityContext context, Map<String, String> mostCommonValues) {
@@ -275,10 +302,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectHistogram(Database database, Table table, double sampleRatio, Long bucketNum,
                                          Map<String, String> mostCommonValues, String columnName, Type columnType,
                                          boolean withSampleNdv) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, columnName, columnType);
         addMcvToContext(context, mostCommonValues);
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
-
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
                 withSampleNdv));
         context.put("totalRows", Config.histogram_max_sample_row_count);
@@ -305,8 +331,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,
-                                                String buckets, String columnName) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+                                                    String buckets, String columnName, Type columnType) {
+        VelocityContext context = buildBaseContext(database, table, columnName, columnType);
         addMcvToContext(context, mostCommonValues);
         context.put("buckets", buckets);
 
@@ -316,7 +342,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private String buildCollectBucketsWithoutNdv(Database database, Table table, double sampleRatio,
                                       Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                       Type columnType) {
-        VelocityContext context = buildBaseContext(database, table, columnName);
+        VelocityContext context = buildBaseContext(database, table, columnName, columnType);
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName, false));
         context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);

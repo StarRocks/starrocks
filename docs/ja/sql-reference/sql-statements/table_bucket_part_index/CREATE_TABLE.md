@@ -196,7 +196,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 - CHAR[(長さ)]: 固定長文字列。範囲: 1 ~ 255。デフォルト値: 1。
 
-- VARCHAR[(長さ)]: 可変長文字列。デフォルト値は1です。単位: バイト。StarRocks 2.1より前のバージョンでは、`length` の値の範囲は1～65533です。[プレビュー] StarRocks 2.1以降のバージョンでは、`length` の値の範囲は1～1048576です。
+- VARCHAR[(長さ)]: 可変長文字列。デフォルト値は1です。単位: バイト。StarRocks 2.1より前のバージョンでは、`length` の値の範囲は1～65533です。StarRocks 2.1 から 4.1 までのバージョンでは、範囲は1～1048576です。StarRocks 4.2 以降では、範囲は1～2147482624（2 GiB から 1 KiB を引いた値）です。
 
 - HLL (1～16385バイト): HLL型の場合、長さやデフォルト値を指定する必要はありません。長さはデータ集計に応じてシステム内で制御されます。HLLカラムは、[hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/scalar-functions/hll_hash.md)によってのみクエリまたは使用できます。
 

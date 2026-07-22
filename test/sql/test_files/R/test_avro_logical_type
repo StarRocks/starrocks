@@ -21,7 +21,7 @@ desc files(
 -- result:
 decimal_bytes	decimal(10,2)	YES
 decimal_fixed	decimal(10,2)	YES
-uuid_string	varchar(1048576)	YES
+uuid_string	varchar(2147482624)	YES
 date	date	YES
 time_millis	int	YES
 time_micros	bigint	YES

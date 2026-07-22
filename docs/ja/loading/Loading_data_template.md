@@ -305,13 +305,13 @@ DESCRIBE user_behavior_inferred;
 ```
 
 ```plaintext
-Field       |Type            |Null|Key  |Default|Extra|
-------------+----------------+----+-----+-------+-----+
-UserID      |bigint          |YES |true |       |     |
-ItemID      |bigint          |YES |true |       |     |
-CategoryID  |bigint          |YES |true |       |     |
-BehaviorType|varchar(1048576)|YES |false|       |     |
-Timestamp   |varchar(1048576)|YES |false|       |     |
+Field       |Type               |Null|Key  |Default|Extra|
+------------+-------------------+----+-----+-------+-----+
+UserID      |bigint             |YES |true |       |     |
+ItemID      |bigint             |YES |true |       |     |
+CategoryID  |bigint             |YES |true |       |     |
+BehaviorType|varchar(2147482624)|YES |false|       |     |
+Timestamp   |varchar(2147482624)|YES |false|       |     |
 ```
 
 > **NOTE**

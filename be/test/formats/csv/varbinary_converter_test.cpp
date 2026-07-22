@@ -19,6 +19,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
 #include "types/type_descriptor.h"
@@ -32,8 +33,18 @@ public:
         _type.len = 6000;
     }
 
+    void SetUp() override {
+        _saved_enable_check_string_lengths = config::enable_check_string_lengths;
+        config::enable_check_string_lengths = true;
+    }
+
+    void TearDown() override { config::enable_check_string_lengths = _saved_enable_check_string_lengths; }
+
 protected:
     TypeDescriptor _type;
+
+private:
+    bool _saved_enable_check_string_lengths = true;
 };
 
 // NOLINTNEXTLINE
@@ -77,8 +88,10 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH * 4, 'a');
-    EXPECT_FALSE(conv->read_string(col.get(), large_string, Converter::Options()));
+    std::string large_string(static_cast<size_t>(_type.len) * 4, 'a');
+    Converter::Options options;
+    options.type_desc = &_type;
+    EXPECT_FALSE(conv->read_string(col.get(), large_string, options));
 }
 
 // NOLINTNEXTLINE

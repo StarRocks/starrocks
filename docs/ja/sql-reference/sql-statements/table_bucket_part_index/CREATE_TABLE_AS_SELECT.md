@@ -51,7 +51,7 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 | **パラメータ**   | **必須** | **説明**                                                                 |
 | ----------------- | ------------ | ------------------------------------------------------------------------ |
 | TEMPORARY         | いいえ       | 一時テーブルを作成します。v3.3.1 から、StarRocks は Default Catalog での一時テーブルの作成をサポートしています。詳細は [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table) を参照してください。現在、StarRocks は SUBMIT TASK を使用した非同期タスクでの一時テーブルの作成をサポートしていません。 |
-| column_name       | いいえ       | 新しいテーブルの列名です。列のデータ型を指定する必要はありません。StarRocks が自動的に適切なデータ型を指定します。StarRocks は FLOAT と DOUBLE データを DECIMAL(38,9) データに変換します。また、CHAR、VARCHAR、STRING データを VARCHAR(65533) データに変換します。 |
+| column_name       | いいえ       | 新しいテーブルの列名です。列のデータ型を指定する必要はありません。StarRocks が自動的に適切なデータ型を指定します。StarRocks は FLOAT と DOUBLE データを DECIMAL(38,9) データに変換します。また、CHAR、VARCHAR、および STRING データに対して VARCHAR カラムを作成し、ソース長が明示的に指定されているか推測できる場合は、その長さを保持します。ソース長を推測できない場合は、現在の OLAP VARCHAR の最大長 2147482624 を使用します。 |
 | index_definition  | いいえ       | v3.1.8 以降、新しいテーブルにビットマップインデックスを作成できます。構文は `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'` です。パラメータの説明と使用上の注意については、[Bitmap indexes](../../../table_design/indexes/Bitmap_index.md) を参照してください。 |
 | key_desc          | いいえ       | 構文は `key_type ( <col_name1> [, <col_name2> , ...])` です。<br />**パラメータ**:<ul><li>`key_type`: [新しいテーブルのキータイプ](../../../table_design/table_types/table_types.md)。有効な値: `DUPLICATE KEY` と `PRIMARY KEY`。デフォルト値: `DUPLICATE KEY`。</li><li> `col_name`: キーを形成する列。</li></ul> |
 | COMMENT           | いいえ       | 新しいテーブルのコメントです。                                           |

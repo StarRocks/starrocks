@@ -15,6 +15,8 @@
 #include "column/mysql_row_buffer.h"
 
 #include <optional>
+#include <type_traits>
+#include <utility>
 
 #include "base/types/int128.h"
 #include "gtest/gtest.h"
@@ -22,6 +24,8 @@
 #include "types/constexpr.h"
 
 namespace starrocks {
+
+static_assert(std::is_same_v<decltype(std::declval<const MysqlRowBuffer&>().length()), size_t>);
 
 class MysqlRowBufferTest : public ::testing::Test {
 public:

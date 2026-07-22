@@ -124,27 +124,27 @@ DESC FILES(
     "aws.s3.region" = "us-west-2"
 );
 
-+------------------+------------------+------+
-| Field            | Type             | Null |
-+------------------+------------------+------+
-| lo_orderkey      | int              | YES  |
-| lo_linenumber    | int              | YES  |
-| lo_custkey       | int              | YES  |
-| lo_partkey       | int              | YES  |
-| lo_suppkey       | int              | YES  |
-| lo_orderdate     | int              | YES  |
-| lo_orderpriority | varchar(1048576) | YES  |
-| lo_shippriority  | int              | YES  |
-| lo_quantity      | int              | YES  |
-| lo_extendedprice | int              | YES  |
-| lo_ordtotalprice | int              | YES  |
-| lo_discount      | int              | YES  |
-| lo_revenue       | int              | YES  |
-| lo_supplycost    | int              | YES  |
-| lo_tax           | int              | YES  |
-| lo_commitdate    | int              | YES  |
-| lo_shipmode      | varchar(1048576) | YES  |
-+------------------+------------------+------+
++------------------+---------------------+------+
+| Field            | Type                | Null |
++------------------+---------------------+------+
+| lo_orderkey      | int                 | YES  |
+| lo_linenumber    | int                 | YES  |
+| lo_custkey       | int                 | YES  |
+| lo_partkey       | int                 | YES  |
+| lo_suppkey       | int                 | YES  |
+| lo_orderdate     | int                 | YES  |
+| lo_orderpriority | varchar(2147482624) | YES  |
+| lo_shippriority  | int                 | YES  |
+| lo_quantity      | int                 | YES  |
+| lo_extendedprice | int                 | YES  |
+| lo_ordtotalprice | int                 | YES  |
+| lo_discount      | int                 | YES  |
+| lo_revenue       | int                 | YES  |
+| lo_supplycost    | int                 | YES  |
+| lo_tax           | int                 | YES  |
+| lo_commitdate    | int                 | YES  |
+| lo_shipmode      | varchar(2147482624) | YES  |
++------------------+---------------------+------+
 17 rows in set (0.05 sec)
 ```
 

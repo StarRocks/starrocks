@@ -251,7 +251,7 @@ This topic introduces the following types of BE configurations:
 
 ### brpc_max_body_size
 
-- Default: 2147483648
+- Default: 2147483647
 - Type: Int
 - Unit: Bytes
 - Is mutable: No

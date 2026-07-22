@@ -97,6 +97,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -3151,7 +3152,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Column mvColumn = fullSchemas.get(2);
             Assertions.assertTrue(mvColumn.getName().equals("mv_city"));
             Assertions.assertTrue(mvColumn.getType().isVarchar());
-            Assertions.assertTrue(mvColumn.getType().getColumnSize() == 1048576);
+            Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), mvColumn.getType().getColumnSize());
             starRocksAssert.dropTable("case_when_t1");
         } catch (Exception e) {
             Assertions.fail();
@@ -5869,7 +5870,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Type type0 = col0.getType();
         Assertions.assertTrue(type0.isStringType());
         ScalarType scalarType0 = (ScalarType) type0;
-        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), scalarType0.getLength());
         Config.transform_type_prefer_string_for_varchar = false;
     }
 
@@ -5893,7 +5894,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Type type0 = col0.getType();
         Assertions.assertTrue(type0.isStringType());
         ScalarType scalarType0 = (ScalarType) type0;
-        Assertions.assertEquals(1048576, scalarType0.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), scalarType0.getLength());
         Config.transform_type_prefer_string_for_varchar = false;
     }
 

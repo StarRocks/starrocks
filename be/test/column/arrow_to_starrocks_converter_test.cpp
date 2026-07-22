@@ -529,7 +529,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
 
 template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
-                                bool strict_mode, bool fail) {
+                                bool strict_mode, bool fail, ArrowConvertContext* ctx = nullptr) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
@@ -538,8 +538,7 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    auto status =
-            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, ctx, nullptr);
     ASSERT_TRUE(status.ok());
     auto* binary_column = down_cast<ColumnType*>(column);
     for (auto i = 0; i < num_elements; ++i) {
@@ -559,7 +558,7 @@ template <typename T>
 using TestCaseArray = std::vector<std::tuple<size_t, T, bool>>;
 
 template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
-void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
+void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode, ArrowConvertContext* ctx = nullptr) {
     using ColumnType = RunTimeColumnType<LT>;
     auto col = ColumnType::create();
     col->reserve(4096);
@@ -569,13 +568,13 @@ void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
         add_arrow_to_binary_column<AT, LT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
-                                                                    strict_mode, fail);
+                                                                    strict_mode, fail, ctx);
     }
 }
 
 template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
-                                         bool strict_mode, bool fail) {
+                                         bool strict_mode, bool fail, ArrowConvertContext* ctx = nullptr) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
@@ -591,7 +590,7 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     Filter filter;
     filter.resize(array->length() + binary_column->size(), 1);
     auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
-                            nullptr, nullptr);
+                            ctx, nullptr);
     ASSERT_TRUE(status.ok());
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
@@ -612,7 +611,8 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
 }
 
 template <ArrowTypeId AT, LogicalType LT, typename ArrowType, typename ArrowCppType>
-void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
+void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode,
+                          ArrowConvertContext* ctx = nullptr) {
     using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
@@ -626,7 +626,7 @@ void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool st
         auto fail = std::get<2>(tc);
         expect_num_rows += num_elements;
         add_arrow_to_nullable_binary_column<AT, LT, ArrowType, ArrowCppType>(col.get(), num_elements, value, counter,
-                                                                             strict_mode, fail);
+                                                                             strict_mode, fail, ctx);
     }
     ASSERT_EQ(col->size(), expect_num_rows);
 }
@@ -705,40 +705,46 @@ PARALLEL_TEST(ArrowConverterTest, test_nullable_binary_nonstrict) {
 
 template <LogicalType LT>
 void convert_string_fail(size_t limit, bool strict_mode) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = limit;
     auto test_cases_pass = TestCaseArray<std::string>{
             {7, std::string(limit, 'x'), false},
             {8, std::string(limit + 1, 'x'), true},
             {9, std::string(limit, 'x'), false},
             {10, std::string(limit + 2, 'x'), true},
     };
-    test_nullable_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
+    test_nullable_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode, &ctx);
     test_nullable_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass,
-                                                                                             strict_mode);
-    test_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode);
+                                                                                             strict_mode, &ctx);
+    test_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode, &ctx);
+    test_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode, &ctx);
 }
 
 template <LogicalType LT>
 void convert_binary_fail(size_t limit, bool strict_mode) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = limit;
     auto test_cases_pass = TestCaseArray<std::string>{
             {7, std::string(limit, 'a'), false},
             {8, std::string(limit + 1, 'a'), true},
             {9, std::string(limit, 'a'), false},
             {10, std::string(limit + 2, 'a'), true},
     };
-    test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
+    test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode, &ctx);
     test_nullable_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass,
-                                                                                             strict_mode);
-    test_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass, strict_mode);
+                                                                                             strict_mode, &ctx);
+    test_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode, &ctx);
+    test_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass, strict_mode, &ctx);
 }
+
+constexpr size_t kTestMaxStringLength = 1024;
 
 PARALLEL_TEST(ArrowConverterTest, test_char_fail_strict) {
     convert_string_fail<TYPE_CHAR>(TypeDescriptor::MAX_CHAR_LENGTH, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_varchar_fail_strict) {
-    convert_string_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
+    convert_string_fail<TYPE_VARCHAR>(kTestMaxStringLength, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_char_fail_nonstrict) {
@@ -746,15 +752,15 @@ PARALLEL_TEST(ArrowConverterTest, test_char_fail_nonstrict) {
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_varchar_fail_nonstrict) {
-    convert_string_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
+    convert_string_fail<TYPE_VARCHAR>(kTestMaxStringLength, false);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_binary_fail_strict) {
-    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
+    convert_binary_fail<TYPE_VARBINARY>(kTestMaxStringLength, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_binary_fail_nonstrict) {
-    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
+    convert_binary_fail<TYPE_VARBINARY>(kTestMaxStringLength, false);
 }
 
 template <int bytes_width, bool is_nullable = false>
@@ -788,7 +794,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
 
 template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_elements, const std::string& value,
-                                                  size_t& counter, bool fail) {
+                                                  size_t& counter, bool fail, ArrowConvertContext* ctx = nullptr) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
@@ -797,8 +803,7 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    auto status =
-            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, ctx, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(column->size(), counter);
     auto* binary_column = down_cast<ColumnType*>(column);
@@ -818,7 +823,8 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
 
 template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_t num_elements,
-                                                           const std::string& value, size_t& counter, bool fail) {
+                                                           const std::string& value, size_t& counter, bool fail,
+                                                           ArrowConvertContext* ctx = nullptr) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
@@ -834,7 +840,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     Filter filter;
     filter.resize(array->length() + binary_column->size(), 1);
     auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
-                            nullptr, nullptr);
+                            ctx, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(binary_column->size(), counter);
     auto slice_size = std::min((std::string::size_type)bytes_width, value.size());
@@ -856,7 +862,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
 }
 
 template <int bytes_width, ArrowTypeId AT, LogicalType LT>
-void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases) {
+void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases, ArrowConvertContext* ctx = nullptr) {
     using ColumnType = RunTimeColumnType<LT>;
     auto col = ColumnType::create();
     col->reserve(4096);
@@ -865,13 +871,13 @@ void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases)
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_binary_column<bytes_width, AT, LT>(col.get(), num_elements, value, counter,
-                                                                          fail);
+        add_fixed_size_binary_array_to_binary_column<bytes_width, AT, LT>(col.get(), num_elements, value, counter, fail,
+                                                                          ctx);
     }
 }
 
 template <int bytes_width, ArrowTypeId AT, LogicalType LT>
-void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_cases) {
+void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_cases, ArrowConvertContext* ctx = nullptr) {
     using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
     auto null_column = NullColumn::create();
@@ -882,12 +888,14 @@ void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_case
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, AT, LT>(col->as_mutable_raw_ptr(),
-                                                                                   num_elements, value, counter, fail);
+        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, AT, LT>(
+                col->as_mutable_raw_ptr(), num_elements, value, counter, fail, ctx);
     }
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_string_pass) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = kTestMaxStringLength;
     auto test_cases = TestCaseArray<std::string>{
             {3, std::string(""), false},
             {3, std::string("a"), false},
@@ -899,27 +907,30 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_string_pass) {
     test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
     PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
     PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
-            test_cases);
+    PARALLEL_TESTixed_size_binary<kTestMaxStringLength, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases, &ctx);
     test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
     test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
-            test_cases);
+    test_nullable_fixed_size_binary<kTestMaxStringLength, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases,
+                                                                                                        &ctx);
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_string_fail) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = kTestMaxStringLength;
     auto test_cases = TestCaseArray<std::string>{
             {2, std::string(255, 'x'), true},
     };
     PARALLEL_TESTixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
     test_nullable_fixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
-            test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
-                                    TYPE_VARCHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<kTestMaxStringLength + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases,
+                                                                                                          &ctx);
+    test_nullable_fixed_size_binary<kTestMaxStringLength + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases,
+                                                                                                            &ctx);
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_pass) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = kTestMaxStringLength;
     auto test_cases = TestCaseArray<std::string>{
             {3, std::string(""), false},
             {3, std::string("a"), false},
@@ -931,22 +942,24 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_pass) {
     test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
     PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
     PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(
-            test_cases);
+    PARALLEL_TESTixed_size_binary<kTestMaxStringLength, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases,
+                                                                                                        &ctx);
     test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
     test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(
-            test_cases);
+    test_nullable_fixed_size_binary<kTestMaxStringLength, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases,
+                                                                                                          &ctx);
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
+    ArrowConvertContext ctx;
+    ctx.current_type_length = kTestMaxStringLength;
     auto test_cases = TestCaseArray<std::string>{
             {2, std::string(255, 'x'), true},
     };
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
-                                  TYPE_VARBINARY>(test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
-                                    TYPE_VARBINARY>(test_cases);
+    PARALLEL_TESTixed_size_binary<kTestMaxStringLength + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases,
+                                                                                                            &ctx);
+    test_nullable_fixed_size_binary<kTestMaxStringLength + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(
+            test_cases, &ctx);
 }
 
 template <typename ArrowType, bool is_nullable, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>

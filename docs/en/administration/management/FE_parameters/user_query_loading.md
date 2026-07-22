@@ -694,6 +694,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum depth that ScalarOperator optimization can be applied.
 - Introduced in: -
 
+### `max_varchar_length`
+
+- Default: 2147482624
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum length of VARCHAR columns supported in OLAP tables. This value is also the upper bound when FE infers or materializes a CHAR/VARCHAR type. The maximum value allowed is 2147482624 (2 GiB minus 1 KiB).
+- Introduced in: -
+
 ### `mv_active_checker_interval_seconds`
 
 - Default: 60

@@ -27,6 +27,7 @@ import com.starrocks.qe.SessionVariableConstants;
  * across Type and ScalarType classes, following the Factory pattern.
  */
 public class TypeFactory {
+    private static final int MAX_VARBINARY_LENGTH = 1024 * 1024;
 
     private TypeFactory() {
         // Private constructor to prevent instantiation
@@ -57,20 +58,32 @@ public class TypeFactory {
     }
 
     /**
-     * Get the maximum varchar length for OLAP tables.
+     * Get the maximum VARCHAR length supported by OLAP tables.
      *
-     * @return the maximum varchar length
+     * <p>This value is also the upper bound when FE infers or materializes a CHAR/VARCHAR type.</p>
+     *
+     * @return the maximum supported VARCHAR length
      */
     public static int getOlapMaxVarcharLength() {
         return Config.max_varchar_length;
     }
 
-    // 1GB for each line, it's enough
+    /**
+     * Get the maximum VARBINARY length accepted by FE type declarations.
+     *
+     * @return the maximum supported VARBINARY length
+     */
+    public static int getMaxVarbinaryLength() {
+        return MAX_VARBINARY_LENGTH;
+    }
+
+    // Historical compatibility length used for unbounded string types in external catalogs.
+    // This is catalog metadata, not a sentinel or the OLAP storage limit.
     public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
 
     /**
      * Create a default catalog string type.
-     * Uses maximum catalog varchar length for external catalogs like Hive.
+     * Uses the historical compatibility length for external catalogs like Hive.
      *
      * @return the created catalog string type
      */

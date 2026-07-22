@@ -17,8 +17,10 @@ package com.starrocks.statistic;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -26,7 +28,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 class StatisticUtilsTest extends PlanTestBase {
+
+    private static void assertVarcharLength(List<ColumnDef> columnDefs, String columnName, int expectedLength) {
+        ColumnDef columnDef = columnDefs.stream()
+                .filter(column -> columnName.equals(column.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing statistics column: " + columnName));
+        Assertions.assertInstanceOf(ScalarType.class, columnDef.getType());
+        Assertions.assertEquals(expectedLength, ((ScalarType) columnDef.getType()).getLength(), columnName);
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -78,6 +91,55 @@ class StatisticUtilsTest extends PlanTestBase {
         Assertions.assertEquals("1",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
+    }
+
+    @Test
+    void buildStatsColumnDefUsesConfiguredOlapVarcharLengthOnlyForPayloadColumns() {
+        int previousMaxVarcharLength = Config.max_varchar_length;
+        int configuredMaxVarcharLength = 1_234_567;
+        try {
+            Config.max_varchar_length = configuredMaxVarcharLength;
+
+            List<ColumnDef> sampleColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            assertVarcharLength(sampleColumns, "max", configuredMaxVarcharLength);
+            assertVarcharLength(sampleColumns, "min", configuredMaxVarcharLength);
+            assertVarcharLength(sampleColumns, "column_name", 65530);
+            assertVarcharLength(sampleColumns, "table_name", 65530);
+            assertVarcharLength(sampleColumns, "db_name", 65530);
+
+            List<ColumnDef> fullColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            assertVarcharLength(fullColumns, "max", configuredMaxVarcharLength);
+            assertVarcharLength(fullColumns, "min", configuredMaxVarcharLength);
+            assertVarcharLength(fullColumns, "partition_name", 65530);
+
+            List<ColumnDef> externalFullColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+            assertVarcharLength(externalFullColumns, "max", configuredMaxVarcharLength);
+            assertVarcharLength(externalFullColumns, "min", configuredMaxVarcharLength);
+            assertVarcharLength(externalFullColumns, "table_uuid", 65530);
+            assertVarcharLength(externalFullColumns, "catalog_name", 65530);
+
+            List<ColumnDef> histogramColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+            assertVarcharLength(histogramColumns, "buckets", configuredMaxVarcharLength);
+            assertVarcharLength(histogramColumns, "mcv", configuredMaxVarcharLength);
+            assertVarcharLength(histogramColumns, "column_name", 65530);
+
+            List<ColumnDef> externalHistogramColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+            assertVarcharLength(externalHistogramColumns, "buckets", configuredMaxVarcharLength);
+            assertVarcharLength(externalHistogramColumns, "mcv", configuredMaxVarcharLength);
+            assertVarcharLength(externalHistogramColumns, "table_uuid", 65530);
+
+            List<ColumnDef> multiColumnColumns =
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME);
+            assertVarcharLength(multiColumnColumns, "column_ids", 65530);
+            assertVarcharLength(multiColumnColumns, "column_names", 65530);
+        } finally {
+            Config.max_varchar_length = previousMaxVarcharLength;
+        }
     }
 
     @Test

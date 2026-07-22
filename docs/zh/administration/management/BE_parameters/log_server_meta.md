@@ -235,7 +235,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### brpc_max_body_size
 
-- 默认值：2147483648
+- 默认值：2147483647
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否

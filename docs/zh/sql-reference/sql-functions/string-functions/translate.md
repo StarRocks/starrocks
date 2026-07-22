@@ -35,7 +35,7 @@ TRANSLATE(source, from_string, to_string)
 
 - 当任意一个输入参数为 `NULL` 时。
 
-- 当替换后结果字符串的长度超过了 VARCHAR 类型的最大长度（1048576）时。
+- 当替换后结果字符串的长度超过了 VARCHAR 类型的最大长度（2147482624）时。
 
 ## 示例
 
@@ -87,15 +87,6 @@ MySQL > select translate('abcabc', 'aba', '123') as test;
 +--------+
 | 12c12c |
 +--------+
-
--- 该函数与 repeat() 和 concat() 搭配使用。替换后结果字符串长度超过了 VARCHAR 类型的最大长度，返回 NULL。
-MySQL > select translate(concat('b', repeat('a', 1024*1024-3)), 'a', '膨') as test;
-+--------+
-| test   |
-+--------+
-| NULL   |
-+--------+
-
 -- 该函数与 length()，repeat() 和 concat() 搭配使用，计算替换后的字符串的长度。
 MySQL > select length(translate(concat('b', repeat('a', 1024*1024-3)), 'b', '膨')) as test
 +---------+

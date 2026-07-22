@@ -14,12 +14,26 @@
 
 #include <gtest/gtest.h>
 
+#include "common/config_scan_io_fwd.h"
 #include "common/storage_define.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
 
-class StringFunctionRepeatTest : public ::testing::Test {};
+constexpr int32_t kTestOlapStringMaxLength = 64 * 1024;
+
+class StringFunctionRepeatTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        _saved_olap_string_max_length = config::olap_string_max_length;
+        config::olap_string_max_length = kTestOlapStringMaxLength;
+    }
+
+    void TearDown() override { config::olap_string_max_length = _saved_olap_string_max_length; }
+
+private:
+    int32_t _saved_olap_string_max_length = 0;
+};
 TEST_F(StringFunctionRepeatTest, repeatTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -90,12 +104,35 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
         auto si = str->get_slice(i);
         auto so = v.value(i);
 
-        if (si.size * repeat_times < get_olap_string_max_length()) {
+        if (si.size * repeat_times <= get_olap_string_max_length()) {
             ASSERT_EQ(so.size, si.size * repeat_times);
         } else {
             ASSERT_TRUE(v.is_null(i));
         }
     }
+}
+
+TEST_F(StringFunctionRepeatTest, repeatConstExactLimitWithOversizeRow) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto str = BinaryColumn::create();
+    auto times = Int32Column::create();
+
+    constexpr int32_t repeat_times = 2;
+    str->append(std::string(get_olap_string_max_length() / repeat_times, 'x'));
+    str->append(std::string(get_olap_string_max_length() / repeat_times + 1, 'y'));
+    times->append(repeat_times);
+
+    Columns columns;
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(ConstColumn::create(std::move(times), 1));
+
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
+    ASSERT_EQ(2, result->size());
+
+    auto viewer = ColumnViewer<TYPE_VARCHAR>(result);
+    ASSERT_FALSE(viewer.is_null(0));
+    ASSERT_EQ(get_olap_string_max_length(), viewer.value(0).size);
+    ASSERT_TRUE(viewer.is_null(1));
 }
 
 } // namespace starrocks

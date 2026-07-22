@@ -4515,9 +4515,9 @@ public class Config extends ConfigBase {
             + "Set to 0 to disable. Default: 0 (disabled)")
     public static long jdbc_connection_leak_detection_threshold_ms = 0L;
 
-    // The longest supported VARCHAR length.
+    // The longest supported VARCHAR length: 2 GiB minus 1 KiB.
     @ConfField(mutable = true)
-    public static int max_varchar_length = 1048576;
+    public static int max_varchar_length = Integer.MAX_VALUE - 1023;
 
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
@@ -4549,9 +4549,9 @@ public class Config extends ConfigBase {
     public static boolean enable_alter_struct_column = true;
 
     // since thrift@0.16.0, it adds a default setting max_message_size = 100M which may prevent
-    // large bytes to being deserialized successfully. So we give a 1G default value here.
+    // large bytes to being deserialized successfully. So we use the largest int32 value here.
     @ConfField(mutable = true)
-    public static int thrift_max_message_size = 1024 * 1024 * 1024;
+    public static int thrift_max_message_size = Integer.MAX_VALUE;
 
     @ConfField(mutable = true)
     public static int thrift_max_frame_size = 16384000;

@@ -74,9 +74,11 @@ public:
     // Return the zonemap of last page
     virtual std::optional<ZoneMapPB> get_last_zonemap() = 0;
 
-    virtual Status finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* wfile, ColumnMetaPB* col_meta) = 0;
 
     virtual uint64_t size() const = 0;
+
+    virtual bool is_valid() const = 0;
 };
 
 class ZoneMapIndexReader {

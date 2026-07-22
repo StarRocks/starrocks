@@ -26,7 +26,7 @@ k3	bigint	YES
 k4	decimal(10,2)	YES
 k5	date	YES
 k6	datetime	YES
-k7	varchar(1048576)	YES
+k7	varchar(2147482624)	YES
 k8	double	YES
 -- !result
 

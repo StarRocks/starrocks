@@ -1958,7 +1958,7 @@ public class JoinTest extends PlanTestBase {
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
         Assertions.assertTrue(explainString.contains("equal join conjunct: 7: cast = 6: value"));
-        Assertions.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(1048576))"));
+        Assertions.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS VARCHAR(2147482624))"));
         Assertions.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -2144,11 +2144,11 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(2: v2 AS VARCHAR(1048576)) = 'zxcv'");
+                "     PREDICATES: CAST(2: v2 AS VARCHAR(2147482624)) = 'zxcv'");
         assertContains(plan, "  1:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: CAST(5: v2 AS VARCHAR(1048576)) = 'zxcv'\n");
+                + "     PREDICATES: CAST(5: v2 AS VARCHAR(2147482624)) = 'zxcv'\n");
     }
 
     @Test
@@ -2158,7 +2158,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "equal join conjunct: 4: v4 = 1: v1");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(2147482624))\n" +
                 "     partitions=0/1\n");
     }
 
@@ -3477,7 +3477,7 @@ public class JoinTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: " +
-                "coalesce(if(CAST(1: v1 AS VARCHAR(1048576)) = 'cccc', 'cccc', NULL), CAST(1: v1 AS VARCHAR)) = '1'");
+                "coalesce(if(CAST(1: v1 AS VARCHAR(2147482624)) = 'cccc', 'cccc', NULL), CAST(1: v1 AS VARCHAR)) = '1'");
     }
 
     @Test

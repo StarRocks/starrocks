@@ -807,7 +807,7 @@ public class LowCardinalityTest extends PlanTestBase {
         // DictExpr return varchar and int
         sql = "select if(S_SUPPKEY='kks', upper(S_ADDRESS), S_COMMENT), upper(S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', "
+        assertContains(plan, "  |  9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(2147482624)) = 'kks', "
                 + "DictDecode([11: S_ADDRESS, INT, false], "
                 + "[upper[(<place-holder>); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: "
                 + "true]]), DictDecode([12: S_COMMENT, INT, false], "

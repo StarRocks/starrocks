@@ -33,7 +33,7 @@ desc files(
     "auto_detect_sample_files" = "1");
 -- result:
 $1	bigint	YES
-$2	varchar(1048576)	YES
+$2	varchar(2147482624)	YES
 $3	double	YES
 $4	boolean	YES
 -- !result

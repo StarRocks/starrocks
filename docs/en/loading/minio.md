@@ -187,15 +187,15 @@ DESCRIBE user_behavior_inferred;
 The system returns the following query result:
 
 ```Plaintext
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
++--------------+---------------------+------+-------+---------+-------+
+| Field        | Type                | Null | Key   | Default | Extra |
++--------------+---------------------+------+-------+---------+-------+
+| UserID       | bigint              | YES  | true  | NULL    |       |
+| ItemID       | bigint              | YES  | true  | NULL    |       |
+| CategoryID   | bigint              | YES  | true  | NULL    |       |
+| BehaviorType | varchar(2147482624) | YES  | false | NULL    |       |
+| Timestamp    | varchar(2147482624) | YES  | false | NULL    |       |
++--------------+---------------------+------+-------+---------+-------+
 ```
 
 Query the table to verify that the data has been loaded into it. Example:

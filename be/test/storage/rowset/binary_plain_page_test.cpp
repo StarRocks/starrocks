@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -121,6 +122,25 @@ public:
         ASSERT_EQ("['Hello', 'StarRocks']", column2->debug_string());
     }
 };
+
+TEST_F(BinaryPlainPageTest, test_reserve_bytes_boundaries) {
+    EXPECT_EQ(0, binary_page_reserve_bytes(0, 0));
+    EXPECT_EQ(0, binary_page_reserve_bytes(0, std::numeric_limits<size_t>::max()));
+    EXPECT_EQ(0, binary_page_reserve_bytes(std::numeric_limits<size_t>::max(), 0));
+
+    EXPECT_EQ(1, binary_page_reserve_bytes(1, 1));
+    EXPECT_EQ(2048, binary_page_reserve_bytes(2, 1024));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes - 1, binary_page_reserve_bytes(1, kMaxBinaryPageReserveBytes - 1));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes, binary_page_reserve_bytes(1, kMaxBinaryPageReserveBytes));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes, binary_page_reserve_bytes(1, kMaxBinaryPageReserveBytes + 1));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes, binary_page_reserve_bytes(kMaxBinaryPageReserveBytes / 2, 2));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes, binary_page_reserve_bytes(kMaxBinaryPageReserveBytes / 2 + 1, 2));
+
+    // The division-first guard must cap these values without overflowing rows * estimate.
+    EXPECT_EQ(kMaxBinaryPageReserveBytes, binary_page_reserve_bytes(std::numeric_limits<size_t>::max(), 2));
+    EXPECT_EQ(kMaxBinaryPageReserveBytes,
+              binary_page_reserve_bytes(std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()));
+}
 
 // NOLINTNEXTLINE
 TEST_F(BinaryPlainPageTest, test_seek_by_value) {

@@ -197,7 +197,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 - CHAR[(length)]：定长字符串。范围：1 ~ 255。默认值：1。
 
-- VARCHAR[(length)]：变长字符串。默认值为 1。单位：字节。在 StarRocks 2.1 之前的版本中，`length` 的取值范围是 1–65533。[预览] 在 StarRocks 2.1 及更高版本中，`length` 的取值范围是 1–1048576。
+- VARCHAR[(length)]：变长字符串。默认值为 1。单位：字节。在 StarRocks 2.1 之前的版本中，`length` 的取值范围是 1–65533。StarRocks 2.1 至 4.1 版本，取值范围是 1–1048576。自 StarRocks 4.2 起，取值范围是 1–2147482624（2 GiB 减 1 KiB）。
 
 - HLL (1~16385 字节)：对于 HLL 类型，无需指定长度或默认值。长度将根据数据聚合在系统内部控制。HLL 列只能通过[hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/scalar-functions/hll_hash.md) 进行查询或使用。
 

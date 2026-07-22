@@ -35,7 +35,7 @@ desc files("path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
     "csv.row_delimiter" = "\n");
 -- result:
 $1	bigint	YES
-$2	varchar(1048576)	YES
+$2	varchar(2147482624)	YES
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null
 -- result:

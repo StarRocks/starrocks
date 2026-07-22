@@ -158,6 +158,27 @@ public class TypeTest {
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
+        // MySQL column_length is an unsigned 4-byte field. Exercise the last value below
+        // saturation, exact UINT32_MAX, one character above it, and the OLAP VARCHAR maximum.
+        final long unsignedIntMax = 0xffffffffL;
+        final int exactUnsignedBoundaryChars = (int) (unsignedIntMax / 3);
+        type = TypeFactory.createVarcharType(exactUnsignedBoundaryChars - 1);
+        Assertions.assertEquals(unsignedIntMax - 3,
+                Integer.toUnsignedLong(MysqlCodec.getMysqlResultSetFieldLength(type)));
+        type = TypeFactory.createVarcharType(exactUnsignedBoundaryChars);
+        Assertions.assertEquals(unsignedIntMax,
+                Integer.toUnsignedLong(MysqlCodec.getMysqlResultSetFieldLength(type)));
+        type = TypeFactory.createVarcharType(exactUnsignedBoundaryChars + 1);
+        Assertions.assertEquals(unsignedIntMax,
+                Integer.toUnsignedLong(MysqlCodec.getMysqlResultSetFieldLength(type)));
+        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+        Assertions.assertEquals(unsignedIntMax,
+                Integer.toUnsignedLong(MysqlCodec.getMysqlResultSetFieldLength(type)));
+
+        type = TypeFactory.createVarbinary(TypeFactory.getMaxVarbinaryLength());
+        Assertions.assertEquals((long) TypeFactory.getMaxVarbinaryLength() * 3,
+                Integer.toUnsignedLong(MysqlCodec.getMysqlResultSetFieldLength(type)));
+
         // wildcard varchar
         type = TypeFactory.createVarcharType(-1);
         Assertions.assertEquals(192, MysqlCodec.getMysqlResultSetFieldLength(type));

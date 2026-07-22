@@ -32,7 +32,7 @@ static Status get_avro_type_from_scalar_type(const avro::NodePtr& node, TypeDesc
         if (logical_type.type() == avro::LogicalType::DECIMAL) {
             *desc = TypeDescriptor::promote_decimal_type(logical_type.precision(), logical_type.scale());
         } else {
-            *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARBINARY_LENGTH);
         }
         break;
     }

@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iostream>
 
 #include "base/testutil/assert.h"
@@ -646,17 +647,20 @@ TEST_F(ColumnReaderWriterTest, test_string_delta_offset_encoding) {
     run(true, PLAIN_ENCODING_DELTA_OFFSET);
 }
 
-TEST_F(ColumnReaderWriterTest, test_large_varchar_declared_length_boundary) {
+TEST_F(ColumnReaderWriterTest, test_large_varchar_runtime_encoding_fallback) {
     const auto saved_dict_chunk_size = config::dictionary_speculate_min_chunk_size;
+    const auto saved_dict_page_size = config::dictionary_page_size;
     const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
     const bool saved_check_string_lengths = config::enable_check_string_lengths;
     DeferOp restore([&]() {
         config::dictionary_speculate_min_chunk_size = saved_dict_chunk_size;
+        config::dictionary_page_size = saved_dict_page_size;
         config::enable_binary_plain_delta_offset = saved_delta_offset;
         config::enable_check_string_lengths = saved_check_string_lengths;
     });
 
     config::dictionary_speculate_min_chunk_size = 4096;
+    config::dictionary_page_size = 4 * 1024 * 1024;
     config::enable_binary_plain_delta_offset = true;
     config::enable_check_string_lengths = true;
 
@@ -670,10 +674,16 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_declared_length_boundary) {
     ASSERT_TRUE(col->append_strings(slices));
     ASSERT_LT(col->size(), config::dictionary_speculate_min_chunk_size);
 
-    auto run = [&](int storage_length, EncodingTypePB expected_encoding) {
+    auto run = [&](const std::vector<const Column*>& chunks, int storage_length, EncodingTypePB expected_encoding,
+                   bool expected_all_dict_encoded, bool expect_encoding_after_first_append, bool expected_zone_map) {
         const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
         auto segment = create_dummy_segment(fname);
         ColumnMetaPB meta;
+
+        MutableColumnPtr expected = chunks.front()->clone_empty();
+        for (const Column* chunk : chunks) {
+            expected->append(*chunk, 0, chunk->size());
+        }
 
         {
             ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
@@ -684,9 +694,11 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_declared_length_boundary) {
             ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
             ASSERT_OK(writer->init());
 
-            ASSERT_OK(writer->append(*col));
-            if (expected_encoding == PLAIN_ENCODING) {
-                EXPECT_EQ(PLAIN_ENCODING, meta.encoding());
+            for (size_t i = 0; i < chunks.size(); ++i) {
+                ASSERT_OK(writer->append(*chunks[i]));
+                if (i == 0 && expect_encoding_after_first_append) {
+                    EXPECT_EQ(expected_encoding, meta.encoding());
+                }
             }
 
             flush_column_writer(writer.get());
@@ -694,24 +706,69 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_declared_length_boundary) {
         }
 
         EXPECT_EQ(expected_encoding, meta.encoding());
+        ASSERT_TRUE(meta.has_all_dict_encoded());
+        EXPECT_EQ(expected_all_dict_encoded, meta.all_dict_encoded());
+        const bool has_zone_map =
+                std::any_of(meta.indexes().begin(), meta.indexes().end(),
+                            [](const ColumnIndexMetaPB& index) { return index.type() == ZONE_MAP_INDEX; });
+        EXPECT_EQ(expected_zone_map, has_zone_map);
 
         TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
         auto iter = create_and_init_iterator(meta, segment.get(), fname);
         ASSERT_OK(iter->seek_to_first());
         MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-        size_t rows_read = col->size();
+        size_t rows_read = expected->size();
         dst->reserve(rows_read);
         ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
-        ASSERT_EQ(col->size(), rows_read);
+        ASSERT_EQ(expected->size(), rows_read);
 
         for (size_t i = 0; i < rows_read; i++) {
-            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " mismatch at row " << i;
+            ASSERT_EQ(0, type_info->cmp(expected->get(i), dst->get(i))) << " mismatch at row " << i;
         }
     };
 
     const int binary_length_overhead = static_cast<int>(sizeof(uint32_t));
-    run(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead, DICT_ENCODING);
-    run(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead + 1, PLAIN_ENCODING);
+    const int large_storage_length = TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead + 1;
+
+    // Declared length no longer disables dictionary encoding when the actual values are small.
+    run({col.get()}, TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead, DICT_ENCODING, true,
+        false, true);
+    run({col.get()}, large_storage_length, DICT_ENCODING, true, false, true);
+
+    // Crossing the threshold in aggregate must not be confused with one oversized value.
+    const std::string repeated_small_value(1024, 's');
+    std::vector<Slice> repeated_small_slices(1025, Slice(repeated_small_value));
+    auto many_small_col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    ASSERT_TRUE(many_small_col->append_strings(repeated_small_slices));
+    ASSERT_GT(many_small_col->byte_size(), TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD);
+    run({many_small_col.get()}, large_storage_length, DICT_ENCODING, true, false, true);
+
+    std::string threshold_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 't');
+    Slice threshold_slice(threshold_value);
+    auto threshold_col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    ASSERT_TRUE(threshold_col->append_strings(&threshold_slice, 1));
+    run({threshold_col.get()}, TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead, DICT_ENCODING,
+        true, false, true);
+
+    std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + 1, 'x');
+    Slice large_slice(large_value);
+    auto large_col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    ASSERT_TRUE(large_col->append_strings(&large_slice, 1));
+
+    // A large value in the first chunk ends speculation immediately and selects plain encoding
+    // before the chunk can be copied into the speculation buffer.
+    run({large_col.get()}, large_storage_length, PLAIN_ENCODING_DELTA_OFFSET, false, true, false);
+
+    // Detection scans the whole chunk; the oversized value need not be the first row.
+    Slice mixed_slices[] = {Slice("prefix"), large_slice};
+    auto mixed_col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    ASSERT_TRUE(mixed_col->append_strings(mixed_slices, 2));
+    run({mixed_col.get()}, large_storage_length, PLAIN_ENCODING_DELTA_OFFSET, false, true, false);
+
+    // Once DICT_ENCODING has been selected, a later large value falls back to plain data pages
+    // while retaining the column-level dictionary encoding.
+    config::dictionary_speculate_min_chunk_size = static_cast<int32_t>(col->size());
+    run({col.get(), large_col.get()}, large_storage_length, DICT_ENCODING, false, true, false);
 }
 
 TEST_F(ColumnReaderWriterTest, test_binary_plain_page_first_last_value_lifetime) {

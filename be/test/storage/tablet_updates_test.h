@@ -511,8 +511,8 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    TabletSharedPtr create_tablet_column_with_row(int64_t tablet_id, int32_t schema_hash,
-                                                  bool multi_column_pk = false) {
+    TabletSharedPtr create_tablet_column_with_row(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
+                                                  int32_t varchar_len = TypeDescriptor::MAX_VARCHAR_LENGTH) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -557,14 +557,14 @@ public:
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::VARCHAR;
-        k3.column_type.len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+        k3.column_type.len = varchar_len;
         request.tablet_schema.columns.emplace_back(k3);
 
         TColumn row;
         row.column_name = Schema::FULL_ROW_COLUMN;
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
-        ctype.__set_len(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        ctype.__set_len(varchar_len);
         row.__set_column_type(ctype);
         row.__set_aggregation_type(TAggregationType::REPLACE);
         row.__set_is_allow_null(false);

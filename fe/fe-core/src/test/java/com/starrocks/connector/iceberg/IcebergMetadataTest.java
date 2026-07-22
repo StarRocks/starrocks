@@ -464,7 +464,7 @@ public class IcebergMetadataTest extends TableTestBase {
         String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
         Assertions.assertEquals("CREATE TABLE `tbl` (\n"
                         + "  `c1` int(11) DEFAULT NULL,\n"
-                        + "  `c2` varchar(1048576) DEFAULT NULL\n"
+                        + "  `c2` " + STRING.toSql() + " DEFAULT NULL\n"
                         + ")\n"
                         + "PARTITION BY hour(`c1`)\n"
                         + "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST)\n"

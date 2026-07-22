@@ -27,9 +27,9 @@ desc files(
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 id	int	YES
-name	varchar(1048576)	YES
-info	struct<`address` varchar(1048576), `email` varchar(1048576)>	YES
-extra	varchar(1048576)	YES
+name	varchar(2147482624)	YES
+info	struct<`address` varchar(2147482624), `email` varchar(2147482624)>	YES
+extra	varchar(2147482624)	YES
 -- !result
 
 select * from files(
@@ -52,8 +52,8 @@ desc files(
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 id	bigint	YES
-name	varchar(1048576)	YES
-info	struct<`age` int(11), `email` varchar(1048576)>	YES
+name	varchar(2147482624)	YES
+info	struct<`age` int(11), `email` varchar(2147482624)>	YES
 -- !result
 
 select * from files(
@@ -75,9 +75,9 @@ desc files(
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 id	bigint	YES
-name	varchar(1048576)	YES
-info	varchar(1048576)	YES
-extra	varchar(1048576)	YES
+name	varchar(2147482624)	YES
+info	varchar(2147482624)	YES
+extra	varchar(2147482624)	YES
 -- !result
 
 select * from files(

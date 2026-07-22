@@ -20,7 +20,7 @@ desc files(
     "aws.s3.endpoint" = "${oss_endpoint}");
 -- result:
 id	bigint	YES
-name	varchar(1048576)	YES
+name	varchar(2147482624)	YES
 -- !result
 
 select * from files(

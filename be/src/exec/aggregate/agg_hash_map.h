@@ -694,7 +694,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
+              buffer(mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(chunk_size) +
+                                        SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
@@ -706,9 +707,14 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         slice_sizes.assign(_chunk_size, 0);
         size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
-            size_t batch_allocate_size = (size_t)cur_max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
-            // too large, process by rows
-            if (batch_allocate_size > std::numeric_limits<int32_t>::max()) {
+            bool process_by_rows = cur_max_one_row_size > std::numeric_limits<uint32_t>::max();
+            size_t batch_allocate_size = 0;
+            if (!process_by_rows) {
+                batch_allocate_size =
+                        cur_max_one_row_size * static_cast<size_t>(_chunk_size) + SLICE_MEMEQUAL_OVERFLOW_PADDING;
+                process_by_rows = batch_allocate_size > std::numeric_limits<int32_t>::max();
+            }
+            if (process_by_rows) {
                 max_one_row_size = 0;
                 mem_pool->clear();
                 buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
@@ -716,7 +722,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                                                                    std::move(allocate_func), agg_states, extra,
                                                                    cur_max_one_row_size);
             }
-            max_one_row_size = cur_max_one_row_size;
+            max_one_row_size = static_cast<uint32_t>(cur_max_one_row_size);
             mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
@@ -761,15 +767,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     ALWAYS_NOINLINE void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                     ExtraAggParam* extra, size_t max_serialize_each_row) {
-        uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
-        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
-            max_one_row_size = cur_max_one_row_size;
-            mem_pool->clear();
-            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
-            // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        }
-
+        DCHECK_LE(max_serialize_each_row, max_one_row_size);
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_one_row_size);
         }
@@ -884,8 +882,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    uint32_t get_max_serialize_size(const Columns& key_columns) {
-        uint32_t max_size = 0;
+    size_t get_max_serialize_size(const Columns& key_columns) {
+        size_t max_size = 0;
         for (const auto& key_column : key_columns) {
             max_size += key_column->max_one_element_serialize_size();
         }

@@ -78,9 +78,60 @@ public class AnalyzeCreateTableTest {
         ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
 
         Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
-        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
-        Assertions.assertEquals("varbinary(" + TypeFactory.getOlapMaxVarcharLength() + ")",
+        Assertions.assertEquals(TypeFactory.getMaxVarbinaryLength(), type.getLength());
+        Assertions.assertEquals("varbinary(" + TypeFactory.getMaxVarbinaryLength() + ")",
                 type.toSql());
+    }
+
+    @Test
+    public void testVarcharExplicitLengthBoundaries() {
+        final int maxLength = TypeFactory.getOlapMaxVarcharLength();
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_varchar_max (col1 int, col2 varchar(" + (maxLength - 1) +
+                        "), col3 varchar(" + maxLength + ")) engine=olap duplicate key(col1) " +
+                        "distributed by hash(col1) buckets 10");
+        Assertions.assertEquals(maxLength - 1,
+                ((ScalarType) stmt.getColumnDefs().get(1).getType()).getLength());
+        Assertions.assertEquals(maxLength,
+                ((ScalarType) stmt.getColumnDefs().get(2).getType()).getLength());
+
+        analyzeFail(
+                "create table test.table_varchar_over_max (col1 int, col2 varchar(" + (maxLength + 1) +
+                        ")) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10",
+                "Varchar size must be <= " + maxLength);
+
+        analyzeSuccess(
+                "create table test.table_nested_varchar_max (col1 int, col2 array<varchar(" + maxLength +
+                        ")>) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10");
+        analyzeFail(
+                "create table test.table_nested_varchar_over_max (col1 int, col2 array<varchar(" +
+                        (maxLength + 1) + ")>) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10",
+                "Varchar size must be <= " + maxLength);
+    }
+
+    @Test
+    public void testVarbinaryExplicitLengthBoundaries() {
+        final int maxLength = TypeFactory.getMaxVarbinaryLength();
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_varbinary_max (col1 int, col2 varbinary(" + maxLength + ")) engine=olap " +
+                        "duplicate key(col1) distributed by hash(col1) buckets 10");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(maxLength, type.getLength());
+
+        analyzeFail(
+                "create table test.table_varbinary_over_max (col1 int, col2 varbinary(" + (maxLength + 1) +
+                        ")) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10",
+                "VARBINARY size must be <= " + maxLength);
+
+        // The same scalar validation must apply recursively inside complex types.
+        analyzeSuccess(
+                "create table test.table_nested_varbinary_max (col1 int, col2 array<varbinary(" + maxLength +
+                        ")>) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10");
+        analyzeFail(
+                "create table test.table_nested_varbinary_over_max (col1 int, col2 array<varbinary(" +
+                        (maxLength + 1) + ")>) engine=olap duplicate key(col1) distributed by hash(col1) buckets 10",
+                "VARBINARY size must be <= " + maxLength);
     }
 
     @Test

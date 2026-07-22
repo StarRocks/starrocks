@@ -162,7 +162,7 @@ TEST_F(AvroReaderTest, test_get_schema_primitive_types) {
 
     ASSERT_EQ(8, schema.size());
     ASSERT_EQ("null_field", schema[0].col_name());
-    ASSERT_EQ("VARCHAR(1048576)", schema[0].type().debug_string());
+    ASSERT_EQ("VARCHAR(2147482624)", schema[0].type().debug_string());
     ASSERT_EQ("bool_field", schema[1].col_name());
     ASSERT_EQ("BOOLEAN", schema[1].type().debug_string());
     ASSERT_EQ("int_field", schema[2].col_name());
@@ -176,7 +176,7 @@ TEST_F(AvroReaderTest, test_get_schema_primitive_types) {
     ASSERT_EQ("bytes_field", schema[6].col_name());
     ASSERT_EQ("VARBINARY(1048576)", schema[6].type().debug_string());
     ASSERT_EQ("string_field", schema[7].col_name());
-    ASSERT_EQ("VARCHAR(1048576)", schema[7].type().debug_string());
+    ASSERT_EQ("VARCHAR(2147482624)", schema[7].type().debug_string());
 }
 
 TEST_F(AvroReaderTest, test_get_schema_complex_types) {
@@ -188,13 +188,13 @@ TEST_F(AvroReaderTest, test_get_schema_complex_types) {
 
     ASSERT_EQ(6, schema.size());
     ASSERT_EQ("record_field", schema[0].col_name());
-    ASSERT_EQ("STRUCT{id INT, name VARCHAR(1048576)}", schema[0].type().debug_string());
+    ASSERT_EQ("STRUCT{id INT, name VARCHAR(2147482624)}", schema[0].type().debug_string());
     ASSERT_EQ("enum_field", schema[1].col_name());
-    ASSERT_EQ("VARCHAR(1048576)", schema[1].type().debug_string());
+    ASSERT_EQ("VARCHAR(2147482624)", schema[1].type().debug_string());
     ASSERT_EQ("array_field", schema[2].col_name());
-    ASSERT_EQ("ARRAY<VARCHAR(1048576)>", schema[2].type().debug_string());
+    ASSERT_EQ("ARRAY<VARCHAR(2147482624)>", schema[2].type().debug_string());
     ASSERT_EQ("map_field", schema[3].col_name());
-    ASSERT_EQ("MAP<VARCHAR(1048576), INT>", schema[3].type().debug_string());
+    ASSERT_EQ("MAP<VARCHAR(2147482624), INT>", schema[3].type().debug_string());
     ASSERT_EQ("union_field", schema[4].col_name());
     ASSERT_EQ("BIGINT", schema[4].type().debug_string());
     ASSERT_EQ("fixed_field", schema[5].col_name());
@@ -214,27 +214,28 @@ TEST_F(AvroReaderTest, test_get_schema_complex_nest_types) {
     ASSERT_EQ("record_of_array", schema[1].col_name());
     ASSERT_EQ("STRUCT{list ARRAY<INT>}", schema[1].type().debug_string());
     ASSERT_EQ("record_of_map", schema[2].col_name());
-    ASSERT_EQ("STRUCT{dict MAP<VARCHAR(1048576), VARCHAR(1048576)>}", schema[2].type().debug_string());
+    ASSERT_EQ("STRUCT{dict MAP<VARCHAR(2147482624), VARCHAR(2147482624)>}", schema[2].type().debug_string());
     ASSERT_EQ("array_of_record", schema[3].col_name());
-    ASSERT_EQ("ARRAY<STRUCT{value VARCHAR(1048576)}>", schema[3].type().debug_string());
+    ASSERT_EQ("ARRAY<STRUCT{value VARCHAR(2147482624)}>", schema[3].type().debug_string());
     ASSERT_EQ("array_of_array", schema[4].col_name());
     ASSERT_EQ("ARRAY<ARRAY<INT>>", schema[4].type().debug_string());
     ASSERT_EQ("array_of_map", schema[5].col_name());
-    ASSERT_EQ("ARRAY<MAP<VARCHAR(1048576), INT>>", schema[5].type().debug_string());
+    ASSERT_EQ("ARRAY<MAP<VARCHAR(2147482624), INT>>", schema[5].type().debug_string());
     ASSERT_EQ("map_of_record", schema[6].col_name());
-    ASSERT_EQ("MAP<VARCHAR(1048576), STRUCT{id INT}>", schema[6].type().debug_string());
+    ASSERT_EQ("MAP<VARCHAR(2147482624), STRUCT{id INT}>", schema[6].type().debug_string());
     ASSERT_EQ("map_of_array", schema[7].col_name());
-    ASSERT_EQ("MAP<VARCHAR(1048576), ARRAY<INT>>", schema[7].type().debug_string());
+    ASSERT_EQ("MAP<VARCHAR(2147482624), ARRAY<INT>>", schema[7].type().debug_string());
     ASSERT_EQ("map_of_map", schema[8].col_name());
-    ASSERT_EQ("MAP<VARCHAR(1048576), MAP<VARCHAR(1048576), VARCHAR(1048576)>>", schema[8].type().debug_string());
+    ASSERT_EQ("MAP<VARCHAR(2147482624), MAP<VARCHAR(2147482624), VARCHAR(2147482624)>>",
+              schema[8].type().debug_string());
     ASSERT_EQ("record_array_of_record", schema[9].col_name());
     ASSERT_EQ("STRUCT{entries ARRAY<STRUCT{flag BOOLEAN}>}", schema[9].type().debug_string());
     ASSERT_EQ("record_array_of_map", schema[10].col_name());
-    ASSERT_EQ("STRUCT{entries ARRAY<MAP<VARCHAR(1048576), VARCHAR(1048576)>>}", schema[10].type().debug_string());
+    ASSERT_EQ("STRUCT{entries ARRAY<MAP<VARCHAR(2147482624), VARCHAR(2147482624)>>}", schema[10].type().debug_string());
     ASSERT_EQ("array_map_record", schema[11].col_name());
-    ASSERT_EQ("ARRAY<MAP<VARCHAR(1048576), STRUCT{ok BOOLEAN}>>", schema[11].type().debug_string());
+    ASSERT_EQ("ARRAY<MAP<VARCHAR(2147482624), STRUCT{ok BOOLEAN}>>", schema[11].type().debug_string());
     ASSERT_EQ("map_array_record", schema[12].col_name());
-    ASSERT_EQ("MAP<VARCHAR(1048576), ARRAY<STRUCT{score FLOAT}>>", schema[12].type().debug_string());
+    ASSERT_EQ("MAP<VARCHAR(2147482624), ARRAY<STRUCT{score FLOAT}>>", schema[12].type().debug_string());
 }
 
 TEST_F(AvroReaderTest, test_get_schema_logical_types) {
@@ -250,7 +251,7 @@ TEST_F(AvroReaderTest, test_get_schema_logical_types) {
     ASSERT_EQ("decimal_fixed", schema[1].col_name());
     ASSERT_EQ("DECIMAL64(10, 2)", schema[1].type().debug_string());
     ASSERT_EQ("uuid_string", schema[2].col_name());
-    ASSERT_EQ("VARCHAR(1048576)", schema[2].type().debug_string());
+    ASSERT_EQ("VARCHAR(2147482624)", schema[2].type().debug_string());
     ASSERT_EQ("date", schema[3].col_name());
     ASSERT_EQ("DATE", schema[3].type().debug_string());
     ASSERT_EQ("time_millis", schema[4].col_name());
