@@ -34,6 +34,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
@@ -138,6 +139,10 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                        long timeoutMillis) throws StarRocksException {
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
+        if (txnState == null) {
+            // Full state count-evicted; answer the recommit from the terminal-state cache.
+            return commitEvictedByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -169,6 +174,10 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                       long timeoutMillis) throws StarRocksException {
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
+        if (txnState == null) {
+            // Full state count-evicted; answer the recommit from the terminal-state cache.
+            return commitEvictedByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -198,6 +207,10 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                         List<TabletFailInfo> failedTablets) throws StarRocksException {
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
+        if (txnState == null) {
+            // Full state count-evicted; answer the recommit from the terminal-state cache.
+            return rollbackEvictedByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -221,11 +234,16 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         return result;
     }
 
+    // Returns the live bypass-write transaction state, or null when the label has no live transaction
+    // (e.g. count-evicted after a savepoint/resume). A null return signals the caller to resolve the
+    // terminal outcome from the terminal-state cache (commit*/rollbackEvictedByLabel) instead of
+    // failing with "transaction not found". Throws only when a live transaction exists but was not
+    // created by a bypass write.
     private static TransactionState getTxnState(long dbId, String label) throws StarRocksException {
         TransactionState txnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
         if (null == txnState) {
-            throw new StarRocksException(String.format("No transaction found by label %s", label));
+            return null;
         }
 
         if (BYPASS_WRITE.equals(txnState.getSourceType())) {
@@ -234,6 +252,46 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
         throw new StarRocksException(String.format(
                 "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
+    }
+
+    // Resolve a commit/prepare for a bypass-write transaction whose full state has been count-evicted,
+    // from the terminal-state cache (by label). VISIBLE/COMMITTED -> idempotent success; ABORTED ->
+    // cannot commit; otherwise genuinely unknown -> not found. Mirrors the in-map status branches.
+    private static TransactionResult commitEvictedByLabel(long dbId, String label) throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case COMMITTED:
+            case VISIBLE:
+                result.setOKMsg(String.format("Transaction has already committed, label is %s", label));
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case ABORTED:
+                throw new StarRocksException(String.format("Can not commit ABORTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+        }
+        return result;
+    }
+
+    // Rollback counterpart of commitEvictedByLabel.
+    private static TransactionResult rollbackEvictedByLabel(long dbId, String label) throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case ABORTED:
+                result.setOKMsg(String.format("Transaction has already aborted, label is %s", label));
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case COMMITTED:
+            case VISIBLE:
+                throw new StarRocksException(String.format("Can not abort COMMITTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+        }
+        return result;
     }
 
     @VisibleForTesting
