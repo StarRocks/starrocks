@@ -461,11 +461,7 @@ public class AnalyzeStmtAnalyzer {
                                     return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
                                 })
                                 .collect(Collectors.toList());
-                        if (supported.isEmpty()) {
-                            throw new SemanticException(
-                                    "Table '%s' has no columns that support histogram statistics",
-                                    analyzeTable.getName());
-                        }
+
                         analyzeStmt.setColumnNames(supported);
                     }
                 }
