@@ -269,7 +269,7 @@ jobs:
       BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
       # AI analysis is fully decoupled into a separate workflow
-      # (unstable-case-ai-analysis.yml); this job no longer needs
+      # (ai-unstable-case-analysis.yml); this job no longer needs
       # ANTHROPIC_API_KEY.
     steps:
       - name: Generate report & update unstable_case.json
@@ -330,7 +330,7 @@ jobs:
 
       - name: Upload report artifact (fallback, always)
         # So an OSS outage doesn't lose the report — same fallback as
-        # unstable-case-ai-analysis.yml.
+        # ai-unstable-case-analysis.yml.
         if: always()
         uses: actions/upload-artifact@v4
         with:
