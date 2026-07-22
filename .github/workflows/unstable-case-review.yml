@@ -321,12 +321,14 @@ jobs:
           # failing.json carries the per-case failure message (extracted from the
           # review XML). Publish it so the decoupled AI-analysis workflow can
           # classify from real failure text, not just history metadata. Mirror to
-          # latest/ for a SHA-free lookup by the analyzer. (No file when nothing
-          # is still failing — guard.)
-          if [ -f "${WORK_DIR}/failing.json" ]; then
-            ${_oss} cp "${WORK_DIR}/failing.json" "${REPORT_OSS}failing.json" -f
-            ${_oss} cp "${WORK_DIR}/failing.json" "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" -f
-          fi
+          # latest/ for a SHA-free lookup by the analyzer.
+          # review-unstable-cases.py always writes failing.json (empty [] when
+          # nothing is failing), so latest/ always reflects THIS run and is never
+          # left stale. Guard only the abnormal case (file missing, e.g. an
+          # aborted gen) by publishing [] so the analyzer sees no failures.
+          FJ="${WORK_DIR}/failing.json"; [ -f "${FJ}" ] || echo "[]" > "${FJ}"
+          ${_oss} cp "${FJ}" "${REPORT_OSS}failing.json" -f
+          ${_oss} cp "${FJ}" "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" -f
 
       - name: Upload report artifact (fallback, always)
         # So an OSS outage doesn't lose the report — same fallback as
