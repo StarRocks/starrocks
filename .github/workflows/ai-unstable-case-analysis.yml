@@ -1,4 +1,4 @@
-name: AI UNSTABLE-CASE ANALYSIS
+name: AI UNSTABLE CASE ANALYSIS
 
 # Standalone, history-aware AI analysis of unstable cases. FULLY DECOUPLED from
 # the review workflow: separate file, its own manual trigger, no job dependency.
