@@ -63,13 +63,25 @@ jobs:
             echo "::warning::No case_history downloaded from ${CH}/{inspection,pr}/${ch_branch}/ — analysis will have NO history (OSS empty or unreachable)."
           fi
 
-          # Analyze the currently-blacklisted cases (those with failure history)
-          # for the branch — no dependency on any review run.
+          # Prefer the latest review run's failing.json — it carries the actual
+          # per-case failure message (from the review XML), which lets the
+          # classifier reason over real failure text instead of history metadata
+          # alone. Fall back to the blacklist (history-only) when no review has
+          # published one yet. Still fully decoupled: this is a best-effort OSS
+          # read, no job dependency on the review workflow.
+          FAILING="${WORK}/failing.json"
+          ${_oss} cp "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" "${FAILING}" >/dev/null 2>&1 || true
+          if [ -s "${FAILING}" ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('${FAILING}')) else 1)" 2>/dev/null; then
+            echo "Analyzing from review failing.json (real per-case failure text)."
+            SRC=(--failing "${FAILING}")
+          else
+            echo "No review failing.json on OSS — analyzing the blacklist (history metadata only)."
+            SRC=(--from-blacklist files/unstable_case.json --types "${CASE_TYPES}")
+          fi
           python3 bin/analyze_unstable_cases.py \
-            --from-blacklist files/unstable_case.json \
+            "${SRC[@]}" \
             --repo "${{ github.repository }}" \
             --branch "${BRANCH}" \
-            --types "${CASE_TYPES}" \
             --history-dir "${HIST}" \
             --limit "${{ inputs.limit || '10' }}" \
             --out "${WORK}/out"

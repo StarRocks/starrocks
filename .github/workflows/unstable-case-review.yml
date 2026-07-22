@@ -315,9 +315,18 @@ jobs:
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
           REPORT_OSS="oss://${bucket}/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
-          /var/local/env/ossutil64 --config-file /root/.ossutilconfig \
-            cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
+          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
+          ${_oss} cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
+          # failing.json carries the per-case failure message (extracted from the
+          # review XML). Publish it so the decoupled AI-analysis workflow can
+          # classify from real failure text, not just history metadata. Mirror to
+          # latest/ for a SHA-free lookup by the analyzer. (No file when nothing
+          # is still failing — guard.)
+          if [ -f "${WORK_DIR}/failing.json" ]; then
+            ${_oss} cp "${WORK_DIR}/failing.json" "${REPORT_OSS}failing.json" -f
+            ${_oss} cp "${WORK_DIR}/failing.json" "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" -f
+          fi
 
       - name: Upload report artifact (fallback, always)
         # So an OSS outage doesn't lose the report — same fallback as
