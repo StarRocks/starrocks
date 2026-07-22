@@ -113,8 +113,8 @@ void BrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint, EndpointCle
 
     int64_t now = butil::gettimeofday_us();
     if (now < cleanup_task->deadline_locked()) {
-        auto status =
-                _pipeline_timer->schedule(cleanup_task, butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
+        auto status = _pipeline_timer->schedule(cleanup_task,
+                                                butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
         if (!status.ok()) {
             LOG(WARNING) << "Failed to reschedule brpc cleanup task: " << endpoint;
             _stub_map.erase(endpoint);
@@ -244,8 +244,8 @@ void HttpBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint,
 
     int64_t now = butil::gettimeofday_us();
     if (now < cleanup_task->deadline_locked()) {
-        auto status =
-                _pipeline_timer->schedule(cleanup_task, butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
+        auto status = _pipeline_timer->schedule(cleanup_task,
+                                                butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
         if (!status.ok()) {
             LOG(WARNING) << "Failed to reschedule http brpc cleanup task: " << endpoint;
             _stub_map.erase(endpoint);
@@ -347,8 +347,8 @@ void LakeServiceBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint,
 
     int64_t now = butil::gettimeofday_us();
     if (now < cleanup_task->deadline_locked()) {
-        auto status =
-                _pipeline_timer->schedule(cleanup_task, butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
+        auto status = _pipeline_timer->schedule(cleanup_task,
+                                                butil::microseconds_to_timespec(cleanup_task->deadline_locked()));
         if (!status.ok()) {
             LOG(WARNING) << "Failed to reschedule lake brpc cleanup task: " << endpoint;
             _stub_map.erase(endpoint);
