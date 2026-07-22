@@ -647,12 +647,18 @@ public class SplitTabletJob extends TabletReshardJob {
                     anySpreadPreSplit |= oldIndex != null && oldIndex.getRowCount() == 0;
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
-                        if (splittingTablet == null || splittingTablet.isIdenticalTablet()) {
+                        if (splittingTablet == null) {
                             continue;
                         }
+                        // A pre-split creates even a fallback-to-identical replacement (BE returned only the
+                        // first child range -> fallbackToIdenticalTablet) in the SPREAD group only, so its
+                        // range must still be collected below for the reconcile — otherwise the replacement
+                        // is stranded SPREAD-only and loses colocate placement. An identical replacement
+                        // introduces no boundary, so skip the boundary/straddle logic for it.
+                        boolean identical = splittingTablet.isIdenticalTablet();
                         Tablet oldTablet = oldIndex == null ? null
                                 : oldIndex.getTablet(splittingTablet.getOldTabletId());
-                        if (oldTablet != null && oldTablet.getRange() != null
+                        if (!identical && oldTablet != null && oldTablet.getRange() != null
                                 && !ColocateRangeUtils.isContainedInOwningColocateRange(
                                         oldTablet.getRange().getRange(),
                                         currentRanges, sortKeyColumns, colocateColumnCount)) {
@@ -665,6 +671,9 @@ public class SplitTabletJob extends TabletReshardJob {
                             }
                             Range<Tuple> newRange = newTablet.getRange().getRange();
                             newChildRanges.put(newTabletId, newRange);
+                            if (identical) {
+                                continue;
+                            }
                             boolean canonicalLow = ColocateRangeUtils.hasCanonicalLowerBound(
                                     newRange, sortKeyColumns, colocateColumnCount);
                             if (canonicalLow) {
