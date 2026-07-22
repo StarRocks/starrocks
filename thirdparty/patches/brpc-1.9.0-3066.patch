@@ -1,0 +1,62 @@
+From 3b0c99e7f7c5be121f8a33fb005920f385306f7e Mon Sep 17 00:00:00 2001
+From: chenBright <chenguangmingfe@foxmail.com>
+Date: Wed, 13 Aug 2025 22:38:18 +0800
+Subject: [PATCH] Backport IntRecorder combiner initialization fix
+
+Partial backport of apache/brpc#3066. The unrelated googletest version
+bump and assertion cleanup from the upstream commit are intentionally
+omitted.
+---
+ src/bvar/detail/combiner.h      | 2 +-
+ src/bvar/recorder.h             | 4 ++--
+ test/bvar_recorder_unittest.cpp | 5 +++++
+ 3 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/bvar/detail/combiner.h b/src/bvar/detail/combiner.h
+index 07baa89158..3b4421809c 100644
+--- a/src/bvar/detail/combiner.h
++++ b/src/bvar/detail/combiner.h
+@@ -172,7 +172,7 @@ friend class GlobalValue<self_type>;
+             }
+         }
+         
+-        void reset(const ElementTp& val, self_shared_type c) {
++        void reset(const ElementTp& val, const self_shared_type& c) {
+             combiner = c;
+             element.store(val);
+         }
+diff --git a/src/bvar/recorder.h b/src/bvar/recorder.h
+index c2c18bd144..99bdfa752e 100644
+--- a/src/bvar/recorder.h
++++ b/src/bvar/recorder.h
+@@ -118,12 +118,12 @@ class IntRecorder : public Variable {
+ 
+     IntRecorder() : _combiner(std::make_shared<combiner_type>()), _sampler(NULL) {}
+ 
+-    explicit IntRecorder(const butil::StringPiece& name) : _sampler(NULL) {
++    explicit IntRecorder(const butil::StringPiece& name) : IntRecorder() {
+         expose(name);
+     }
+ 
+     IntRecorder(const butil::StringPiece& prefix, const butil::StringPiece& name)
+-        : _sampler(NULL) {
++        : IntRecorder() {
+         expose_as(prefix, name);
+     }
+ 
+diff --git a/test/bvar_recorder_unittest.cpp b/test/bvar_recorder_unittest.cpp
+index b0938da99d..52cb70733d 100644
+--- a/test/bvar_recorder_unittest.cpp
++++ b/test/bvar_recorder_unittest.cpp
+@@ -78,6 +78,11 @@ TEST(RecorderTest, sanity) {
+         ASSERT_EQ("var1", vars[0]);
+         ASSERT_EQ(1UL, bvar::Variable::count_exposed());
+     }
++    {
++        bvar::IntRecorder recorder("var2");
++        recorder << 2;
++        ASSERT_EQ(2l, recorder.average());
++    }
+     ASSERT_EQ(0UL, bvar::Variable::count_exposed());
+ }
+ 

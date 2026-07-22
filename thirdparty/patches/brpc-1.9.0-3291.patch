@@ -1,0 +1,149 @@
+From f3b2796ec60860864ae1f45817839f1eb1a11cad Mon Sep 17 00:00:00 2001
+From: chenBright <chenguangmingfe@foxmail.com>
+Date: Sun, 10 May 2026 13:37:02 +0800
+Subject: [PATCH] Fix heap-use-after-free in ~AgentCombiner (#2937 follow-up)
+
+Rebased onto bRPC 1.9.0 after the apache/brpc#2949 and focused
+apache/brpc#3066 backports. The code changes match apache/brpc#3291;
+only the preimage metadata and hunk locations are adjusted so the patch
+applies without offsets or backup files.
+
+After PR #2949 changed Agent::combiner from a raw pointer to a
+weak_ptr, MultiDimensionTest.shared started to fail under ASAN with a
+heap-use-after-free in clear_all_agents() called from ~AgentCombiner.
+
+Root cause
+----------
+std::shared_ptr makes its weak_ptr expire the instant use_count drops
+to 0, while ~AgentCombiner only starts running after that. The two
+events therefore form a race window between two threads:
+
+    * thread A: last shared_ptr<AgentCombiner> released
+                use_count -> 0   -> weak_ptr expired
+                ~AgentCombiner -> clear_all_agents() takes _lock and
+                                  starts walking _agents
+    * thread B: thread exits, _destroy_tls_blocks() deletes ThreadBlock,
+                each ~Agent calls combiner.lock() which now returns null
+                (weak_ptr already expired), so commit_and_erase() is
+                skipped and the Agent is freed while still linked into
+                A's _agents list
+    * thread A: dereferences a freed LinkNode in clear_all_agents() ->
+                heap-use-after-free
+
+Fix
+---
+Don't traverse _agents from ~AgentCombiner. Letting _agents go out of
+scope is safe because:
+
+  * butil::LinkedList and butil::LinkNode have trivial destructors and
+    never traverse on destruction, so tearing down _agents does not
+    dereference any agent node.
+  * Surviving Agents simply observe combiner.expired() == true in
+    ~Agent and skip commit_and_erase, leaving prev_/next_ dangling but
+    never read.
+  * If the freed agent_id is later reused by a new combiner and the
+    same TLS slot is taken, get_or_create_tls_agent calls Agent::reset
+    and Append's it into the new combiner's _agents.
+    LinkNode::InsertBefore only writes prev_/next_ (it never reads
+    their stale values), so the dangling pointers are safely
+    overwritten.
+  * Agent::element is destroyed together with its ThreadBlock, so any
+    non-POD resource it holds is still released; if the agent slot is
+    reused, Agent::reset rewrites the element value before it is
+    observed again.
+
+The body of clear_all_agents() is kept (commented out) for reference,
+together with a NOTE explaining why it must not be re-enabled from
+~AgentCombiner.
+---
+ src/bvar/detail/combiner.h | 70 +++++++++++++++++++++++++++++++-------
+ 1 file changed, 57 insertions(+), 13 deletions(-)
+
+diff --git a/src/bvar/detail/combiner.h b/src/bvar/detail/combiner.h
+index 3b4421809c..89bf45b861 100644
+--- a/src/bvar/detail/combiner.h
++++ b/src/bvar/detail/combiner.h
+@@ -235,7 +235,38 @@ friend class GlobalValue<self_type>;
+ 
+     ~AgentCombiner() {
+         if (_id >= 0) {
+-            clear_all_agents();
++            // NOTE: We intentionally do NOT walk `_agents` here (e.g. via the
++            // previously existed `clear_all_agents()`).
++            //
++            // `Agent` instances live inside per-thread `ThreadBlock`s owned by
++            // `AgentGroup` and are destroyed when their owning thread exits
++            // (via `_destroy_tls_blocks`). At that point `~Agent` calls
++            // `combiner.lock()`; if the combiner has already started its
++            // destruction the `weak_ptr` is expired and the agent will skip
++            // `commit_and_erase`, leaving its `LinkNode` linked to this
++            // combiner's `_agents`. If we tried to traverse `_agents` here we
++            // could touch agent nodes whose `ThreadBlock` was just freed by
++            // a concurrent thread-exit, causing heap-use-after-free
++            // (see issue #2937 follow-up).
++            //
++            // It is safe to leave the list "dirty" because:
++            //   * `butil::LinkedList` / `butil::LinkNode` have trivial
++            //     destructors and never traverse on destruction, so tearing
++            //     down `_agents` here does not dereference any agent node.
++            //   * After this combiner is gone, every still-alive `Agent` will
++            //     observe `combiner.expired() == true` in `~Agent` and skip
++            //     `commit_and_erase`, so the dangling `prev_/next_` pointers
++            //     in those agents are never read.
++            //   * If the freed `_id` is later reused by a new combiner and the
++            //     same TLS slot is taken, `get_or_create_tls_agent` will call
++            //     `Agent::reset` and `Append` the agent into the new
++            //     combiner's `_agents`. `LinkNode::InsertBefore` only writes
++            //     `prev_/next_` (never reads their stale values), so the
++            //     dangling pointers are safely overwritten.
++            //   * `Agent::element` is destroyed together with the `ThreadBlock`,
++            //     so any non-POD resource it holds is still released; if the
++            //     agent slot is reused, `Agent::reset` will overwrite the
++            //     element value before it is observed again.
+             AgentGroup::destroy_agent(_id);
+             _id = -1;
+         }
+@@ -321,18 +352,31 @@ friend class GlobalValue<self_type>;
+         return agent;
+     }
+ 
+-    void clear_all_agents() {
+-        butil::AutoLock guard(_lock);
+-        // Resting agents is must because the agent object may be reused.
+-        // Set element to be default-constructed so that if it's non-pod,
+-        // internal allocations should be released.
+-        for (butil::LinkNode<Agent>* node = _agents.head(); node != _agents.end();) {
+-            node->value()->reset(ElementTp(), NULL);
+-            butil::LinkNode<Agent>* const saved_next =  node->next();
+-            node->RemoveFromList();
+-            node = saved_next;
+-        }
+-    }
++    // NOTE: `clear_all_agents()` is intentionally kept but no longer called
++    // from `~AgentCombiner` (see the long comment in `~AgentCombiner`).
++    //
++    // Calling it from the destructor is unsafe: by the time the destructor
++    // runs, agent weak_ptrs have already expired and `~Agent` will skip
++    // `commit_and_erase`; a concurrent thread-exit can therefore free the
++    // `ThreadBlock` (and the agents inside it) while we are still walking
++    // `_agents` here, which is a heap-use-after-free.
++    //
++    // The body is left around (commented out) for reference / future use --
++    // do NOT re-enable it from `~AgentCombiner`.
++    //
++    // void clear_all_agents() {
++    //     butil::AutoLock guard(_lock);
++    //     // Resetting agents is a must because the agent object may be
++    //     // reused. Set element to be default-constructed so that if it's
++    //     // non-pod, internal allocations should be released.
++    //     for (butil::LinkNode<Agent>* node = _agents.head();
++    //          node != _agents.end();) {
++    //         node->value()->reset(ElementTp(), NULL);
++    //         butil::LinkNode<Agent>* const saved_next = node->next();
++    //         node->RemoveFromList();
++    //         node = saved_next;
++    //     }
++    // }
+ 
+     const BinaryOp& op() const { return _op; }
+ 

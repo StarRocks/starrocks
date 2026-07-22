@@ -507,7 +507,11 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     touch $PATCHED_MARK
 fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
-    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    patch < $TP_PATCH_DIR/brpc-1.9.0.patch || exit 1
+    # Backport apache/brpc#2949 and its follow-ups apache/brpc#3066 and #3291.
+    patch -p1 < $TP_PATCH_DIR/brpc-1.9.0-2949.patch || exit 1
+    patch -p1 < $TP_PATCH_DIR/brpc-1.9.0-3066.patch || exit 1
+    patch -p1 < $TP_PATCH_DIR/brpc-1.9.0-3291.patch || exit 1
     touch $PATCHED_MARK
 fi
 cd -
