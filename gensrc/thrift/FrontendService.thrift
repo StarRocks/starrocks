@@ -2599,7 +2599,7 @@ service FrontendService {
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
-    TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: TGetPartitionAccessTimesRequest request)
+    TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 
