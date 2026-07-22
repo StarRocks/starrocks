@@ -389,6 +389,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             generateNextTaskRun();
         }
 
+        // Final run of the batch confirms freshness even when no version changed (SKIPPED, or a no-op version update).
+        // Idempotent with the inline confirm on the version-change path, so the common case writes no extra edit log.
+        if (!mvContext.hasNextBatchPartition()
+                && (result == Constants.TaskRunState.SUCCESS || result == Constants.TaskRunState.SKIPPED)) {
+            new MVVersionManager(this.mv, mvContext).confirmFreshness();
+        }
+
         long refreshDurationMs = System.currentTimeMillis() - startRefreshTs;
         logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs));
         mvEntity.updateRefreshDuration(refreshDurationMs);
@@ -864,6 +871,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
         }
+        // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
+        // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+            long processStartTime = mvContext.getStatus().getProcessStartTime();
+            newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
+                    new MVRefreshParams(mv, properties).isCompleteRefresh() && processStartTime > 0
+                            ? String.valueOf(processStartTime) : "0");
+        }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -1005,7 +1020,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames);
+                    refBaseTableIds, refTableAndPartitionNames, !mvContext.hasNextBatchPartition());
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;

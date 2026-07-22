@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -212,5 +213,165 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                     "     partitions=1/2");
             Assertions.assertNotNull(execPlan);
         }
+    }
+
+    @Test
+    public void testMVBatchRefreshSeedsFreshnessBaseline() throws Exception {
+        String partitionTable = "CREATE TABLE range_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_t1", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_t1", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_t1 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_t1 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from range_t1 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.getProperties().put(TaskRun.FORCE, "true");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long leaderStartTime = 1718000000123L;
+        taskRun.getStatus().setProcessStartTime(leaderStartTime);
+        taskRun.executeTaskRun();
+
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+        TaskRun nextTaskRun = processor.getNextTaskRun();
+        Assertions.assertNotNull(nextTaskRun);
+        Assertions.assertEquals(String.valueOf(leaderStartTime),
+                nextTaskRun.getProperties().get(TaskRun.MV_FRESHNESS_BASELINE_TIME));
+
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("range_t1");
+    }
+
+    @Test
+    public void testMVMultiBatchConfirmsAtFirstBatchStart() throws Exception {
+        String partitionTable = "CREATE TABLE range_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_t1", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_t1", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_t1 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_t1 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from range_t1 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv1");
+
+        // Batch 1 (leader): a FORCE refresh splits into one batch per partition.
+        TaskRun leader = buildMVTaskRun(mv, "test");
+        leader.getProperties().put(TaskRun.FORCE, "true");
+        leader.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long firstBatchStart = 1718000000123L;
+        leader.getStatus().setProcessStartTime(firstBatchStart);
+        leader.executeTaskRun();
+        // An intermediate batch must NOT confirm freshness.
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        // Batch 2 (final): give it a much later own start; freshness must still be confirmed at the
+        // batch's first-run start (carried via MV_FRESHNESS_BASELINE_TIME), not this run's own start.
+        TaskRun nextTaskRun = ((PartitionBasedMvRefreshProcessor) leader.getProcessor()).getNextTaskRun();
+        Assertions.assertNotNull(nextTaskRun);
+        nextTaskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long lastBatchStart = firstBatchStart + 100000L;
+        nextTaskRun.getStatus().setProcessStartTime(lastBatchStart);
+        nextTaskRun.executeTaskRun();
+
+        Assertions.assertEquals(firstBatchStart, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertNotEquals(lastBatchStart, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("range_t1");
+    }
+
+    @Test
+    public void testMVCompleteRefreshConfirmsFreshness() throws Exception {
+        String partitionTable = "CREATE TABLE range_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_t1", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_t1", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_t1 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_t1 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT dt1,sum(int1) from range_t1 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long leaderStartTime = 1718000000123L;
+        taskRun.getStatus().setProcessStartTime(leaderStartTime);
+        taskRun.executeTaskRun();
+
+        Assertions.assertEquals(leaderStartTime, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("range_t1");
+    }
+
+    @Test
+    public void testMVPartialRefreshDoesNotConfirmFreshness() throws Exception {
+        String partitionTable = "CREATE TABLE range_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_t1", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_t1", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_t1 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_t1 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv1 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT dt1,sum(int1) from range_t1 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv1");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.getProperties().put(TaskRun.PARTITION_START, "2024-01-04");
+        taskRun.getProperties().put(TaskRun.PARTITION_END, "2024-01-05");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.getStatus().setProcessStartTime(1718000000123L);
+        taskRun.executeTaskRun();
+
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("range_t1");
     }
 }

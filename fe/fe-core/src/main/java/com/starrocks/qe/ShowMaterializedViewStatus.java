@@ -74,6 +74,7 @@ public class ShowMaterializedViewStatus {
     private String queryRewriteStatus;
     private long taskId;
     private String taskName;
+    private long lastFreshnessConfirmedAt;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -332,6 +333,7 @@ public class ShowMaterializedViewStatus {
             status.setRefreshType("UNKNOWN");
         } else {
             status.setRefreshType(String.valueOf(mv.getRefreshScheme().getType()));
+            status.setLastFreshnessConfirmedAt(refreshScheme.getLastFreshnessConfirmedAt());
         }
         // is_active
         status.setActive(mv.isActive());
@@ -481,6 +483,14 @@ public class ShowMaterializedViewStatus {
 
     public void setTaskName(String taskName) {
         this.taskName = taskName;
+    }
+
+    public long getLastFreshnessConfirmedAt() {
+        return lastFreshnessConfirmedAt;
+    }
+
+    public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+        this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
     }
 
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
@@ -658,6 +668,9 @@ public class ShowMaterializedViewStatus {
         status.setQuery_rewrite_status(queryRewriteStatus);
         // creator
         status.setCreator(refreshJobStatus.getTaskOwner());
+        if (lastFreshnessConfirmedAt > 0) {
+            status.setLast_freshness_confirmed_at(TimeUtils.longToTimeString(lastFreshnessConfirmedAt));
+        }
 
         return status;
     }
@@ -731,6 +744,7 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // last refresh job id
         addField(resultRow, refreshJobStatus.getJobId());
+        addField(resultRow, lastFreshnessConfirmedAt > 0 ? TimeUtils.longToTimeString(lastFreshnessConfirmedAt) : "");
 
         return resultRow;
     }

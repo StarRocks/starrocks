@@ -37,3 +37,4 @@ displayed_sidebar: docs
 | CREATOR                              | 物化视图的创建者。                               |
 | LAST_REFRESH_PROCESS_TIME            | 最近一次刷新任务的处理时间。                     |
 | LAST_REFRESH_JOB_ID                  | 最近一次刷新任务的作业 ID。                      |
+| LAST_FRESHNESS_CONFIRMED_AT          | 最近一次成功刷新的开始时间，在整次刷新（其全部 task run）完成后才记录；确认基表无变化、无需刷新的刷新同样会确认新鲜度。物化视图反映该时刻的基表数据。区别于 `LAST_REFRESH_TIME`（基表数据版本时间），这是墙钟时间。首次成功刷新前、以及同步物化视图，为 `NULL`。按分区范围的 REFRESH（部分刷新）不推进该值。 |

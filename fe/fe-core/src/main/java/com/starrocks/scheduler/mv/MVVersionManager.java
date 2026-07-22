@@ -19,10 +19,15 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TableSnapshotInfo;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.Logger;
@@ -32,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -55,11 +61,13 @@ public class MVVersionManager {
      * @param mvRefreshedPartitions mv refreshed partitions
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
+     * @param isFinalBatchRun whether this run is the batch's final task run (only then is freshness confirmed)
      */
     public void updateMVVersionInfo(Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                     Set<String> mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
-                                    Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                    Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames,
+                                    boolean isFinalBatchRun) {
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
         MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
@@ -86,11 +94,69 @@ public class MVVersionManager {
             }
         }
         mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        // Confirmed as of the batch's first-run start (the pinned-snapshot moment), only once the final run
+        // completes. Monotonic (>) so it never moves backwards; piggybacks on the version-change edit log below.
+        long freshnessBaseline = freshnessBaselineTime();
+        if (isFinalBatchRun && freshnessBaseline > mvRefreshScheme.getLastFreshnessConfirmedAt()) {
+            mvRefreshScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
+        }
         updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
                 MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
+    }
+
+    // Persist freshness for a successful refresh that changed no version. Idempotent: a no-op when the version-change
+    // log already recorded this run's freshness, so the main path writes no extra edit-log entry.
+    public void confirmFreshness() {
+        long confirmTime = freshnessBaselineTime();
+        if (confirmTime <= 0 || mv.getRefreshScheme().getLastFreshnessConfirmedAt() >= confirmTime) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            logger.warn("skip freshness confirm, failed to lock mv: {}", mv.getName());
+            return;
+        }
+        try {
+            MaterializedView.MvRefreshScheme scheme = mv.getRefreshScheme();
+            if (scheme.getLastFreshnessConfirmedAt() >= confirmTime) {
+                return;
+            }
+            scheme.setLastFreshnessConfirmedAt(confirmTime);
+            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                    new ChangeMaterializedViewRefreshSchemeLog(mv);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run
+    // refresh has no such property and falls back to this run's own start, which is also the batch start.
+    private long freshnessBaselineTime() {
+        Map<String, String> properties = mvTaskRunContext.getProperties();
+        if (properties != null) {
+            String baseline = properties.get(TaskRun.MV_FRESHNESS_BASELINE_TIME);
+            if (baseline != null) {
+                try {
+                    return Long.parseLong(baseline);
+                } catch (NumberFormatException e) {
+                    // fall through to this run's own start time
+                }
+            }
+        }
+        TaskRunStatus status = mvTaskRunContext.getStatus();
+        if (status == null) {
+            return 0;
+        }
+        // A user-scoped partial refresh only covers the requested range, so it cannot confirm whole-MV freshness.
+        if (properties != null && !new MVRefreshParams(mv, properties).isCompleteRefresh()) {
+            return 0;
+        }
+        return status.getProcessStartTime();
     }
 
     private boolean updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
