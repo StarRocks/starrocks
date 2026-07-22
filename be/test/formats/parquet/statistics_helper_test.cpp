@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "formats/parquet/schema.h"
-#include "types/type_descriptor.h"
+#include "runtime/types.h"
 
 namespace starrocks::parquet {
 
