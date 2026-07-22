@@ -1508,6 +1508,12 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
                                                                       const TabletMetadataPB& new_metadata,
                                                                       const CanonicalContribMap& canonical_contribs) {
     std::vector<CanonicalGapSpec> result;
+    // The current tablet schema, used to project a gap range whose bound arity is wider than a canonical
+    // rowset's (archived) sort key. This path is primary-key-only and the metadata-only trailing sort-key
+    // add excludes primary-key tables, so a wider bound does not arise here today; passing current_schema
+    // keeps create_seek_range_from correct and consistent with the other call sites regardless.
+    const TabletSchemaCSPtr current_schema =
+            new_metadata.has_schema() ? TabletSchema::create(new_metadata.schema()) : nullptr;
     for (const auto& [canonical_index, contrib] : canonical_contribs) {
         if (canonical_index < 0 || canonical_index >= new_metadata.rowsets_size()) {
             return Status::InternalError(
@@ -1563,8 +1569,8 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
 
             Roaring gap_bits;
             for (const auto& gap_range : non_contributed) {
-                ASSIGN_OR_RETURN(auto seek_range,
-                                 TabletRangeHelper::create_seek_range_from(gap_range, schema, /*mem_pool=*/nullptr));
+                ASSIGN_OR_RETURN(auto seek_range, TabletRangeHelper::create_seek_range_from(
+                                                          gap_range, schema, /*mem_pool=*/nullptr, current_schema));
                 LakeIOOptions io_opts{.fill_data_cache = false};
                 ASSIGN_OR_RETURN(auto rowid_range_opt,
                                  segment_seek_range_to_rowid_range(base_segment, seek_range, io_opts));
