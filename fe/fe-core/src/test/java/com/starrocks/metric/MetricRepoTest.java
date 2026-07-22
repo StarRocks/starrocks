@@ -306,4 +306,23 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("time_travel_type=\"branch\""),
                 "iceberg_time_travel_query_total should contain time_travel_type=branch");
     }
+
+    @Test
+    public void testDictCacheMemoryMetric() {
+        // The gauge must be registered and expose a non-negative byte value on read.
+        Assertions.assertNotNull(MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+        Long value = MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES.getValue();
+        Assertions.assertNotNull(value);
+        Assertions.assertTrue(value >= 0L, "dict cache memory must be non-negative, got " + value);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_low_cardinality_dict_cache_bytes"),
+                "low_cardinality_dict_cache_bytes should be exposed");
+        Assertions.assertTrue(output.contains("# TYPE ut_low_cardinality_dict_cache_bytes gauge"),
+                "low_cardinality_dict_cache_bytes should be declared as a gauge");
+    }
 }

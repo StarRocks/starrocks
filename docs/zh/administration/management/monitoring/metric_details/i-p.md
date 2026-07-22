@@ -239,6 +239,12 @@ description: "Alphabetical i - p"
 
 ## `local_column_pool_bytes (Deprecated)`
 
+## `low_cardinality_dict_cache_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：当前 FE 上低基数全局字典缓存（`CacheDictManager`）中缓存的字典数据总字节数。由缓存精确统计（非采样），统计的是序列化后的字典数据大小，是实际堆内存占用的下界。该缓存以此字节大小为上界，由配置项 `low_cardinality_dict_cache_max_bytes` 控制。
+
 ## `max_disk_io_util_percent`
 
 - 单位：-
