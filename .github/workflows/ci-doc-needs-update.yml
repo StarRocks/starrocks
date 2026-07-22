@@ -50,13 +50,16 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       # The value-drift engine lives in its own repo (single source of truth,
-      # reused by commercial docs too). Pinned to main and run from this trusted
-      # same-org checkout — never from the merged PR head.
+      # reused by commercial docs too) and runs from this trusted checkout, never
+      # from the merged PR head. Pinned to an immutable commit SHA: this job runs
+      # under pull_request_target with issues: write, so an unpinned `main` would
+      # let an upstream change execute with elevated permissions. Bump this SHA
+      # intentionally when upgrading the engine.
       - name: Check out the drift engine
         uses: actions/checkout@v4
         with:
           repository: StarRocks/doc-config-drift
-          ref: main
+          ref: dfd6f7285de5fa069dc1cddfe35c6833b0ad6c34  # doc-config-drift main @ 2026-07-22
           path: drift-engine
 
       - uses: actions/setup-python@v5
@@ -162,7 +165,7 @@ jobs:
       - name: Detect config value drift
         run: |
           python3 - << 'PYEOF'
-          import json, subprocess
+          import json, subprocess, sys
           result = {}
           for comp in ("fe", "be"):
               p = subprocess.run(
@@ -170,10 +173,20 @@ jobs:
                    "--repo", ".", "--changed-since", "HEAD^1", "--format", "json"],
                   capture_output=True, text=True,
               )
+              # drift_audit exits 0 (no drift) or 1 (drift found) normally; any
+              # other code, or unparseable stdout, means the detector itself broke
+              # — log it so the section isn't silently omitted without a trace.
               try:
                   result[comp] = json.loads(p.stdout)
-              except Exception:
+              except Exception as exc:
                   result[comp] = {}
+                  print(f"::warning::value-drift detection failed for {comp} "
+                        f"(exit {p.returncode}, {exc}); stderr:\n{p.stderr}",
+                        file=sys.stderr)
+              else:
+                  if p.returncode not in (0, 1):
+                      print(f"::warning::drift_audit for {comp} exited {p.returncode}; "
+                            f"stderr:\n{p.stderr}", file=sys.stderr)
           with open("/tmp/value_drift.json", "w") as f:
               json.dump(result, f)
           PYEOF
@@ -242,7 +255,7 @@ jobs:
                       )
                   lines.append("")
 
-          # Value drift from the engine (docs/value_drift.json): params this PR
+          # Value drift from the engine (/tmp/value_drift.json): params this PR
           # changed whose documented Default / mutability now contradicts code.
           try:
               with open("/tmp/value_drift.json") as f:
@@ -255,7 +268,7 @@ jobs:
               for x in comp.get("default_mismatch", []):
                   rows.append((x["name"], "default", x["doc"], x["code"], x.get("file", "")))
               for x in comp.get("mutable_mismatch", []):
-                  rows.append((x["name"], "mutable", x["doc"], x["code"], x.get("file", "")))
+                  rows.append((x["name"], "mutability", x["doc"], x["code"], x.get("file", "")))
               return sorted(rows)
 
           vd_groups = [
