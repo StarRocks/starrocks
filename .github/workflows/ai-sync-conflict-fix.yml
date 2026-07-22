@@ -17,10 +17,12 @@ name: AI Sync Conflict Fix
 #         back to `gh auth token` for git clone/push (see unstable-case-review.yml).
 
 on:
-  pull_request_target:
-    types: [labeled, closed]
-  schedule:
-    - cron: "*/30 * * * *"
+  # NOTE: auto-triggers are DISABLED during validation — only manual dispatch is active, so the tool
+  # never fires unattended on real sync PRs. Re-enable (uncomment) once we're ready for production.
+  # pull_request_target:
+  #   types: [labeled, closed]
+  # schedule:
+  #   - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       pr:
