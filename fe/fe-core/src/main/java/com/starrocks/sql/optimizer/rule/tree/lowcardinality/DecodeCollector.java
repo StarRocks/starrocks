@@ -323,7 +323,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         Set<Integer> mergedUnionDictColumns = unionDictionaryManager.getMergedDictColumnIds();
         mergeJoinEqColumnDicts(mergedUnionDictColumns);
         fillDisableStringColumns();
-        unionDictionaryManager.finalizeColumnDictionaries();
+        unionDictionaryManager.finalizeColumnDictionaries(disableRewriteStringColumns);
         context.unionDictionaryManager = unionDictionaryManager;
 
         // choose the profitable string columns
@@ -356,6 +356,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 context.allStringColumns.add(cid);
             }
         }
+        context.allStringColumns.addAll(unionDictionaryManager.getGeneratedDictionaryIds());
         // resolve depend-on relation:
         // like: b = upper(a), c = lower(b), if we forbidden a, should forbidden b & c too
         stringRefToDefineExprMap.forEach((cid, defineExpr) ->  {
@@ -799,14 +800,19 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 boolean isCandidate = childColumns.stream().allMatch(
                         c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
                 ColumnRefOperator outputColumn = setOp.getOutputColumnRefOp().get(i);
-                Integer useChildId;
-                if (isCandidate && (useChildId = unionDictionaryManager.mergeDictionaries(childColumnIds)) != null) {
+                Integer mergedId;
+                if (isCandidate && (mergedId =
+                        unionDictionaryManager.mergeDictionaries(childColumnIds, outputColumn.getId())) != null) {
                     childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
                         result.usedStringColumns.union(c);
                         expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
                     });
-                    setDefineExpr(outputColumn, childColumns.stream()
-                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow(), 1);
+                    if (mergedId == outputColumn.getId()) {
+                        setDefineExpr(outputColumn, outputColumn, 1);
+                    } else {
+                        setDefineExpr(outputColumn, childColumns.stream()
+                                .filter(c -> c.getId() == mergedId).findAny().orElseThrow(), 1);
+                    }
                     result.outputStringColumns.union(outputColumn);
                 } else {
                     childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
