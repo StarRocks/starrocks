@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -647,5 +648,23 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(joinBucket.getUpper(), 9D, 0.001);
         Assertions.assertEquals(joinBucket.getCount().longValue(), 833);
         Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+    }
+
+    @Test
+    public void testDefaultPlaceholderBucketRoundTripTotalRows() throws Exception {
+        String histogramJson =
+                "{\"buckets\":[[\"Infinity\",\"Infinity\",153,0]],\"mcv\":[[\"1\",\"100\"],[\"2\",\"50\"]]}";
+
+        List<Bucket> buckets = HistogramUtils.convertBuckets(histogramJson, VarcharType.VARCHAR);
+        Map<String, Long> mcv = HistogramUtils.convertMCV(histogramJson);
+        Histogram histogram = new Histogram(buckets, mcv);
+
+        Assertions.assertEquals(1, buckets.size());
+        Assertions.assertEquals(153L, buckets.get(0).getCount().longValue());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, buckets.get(0).getLower());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, buckets.get(0).getUpper());
+        Assertions.assertTrue(buckets.get(0).getRowCountInBucket(0D, 0L, 10D, false).isEmpty());
+        Assertions.assertTrue(buckets.get(0).getRowCountInBucket(42D, 0L, 10D, false).isEmpty());
+        Assertions.assertEquals(303L, histogram.getTotalRows());
     }
 }
