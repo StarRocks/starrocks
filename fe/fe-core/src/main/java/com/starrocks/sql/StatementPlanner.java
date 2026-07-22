@@ -126,9 +126,6 @@ public class StatementPlanner {
         // 1. For all queries, we need db lock when analyze phase
         try (var guard = session.bindScope();
                 var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
-            SPMPlanner spmPlanner = new SPMPlanner(session);
-            stmt = spmPlanner.plan(stmt);
-
             plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
