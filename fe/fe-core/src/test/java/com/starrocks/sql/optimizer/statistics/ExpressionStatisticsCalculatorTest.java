@@ -723,6 +723,499 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalesceReturnsCombinedStatisticsWhenBothInputsAreKnown() {
+        // Given COALESCE(left, right)
+        // CASE WHEN both inputs have known stats THEN calculate stats based on inputs END
+
+        final int rowCount = 100;
+        final int leftDistinctValues = 70;
+        final int rightDistinctValues = 20;
+        final double leftNullFraction = 0.2;
+        final double rightNullFraction = 0.5;
+        final int leftMin = -100;
+        final int leftMax = 100;
+        final int rightMin = 100;
+        final double rightMax = 200.5;
+
+        final double expectedDistinctValues = 90;
+        final double expectedNullFraction = 0.1;
+        final double expectedMin = -100;                // min(leftMin, rightMin)
+        final double expectedMax = 200.5;
+
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, FloatType.DOUBLE, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, FloatType.DOUBLE, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(leftInput, new ColumnStatistic(leftMin, leftMax, leftNullFraction, 0, leftDistinctValues))
+                .addColumnStatistic(rightInput,
+                        new ColumnStatistic(rightMin, rightMax, rightNullFraction, 0, rightDistinctValues))
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, FloatType.DOUBLE,
+                Lists.newArrayList(leftInput, rightInput));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testCoalesceReturnsUnknownWhenAnyInputIsUnknown() {
+        // Given COALESCE(left, right)
+        // CASE WHEN an input has unknown stats THEN output stats are also unknown END
+
+        final int rowCount = 100;
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, IntegerType.INT, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, IntegerType.INT, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(leftInput, new ColumnStatistic(-100, 100, 0.2, 0, 70))
+                .addColumnStatistic(rightInput, ColumnStatistic.unknown())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(leftInput, rightInput));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertTrue(actualStatistic.isUnknown());
+    }
+
+    @Test
+    public void testCoalesceReturnsCombinedStatisticsWhenAllThreeInputsAreKnown() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN more than two inputs where all have known stats THEN output stat is known END
+
+        final int rowCount = 100;
+        final int input1DistinctValues = 30;
+        final int input2DistinctValues = 20;
+        final int input3DistinctValues = 10;
+        final double input1NullFraction = 0.2;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.4;
+        final int input1Min = -100;
+        final int input1Max = 100;
+        final int input2Min = 100;
+        final int input2Max = 200;
+        final int input3Min = 0;
+        final int input3Max = 50;
+
+        final double expectedDistinctValues = 60;
+        final double expectedNullFraction = 0.04;
+        final double expectedMin = -100;
+        final double expectedMax = 200;
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1,
+                        new ColumnStatistic(input1Min, input1Max, input1NullFraction, 0, input1DistinctValues))
+                .addColumnStatistic(input2,
+                        new ColumnStatistic(input2Min, input2Max, input2NullFraction, 0, input2DistinctValues))
+                .addColumnStatistic(input3,
+                        new ColumnStatistic(input3Min, input3Max, input3NullFraction, 0, input3DistinctValues))
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testCalculateMcvForKnownBinaryInputs() {
+        // Given COALESCE(mcvLeft, mcvRight) where both inputs have MCV histograms
+        // CASE WHEN both inputs are NOT NULL THEN scale and weight MCV END
+
+        final long rowCount = 1000;
+        final double leftNullFraction = 0.3;
+        final double rightNullFraction = 0.5;
+        final Map<String, Long> leftMcv = Map.of("A", 400L, "B", 200L);
+        final Map<String, Long> rightMcv = Map.of("X", 300L, "A", 100L);
+
+        // Left MCVs pass through unscaled; right MCVs are scaled by the left null fraction (0.3) and merged by key.
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 430L,
+                "B", 200L,
+                "X", 90L);
+
+        final ColumnRefOperator mcvLeft = new ColumnRefOperator(4, IntegerType.INT, "mcvLeft", true);
+        final ColumnRefOperator mcvRight = new ColumnRefOperator(5, IntegerType.INT, "mcvRight", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(mcvLeft, ColumnStatistic.builder()
+                        .setNullsFraction(leftNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), leftMcv))
+                        .build())
+                .addColumnStatistic(mcvRight, ColumnStatistic.builder()
+                        .setNullsFraction(rightNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), rightMcv))
+                        .build())
+                .build();
+        final CallOperator coalesce =
+                new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT, Lists.newArrayList(mcvLeft, mcvRight));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvCalculationWithMissingMcv() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN one input has no mcv THEN mcv calculation does not account for the missing input END
+
+        final long rowCount = 1000;
+        final double input1NullFraction = 0.3;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.2;
+        final Map<String, Long> input1Mcv = Map.of("A", 400L, "B", 200L);
+        final Map<String, Long> input3Mcv = Map.of("Y", 50L);
+
+        // input1 passes through unscaled; input2 has no histogram so it adds nothing, but its null fraction
+        // still scales later inputs, so input3 is scaled by 0.3 * 0.5 = 0.15.
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 400L,
+                "B", 200L,
+                "Y", 8L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(5)
+                        .build())
+                .addColumnStatistic(input3, ColumnStatistic.builder()
+                        .setNullsFraction(input3NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalingWhenMaxRowCountIsReached() {
+        // Given COALESCE(colA, colB)
+        // CASE WHEN accumulated MCV rows reach the row count THEN scale the remaining input's MCVs to fit END
+
+        final int rowCount = 300;
+        final double colANullFraction = 0.3;
+        final double colBNullFraction = 0.0;
+        final Map<String, Long> colAMcv = Map.of("a", 100L, "b", 100L);
+        final Map<String, Long> colBMcv = Map.of("c", 1000L, "d", 3000L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "a", 100L,
+                "b", 100L,
+                "c", 25L,
+                "d", 75L);
+
+        final ColumnRefOperator colA = new ColumnRefOperator(0, IntegerType.INT, "colA", true);
+        final ColumnRefOperator colB = new ColumnRefOperator(1, IntegerType.INT, "colB", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(colA, ColumnStatistic.builder()
+                        .setNullsFraction(colANullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), colAMcv))
+                        .build())
+                .addColumnStatistic(colB, ColumnStatistic.builder()
+                        .setNullsFraction(colBNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), colBMcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(colA, colB));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalesRemainingInputsAcrossColumnsWhenRowCountReached() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN the budget is reached mid-way THEN scale every remaining input's MCVs across columns END
+
+        final int rowCount = 100;
+        final double input1NullFraction = 0.5;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.0;
+        final Map<String, Long> input1Mcv = Map.of("P", 40L);
+        final Map<String, Long> input2Mcv = Map.of("B", 160L, "C", 240L);
+        final Map<String, Long> input3Mcv = Map.of("D", 160L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "P", 40L,
+                "B", 20L,
+                "C", 30L,
+                "D", 10L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input2Mcv))
+                        .build())
+                .addColumnStatistic(input3, ColumnStatistic.builder()
+                        .setNullsFraction(input3NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalesDownFirstColumnWhenItAloneExceedsRowCount() {
+        // Given COALESCE(input1, input2) where input1 is never null so input2 is unreachable
+        // CASE WHEN the first input's MCVs alone exceed the row count THEN scale them down to fit END
+
+        final int rowCount = 100;
+        final double input1NullFraction = 0.0;
+        final double input2NullFraction = 0.0;
+        final Map<String, Long> input1Mcv = Map.of("A", 300L, "B", 100L);
+        final Map<String, Long> input2Mcv = Map.of("Z", 9999L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 75L,
+                "B", 25L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input2Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceLeavesHistogramUnsetWhenNoInputHasMcv() {
+        // Given COALESCE(left, right) where both inputs have known stats but no histogram/MCV
+        // CASE WHEN no input contributes any MCV THEN the histogram is left unset (not empty) END
+
+        final int rowCount = 100;
+        final ColumnRefOperator left = new ColumnRefOperator(0, IntegerType.INT, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(left, ColumnStatistic.builder()
+                        .setMinValue(-100).setMaxValue(100).setNullsFraction(0.2)
+                        .setAverageRowSize(4).setDistinctValuesCount(70).build())
+                .addColumnStatistic(right, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(200).setNullsFraction(0.5)
+                        .setAverageRowSize(4).setDistinctValuesCount(20).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(left, right));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertNull(actualStatistic.getHistogram());
+    }
+
+    @Test
+    public void testCoalesceIgnoresArgsAfterGuaranteedNonNullColumn() {
+        // Given COALESCE(nonNullCol, highNdvCol) where the first argument is guaranteed non-null
+        // CASE WHEN an earlier argument can never be null THEN later arguments are unreachable and
+        //      contribute nothing to NDV or the min/max range END
+
+        final int rowCount = 10000;
+        final double nonNullFraction = 0.0;
+        final double highNdvNullFraction = 0.3;
+
+        // The result is exactly nonNullCol, so its NDV and range are the output's; highNdvCol is ignored.
+        final double expectedDistinctValues = 10;
+        final double expectedMin = 5;
+        final double expectedMax = 15;
+        final double expectedNullFraction = 0.0;
+
+        final ColumnRefOperator nonNullCol = new ColumnRefOperator(0, IntegerType.INT, "nonNullCol", true);
+        final ColumnRefOperator highNdvCol = new ColumnRefOperator(1, IntegerType.INT, "highNdvCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(nonNullCol, ColumnStatistic.builder()
+                        .setMinValue(5).setMaxValue(15)
+                        .setNullsFraction(nonNullFraction).setAverageRowSize(4).setDistinctValuesCount(10).build())
+                .addColumnStatistic(highNdvCol, ColumnStatistic.builder()
+                        .setMinValue(-100).setMaxValue(100000)
+                        .setNullsFraction(highNdvNullFraction).setAverageRowSize(4).setDistinctValuesCount(1000).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.INT,
+                Lists.newArrayList(nonNullCol, highNdvCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCoalescePropagatesDateRangeWhenOneInputIsFullyNull() {
+        // Given COALESCE(fullyNullDate, dateCol) over DATETIME inputs
+        // CASE WHEN one input is fully null THEN min/max come from the reachable (non-null) date input END
+
+        final int rowCount = 100;
+        final double fullyNullFraction = 1.0;
+        final double dateColNullFraction = 0.2;
+        final double dateColMin =
+                getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2021-09-01", DateUtils.DATE_FORMATTER_UNIX));
+        final double dateColMax =
+                getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-07-01", DateUtils.DATE_FORMATTER_UNIX));
+
+        final double expectedMin = dateColMin;
+        final double expectedMax = dateColMax;
+
+        final ColumnRefOperator fullyNullDate = new ColumnRefOperator(0, DateType.DATETIME, "fullyNullDate", true);
+        final ColumnRefOperator dateCol = new ColumnRefOperator(1, DateType.DATETIME, "dateCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(fullyNullDate, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY).setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fullyNullFraction).setAverageRowSize(8).setDistinctValuesCount(0).build())
+                .addColumnStatistic(dateCol, ColumnStatistic.builder()
+                        .setMinValue(dateColMin).setMaxValue(dateColMax)
+                        .setNullsFraction(dateColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.DATETIME,
+                Lists.newArrayList(fullyNullDate, dateCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.2, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCoalescePropagatesTimeRangeWhenOneInputIsFullyNull() {
+        // Given COALESCE(fullyNullTime, timeCol) over TIME inputs (TIME min/max are seconds-of-day)
+        // CASE WHEN one input is fully null THEN min/max come from the reachable (non-null) time input END
+
+        final int rowCount = 100;
+        final double fullyNullFraction = 1.0;
+        final double timeColNullFraction = 0.2;
+        final double timeColMin = 3600;   // 01:00:00
+        final double timeColMax = 7200;   // 02:00:00
+
+        final double expectedMin = timeColMin;
+        final double expectedMax = timeColMax;
+
+        final ColumnRefOperator fullyNullTime = new ColumnRefOperator(0, DateType.TIME, "fullyNullTime", true);
+        final ColumnRefOperator timeCol = new ColumnRefOperator(1, DateType.TIME, "timeCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(fullyNullTime, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY).setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fullyNullFraction).setAverageRowSize(8).setDistinctValuesCount(0).build())
+                .addColumnStatistic(timeCol, ColumnStatistic.builder()
+                        .setMinValue(timeColMin).setMaxValue(timeColMax)
+                        .setNullsFraction(timeColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.TIME,
+                Lists.newArrayList(fullyNullTime, timeCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.2, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCoalesceLeavesRangeInfiniteWhenResultTypeIsNotSupported() {
+        // Given COALESCE(left, right) over VARCHAR inputs (result type is cannot be represented numerically)
+        // CASE WHEN the result type has no meaningful numeric range THEN min/max stay [-inf, +inf] END
+
+        final int rowCount = 100;
+        final ColumnRefOperator left = new ColumnRefOperator(0, VarcharType.VARCHAR, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, VarcharType.VARCHAR, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(left, ColumnStatistic.builder()
+                        .setMinValue(10).setMaxValue(20).setNullsFraction(0.2)
+                        .setAverageRowSize(16).setDistinctValuesCount(70).build())
+                .addColumnStatistic(right, ColumnStatistic.builder()
+                        .setMinValue(30).setMaxValue(40).setNullsFraction(0.5)
+                        .setAverageRowSize(16).setDistinctValuesCount(20).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, VarcharType.VARCHAR,
+                Lists.newArrayList(left, right));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
     public void testWeek() {
         ColumnRefOperator left = new ColumnRefOperator(0, DateType.DATETIME, "left", true);
         ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
