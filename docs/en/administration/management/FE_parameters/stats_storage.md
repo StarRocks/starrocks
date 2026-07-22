@@ -558,7 +558,7 @@ This topic introduces the following types of FE configurations:
 - Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
