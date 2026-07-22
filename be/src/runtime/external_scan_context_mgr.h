@@ -42,6 +42,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
@@ -49,6 +50,13 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.h
+=======
+class MetricRegistry;
+
+namespace orchestration {
+
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.h
 struct ScanContext {
 public:
     TUniqueId query_id;
@@ -64,7 +72,11 @@ public:
 
 class ExternalScanContextMgr {
 public:
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.h
     ExternalScanContextMgr(ExecEnv* exec_env);
+=======
+    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.h
 
     ~ExternalScanContextMgr();
 
@@ -75,6 +87,11 @@ public:
     Status clear_scan_context(const std::string& context_id);
 
 private:
+    // Cancel the pipeline fragment of the scan context and clear its result queue. Shared by
+    // close_scanner (clear_scan_context) and the keep-alive reaper (gc_expired_context); the caller
+    // must have already removed the context from the active map.
+    Status _cancel_scan_context(const std::shared_ptr<ScanContext>& context, const std::string& reason);
+
     ExecEnv* _exec_env;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
