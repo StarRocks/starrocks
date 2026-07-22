@@ -83,8 +83,40 @@ _SKIP_RULES: list[tuple[str, re.Pattern]] = [
     ("output-sample",  re.compile(r"(?m)^\s*\+[-+]{3,}\+\s*$")),
     ("cli-terminator", re.compile(r"\\G")),   # MySQL client \G vertical-output terminator
     # UDFs need a jar + FE/BE config the bare cluster doesn't have.
-    ("udf", re.compile(r"\bCREATE\s+(GLOBAL\s+)?FUNCTION\b", re.I)),
+    ("udf", re.compile(r"\b(CREATE(\s+OR\s+REPLACE)?|DROP)\s+(GLOBAL\s+)?"
+                       r"(AGGREGATE\s+|TABLE\s+)?FUNCTION\b", re.I)),
+    # Template placeholder ellipsis (e.g. SQL_command_template.md).
+    ("placeholder-ellipsis", re.compile(r"\.\.\.")),
+    # Syntax-reference notation, not runnable SQL: [OPTIONAL KEYWORD] blocks in
+    # Synopsis sections (e.g. CREATE [GLOBAL] FUNCTION, SHOW [FULL] TABLES).
+    ("syntax-notation", re.compile(r"\[[A-Z][A-Z ]{2,}\]")),
 ]
+
+# Server errors that mean the example just isn't self-contained (references a
+# db/table/column/function defined elsewhere) — a distinct doc-quality signal,
+# NOT doc rot.
+_UNRESOLVED_CODES = {5501, 5502, 1055}
+_UNRESOLVED_MSGS = ("unknown database", "unknown table", "unknown column",
+                    "cannot be resolved", "not found", "unknown catalog",
+                    "is not found", "unknown function", "no matching function")
+
+
+def _is_unresolved(code, msg: str) -> bool:
+    if code in _UNRESOLVED_CODES:
+        return True
+    m = msg.lower()
+    return any(k in m for k in _UNRESOLVED_MSGS)
+
+
+# Errors from the test cluster's shape, not the docs (e.g. single-BE replication
+# limits, disabled UDFs). A distinct bucket so FAIL stays doc-rot signal.
+_ENV_MSGS = ("replication num should be", "udf is not enabled",
+             "be number", "backend number")
+
+
+def _is_env(msg: str) -> bool:
+    m = msg.lower()
+    return any(k in m for k in _ENV_MSGS)
 _SHARED_DATA_RULES: list[re.Pattern] = [
     re.compile(r"\b(STORAGE\s+VOLUME|cloud_native|datacache\.)\b", re.I),
 ]
@@ -219,7 +251,14 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
                     # holds; this is a dirty-namespace artifact, not doc rot.
                     if code in (1050, 1007) or "already exists" in str(exc).lower():
                         continue
-                    failed = (stmt, str(exc).strip())
+                    msg = str(exc).strip()
+                    if _is_unresolved(code, msg):
+                        status = "UNRESOLVED"
+                    elif _is_env(msg):
+                        status = "ENV"
+                    else:
+                        status = "FAIL"
+                    failed = (stmt, msg, status)
                     # keep the worker usable for the rest of the file
                     try:
                         worker.ping(reconnect=True)
@@ -228,7 +267,7 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
                     except Exception:                # noqa: BLE001
                         pass
                     break
-            results.append(Result(s, "FAIL", failed[1], statement=failed[0])
+            results.append(Result(s, failed[2], failed[1], statement=failed[0])
                            if failed else Result(s, "PASS"))
         try:
             worker.close()
