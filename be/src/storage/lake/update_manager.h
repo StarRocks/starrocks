@@ -158,7 +158,8 @@ public:
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                             const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
+                                            bool replay_conflict = false);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 

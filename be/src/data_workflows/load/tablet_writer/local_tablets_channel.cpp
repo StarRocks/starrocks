@@ -34,6 +34,7 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
 #include "data_workflows/load/tablet_writer/load_channel.h"
@@ -414,6 +415,22 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // _channel_row_idx_start_points no longer used, release it to free memory.
     context->_channel_row_idx_start_points.reset();
+
+    // SDCG flexible partial update (cross-node): the local path also supports flexible partial
+    // update -- the FE enables it for any JSON partial-update PK load (not lake-only), the local
+    // DeltaWriter self-detects the "__cset__" slot, and RowsetWriter::_populate_flexible_column_sets
+    // folds the dict from FlexiblePartialUpdateRegistry::get(txn_id) at commit. So a multi-bucket
+    // local PK load spread over >1 BE hits the SAME cross-node gap as lake. Materialize the dict the
+    // coordinator shipped on the eos request into THIS BE's registry (keyed by _txn_id) BEFORE
+    // _commit_tablets() below triggers the fold. Idempotent + txn-keyed, safe on every sender's eos.
+    if (request.eos() && request.has_column_set_dict() && request.column_set_dict().sets_size() > 0) {
+        std::vector<std::vector<std::string>> sets;
+        sets.reserve(request.column_set_dict().sets_size());
+        for (const auto& set_pb : request.column_set_dict().sets()) {
+            sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+        }
+        FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->populate_from_snapshot(sets);
+    }
 
     // NOTE: Must close sender *AFTER* the write requests submitted, otherwise a delta writer commit request may
     // be executed ahead of the write requests submitted by other senders.
