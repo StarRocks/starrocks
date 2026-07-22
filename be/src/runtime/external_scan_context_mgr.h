@@ -50,13 +50,6 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.h
-=======
-class MetricRegistry;
-
-namespace orchestration {
-
->>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.h
 struct ScanContext {
 public:
     TUniqueId query_id;
@@ -72,11 +65,7 @@ public:
 
 class ExternalScanContextMgr {
 public:
-<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.h
     ExternalScanContextMgr(ExecEnv* exec_env);
-=======
-    ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics);
->>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.h
 
     ~ExternalScanContextMgr();
 
