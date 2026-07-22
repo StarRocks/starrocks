@@ -40,15 +40,25 @@
 #include <vector>
 
 #include "exec/pipeline/query_context.h"
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.cpp
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
+=======
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
+#include "runtime/runtime_metrics.h"
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.cpp
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.cpp
 ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
+=======
+ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics) : _exec_env(exec_env) {
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.cpp
     // start the reaper thread for gc the expired context
     _keep_alive_reaper = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
@@ -113,6 +123,7 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
         }
     }
     if (context != nullptr) {
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.cpp
         // cancel pipeline
         const auto& fragment_instance_id = context->fragment_instance_id;
         if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
@@ -122,12 +133,31 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
                 fragment_ctx->cancel(Status::Cancelled(msg.str()));
             }
         }
+=======
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.cpp
         LOG(INFO) << "close scan context: context id [ " << context_id << " ], fragment instance id [ "
-                  << print_id(fragment_instance_id) << " ]";
-        // clear the fragment instance's related result queue
-        RETURN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(fragment_instance_id));
+                  << print_id(context->fragment_instance_id) << " ]";
+        RETURN_IF_ERROR(_cancel_scan_context(context, "close_scanner"));
     }
     return Status::OK();
+}
+
+Status ExternalScanContextMgr::_cancel_scan_context(const std::shared_ptr<ScanContext>& context,
+                                                    const std::string& reason) {
+    const auto& fragment_instance_id = context->fragment_instance_id;
+    // The fragment opened by open_scanner always runs on the pipeline engine, so it must be cancelled
+    // through the pipeline QueryContext/FragmentContext. Cancelling through the non-pipeline
+    // FragmentMgr is a silent no-op for pipeline fragments, which leaves an abandoned scanner holding
+    // all its buffered memory until the query deadline expires.
+    if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
+        if (auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id); fragment_ctx != nullptr) {
+            std::stringstream msg;
+            msg << "FragmentContext(id=" << print_id(fragment_instance_id) << ") cancelled by " << reason;
+            pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(msg.str()));
+        }
+    }
+    // clear the fragment instance's related result queue
+    return _exec_env->result_queue_mgr()->cancel(fragment_instance_id);
 }
 
 void ExternalScanContextMgr::gc_expired_context() {
@@ -165,15 +195,24 @@ void ExternalScanContextMgr::gc_expired_context() {
             }
         }
         for (const auto& expired_context : expired_contexts) {
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.cpp
             // must cancel the fragment instance, otherwise return thrift transport TTransportException
             WARN_IF_ERROR(
                     _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id),
                     strings::Substitute("Fail to cancel fragment $0", print_id(expired_context->fragment_instance_id)));
             WARN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
+=======
+            WARN_IF_ERROR(_cancel_scan_context(expired_context, "expired scan context gc"),
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.cpp
                           strings::Substitute("Fail to cancel fragment $0 in result queue mgr",
                                               print_id(expired_context->fragment_instance_id)));
         }
     }
 #endif
 }
+<<<<<<< HEAD:be/src/runtime/external_scan_context_mgr.cpp
 } // namespace starrocks
+=======
+
+} // namespace starrocks::orchestration
+>>>>>>> d58c9249a9 ([BugFix] Cancel pipeline fragments when reaping expired external scan contexts (#76535)):be/src/orchestration/external_scan_context_mgr.cpp
