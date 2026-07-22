@@ -44,10 +44,19 @@ public:
 private:
     StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);
 
+    // When `pk_in_key_group` is true (separate-sort-key PK table with eager index build), the key
+    // column group has been widened to [sort-key columns, then PK columns]; the key-group schema is
+    // built accordingly so the eager SST writer can read the PK columns.
     Status compact_column_group(bool is_key, int column_group_index, size_t num_column_groups,
                                 const std::vector<uint32_t>& column_group, std::unique_ptr<TabletWriter>& writer,
                                 RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks,
-                                const CancelFunc& cancel_func);
+                                const CancelFunc& cancel_func, bool pk_in_key_group);
+
+    // For a separate-sort-key PK table with eager PK-index SST build, move the PK columns (tablet
+    // column ids [0, num_key) not already in the sort key) out of the value groups and into the key
+    // group (group 0), appended after the sort-key columns. Empty value groups are dropped. This lets
+    // the eager SST writer, which only sees the key group, read the PK columns.
+    void move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const;
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;
