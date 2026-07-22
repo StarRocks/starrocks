@@ -49,6 +49,16 @@ jobs:
           # Checkout the merged commit so we can run the diff script
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
+      # The value-drift engine lives in its own repo (single source of truth,
+      # reused by commercial docs too). Pinned to main and run from this trusted
+      # same-org checkout — never from the merged PR head.
+      - name: Check out the drift engine
+        uses: actions/checkout@v4
+        with:
+          repository: StarRocks/doc-config-drift
+          ref: main
+          path: drift-engine
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -146,6 +156,28 @@ jobs:
             echo "AI enrichment did not produce valid JSON (exit $ec) — keeping original"
           fi
 
+      # Detect config VALUE drift (documented Default/mutability that now
+      # contradicts the code) using the engine repo — no logic duplicated here.
+      # Restricted to params this PR changed via --changed-since HEAD^1.
+      - name: Detect config value drift
+        run: |
+          python3 - << 'PYEOF'
+          import json, subprocess
+          result = {}
+          for comp in ("fe", "be"):
+              p = subprocess.run(
+                  ["python3", "drift-engine/drift_audit.py", "--component", comp,
+                   "--repo", ".", "--changed-since", "HEAD^1", "--format", "json"],
+                  capture_output=True, text=True,
+              )
+              try:
+                  result[comp] = json.loads(p.stdout)
+              except Exception:
+                  result[comp] = {}
+          with open("/tmp/value_drift.json", "w") as f:
+              json.dump(result, f)
+          PYEOF
+
       # Build the issue body from the collected data
       - name: Build issue body
         id: issuebody
@@ -208,6 +240,46 @@ jobs:
                           f"| `{p['name']}` | {p.get('code_type','')} | "
                           f"`{p.get('default','')}` | {mut} | {desc} | {doc_path} |"
                       )
+                  lines.append("")
+
+          # Value drift from the engine (docs/value_drift.json): params this PR
+          # changed whose documented Default / mutability now contradicts code.
+          try:
+              with open("/tmp/value_drift.json") as f:
+                  vdrift = json.load(f)
+          except Exception:
+              vdrift = {}
+
+          def _drift_rows(comp):
+              rows = []
+              for x in comp.get("default_mismatch", []):
+                  rows.append((x["name"], "default", x["doc"], x["code"], x.get("file", "")))
+              for x in comp.get("mutable_mismatch", []):
+                  rows.append((x["name"], "mutable", x["doc"], x["code"], x.get("file", "")))
+              return sorted(rows)
+
+          vd_groups = [
+              ("FE Configuration", vdrift.get("fe", {}), "docs/en/administration/management/FE_parameters/"),
+              ("BE Configuration", vdrift.get("be", {}), "docs/en/administration/management/BE_parameters/"),
+          ]
+          if any(_drift_rows(c) for _, c, _ in vd_groups):
+              lines.append("## Parameter values changed — docs may be outdated")
+              lines.append("")
+              lines.append(
+                  "This PR changed the code default or mutability of parameters "
+                  "whose documentation still shows the old value. Suggested edits:"
+              )
+              lines.append("")
+              for title, comp, base in vd_groups:
+                  rows = _drift_rows(comp)
+                  if not rows:
+                      continue
+                  lines.append(f"### {title}")
+                  lines.append("")
+                  lines.append("| Parameter | Field | Docs say | Code says | Doc page |")
+                  lines.append("|-----------|-------|----------|-----------|----------|")
+                  for name, field, doc, code, file in rows:
+                      lines.append(f"| `{name}` | {field} | `{doc}` | `{code}` | {base}{file} |")
                   lines.append("")
 
           lines += [
