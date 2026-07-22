@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -124,13 +125,15 @@ public class StatementPlanner {
             }
         }
 
-        SPMPlanner spmPlanner = new SPMPlanner(session);
-        stmt = spmPlanner.plan(stmt);
-
         boolean needWholePhaseLock = true;
+        PlannerMetaLocker plannerMetaLocker = null;
         // 1. For all queries, we need db lock when analyze phase
-        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
-        try (var guard = session.bindScope()) {
+        try (var guard = session.bindScope();
+                var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
+            SPMPlanner spmPlanner = new SPMPlanner(session);
+            stmt = spmPlanner.plan(stmt);
+
+            plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
 
@@ -185,7 +188,7 @@ public class StatementPlanner {
             }
             throw e;
         } finally {
-            if (needWholePhaseLock) {
+            if (needWholePhaseLock && plannerMetaLocker != null) {
                 unLock(plannerMetaLocker);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();

@@ -477,6 +477,13 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
 
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: なし
+- 説明: スコープ付きの同期統計情報待機が、クエリ単位の統計情報待機予算を使い切ったため継続できなかった回数、または残り予算のタイムアウトに達した回数の合計。クエリ単位の予算スコープなしで実行される単発の待機は、このメトリックには含まれません。
+
 ## `starrocks_fe_statistics_cache_entries`
 
 - 単位: カウント
@@ -709,4 +716,3 @@ description: "Alphabetical s"
 - 説明: Stream Loadリクエストの合計数。
 
 ##### SPLIT
-

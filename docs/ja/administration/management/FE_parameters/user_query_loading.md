@@ -477,6 +477,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：統計情報を同期的に待機するタイムアウト（`enable_sync_statistics_load` が有効な場合）。この時間内に統計情報が利用できない場合、クエリは統計情報なしで処理を進めますが、最適でないプランになる可能性があります。クラスターのパフォーマンスとワークロードの特性に基づいて、この値を適切な時間に設定してください。
 - 導入時期：-
 
+### `sync_statistics_load_per_query_budget_ms`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：`enable_sync_statistics_load` が有効な場合に、1 つのクエリが統計情報を同期的に待機する合計予算。`-1` は `sync_statistics_load_timeout_ms` を合計予算として使用します。`0` は統計情報の同期待機を無効にします。正の値は明示的な合計予算を設定します。個々の統計情報待機は引き続き `sync_statistics_load_timeout_ms` によって制限され、予算を使い切ると、クエリは利用できない統計情報なしで処理を続行します。
+- 導入時期：-
+
 ### `enable_udf`
 
 - デフォルト：false
