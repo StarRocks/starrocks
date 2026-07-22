@@ -23,6 +23,7 @@
 #include "column/nullable_column.h"
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -374,6 +375,8 @@ void ChangesDataSource::_init_counter() {
     _scan_counters->bloom_filter_filtered = ADD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT);
     _scan_counters->short_key_filtered = ADD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT);
     _scan_counters->predicate_filtered = ADD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT);
+    _scan_counters->runtime_filter_input = ADD_COUNTER(_runtime_profile, "RuntimeFilterInputRows", TUnit::UNIT);
+    _scan_counters->runtime_filter_output = ADD_COUNTER(_runtime_profile, "RuntimeFilterOutputRows", TUnit::UNIT);
 }
 
 Status ChangesDataSource::_init_tablet_schema() {
@@ -396,8 +399,6 @@ Status ChangesDataSource::_init_tablet_schema() {
 Status ChangesDataSource::_init_pushdown_predicates() {
     DCHECK(_runtime_state != nullptr);
     DCHECK(_tablet_schema != nullptr);
-
-    if (_conjunct_ctxs.empty()) return Status::OK();
 
     // A constant-false/null predicate (e.g. WHERE 1=0) makes the scan empty; short-circuit to EndOfFile.
     Status const_conjuncts_status;
@@ -424,7 +425,16 @@ Status ChangesDataSource::_init_pushdown_predicates() {
             _data_slot_conjunct_ctxs.push_back(ctx);
         }
     }
-    if (_data_slot_conjunct_ctxs.empty()) return Status::OK();
+
+    if (_runtime_filters != nullptr) {
+        for (const auto& [filter_id, desc] : _runtime_filters->descriptors()) {
+            SlotId slot_id;
+            if (desc->is_probe_slot_ref(&slot_id) && meta_slot_ids.count(slot_id) > 0) {
+                continue; // metadata-column RF: keep it out of the storage path; operator-level eval still applies it.
+            }
+            _data_column_runtime_filters.add_descriptor(desc);
+        }
+    }
 
     for (uint32_t idx : _tablet_schema->sort_key_idxes()) {
         _sort_key_column_names.emplace_back(_tablet_schema->column(idx).name());
@@ -441,22 +451,29 @@ Status ChangesDataSource::_init_pushdown_predicates() {
     opts.max_scan_key_num = (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0)
                                     ? query_options.max_scan_key_num
                                     : config::max_scan_key_num;
-    opts.runtime_filters = _runtime_filters;
+    // _data_column_runtime_filters (built above, excluding any probe on a CHANGES metadata slot) is
+    // what ScanConjunctsManager sees: OlapPredicateParser has no column for those slots.
+    opts.runtime_filters = &_data_column_runtime_filters;
     opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
     opts.pred_tree_params = _runtime_state->fragment_runtime_state()->pred_tree_params();
     _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     RETURN_IF_ERROR(_conjuncts_manager->parse_conjuncts());
 
-    OlapPredicateParser parser(_tablet_schema);
-    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(&parser, _parsed_column_predicates));
+    OlapPredicateParser* parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
+    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _parsed_column_predicates));
     PredicateAndNode pushdown_root;
     PredicateAndNode non_pushdown_root;
-    pred_tree.root().partition_copy([&parser](const auto& node) { return parser.can_pushdown(node); }, &pushdown_root,
+    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); }, &pushdown_root,
                                     &non_pushdown_root);
     _pushdown_pred_tree = PredicateTree::create(std::move(pushdown_root));
     _residual_pred_tree = PredicateTree::create(std::move(non_pushdown_root));
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, _pushdown_pred_tree,
                                                                       _pushdown_pred_tree_for_zone_map));
+
+    if (_runtime_state->enable_join_runtime_filter_pushdown()) {
+        ASSIGN_OR_RETURN(_runtime_filter_preds, _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, parser));
+        _runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    }
 
     std::vector<ExprContext*> not_pushdown;
     _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown);
@@ -570,6 +587,8 @@ void ChangesDataSource::_update_counter() {
     COUNTER_UPDATE(_scan_counters->bloom_filter_filtered, i.rows_bf_filtered + d.rows_bf_filtered);
     COUNTER_UPDATE(_scan_counters->short_key_filtered, i.rows_key_range_filtered + d.rows_key_range_filtered);
     COUNTER_UPDATE(_scan_counters->predicate_filtered, i.rows_vec_cond_filtered + d.rows_vec_cond_filtered);
+    COUNTER_UPDATE(_scan_counters->runtime_filter_input, i.rf_cond_input_rows + d.rf_cond_input_rows);
+    COUNTER_UPDATE(_scan_counters->runtime_filter_output, i.rf_cond_output_rows + d.rf_cond_output_rows);
 }
 
 Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
@@ -735,12 +754,18 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         RowsetReadOptions opts;
         opts.stats = stats;
         opts.version = read_meta->version();
+        // A primary-key read; the delvec-free segment read below requires this flag.
+        opts.is_primary_keys = true;
         // Resolve pushed predicates and the read schema against the scan schema, not the rowset's
         // historical schema, so a CHANGES range spanning a schema change reads the intended columns.
         opts.tablet_schema = _tablet_schema;
         opts.pred_tree = _pushdown_pred_tree;
         opts.pred_tree_for_zone_map = _pushdown_pred_tree_for_zone_map;
         opts.ranges = _pushdown_key_ranges;
+        opts.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+        opts.runtime_filter_preds = _runtime_filter_preds;
+        opts.runtime_range_pruner = _runtime_range_pruner;
+        opts.runtime_state = _runtime_state;
         ASSIGN_OR_RETURN(iters, rowset->get_each_segment_iterator_no_delvec(_storage_read_schema, opts,
                                                                             /*apply_dcg=*/seg.read_with_dcg, &ranges));
     } else {
@@ -754,6 +779,10 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         opts.pred_tree = _pushdown_pred_tree;
         opts.pred_tree_for_zone_map = _pushdown_pred_tree_for_zone_map;
         opts.ranges = _pushdown_key_ranges;
+        opts.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+        opts.runtime_filter_preds = _runtime_filter_preds;
+        opts.runtime_range_pruner = _runtime_range_pruner;
+        opts.runtime_state = _runtime_state;
         ASSIGN_OR_RETURN(iters, rowset->read(_storage_read_schema, opts));
     }
 

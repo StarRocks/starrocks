@@ -265,6 +265,10 @@ private:
         RuntimeProfile::Counter* bloom_filter_filtered = nullptr;
         RuntimeProfile::Counter* short_key_filtered = nullptr;
         RuntimeProfile::Counter* predicate_filtered = nullptr;
+        // Rows entering / leaving the storage-layer runtime-filter predicate (join / TopN / aggregation
+        // RF), mirroring the internal scan's RuntimeFilterInputRows/RuntimeFilterOutputRows.
+        RuntimeProfile::Counter* runtime_filter_input = nullptr;
+        RuntimeProfile::Counter* runtime_filter_output = nullptr;
     };
 
     void _init_counter();
@@ -333,6 +337,16 @@ private:
     PredicateTree _residual_pred_tree;
     std::vector<ExprContext*> _residual_conjunct_ctxs;
     Filter _reused_selection;
+
+    // Runtime filter pushdown
+    // A metadata-column-filtered copy of the framework collector (_runtime_filters, from
+    // DataSource::set_runtime_filters), passed to ScanConjunctsManager instead of the framework
+    // collector directly: a probe on a CHANGES metadata slot (__CHANGE_TYPE__ / __ROW_VERSION__) has
+    // no tablet-schema column, and OlapPredicateParser::can_pushdown CHECK-fails if asked to resolve
+    // one. Holds re-indexed pointers into _runtime_filters's descriptors, which outlive the scan.
+    RuntimeFilterProbeCollector _data_column_runtime_filters;
+    RuntimeFilterPredicates _runtime_filter_preds{0};
+    RuntimeScanRangePruner _runtime_range_pruner;
 
     // The tablet columns the segment read materializes: every data slot's column, or — when the
     // projection is metadata-only (e.g. SELECT __ROW_VERSION__) — the first tablet column, forced in so

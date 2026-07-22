@@ -1251,6 +1251,7 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_no_delvec_range_mode_uses_
         RowsetReadOptions opts;
         opts.version = 1;
         opts.stats = &stats;
+        opts.is_primary_keys = true;
         ASSIGN_OR_ABORT(auto iters,
                         rowset->get_each_segment_iterator_no_delvec(input_schema, opts, /*apply_dcg=*/true));
         EXPECT_EQ(count_rows_from_iters(iters), 2);
@@ -1265,6 +1266,7 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_no_delvec_range_mode_uses_
         RowsetReadOptions opts;
         opts.version = 1;
         opts.stats = &stats;
+        opts.is_primary_keys = true;
         ASSIGN_OR_ABORT(auto iters,
                         rowset->get_each_segment_iterator_no_delvec(input_schema, opts, /*apply_dcg=*/true));
         EXPECT_EQ(count_rows_from_iters(iters), 34);
@@ -2262,6 +2264,7 @@ TEST_F(LakeRowsetDcgTest, get_each_segment_iterator_no_delvec_applies_overlay_sk
         RowsetReadOptions opts;
         opts.version = version;
         opts.stats = &stats;
+        opts.is_primary_keys = true;
         ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator_no_delvec(input_schema, opts,
                                                                                 /*apply_dcg=*/true, &ranges));
         auto c1 = collect_c1(iters);

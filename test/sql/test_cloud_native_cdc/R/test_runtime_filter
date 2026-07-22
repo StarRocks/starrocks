@@ -1,0 +1,117 @@
+-- name: test_cdc_join_runtime_filter_broadcast @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE fact_j (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE dim_j (id int)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dim_j VALUES (10), (20);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "fact_j", "rfj", "1800000");
+INSERT INTO fact_j SELECT number, number FROM TABLE(generate_series(1, 100000)) g(number);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "fact_j", "rfj", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "fact_j", "${bk0}", "rfj");
+    SELECT bookmark_release("${db[0]}", "fact_j", "${bk1}", "rfj");
+    SET enable_profile = false;
+} END CLEANUP
+
+SELECT count(*) FROM (SELECT k FROM fact_j [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_j d ON c.k = d.id;
+-- result:
+2
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SELECT count(*) FROM (SELECT k FROM fact_j [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_j d ON c.k = d.id;
+-- result:
+2
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'ZoneMapIndexFilterRows: ([0-9]+)', 1) AS BIGINT) > 0;
+-- result:
+1
+-- !result
+-- name: test_cdc_topn_runtime_filter @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE topn_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "topn_t", "rft", "1800000");
+INSERT INTO topn_t SELECT number, number FROM TABLE(generate_series(1, 100000)) g(number);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "topn_t", "rft", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "topn_t", "${bk0}", "rft");
+    SELECT bookmark_release("${db[0]}", "topn_t", "${bk1}", "rft");
+    SET enable_profile = false;
+} END CLEANUP
+
+SELECT k FROM topn_t [_CHANGES_${bk0}_${bk1}_] ORDER BY k DESC LIMIT 3;
+-- result:
+100000
+99999
+99998
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SELECT k FROM topn_t [_CHANGES_${bk0}_${bk1}_] ORDER BY k DESC LIMIT 3;
+-- result:
+100000
+99999
+99998
+-- !result
+SELECT get_query_profile(last_query_id()) LIKE '%RuntimeMinMax%';
+-- result:
+1
+-- !result
+-- name: test_cdc_net_change_value_col_join_safe @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_nc (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE dim_nc (id int)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dim_nc VALUES (0), (1);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_nc", "rfn", "1800000");
+INSERT INTO pk_nc SELECT number, number % 5 FROM TABLE(generate_series(1, 1000)) g(number);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_nc", "rfn", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_nc", "${bk0}", "rfn");
+    SELECT bookmark_release("${db[0]}", "pk_nc", "${bk1}", "rfn");
+    SET enable_cdc_net_change = false;
+} END CLEANUP
+
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT count(*) FROM (SELECT v FROM pk_nc [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_nc d ON c.v = d.id;
+-- result:
+400
+-- !result

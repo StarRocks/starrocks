@@ -3265,6 +3265,202 @@ TEST_F(ChangesConnectorTest, test_agg_non_pushable_column_predicate_filtered_by_
     ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
 }
 
+// Builds a RuntimeFilterProbeDescriptor carrying a hand-built bloom runtime filter on the given slot,
+// typed to the slot's own logical type LT. Built per RF column's real logical type: a wrong type
+// would abort in ScanConjunctsManager's type-dispatched RF builder (down_cast to the wrong
+// MinMaxRuntimeFilter<Type>) before the filter ever reaches evaluation. The membership (bloom) bitset
+// must be sized via init() before insert(), otherwise it stays empty and matches every probe (only the
+// min/max component would filter) -> the row-level RF prunes nothing.
+template <LogicalType LT>
+RuntimeFilterProbeDescriptor* make_bloom_desc(ObjectPool* pool, RuntimeState* state, int32_t filter_id, SlotId slot,
+                                              const std::vector<RunTimeCppType<LT>>& vals) {
+    TRuntimeFilterDescription t;
+    t.__set_filter_id(filter_id);
+    t.__set_has_remote_targets(false);
+    t.__set_build_plan_node_id(1);
+    t.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    t.__set_filter_type(TRuntimeFilterBuildType::JOIN_FILTER);
+    TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<LT>(slot, true);
+    t.__isset.plan_node_id_to_target_expr = true;
+    t.plan_node_id_to_target_expr.emplace(1, col_ref);
+    auto* desc = pool->add(new RuntimeFilterProbeDescriptor());
+    CHECK_OK(desc->init(pool, t, /*node_id=*/1, state));
+    auto* rf = pool->add(new ComposedRuntimeBloomFilter<LT>());
+    rf->membership_filter().init(vals.size());
+    for (const auto& v : vals) rf->insert(v);
+    desc->set_runtime_filter(rf);
+    return desc;
+}
+
+// Same DUP fixture and c0 > 50 predicate as test_dup_predicate_pushdown_filters_and_reports_stats
+// above, but with join-runtime-filter pushdown turned on and two runtime filters wired in: one bloom
+// filter on the data column c0 (values {60, 70}, both inside the WHERE-surviving range so the RF's
+// own pruning is visible apart from the WHERE clause) and one bloom filter on the CHANGES metadata
+// column __ROW_VERSION__. Rowset::read's DUP/AGG path now forwards runtime_filter_preds to the
+// segment iterator, which evaluates them at read('SegmentIterator::_filter_by_non_expr_predicates');
+// the c0 filter must reach that evaluation and prune rows, while the __ROW_VERSION__ filter must never
+// reach OlapPredicateParser — __ROW_VERSION__ is appended after the segment read and is absent from
+// _tablet_schema, so OlapPredicateParser::can_pushdown CHECK-fails if a probe slot ref resolves to it.
+TEST_F(ChangesConnectorTest, test_dup_runtime_filter_prunes_and_excludes_metadata_column) {
+    TQueryOptions query_options;
+    query_options.__set_enable_join_runtime_filter_pushdown(true);
+    reset_runtime_state(query_options);
+    ASSERT_TRUE(_runtime_state->enable_join_runtime_filter_pushdown());
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    SlotId meta_slot_id = slot_id_of(tuple_id, kRowVersionColumnName);
+    ASSERT_NE(-1, c0_slot_id);
+    ASSERT_NE(-1, meta_slot_id);
+
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/50));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    ObjectPool* rf_pool = _runtime_state->obj_pool();
+    RuntimeFilterProbeCollector collector;
+    collector.add_descriptor(make_bloom_desc<TYPE_INT>(rf_pool, _runtime_state.get(), 1, c0_slot_id, {60, 70}));
+    // metadata-column RF (BIGINT __ROW_VERSION__): must be excluded from the storage path.
+    collector.add_descriptor(make_bloom_desc<TYPE_BIGINT>(rf_pool, _runtime_state.get(), 2, meta_slot_id, {2}));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ds->set_runtime_filters(&collector);
+    CHECK_OK(ds->open(_runtime_state.get())); // must not crash despite the metadata-column RF
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+    EXPECT_EQ(2, total); // c0 > 50 -> 51..99, then RF{60,70} -> {60, 70}
+    for (const auto& ch : chunks) {
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_TRUE(c0->get_data()[i] == 60 || c0->get_data()[i] == 70);
+    }
+
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    const auto& s = cds->insert_read_stats();
+    // The data-column RF actually reached the storage layer and pruned rows there, not just at the
+    // connector's post-read residual step (the metadata-column RF never contributes to these counters).
+    ASSERT_GT(s.rf_cond_input_rows, 0);
+    ASSERT_LT(s.rf_cond_output_rows, s.rf_cond_input_rows);
+
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Same construction as test_dup_runtime_filter_prunes_and_excludes_metadata_column above, but on a
+// PRIMARY_KEYS tablet, so the RF is asserted against the PK no-delvec read path
+// (_build_segment_iterator's is_primary_key branch -> Rowset::get_each_segment_iterator_no_delvec).
+// Before this change, get_each_segment_iterator_no_delvec dropped runtime_filter_preds and
+// runtime_range_pruner when building SegmentReadOptions, so a PK CHANGES read never evaluated any
+// runtime filter — rf_cond_input_rows stayed 0 regardless of what was wired into the collector.
+TEST_F(ChangesConnectorTest, test_pk_runtime_filter_prunes) {
+    TQueryOptions query_options;
+    query_options.__set_enable_join_runtime_filter_pushdown(true);
+    reset_runtime_state(query_options);
+    ASSERT_TRUE(_runtime_state->enable_join_runtime_filter_pushdown());
+
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+
+    // A pushdown WHERE predicate is required so the read reaches
+    // SegmentIterator::_filter_by_non_expr_predicates at all (empty non_expr_pred_tree short-circuits
+    // that whole step on a no-delvec PK read, and the RF conditions are evaluated inside it). c0 > 5
+    // keeps 94 of the 100 rows so RF{10, 20} narrows further and its own contribution to
+    // rf_cond_input_rows/rf_cond_output_rows is visible apart from the WHERE clause.
+    std::vector<TExpr> texprs;
+    texprs.emplace_back(ExprsTestHelper::create_binary_pred_texpr<TYPE_INT, int32_t>(c0_slot_id, /*gt=*/5));
+    std::vector<ExprContext*> conjunct_ctxs;
+    CHECK_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(_runtime_state->obj_pool(), _runtime_state.get(), &texprs,
+                                                            &conjunct_ctxs));
+
+    ObjectPool* rf_pool = _runtime_state->obj_pool();
+    RuntimeFilterProbeCollector collector;
+    collector.add_descriptor(make_bloom_desc<TYPE_INT>(rf_pool, _runtime_state.get(), 1, c0_slot_id, {10, 20}));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    ds->set_predicates(conjunct_ctxs);
+    ds->set_runtime_filters(&collector);
+    CHECK_OK(ds->open(_runtime_state.get())); // must not crash
+
+    std::vector<ChunkPtr> chunks;
+    int64_t total = drain(ds.get(), &chunks);
+    EXPECT_EQ(2, total); // c0 > 5 -> 6..99, then RF{10, 20} -> {10, 20}
+    for (const auto& ch : chunks) {
+        const auto* c0 = down_cast<const Int32Column*>(ch->get_column_by_slot_id(c0_slot_id).get());
+        for (size_t i = 0; i < ch->num_rows(); i++) EXPECT_TRUE(c0->get_data()[i] == 10 || c0->get_data()[i] == 20);
+    }
+
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    const auto& s = cds->insert_read_stats();
+    // The RF actually reached the storage layer on the PK no-delvec read path and pruned rows there,
+    // not just at the connector's post-read residual step.
+    ASSERT_GT(s.rf_cond_input_rows, 0);
+    ASSERT_LT(s.rf_cond_output_rows, s.rf_cond_input_rows);
+
+    ds->close(_runtime_state.get());
+    ExprExecutor::close(conjunct_ctxs, _runtime_state.get());
+}
+
+// Same DUP fixture and bloom filter on c0 as test_dup_runtime_filter_prunes_and_excludes_metadata_column
+// above, but with NO WHERE conjunct at all (set_predicates is never called). Before this change,
+// _init_pushdown_predicates::_conjunct_ctxs.empty() early-returned before the RF storage objects were
+// ever built, so a pure join / ORDER BY ... LIMIT CHANGES query with a runtime filter but no data-column
+// WHERE clause got no storage-level RF skip (rf_cond_input_rows stayed 0). This asserts the RF machinery
+// now builds whenever there is a pushable runtime filter, independent of WHERE conjuncts.
+TEST_F(ChangesConnectorTest, test_runtime_filter_prunes_without_where_conjunct) {
+    TQueryOptions query_options;
+    query_options.__set_enable_join_runtime_filter_pushdown(true);
+    reset_runtime_state(query_options);
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id); // DUP
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 100, .start_value = 0}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    SlotId c0_slot_id = slot_id_of(tuple_id, "c0");
+    ASSERT_NE(-1, c0_slot_id);
+
+    RuntimeFilterProbeCollector collector;
+    collector.add_descriptor(
+            make_bloom_desc<TYPE_INT>(_runtime_state->obj_pool(), _runtime_state.get(), 1, c0_slot_id, {60, 70}));
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+    // Deliberately NO set_predicates(): this is the pure-RF, no-WHERE case that the old
+    // _conjunct_ctxs.empty() early-return skipped.
+    ds->set_runtime_filters(&collector);
+    CHECK_OK(ds->open(_runtime_state.get()));
+
+    std::vector<ChunkPtr> chunks;
+    drain(ds.get(), &chunks);
+
+    auto* cds = down_cast<connector::ChangesDataSource*>(ds.get());
+    const auto& s = cds->insert_read_stats();
+    ASSERT_GT(s.rf_cond_input_rows, 0); // storage RF fired WITHOUT a WHERE conjunct
+    ASSERT_LT(s.rf_cond_output_rows, s.rf_cond_input_rows);
+    ds->close(_runtime_state.get());
+}
+
 // c1 is referenced only by a PUSHED-DOWN predicate (c1 > 50) and is not projected
 // (isOutputColumn=false). It must be read and filtered at storage, but dropped from
 // the output chunk by init_output_schema — the surfaced chunk holds exactly c0.

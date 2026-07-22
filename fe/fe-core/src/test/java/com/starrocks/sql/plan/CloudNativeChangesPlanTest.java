@@ -222,6 +222,51 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
     }
 
     @Test
+    public void testChangesTopNRuntimeFilter() throws Exception {
+        String name = "ch_topn_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) "
+                + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("topn_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("topn_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        // A freshly created test table has a tiny estimated cardinality, and
+        // globalRuntimeFilterProbeMinSize's default (100 * 1024) would reject the TopN runtime
+        // filter as not worth probing regardless of scan-node eligibility. Force-accept it like
+        // IcebergTopNRuntimeFilterTest does, so this test isolates the eligibility gate
+        // (ChangesScanNode.supportTopNRuntimeFilter) from the unrelated cardinality heuristic.
+        long savedProbeMinSize = connectContext.getSessionVariable().getGlobalRuntimeFilterProbeMinSize();
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
+        try {
+            String sql = String.format(
+                    "SELECT k FROM %s [_CHANGES_%d_%d_] ORDER BY k DESC LIMIT 10",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            // "build runtime filters:" / "probe runtime filters:" only render at VERBOSE detail
+            // level (PlanNode.getNodeVerboseExplain), mirroring IcebergTopNRuntimeFilterTest.
+            String verbose = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+            assertTrue(verbose.contains("ChangesScanNode"),
+                    "plan should include ChangesScanNode:\n" + verbose);
+            assertTrue(verbose.contains("build runtime filters:"),
+                    "TopN sort should build a runtime filter:\n" + verbose);
+            assertTrue(verbose.contains("probe runtime filters:"),
+                    "CHANGES scan should probe the TopN runtime filter (requires "
+                            + "ChangesScanNode.supportTopNRuntimeFilter() to accept it):\n" + verbose);
+        } finally {
+            connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(savedProbeMinSize);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
     public void testChangesScanColumnPruning() throws Exception {
         String name = "ch_prune_" + COUNTER.getAndIncrement();
         long tableId = createTable("CREATE TABLE " + name

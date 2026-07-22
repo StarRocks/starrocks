@@ -756,27 +756,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_no_del
         const Schema& schema, const RowsetReadOptions& options, bool apply_dcg,
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_no_delvec_us");
-    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    seg_options.stats = options.stats;
-    seg_options.lake_io_opts.fs = seg_options.fs;
-    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
-    seg_options.is_primary_keys = true;
-    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
-    // delvec_loader stays null so the rows the caller selected are never re-filtered by a delete
-    // vector. apply_dcg installs the delta column group overlay so column-updated rows surface their
-    // updated values; a raw read leaves it null.
-    if (apply_dcg) {
-        seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+    if (!options.is_primary_keys) {
+        return Status::InvalidArgument("get_each_segment_iterator_no_delvec requires options.is_primary_keys");
     }
-    seg_options.pred_tree = options.pred_tree;
-    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
-    seg_options.ranges = options.ranges;
-    seg_options.tablet_schema = options.tablet_schema;
-    seg_options.version = options.version;
-    seg_options.tablet_id = tablet_id();
-    seg_options.rowset_id = metadata().id();
+    SegmentReadOptions seg_options;
+    RETURN_IF_ERROR(init_segment_read_options(options, options.lake_io_opts,
+                                              /*delete_predicates=*/DisjunctivePredicates{}, options.stats,
+                                              &seg_options));
+    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
+    // Never re-filter the caller-selected rows with a delete vector; keep the delta column group overlay
+    // only for a column-update read (apply_dcg), otherwise read the stored bytes raw.
+    seg_options.delvec_loader = nullptr;
+    if (!apply_dcg) {
+        seg_options.dcg_loader = nullptr;
+    }
 
     ASSIGN_OR_RETURN(auto iterators, _build_segment_iterators(schema, std::move(seg_options), rowid_range_per_segment,
                                                               /*per_segment_stats=*/nullptr));

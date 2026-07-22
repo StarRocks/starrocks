@@ -1,0 +1,109 @@
+-- name: test_cdc_join_runtime_filter_broadcast @cloud
+
+-- A broadcast join builds a runtime filter on the join key and pushes it into the CHANGES
+-- delta scan (the probe side), even though the query has no WHERE conjunct. The filter's
+-- min/max range-prunes the delta at the storage layer: the segment iterator skips whole
+-- pages whose zone map falls outside the join key range, recorded as ZoneMapIndexFilterRows.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE fact_j (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+CREATE TABLE dim_j (id int)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dim_j VALUES (10), (20);
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "fact_j", "rfj", "1800000");
+INSERT INTO fact_j SELECT number, number FROM TABLE(generate_series(1, 100000)) g(number);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "fact_j", "rfj", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "fact_j", "${bk0}", "rfj");
+    SELECT bookmark_release("${db[0]}", "fact_j", "${bk1}", "rfj");
+    SET enable_profile = false;
+} END CLEANUP
+
+-- Result correctness: exactly the 2 delta rows (k = 10, 20) match the dimension.
+SELECT count(*) FROM (SELECT k FROM fact_j [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_j d ON c.k = d.id;
+
+-- Storage-layer proof: the join runtime filter range-pruned the delta scan, so the segment
+-- iterator zone-map-skipped a large fraction of the 100k rows (a > 0 check is stable across
+-- the profile's human-readable number formatting).
+SET enable_profile = true;
+SET enable_async_profile = false;
+SELECT count(*) FROM (SELECT k FROM fact_j [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_j d ON c.k = d.id;
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'ZoneMapIndexFilterRows: ([0-9]+)', 1) AS BIGINT) > 0;
+
+
+-- name: test_cdc_topn_runtime_filter @cloud
+
+-- A TOP-N query (ORDER BY ... LIMIT, no WHERE) builds a min/max runtime filter on the sort
+-- key. The FE now accepts a TOP-N runtime filter on the CHANGES scan, so the filter is
+-- delivered to the delta scan and appears in its profile as a RuntimeMinMax descriptor.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE topn_t (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "topn_t", "rft", "1800000");
+INSERT INTO topn_t SELECT number, number FROM TABLE(generate_series(1, 100000)) g(number);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "topn_t", "rft", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "topn_t", "${bk0}", "rft");
+    SELECT bookmark_release("${db[0]}", "topn_t", "${bk1}", "rft");
+    SET enable_profile = false;
+} END CLEANUP
+
+-- Result correctness: the 3 largest keys in the 100k-row delta.
+SELECT k FROM topn_t [_CHANGES_${bk0}_${bk1}_] ORDER BY k DESC LIMIT 3;
+
+-- The TOP-N min/max runtime filter reached the CHANGES scan (a RuntimeMinMax descriptor on
+-- the delta scan). Without the FE accepting a TOP-N runtime filter on the CHANGES scan, no
+-- such descriptor would be attached.
+SET enable_profile = true;
+SET enable_async_profile = false;
+SELECT k FROM topn_t [_CHANGES_${bk0}_${bk1}_] ORDER BY k DESC LIMIT 3;
+SELECT get_query_profile(last_query_id()) LIKE '%RuntimeMinMax%';
+
+
+-- name: test_cdc_net_change_value_col_join_safe @cloud
+
+-- With net-change folding enabled, a join on a non-key (value) column must still be correct.
+-- The value-column runtime filter is consumed at the net-change Window (the partition-by is
+-- the full primary key), so it never reaches the delta scan and cannot break the fold.
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE pk_nc (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+CREATE TABLE dim_nc (id int)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dim_nc VALUES (0), (1);
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_nc", "rfn", "1800000");
+INSERT INTO pk_nc SELECT number, number % 5 FROM TABLE(generate_series(1, 1000)) g(number);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_nc", "rfn", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_nc", "${bk0}", "rfn");
+    SELECT bookmark_release("${db[0]}", "pk_nc", "${bk1}", "rfn");
+    SET enable_cdc_net_change = false;
+} END CLEANUP
+
+-- Pure-insert delta, so the net change is the inserts themselves: v = number % 5 lands in
+-- {0,1,2,3,4}, the dimension is {0,1}, so 400 of the 1000 rows join. A correct count (no
+-- crash, fold intact) confirms the value-column runtime filter did not reach or corrupt the
+-- scan under net-change folding.
+SET enable_cdc_net_change = true;
+SELECT count(*) FROM (SELECT v FROM pk_nc [_CHANGES_${bk0}_${bk1}_]) c JOIN [broadcast] dim_nc d ON c.v = d.id;

@@ -291,6 +291,11 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         return false;
     }
 
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
+
     // A physical partition surviving logical-partition pruning, paired with its delta change.
     private static class SelectedPhysicalPartition {
         private final PhysicalPartition partition;
