@@ -543,6 +543,124 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：被拦截的黑名单 SQL 的次数。
 
+## `starrocks_fe_statistics_cache_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 标签：`cache` — 统计信息缓存名称：`table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats` 或 `multi_column_stats`。
+- 描述：对应统计信息缓存（基于 Caffeine）中当前大致的条目数。每个缓存的最大条目数由 FE 配置项 `statistic_cache_columns` 控制。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存中被淘汰（因容量或过期）的条目累计数量。若该值相对缓存大小持续增长，说明可以适当调大 `statistic_cache_columns`。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存命中的累计次数。结合 `starrocks_fe_statistics_cache_miss_count` 可计算缓存命中率。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存中因 Caffeine 加载器异常完成而失败的加载累计次数。缺失的统计信息行会以空结果缓存，并计为加载成功，而不是加载失败。该值非零且持续增长通常意味着读取统计信息表时出现错误。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存加载成功的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- 单位：计数
+- 类型：累计
+- 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_entries`。
+- 描述：对应统计信息缓存未命中并触发加载的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
+
+## `starrocks_fe_tablet_pre_split_eligibility_skipped`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
+
+## `starrocks_fe_tablet_pre_split_sampler_invocations`
+
+- 单位：计数
+- 类型：累计
+- 描述：由基于采样的 Tablet 预分裂触发的采样器调用总次数。每次资格门通过、生产采样管道开始采样时递增一次。
+
+## `starrocks_fe_tablet_pre_split_sampler_failed`
+
+- 单位：计数
+- 类型：累计
+- 标签：`reason` — 资格门通过后的失败类别（SkipReason 的小写形式），取值之一：`sample_failed`（采样执行器抛错）、`timeout_pre_submit`（采样 + 规划 + 构建阶段超出 `tablet_pre_split_pre_submit_timeout_seconds`）、`submit_failed`（`TabletReshardJobMgr` 拒绝接纳）、`pre_create_failed`（多分区路径：`LocalMetastore.addPartitions` 在预建目标分区时抛错 —— 该单个分区会被踢出合并提交并回退到 BE 运行时自动建分区，同载入中的其他分区继续推进，同时计入 `tablet_pre_split_sampler_failed{reason=pre_create_failed}`）。
+- 描述：采样器尝试但未能产出已接纳的 reshard 作业的总次数，按原因细分。与 `tablet_pre_split_eligibility_skipped`（采样器从未运行）以及 `tablet_pre_split_tier_used`（记录成功生成边界的层级）相区分。meta-tier → data-tier 回退本身不算失败，由 `tablet_pre_split_tier_used{tier=data_tier}` 跟踪。
+
+## `starrocks_fe_tablet_pre_split_tier_used`
+
+- 单位：计数
+- 类型：累计
+- 标签：`tier` — `meta_tier`（边界由 Parquet/ORC row-group 统计算出，不读取行数据）或 `data_tier`（边界由 FILES 子查询采样的实际行算出，包含直接 data-tier 调用与 meta-tier → data-tier 回退两种来源）。
+- 描述：基于采样的 Tablet 预分裂调用总数，按生成边界的采样器层级细分。
+
+## `starrocks_fe_tablet_pre_split_boundaries_planned`
+
+- 单位：计数
+- 类型：直方图
+- 描述：每次调用规划器产生的边界元组数量。等于 `effectiveTabletCount - 1`（K 个 tablet 的切分需要 K-1 个切点）。
+
+## `starrocks_fe_tablet_pre_split_partitions_total`
+
+- 单位：计数
+- 类型：累计
+- 描述：多分区路径（P2-a）计数器。基于采样的 Tablet 预分裂协调器统计的预测目标分区总数 —— 每个通过 grouper 的 `PartitionSamples` 条目递增一次。配合 `tablet_pre_split_partitions_capped` 与 `tablet_pre_split_pre_create{result=...}` 系列，运维可了解每次多分区调用实际作用的分区数。单分区路径下保持为 0。
+
+## `starrocks_fe_tablet_pre_split_partitions_capped`
+
+- 单位：计数
+- 类型：累计
+- 描述：多分区路径（P2-a）计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留样本数最多的分区、丢弃样本数最少的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+
+## `starrocks_fe_tablet_pre_split_pre_create`
+
+- 单位：计数
+- 类型：累计
+- 标签：`result` — `succeeded`（`LocalMetastore.addPartitions` 正常返回 —— 分区已创建或已被静默去重）、`failed`（`addPartitions` 抛错，如并发 ALTER 或写 journal 失败；该分区回退到 BE 运行时自动建分区，并同时计入 `tablet_pre_split_sampler_failed{reason=pre_create_failed}`）、`already_exists`（预建时发现分区已在 catalog 中 —— 并发载入竞争；协调器复用已有分区）。
+- 描述：多分区路径（P2-a）计数器。协调器通过 `LocalMetastore.addPartitions` 发起的分区预建尝试数，按结果细分。总尝试数 = 三个标签之和。单分区路径下保持为 0。
+
+## `starrocks_fe_tablet_pre_split_pre_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：基于采样的 Tablet 预分裂在「提交前阶段」（采样 + 规划 + 构建 reshard 作业）耗费的墙钟时间。受 `tablet_pre_split_pre_submit_timeout_seconds` 上限约束。
+
+## `starrocks_fe_tablet_pre_split_post_submit_wait_ms`
+
+- 单位：毫秒
+- 类型：直方图
+- 描述：协调器等待已提交的预分裂 reshard 作业到达 `FINISHED` 状态所耗费的墙钟时间。在所有生产导入类型上均触发 —— INSERT-from-FILES 与 INSERT-from-table（均经由 `InsertPreSplitHook`，在 `StmtExecutor` 中、`StatementPlanner.plan` 打开导入 txn 之前调用）以及 Broker Load（经由 `BrokerLoadPreSplitHook`，在 `BrokerLoadJob.createLoadingTask` 中、`beginTxn` 打开 `T_load` 之前调用），三者均通过共享的 `PreSplitFlow` 同步等待；测试用的 `runPreSplit` 同步包装路径也触发。所有路径下触发导入本身均按分裂后的 tablet 布局做计划。
+
+## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
+
+- 单位：计数
+- 类型：累计
+- 描述：基于采样的 Tablet 预分裂触发提交后硬上限的事件总数。已提交的 reshard 作业未能在 `tablet_pre_split_post_submit_wait_seconds` 内到达 `FINISHED` 时递增。所有生产导入类型超时后均会触发 —— INSERT-from-FILES、INSERT-from-table 与 Broker Load（三者均通过共享的 `PreSplitFlow` 同步等待）；测试用的 `runPreSplit` 同步包装路径也会触发。导入此时**不中止地继续执行**，按当时可见的 Tablet 布局做计划（守护线程还未推进则仍为原单 tablet 布局，若守护线程在放弃等待之后才完成则可能已部分／完全分裂）；**不**递增 `tablet_pre_split_load_abort`，因为导入本身未被中止。
+
+## `starrocks_fe_tablet_pre_split_load_abort`
+
+- 单位：计数
+- 类型：累计
+- 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
+
 ## `starrocks_fe_tablet_max_compaction_score`
 
 - 单位：计数
