@@ -2559,6 +2559,10 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_dict_columns = 100000;
 
+    // Max total bytes of the global dict cache (CacheDictManager).
+    @ConfField(mutable = true)
+    public static long low_cardinality_dict_cache_max_bytes = 1024L * 1024 * 1024;
+
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
 
