@@ -54,15 +54,27 @@ SpillMemTableSink::~SpillMemTableSink() {
 }
 
 bool SpillMemTableSink::keep_op_column() const {
+    // _keep_op_column is the EFFECTIVE preserve-order snapshot (pk_preserve_txn_delete_order_enabled):
+    // it is already true for the separate-sort-key load-spill path, which MUST run op-aware. That path's
+    // unsort SST writer resolves duplicate primary keys by flush order in its own per-PK reconciliation
+    // (a DELETE loses to a later re-UPSERT of the same key) and routes only winning deletes to a del
+    // file whose del_op_offsets are serialized (also gated by the effective snapshot in finish_with_txnlog),
+    // so a delete-then-reinsert applies consistently even when the two ops split across parallel merge
+    // tasks. The legacy path taken when this returns false (sort-key==PK with preserve off:
+    // _split_upserts_deletes -> flush_chunk_with_deletes) splits deletes off at the memtable and writes a
+    // del file applied "after all segments" -- unchanged from before this feature.
     return _keep_op_column;
 }
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
                                       int64_t* flush_data_size, int64_t slot_idx) {
     if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
-        // Optimization: If there is only one flush, write directly to segment without spilling
-        // This avoids the overhead of spill/merge for single-chunk loads
-        RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
+        // Only one flush: write directly to a segment without the spill/merge round trip. A single flush
+        // is unique-by-PK (memtable dedup), so no cross-flush merge/dedup is needed; write_single_flush
+        // writes a plain segment with the eager PK-index SST skipped (publish rebuilds it lazily), which
+        // also lets a separate-sort-key eager load take this path -- the unsort SST writer is only needed
+        // for the multi-flush spill+merge.
+        RETURN_IF_ERROR(_writer->write_single_flush(chunk, segment, eos));
         return _writer->flush(segment);
     }
     return _spill_and_maybe_eager_merge(chunk, slot_idx, flush_data_size);
@@ -70,12 +82,19 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
 
 Status SpillMemTableSink::flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment, bool eos,
                                               int64_t* flush_data_size, int64_t slot_idx) {
-    // The chunk still carries the trailing __op column. Always spill (skip the single-flush
-    // direct-write shortcut, which cannot handle __op): the op-aware merge resolves upsert/delete
-    // order per key by slot, then splits the merged output into segments + del files (see
-    // TabletInternalParallelMergeTask). __op is REPLACE-aggregated through the merge.
-    // The memtable only calls this when it actually kept the hidden __op column, so this is the
-    // authoritative op-aware signal handed to the merge tasks (see _op_aware).
+    // The chunk carries the trailing __op column. A single memtable flush is already unique-by-PK
+    // (last-op-wins), so the unsort SST writer's cross-flush duplicate-key resolution -- the only reason
+    // a separate-sort-key load must otherwise take the spill+merge path -- is unnecessary for it. So on a
+    // single flush, write directly: split __op (upserts -> plain sort-key-ordered segment with the eager
+    // PK-index SST skipped so publish rebuilds the index lazily; deletes -> del file), avoiding the
+    // spill + unsort-SST merge round trip that makes small (e.g. realtime) batches far slower.
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        RETURN_IF_ERROR(_writer->write_single_flush_with_op(chunk_with_op, segment, eos));
+        return _writer->flush(segment);
+    }
+    // Multi-flush (bulk) load: the op-aware merge resolves upsert/delete order per key by slot, then
+    // splits the merged output into segments + del files (see TabletInternalParallelMergeTask) and keeps
+    // the eager-SST speedup. This is the authoritative op-aware signal handed to the merge tasks.
     _op_aware = true;
     return _spill_and_maybe_eager_merge(chunk_with_op, slot_idx, flush_data_size);
 }
@@ -132,9 +151,11 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
                                                    starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size,
                                                    int64_t slot_idx) {
     if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
-        // If there is only one flush, flush it to segment directly
+        // Only one flush: write directly (deletes were already split out by the memtable). Upserts go
+        // through write_single_flush -> plain segment, eager SST skipped, lazy publish rebuild (see
+        // flush_chunk).
         RETURN_IF_ERROR(_writer->flush_del_file(deletes, kUnknownDelOpOffset));
-        RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
+        RETURN_IF_ERROR(_writer->write_single_flush(upserts, segment, eos));
         return _writer->flush(segment);
     }
     // 1. flush upsert
@@ -159,8 +180,12 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     // Manual flush control needed because we're coordinating multiple parallel writers
     _writer->set_auto_flush(false);
 
-    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
-        // When bulk load happens, try to enable eager PK index build
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes ||
+        _writer->tablet_schema()->has_separate_sort_key()) {
+        // When bulk load happens, try to enable eager PK index build.
+        // For separate-sort-key PK tables eager build is MANDATORY regardless of size: the
+        // sort-key-ordered merge cannot collapse duplicate primary keys, so the unsort SST writer
+        // must run to resolve them (last-flushed wins) and emit the per-segment dedup delvec.
         _writer->try_enable_pk_index_eager_build();
     }
 
