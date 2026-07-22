@@ -202,7 +202,7 @@ This topic introduces the following types of BE configurations:
 
 ### starlet_use_star_cache
 
-- Default: false in v3.1 and true from v3.2.3
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -258,7 +258,7 @@ This topic introduces the following types of BE configurations:
 
 ### datacache_disk_size
 
-- Default: 0
+- Default: 100%
 - Type: String
 - Unit: -
 - Is mutable: Yes
@@ -288,13 +288,13 @@ This topic introduces the following types of BE configurations:
 - Default: 130172
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
 ### datacache_mem_size
 
-- Default: 0
+- Default: 20%
 - Type: String
 - Unit: -
 - Is mutable: Yes
@@ -515,7 +515,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
 - Introduced in: v3.1
 
@@ -524,7 +524,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
 - Introduced in: v3.1
 
@@ -533,7 +533,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit:
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
@@ -542,7 +542,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
@@ -607,7 +607,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1000000
 - Type: Int
 - Unit: Bytes
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum length of input values for bitmap functions.
 - Introduced in: -
 
@@ -616,7 +616,7 @@ This topic introduces the following types of BE configurations:
 - Default: 200000
 - Type: Int
 - Unit: Bytes
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum length of input values for the to_base64() function.
 - Introduced in: -
 

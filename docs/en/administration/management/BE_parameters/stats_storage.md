@@ -195,7 +195,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The number of threads used for checking the consistency of tablets.
 - Introduced in: -
 
@@ -456,7 +456,7 @@ This topic introduces the following types of BE configurations:
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
 - Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
@@ -624,7 +624,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_cumulative_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -687,7 +687,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_update_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -849,7 +849,7 @@ This topic introduces the following types of BE configurations:
 
 ### pk_index_memtable_flush_threadpool_size
 
-- Default: 1048576
+- Default: 2048
 - Type: Int
 - Unit: -
 - Is mutable: Yes
