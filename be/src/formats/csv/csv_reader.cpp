@@ -58,6 +58,9 @@ inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _column_delimiter_length) {
@@ -90,6 +93,9 @@ inline bool CSVReader::is_row_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _row_delimiter_length) {
