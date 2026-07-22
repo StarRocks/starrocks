@@ -81,6 +81,7 @@ public class SelectAnalyzer {
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        widenGroupingKeyNullability(groupByClause, outputScope, outputExpressions, groupByExpressions);
 
         boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
@@ -538,6 +539,42 @@ public class SelectAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    /**
+     * ROLLUP/CUBE/GROUPING SETS produce super-aggregate rows where grouping-key columns are NULL,
+     * regardless of whether the underlying column is declared NOT NULL. The Repeat operator already
+     * accounts for this widening at plan/fragment-build time, but analysis-time nullability is
+     * otherwise derived solely from the grouping expression itself, so it must be widened here too.
+     *
+     * <p>Two analysis-time signals need widening: the output {@link Field} on the scope (consumed by
+     * materialized-view schema building and, via QueryAnalyzer.visitView, by view queries), and the
+     * output {@link Expr} itself (consumed directly by the Arrow Flight prepared-statement schema,
+     * which reads getOutputExpression().isNullable()). Without the latter, a direct
+     * {@code GROUP BY ROLLUP} query that is not wrapped in a view still reports the grouping key as
+     * NOT NULL while the executed result delivers NULLs.
+     */
+    private void widenGroupingKeyNullability(GroupByClause groupByClause, Scope outputScope,
+                                             List<Expr> outputExpressions, List<Expr> groupByExpressions) {
+        if (groupByClause == null || groupByExpressions.isEmpty()) {
+            return;
+        }
+        GroupByClause.GroupingType groupingType = groupByClause.getGroupingType();
+        if (groupingType != GroupByClause.GroupingType.ROLLUP
+                && groupingType != GroupByClause.GroupingType.CUBE
+                && groupingType != GroupByClause.GroupingType.GROUPING_SETS) {
+            return;
+        }
+        List<Field> outputFields = outputScope.getRelationFields().getAllFields();
+        for (int i = 0; i < outputExpressions.size() && i < outputFields.size(); i++) {
+            Expr outputExpr = outputExpressions.get(i);
+            if (groupByExpressions.stream().anyMatch(outputExpr::equals)) {
+                outputFields.get(i).setNullable(true);
+                if (outputExpr instanceof SlotRef) {
+                    ((SlotRef) outputExpr).setNullable(true);
+                }
+            }
+        }
     }
 
     private List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,
