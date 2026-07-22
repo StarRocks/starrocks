@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -119,6 +120,15 @@ public class StatisticsCollectJobFactory {
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
+
+            if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+                columnNames = columnNames.stream()
+                        .filter(name -> {
+                            Column col = table.getColumn(name);
+                            return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
+                        })
+                        .collect(Collectors.toList());
+            }
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
         // for compatibility, if columnTypes is null, we will get column types from table
