@@ -1,4 +1,4 @@
-name: UNSTABLE CASE AI ANALYSIS
+name: AI UNSTABLE-CASE ANALYSIS
 
 # Standalone, history-aware AI analysis of unstable cases. FULLY DECOUPLED from
 # the review workflow: separate file, its own manual trigger, no job dependency.
@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 jobs:
-  analyze:
+  ai-analyze:
     name: AI ANALYSIS
     runs-on: [self-hosted, ubuntu, ai]
     env:
