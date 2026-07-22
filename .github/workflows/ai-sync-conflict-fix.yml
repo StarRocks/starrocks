@@ -12,8 +12,9 @@ name: AI Sync Conflict Fix
 # Note: pull_request_target uses the base branch's copy of this workflow, so it must be merged to the
 #       default branch first to take effect.
 #
-# runner: [self-hosted, ubuntu, ai] native box (not docker), claude CLI pre-authed;
-#         `source lib/init.sh` injects GitHub credentials (GITHUB_ACCESS_TOKEN).
+# runner: [self-hosted, ubuntu, ai] native box (not docker), claude CLI pre-authed; gh is authed
+#         on the runner. init.sh does NOT inject GITHUB_ACCESS_TOKEN there, so the scripts fall
+#         back to `gh auth token` for git clone/push (see unstable-case-review.yml).
 
 on:
   pull_request_target:
@@ -76,7 +77,7 @@ jobs:
           ONE_PR: ${{ github.event.inputs.pr }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
-          export GH_TOKEN="${GITHUB_ACCESS_TOKEN}"
+          export GH_TOKEN="${GH_TOKEN:-${GITHUB_ACCESS_TOKEN:-$(gh auth token 2>/dev/null)}}"
 
           if [ -n "${ONE_PR}" ]; then
             PRS="${ONE_PR}"
