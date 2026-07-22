@@ -643,6 +643,8 @@ struct TOlapScanNode {
   // predicate, pushed into the scored GIN query; absent = unbounded that end.
   44: optional double bm25_score_min
   45: optional double bm25_score_max
+  // COUNT(*) over MATCH: skip base columns whose predicates were fully resolved by the inverted index.
+  46: optional bool count_on_index
 
   //back pressure
   50: optional bool enable_topn_filter_back_pressure
@@ -699,6 +701,8 @@ struct TLakeScanNode {
   46: optional i32 bm25_score_limit
   47: optional double bm25_score_min
   48: optional double bm25_score_max
+  // COUNT(*) over MATCH: skip base columns whose predicates were fully resolved by the inverted index.
+  49: optional bool count_on_index
 }
 
 struct TEqJoinCondition {

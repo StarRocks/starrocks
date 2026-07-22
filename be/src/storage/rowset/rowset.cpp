@@ -838,6 +838,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.count_on_index = options.count_on_index;
     seg_options.enable_gin_filter = options.enable_gin_filter;
     seg_options.has_preaggregation = options.has_preaggregation;
 

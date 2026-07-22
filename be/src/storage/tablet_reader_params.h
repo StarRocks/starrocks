@@ -100,6 +100,7 @@ struct TabletReaderParams {
     int32_t plan_node_id;
 
     bool prune_column_after_index_filter = false;
+    bool count_on_index = false;
     bool enable_gin_filter = false;
 
     bool use_vector_index = false;

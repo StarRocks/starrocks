@@ -278,6 +278,11 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }
+    if (thrift_olap_scan_node.__isset.count_on_index && thrift_olap_scan_node.count_on_index) {
+        _params.prune_column_after_index_filter = true;
+        _params.count_on_index = true;
+        _runtime_profile->add_info_string("CountOnIndex", "true");
+    }
     if (thrift_olap_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
     }

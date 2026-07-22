@@ -73,6 +73,26 @@ public class Bm25ScoreLimitPushdownTest extends PlanTestBase {
     }
 
     @Test
+    public void pushesCountOnIndexForCountStarMatch() throws Exception {
+        String plan = getFragmentPlan("SELECT count(*) FROM bm25_docs WHERE request MATCH 'fox'");
+        assertContains(plan, "COUNT ON INDEX: ON");
+
+        String filteredPlan = getFragmentPlan(
+                "SELECT count(*) FROM bm25_docs WHERE request MATCH 'fox' AND status = 200");
+        assertContains(filteredPlan, "COUNT ON INDEX: ON");
+    }
+
+    @Test
+    public void skipsCountOnIndexForNonCountStarAggregates() throws Exception {
+        String countColumnPlan = getFragmentPlan("SELECT count(status) FROM bm25_docs WHERE request MATCH 'fox'");
+        assertNotContains(countColumnPlan, "COUNT ON INDEX: ON");
+
+        String groupedPlan = getFragmentPlan(
+                "SELECT status, count(*) FROM bm25_docs WHERE request MATCH 'fox' GROUP BY status");
+        assertNotContains(groupedPlan, "COUNT ON INDEX: ON");
+    }
+
+    @Test
     public void supportsPretokenizedMatchAnyAndMatchAll() throws Exception {
         String anyPlan = getFragmentPlan("SELECT id FROM bm25_docs "
                 + "WHERE request MATCH_ANY tokenize('english', 'The quick fox')");

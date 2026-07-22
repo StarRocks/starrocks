@@ -108,6 +108,7 @@ public:
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
+    bool count_on_index = false;
     bool enable_gin_filter = false;
     bool has_preaggregation = true;
 

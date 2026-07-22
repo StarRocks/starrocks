@@ -391,6 +391,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.asc_hint = _is_asc_hint;
     }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.count_on_index = params.count_on_index;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
     rs_opts.has_preaggregation = true;
     if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {

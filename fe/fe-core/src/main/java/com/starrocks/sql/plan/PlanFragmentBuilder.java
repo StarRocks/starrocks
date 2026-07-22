@@ -870,6 +870,7 @@ public class PlanFragmentBuilder {
             scanNode.setBm25ScoreLimit(node.getBm25ScoreLimit());
             scanNode.setBm25ScoreMin(node.getBm25ScoreMin());
             scanNode.setBm25ScoreMax(node.getBm25ScoreMax());
+            scanNode.setCountOnIndex(node.isCountOnIndex());
             scanNode.setSample(node.getSample());
             currentExecGroup.add(scanNode);
             // set tablet
