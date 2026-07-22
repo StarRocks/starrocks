@@ -65,10 +65,15 @@ public class StatisticSQLBuilder {
                     + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
+    // Collection jobs persist min/max as IFNULL(MAX(col), ''), so an all-NULL partition stores ''
+    // rather than NULL. The '' must be mapped back to NULL before the $type cast: the internal
+    // statistics session inherits the global sql_mode, and under ERROR_IF_OVERFLOW casting '' to a
+    // numeric/date type aborts the whole batched load instead of yielding NULL.
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION_V2 + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
                     + " cast(avg(collection_size) as bigint)"
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
@@ -92,10 +97,13 @@ public class StatisticSQLBuilder {
     // counting when a partition has been re-collected (fresh row under the hashed key) but its
     // superseded raw-keyed row hasn't been cleaned up yet - correctness does not depend on that
     // best-effort cleanup (see ExternalFullStatisticsCollectJob#cleanupStaleRawKeyedRows) succeeding.
+    // nullif(x, '') for the same reason as QUERY_FULL_STATISTIC_TEMPLATE: '' is the persisted
+    // representation of "no min/max" and must not reach the $type cast.
     private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
-                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
                     + " max(update_time)"
                     + " FROM (SELECT *, row_number() over ("
                     + " partition by partition_name, column_name order by update_time desc) as rn"

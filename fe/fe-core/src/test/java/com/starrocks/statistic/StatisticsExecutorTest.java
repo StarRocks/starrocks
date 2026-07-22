@@ -150,14 +150,18 @@ public class StatisticsExecutorTest extends PlanTestBase {
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assertions.assertEquals(
                         "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
-                                "cast(min(cast(min as string)) as string), max(update_time) FROM (SELECT *, row_number() " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as string)) as string), " +
+                                "cast(min(cast(nullif(min, '') as string)) as string), " +
+                                "max(update_time) FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
                                 "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
-                                "cast(min(cast(min as bigint)) as string), max(update_time) FROM (SELECT *, row_number() " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                                "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                                "max(update_time) FROM (SELECT *, row_number() " +
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
