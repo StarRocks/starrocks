@@ -1025,20 +1025,18 @@ public class ExpressionStatisticCalculator {
             double nullsFraction = inputs.stream()
                     .mapToDouble(ColumnStatistic::getNullsFraction)
                     .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
+            List<ColumnStatistic> reachableInputs = reachableCoalesceInputs(inputs);
             double distinctValues = Math.min(rowCount,
-                    inputs.stream()
-                            .filter(s -> s.getNullsFraction() < 1.0)
+                    reachableInputs.stream()
                             .mapToDouble(ColumnStatistic::getDistinctValuesCount)
                             .sum());
             double coalesceMin = Double.NEGATIVE_INFINITY;
             double coalesceMax = Double.POSITIVE_INFINITY;
             final Type resultType = callOperator.getType();
             if (resultType.isNumericType() || resultType.isDateType() || resultType.isTime()) {
-                coalesceMin = inputs.stream()
-                        .filter(s -> s.getNullsFraction() < 1.0)
+                coalesceMin = reachableInputs.stream()
                         .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
-                coalesceMax = inputs.stream()
-                        .filter(s -> s.getNullsFraction() < 1.0)
+                coalesceMax = reachableInputs.stream()
                         .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
             }
             Map<String, Long> mcv = buildCoalesceMcv(inputs);
@@ -1054,6 +1052,20 @@ public class ExpressionStatisticCalculator {
             }
 
             return builder.build();
+        }
+
+        private List<ColumnStatistic> reachableCoalesceInputs(List<ColumnStatistic> inputs) {
+            List<ColumnStatistic> reachable = new ArrayList<>();
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                if (nullsFraction < 1.0) {
+                    reachable.add(input);
+                }
+                if (nullsFraction == 0) {
+                    break;
+                }
+            }
+            return reachable;
         }
 
         private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {

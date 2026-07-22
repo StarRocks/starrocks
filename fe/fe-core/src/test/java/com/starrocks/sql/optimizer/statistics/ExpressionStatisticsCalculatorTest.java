@@ -984,6 +984,45 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalesceIgnoresArgsAfterGuaranteedNonNullColumn() {
+        // Given COALESCE(nonNullCol, highNdvCol) where the first argument is guaranteed non-null
+        // CASE WHEN an earlier argument can never be null THEN later arguments are unreachable and
+        //      contribute nothing to NDV or the min/max range END
+
+        final int rowCount = 10000;
+        final double nonNullFraction = 0.0;
+        final double highNdvNullFraction = 0.3;
+
+        // The result is exactly nonNullCol, so its NDV and range are the output's; highNdvCol is ignored.
+        final double expectedDistinctValues = 10;
+        final double expectedMin = 5;
+        final double expectedMax = 15;
+        final double expectedNullFraction = 0.0;
+
+        final ColumnRefOperator nonNullCol = new ColumnRefOperator(0, IntegerType.INT, "nonNullCol", true);
+        final ColumnRefOperator highNdvCol = new ColumnRefOperator(1, IntegerType.INT, "highNdvCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(nonNullCol, ColumnStatistic.builder()
+                        .setMinValue(5).setMaxValue(15)
+                        .setNullsFraction(nonNullFraction).setAverageRowSize(4).setDistinctValuesCount(10).build())
+                .addColumnStatistic(highNdvCol, ColumnStatistic.builder()
+                        .setMinValue(-100).setMaxValue(100000)
+                        .setNullsFraction(highNdvNullFraction).setAverageRowSize(4).setDistinctValuesCount(1000).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.INT,
+                Lists.newArrayList(nonNullCol, highNdvCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
     public void testCoalescePropagatesDateRangeWhenOneInputIsFullyNull() {
         // Given COALESCE(fullyNullDate, dateCol) over DATETIME inputs
         // CASE WHEN one input is fully null THEN min/max come from the reachable (non-null) date input END
