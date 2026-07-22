@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 
 #include "base/metrics.h"
 #include "base/string/string_parser.hpp"
@@ -25,15 +25,21 @@
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
-#include "exec/batch_write/batch_write_util.h"
-#include "exec/exec_env.h"
+#include "data_workflows/load/batch_write/batch_write_util.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/merge_commit_trace.h"
 #include "runtime/runtime_metrics.h"
 
 namespace starrocks {
 
-BatchWriteMgr::BatchWriteMgr(std::unique_ptr<bthreads::ThreadPoolExecutor> executor) : _executor(std::move(executor)) {}
+BatchWriteMgr::BatchWriteMgr(LoadStreamMgr* load_stream_mgr, std::unique_ptr<bthreads::ThreadPoolExecutor> executor)
+        : _load_stream_mgr(load_stream_mgr), _executor(std::move(executor)) {
+    DCHECK(_load_stream_mgr != nullptr);
+}
+
+BatchWriteMgr::~BatchWriteMgr() {
+    stop();
+}
 
 Status BatchWriteMgr::init(MetricRegistry* metrics) {
     if (metrics != nullptr) {
@@ -131,17 +137,21 @@ void BatchWriteMgr::stop() {
     _executor->get_thread_pool()->shutdown();
 }
 
+void BatchWriteMgr::set_txn_state_cache_capacity(size_t capacity) {
+    if (_txn_state_cache != nullptr) {
+        _txn_state_cache->set_capacity(capacity);
+    }
+}
+
 StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
-        ExecEnv* exec_env, BatchWriteMgr* batch_write_mgr, const std::string& db, const std::string& table,
-        const std::map<std::string, std::string>& load_parameters, const std::string& label, long txn_id,
-        const TUniqueId& load_id, int32_t batch_write_interval_ms) {
+        const std::string& db, const std::string& table, const std::map<std::string, std::string>& load_parameters,
+        const std::string& label, long txn_id, const TUniqueId& load_id, int32_t batch_write_interval_ms) {
     std::string pipe_name = fmt::format("txn_{}_label_{}_id_{}", txn_id, label, print_id(load_id));
     auto pipe = std::make_shared<TimeBoundedStreamLoadPipe>(pipe_name, batch_write_interval_ms,
                                                             config::merge_commit_stream_load_pipe_block_wait_us,
                                                             config::merge_commit_stream_load_pipe_max_buffered_bytes);
-    auto* load_stream_mgr = exec_env->load_stream_mgr();
-    RETURN_IF_ERROR(load_stream_mgr->put(load_id, pipe));
-    StreamLoadContext* ctx = new StreamLoadContext(load_id, load_stream_mgr);
+    RETURN_IF_ERROR(_load_stream_mgr->put(load_id, pipe));
+    StreamLoadContext* ctx = new StreamLoadContext(load_id, _load_stream_mgr);
     ctx->ref();
     ctx->id = load_id;
     ctx->db = db;
@@ -157,7 +167,7 @@ StatusOr<StreamLoadContext*> BatchWriteMgr::create_and_register_pipe(
         // need to release the reference to delete the context if register failed
         StreamLoadContext::release(ctx);
     });
-    RETURN_IF_ERROR(batch_write_mgr->register_stream_load_pipe(ctx));
+    RETURN_IF_ERROR(register_stream_load_pipe(ctx));
     return ctx;
 }
 
@@ -170,9 +180,9 @@ static std::string s_empty;
     lhs = rhs;                      \
     return
 
-void BatchWriteMgr::receive_stream_load_rpc(ExecEnv* exec_env, brpc::Controller* cntl,
-                                            const PStreamLoadRequest* request, PStreamLoadResponse* response) {
-    auto* ctx = new StreamLoadContext(exec_env->load_stream_mgr());
+void BatchWriteMgr::receive_stream_load_rpc(brpc::Controller* cntl, const PStreamLoadRequest* request,
+                                            PStreamLoadResponse* response) {
+    auto* ctx = new StreamLoadContext(_load_stream_mgr);
     ctx->ref();
     DeferOp defer([&]() {
         response->set_json_result(ctx->to_json());

@@ -3474,6 +3474,45 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return stripped.lstrip("* ")
         return None
 
+    def get_query_stats_source(self, query, table):
+        """
+        Execute `query` with profiling enabled and return the StatsSource recorded in the query
+        profile for the scan whose table label ends with `table` (the label is the qualified table
+        name, e.g. 'catalog.db.tbl', so passing just 'tbl' is enough). Returns one of
+        NONE / ANALYZE / TABLE_METADATA, or None if no matching StatsSource entry is found.
+        """
+        # Enable synchronous profile so it is available immediately after the query returns.
+        self.execute_sql("set enable_profile = true", True)
+        self.execute_sql("set enable_async_profile = false", True)
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "run query failed: %s" % res["msg"])
+
+        query_id = self.get_last_query_id()
+        tools.assert_true(query_id is not None, "failed to get last query id for: %s" % query)
+
+        profile_res = self.execute_sql("select get_query_profile('%s')" % query_id, True)
+        tools.assert_true(profile_res["status"], "get query profile failed: %s" % profile_res["msg"])
+        profile_text = "\n".join(str(item[0]) for item in profile_res["result"])
+
+        # StatsSource entries render as "- <qualified_table_name>: <SOURCE>" under the
+        # "StatsSource:" section of the profile.
+        for line in profile_text.split("\n"):
+            m = re.match(r"-\s+(\S+):\s+(NONE|ANALYZE|TABLE_METADATA)\s*$", line.strip())
+            if m and (m.group(1) == table or m.group(1).endswith("." + table)):
+                return m.group(2)
+        return None
+
+    def assert_stats_source(self, query, table, expect_source):
+        """
+        Assert the StatsSource of the scan on `table` in the query profile of `query`
+        equals `expect_source` (one of NONE / ANALYZE / TABLE_METADATA).
+        """
+        actual = self.get_query_stats_source(query, table)
+        tools.assert_equal(
+            expect_source, actual,
+            "stats source of table [%s] expect [%s] but got [%s]" % (table, expect_source, actual),
+        )
+
     def assert_show_stats_meta_contains(self, predicate, *expects):
         """
         assert show stats meta with predicate contains expect string

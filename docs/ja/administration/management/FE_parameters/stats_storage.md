@@ -79,6 +79,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `low_cardinality_dict_cache_max_bytes`
+
+- デフォルト：1073741824
+- タイプ：Long
+- 単位：バイト
+- 変更可能：Yes
+- 説明：低基数グローバル辞書キャッシュ（`CacheDictManager`）の最大合計サイズ（バイト単位）。このキャッシュはエントリ数ではなくキャッシュされた辞書の合計バイトサイズで上限が設定されるため、メモリ使用量が直接制限されます（各辞書は最大約 1 MB）。上限に達すると、価値の低い辞書が退避され、影響を受ける列は再収集されるまで非辞書クエリプランにフォールバックします。変更は 1 回の設定リフレッシュサイクル内でライブキャッシュに適用されます。現在追跡されているサイズは `low_cardinality_dict_cache_bytes` メトリクスとしてエクスポートされます。
+- 導入時期：v4.1.0
 ### `enable_external_predicate_columns_collection`
 
 - デフォルト：true
@@ -556,11 +564,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_range_distribution`
 
-- デフォルト：false
+- デフォルト：true
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：テーブル作成時に Range-based Distribution セマンティクスを有効化するかどうか。
+- 説明：テーブルまたはマテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトのテーブル分散方法として使用するかどうか。この設定は共有データモードでのみ有効であり、共有なしモードでは効果がありません。`false` に設定すると、このデフォルト動作が無効になり、そのようなテーブルは代わりに従来のデフォルト分散動作を使用します（PRIMARY KEY テーブルはデフォルトで hash、DUPLICATE KEY テーブルは random となり、AGGREGATE KEY または UNIQUE KEY テーブルは明示的な `DISTRIBUTED BY` 句が必要です）。
 - 導入時期：v4.1.0
 
 ### `tablet_reshard_max_parallel_tablets`

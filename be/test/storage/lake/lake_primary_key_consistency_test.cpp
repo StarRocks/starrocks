@@ -418,18 +418,6 @@ public:
         return force_flush_guard;
     }
 
-    // 20% chance to enable eager PK index build
-    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
-        uint32_t r = _random_generator->random() % 100;
-        if (r < 20) {
-            // 20% chance to enable eager PK index build
-            pk_index_eager_build_guard =
-                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
-        }
-        return pk_index_eager_build_guard;
-    }
-
     ChunkPtr read(int64_t tablet_id, int64_t version) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
@@ -450,7 +438,6 @@ public:
 
     Status upsert_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -581,7 +568,6 @@ public:
 
     Status partial_update_op(PartialUpdateMode mode) {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -618,7 +604,6 @@ public:
 
     Status condition_update() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -651,7 +636,6 @@ public:
 
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         size_t batch_cnt = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxBatchCnt), 1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
@@ -694,7 +678,6 @@ public:
 
     Status delete_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -721,7 +704,6 @@ public:
 
     Status compact_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);

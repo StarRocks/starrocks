@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/batch_write/txn_state_cache.h"
+#include "data_workflows/load/batch_write/txn_state_cache.h"
 
 #include <bvar/reducer.h>
 #include <bvar/status.h>
@@ -24,7 +24,7 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/thrift_client_cache.h"
-#include "exec/batch_write/batch_write_util.h"
+#include "data_workflows/load/batch_write/batch_write_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/merge_commit_trace.h"
@@ -379,6 +379,10 @@ TxnStateCache::TxnStateCache(size_t capacity, std::unique_ptr<ThreadPoolToken> p
     g_mc_txn_cache_capacity.set_value(_capacity);
 }
 
+TxnStateCache::~TxnStateCache() {
+    stop();
+}
+
 Status TxnStateCache::init() {
     _txn_state_poller = std::make_unique<TxnStatePoller>(this, _poll_state_token.get());
     RETURN_IF_ERROR(_txn_state_poller->init());
@@ -389,7 +393,7 @@ Status TxnStateCache::init() {
 
 Status TxnStateCache::push_state(int64_t txn_id, TTransactionStatus::type status, const std::string& reason) {
     auto cache = _get_txn_cache(txn_id);
-    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache, txn_id, true));
+    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache.get(), txn_id, true));
     DCHECK(entry != nullptr);
     entry->value().push_state(status, reason);
     cache->release(entry);
@@ -398,7 +402,7 @@ Status TxnStateCache::push_state(int64_t txn_id, TTransactionStatus::type status
 
 StatusOr<TxnState> TxnStateCache::get_state(int64_t txn_id) {
     auto cache = _get_txn_cache(txn_id);
-    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache, txn_id, false));
+    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache.get(), txn_id, false));
     if (entry == nullptr) {
         return Status::NotFound("Transaction state not found");
     }
@@ -411,7 +415,7 @@ StatusOr<TxnStateSubscriberPtr> TxnStateCache::subscribe_state(int64_t txn_id, c
                                                                const std::string& db, const std::string& tbl,
                                                                const AuthInfo& auth) {
     auto cache = _get_txn_cache(txn_id);
-    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache, txn_id, true));
+    ASSIGN_OR_RETURN(auto entry, _get_txn_entry(cache.get(), txn_id, true));
     DCHECK(entry != nullptr);
     bool trigger_poll = false;
     entry->value().subscribe(trigger_poll);
@@ -424,7 +428,7 @@ StatusOr<TxnStateSubscriberPtr> TxnStateCache::subscribe_state(int64_t txn_id, c
 }
 
 void TxnStateCache::set_capacity(size_t new_capacity) {
-    std::unique_lock<bthreads::BThreadSharedMutex> lock;
+    std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
     if (_stopped) {
         return;
     }
@@ -438,7 +442,7 @@ void TxnStateCache::set_capacity(size_t new_capacity) {
 
 void TxnStateCache::stop() {
     {
-        std::unique_lock<bthreads::BThreadSharedMutex> lock;
+        std::unique_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
         if (_stopped) {
             return;
         }
@@ -472,7 +476,7 @@ int32_t TxnStateCache::size() {
 StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynamicCache* cache, int64_t txn_id,
                                                                    bool create_if_not_exist) {
     // use lock to avoid creating new entry after stopped
-    std::shared_lock<bthreads::BThreadSharedMutex> lock;
+    std::shared_lock<bthreads::BThreadSharedMutex> lock(_rw_mutex);
     if (_stopped) {
         return Status::ServiceUnavailable("Transaction state cache is stopped");
     }
@@ -500,7 +504,7 @@ StatusOr<TxnStateDynamicCacheEntry*> TxnStateCache::_get_txn_entry(TxnStateDynam
 
 void TxnStateCache::_notify_poll_result(const TxnStatePollTask& task, const StatusOr<TxnState>& result) {
     auto cache = _get_txn_cache(task.txn_id);
-    auto entry_st = _get_txn_entry(cache, task.txn_id, false);
+    auto entry_st = _get_txn_entry(cache.get(), task.txn_id, false);
     if (!entry_st.ok() || entry_st.value() == nullptr) {
         TRACE_BATCH_WRITE << "skip notify poll result, txn_id: " << task.txn_id << ", db: " << task.db
                           << ", tbl: " << task.tbl << ", entry status: "

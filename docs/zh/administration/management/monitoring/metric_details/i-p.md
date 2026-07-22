@@ -275,6 +275,37 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_compaction_failed`
+
+- 单位：计数
+- 描述：失败的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_partial_success`
+
+- 单位：计数
+- 描述：部分成功的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_running`
+
+- 单位：计数
+- 描述：当前正在运行的存算分离（lake）压缩作业数量（每个分区一个作业）。
+
+## `lake_compaction_running_tasks`
+
+- 单位：计数
+- 描述：所有正在运行的存算分离（lake）压缩作业中当前正在被压缩的 tablet 数量。该数量与调度器通过 `lake_compaction_max_tasks` 配置进行限流时所用的单位一致，比统计压缩作业数量（每个分区一个）的 `lake_compaction_running` 更细粒度——单个作业会按 tablet 拆分为一个个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_score_at_trigger`
+
+- 单位：分数
+- 类型：Gauge
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的压缩分数，四舍五入为整数。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该 Gauge 不会衰减：在 Leader FE 上，当没有压缩任务运行时，它会保留上一次触发的值（不会重置为 0）。该值是进程本地的（Leader 上的内存计数器，不会持久化），因此当 FE Leader 发生故障切换后，新当选的 Leader 会从 0 开始，并在其首次触发压缩之前一直报告 0——不会继承前一个 Leader 的值。应将其与 `lake_compaction_running > 0` 结合起来设置告警，而非单独读取该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_success`
+
+- 单位：计数
+- 描述：成功的存算分离（lake）压缩任务计数。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 单位：文件数（每批次）
@@ -313,6 +344,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
 
 ## `local_column_pool_bytes (Deprecated)`
+
+## `low_cardinality_dict_cache_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：当前 FE 上低基数全局字典缓存（`CacheDictManager`）中缓存的字典数据总字节数。由缓存精确统计（非采样），统计的是序列化后的字典数据大小，是实际堆内存占用的下界。该缓存以此字节大小为上界，由配置项 `low_cardinality_dict_cache_max_bytes` 控制。
 
 ## `max_disk_io_util_percent`
 

@@ -385,7 +385,8 @@
         "create_child_worker_timeout_ms",
         "report_python_worker_error",
         "python_worker_reuse",
-        "python_worker_expire_time_sec"
+        "python_worker_expire_time_sec",
+        "python_udf_rpc_timeout_ms"
       ]
     },
     {
@@ -498,6 +499,7 @@
         "use_default_dop_when_shared_scan",
         "tablet_internal_parallel_min_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_rows",
+        "lake_prepared_split_max_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_bytes",
         "tablet_internal_parallel_min_scan_dop",
         "max_hdfs_file_handle",
@@ -739,7 +741,6 @@
         "transaction_apply_worker_idle_time_ms",
         "update_compaction_per_tablet_min_interval_seconds",
         "partial_update_memory_limit_per_worker",
-        "enable_pk_index_eager_build",
         "pk_index_eager_build_threshold_bytes",
         "pk_index_parallel_compaction_threadpool_max_threads",
         "pk_index_parallel_compaction_threadpool_size",

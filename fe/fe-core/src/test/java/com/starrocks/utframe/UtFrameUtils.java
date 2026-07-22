@@ -102,9 +102,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -999,6 +1001,36 @@ public class UtFrameUtils {
             backendResourceStat.setCachedAvgNumCores(DEFAULT_WAREHOUSE_ID, replayDumpInfo.getCachedAvgNumCores());
         }
 
+        // recreate partitions for automatically/expression-partitioned tables. Their CREATE TABLE omits
+        // partition definitions, so the table above was created empty; rebuild the concrete partitions from
+        // the captured representative values (via the same path load uses to auto-create partitions), so the
+        // per-partition row counts below can be matched by partition name.
+        for (Map.Entry<String, List<List<String>>> entry :
+                replayDumpInfo.getAutomaticPartitionValuesMap().entrySet()) {
+            String[] nameParts = entry.getKey().split("\\.");
+            if (nameParts.length != 2 || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nameParts[0]);
+            if (db == null) {
+                continue;
+            }
+            Table table = db.getTable(nameParts[1]);
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            try {
+                AddPartitionClause addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                        (OlapTable) table, entry.getValue(), false, null);
+                // resolve the clause (populates resolvedPartitionDescList) before adding, mirroring the load path.
+                new AlterTableClauseAnalyzer(table).analyze(connectContext, addPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addPartitions(connectContext, db, nameParts[1], addPartitionClause);
+            } catch (Exception e) {
+                System.out.println("failed to replay automatic partitions for " + entry.getKey() + ": "
+                        + e.getMessage());
+            }
+        }
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];

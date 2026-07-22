@@ -61,7 +61,7 @@ public:
         _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, RuntimeEnv::GetInstance()->diagnose_daemon(),
                                                              PlatformEnv::GetInstance()->brpc_stub_cache());
         ASSERT_OK(_load_channel_mgr->init(_runtime_env->load_mem_tracker()));
-        register_config_update_hooks(ExecEnv::GetInstance(), *_runtime_env, _load_channel_mgr.get());
+        register_config_update_hooks(ExecEnv::GetInstance(), *_runtime_env, _load_channel_mgr.get(), nullptr);
         ConfigUpdateRegistry::instance()->set_ready();
     }
     void TearDown() override {

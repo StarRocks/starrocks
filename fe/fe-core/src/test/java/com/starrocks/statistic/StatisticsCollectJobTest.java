@@ -35,8 +35,10 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -57,6 +59,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -584,6 +587,101 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
                         "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
                 t0StatsTableId, dbid)), normalize.apply(sql));
+
+        // buildCollectMcvOnly produces MCV-only SQL (no bucket aggregate). This is the SQL collect() substitutes
+        // for char-family columns (see the testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode
+        // end-to-end test).
+        Map<String, String> stringMcv = new HashMap<>();
+        stringMcv.put("1", "10");
+        stringMcv.put("2", "20");
+        String mcvOnlySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMcvOnly",
+                db, olapTable, stringMcv, "v2");
+        String mcvOnlyNormalized = normalize.apply(mcvOnlySql);
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                        "'test.t0_stats', NULL, '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW()",
+                t0StatsTableId, dbid)), mcvOnlyNormalized);
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram("));
+        Assertions.assertFalse(mcvOnlyNormalized.contains("order by"));
+
+        // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
+        // so it emits histogram() even for a char-family column.
+        boolean originalSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = false;
+            sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                    db, olapTable, 0.1, 64L, stringMcv, "v2", VarcharType.VARCHAR, false);
+            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                            "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM (   SELECT `v2` as column_key FROM " +
+                            "`test`.`t0_stats`  WHERE  rand() <= 0.100000 and `v2` is not null  and `v2` " +
+                            "not in (\"1\",\"2\") ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)),
+                    normalize.apply(sql));
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalSample;
+        }
+    }
+
+    @Test
+    public void testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "hll");
+        HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(VarcharType.VARCHAR),
+                StatsConstants.ScheduleType.ONCE, properties);
+
+        AtomicInteger bucketQueryCalls = new AtomicInteger(0);
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryMCV(ConnectContext ctx, String sql) {
+                TStatisticData data = new TStatisticData();
+                data.columnName = "a";
+                data.histogram = "10";
+                return Lists.newArrayList(data);
+            }
+
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
+                bucketQueryCalls.incrementAndGet();
+                TStatisticData data = new TStatisticData();
+                data.histogram = "[]";
+                return Lists.newArrayList(data);
+            }
+        };
+
+        List<String> collectedSql = new ArrayList<>();
+        new MockUp<HistogramStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
+                collectedSql.add(sql);
+            }
+        };
+
+        job.collect(connectContext, new NativeAnalyzeStatus());
+        Assertions.assertEquals(0, bucketQueryCalls.get());
+        Assertions.assertEquals(1, collectedSql.size());
+        String skipSql = collectedSql.get(0).toLowerCase();
+        Assertions.assertFalse(skipSql.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(skipSql.contains("histogram("));
+
+        HistogramStatisticsCollectJob intJob = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
+                StatsConstants.ScheduleType.ONCE, properties);
+        collectedSql.clear();
+        bucketQueryCalls.set(0);
+        intJob.collect(connectContext, new NativeAnalyzeStatus());
+        Assertions.assertEquals(1, bucketQueryCalls.get());
+        Assertions.assertEquals(1, collectedSql.size());
+        Assertions.assertTrue(collectedSql.get(0).toLowerCase().contains("histogram_hll_ndv"));
     }
 
     @Test
@@ -1101,16 +1199,22 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Columns are split into groups of max(2, parallelism), each group a self-contained single-scan CTE
+        // query, per partition. 4 columns / 2-per-scan = 2 groups x 3 partitions = 6 queries.
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(12, collectSqlList.size());
-
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "c1", "c2", "c3", "par_col");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
-
-        collectSqlList = collectJob.buildCollectSQLList(3);
-        Assertions.assertEquals(4, collectSqlList.size());
+        Assertions.assertEquals(6, collectSqlList.size());
+        // A large parallelism puts all 4 columns in one scan -> 1 group x 3 partitions = 3 queries.
+        Assertions.assertEquals(3, collectJob.buildCollectSQLList(128).size());
+        // parallelism 3 -> ceil(4/3)=2 groups x 3 partitions = 6 queries.
+        Assertions.assertEquals(6, collectJob.buildCollectSQLList(3).size());
+        for (List<String> group : collectSqlList) {
+            Assertions.assertEquals(1, group.size());
+            assertContains(group.get(0), "WITH base_cte_table AS");
+            assertContains(group.get(0), "FROM base_cte_table");
+        }
+        // All columns and all three partition predicates appear across the query list.
+        assertContains(collectSqlList.toString(), "c1", "c2", "c3", "par_col");
+        assertContains(collectSqlList.toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
 
         database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
@@ -1122,13 +1226,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Unpartitioned table (1=1 predicate): 3 columns / 2-per-scan = 2 CTE queries.
         collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(3, collectSqlList.size());
-
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
-        assertContains(collectSqlList.get(0).toString(), "1=1");
+        Assertions.assertEquals(2, collectSqlList.size());
+        // All 3 columns in one scan with a large parallelism.
+        Assertions.assertEquals(1, collectJob.buildCollectSQLList(128).size());
+        assertContains(collectSqlList.toString(), "r_regionkey", "r_name", "r_comment");
+        assertContains(collectSqlList.toString(), "1=1");
+        assertContains(collectSqlList.toString(), "WITH base_cte_table AS");
 
         database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
         table = connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -1141,14 +1246,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // 5 columns / 2-per-scan = ceil(5/2)=3 groups x 6 partitions = 18 queries; all columns in one scan -> 6.
         collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(30, collectSqlList.size());
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "par_col=1/par_date=NULL");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` = '1' AND `par_date` IS NULL");
-        assertContains(collectSqlList.get(0).toString(), "par_col=NULL/par_date=2020-01-03");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
+        Assertions.assertEquals(18, collectSqlList.size());
+        Assertions.assertEquals(6, collectJob.buildCollectSQLList(128).size());
+        assertContains(collectSqlList.toString(), "par_col=1/par_date=NULL");
+        assertContains(collectSqlList.toString(), "`par_col` = '1' AND `par_date` IS NULL");
+        assertContains(collectSqlList.toString(), "par_col=NULL/par_date=2020-01-03");
+        assertContains(collectSqlList.toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
     }
 
     @Test
@@ -1439,8 +1544,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Columns split into groups of max(2, parallelism) per partition: 3 cols / 2-per-scan = 2 groups
+        // x 10 partitions = 20 queries.
         List<List<String>> lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(30, lists.size());
+        Assertions.assertEquals(20, lists.size());
 
         //test partition is null
         collectJob = (ExternalFullStatisticsCollectJob)
@@ -1451,8 +1558,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Single partition, 3 cols / 2-per-scan = 2 groups.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(3, lists.size());
+        Assertions.assertEquals(2, lists.size());
 
         //test unpartitioned table
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "paimon0", "pmn_db1",
@@ -1466,8 +1574,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Unpartitioned, 2 cols / 2-per-scan = 1 group.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(2, lists.size());
+        Assertions.assertEquals(1, lists.size());
     }
 
     @Test

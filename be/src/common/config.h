@@ -493,8 +493,6 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable eager build of PK index files during import and compaction.
-CONF_mBool(enable_pk_index_eager_build, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
@@ -1217,6 +1215,10 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on:
+// min(tablet_internal_parallel_max_splitted_scan_rows, this) cuts big tablets into finer prepared-split
+// morsels, never coarser. Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
 
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
@@ -2061,6 +2063,11 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+// Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
+// Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
+// the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above
+// the longest expected UDF query. 0 (default) disables the timeout (wait indefinitely).
+CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");

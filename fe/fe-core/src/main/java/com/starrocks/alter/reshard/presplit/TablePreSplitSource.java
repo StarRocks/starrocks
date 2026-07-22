@@ -100,23 +100,30 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        InsertSelectSourceColumns mapping = InsertSelectSourceColumns.resolve(
+        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target, resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
                 sortKeyColumns, partitionColumns);
-        if (mapping == null) {
+        if (targetToSource == null) {
             return null;
         }
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
                 resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
-                mapping.sortKeySourceColumnNames(), mapping.partitionSourceColumnNames(),
+                targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource());
         long estimatedBytes = Math.max(0L, resolvedSource.sourceTable().getDataSize());
-        // INSERT-from-table cannot remap a rollup's sort key to source columns, so the
-        // dispatch gate already skips multi-index targets for this load kind; secondaryIndexSpecs
-        // stays empty here via the backward-compatible Prepared constructor.
+        List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
+        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
+            // A rollup sort-key column with no source mapping (e.g. a range DUP rollup whose ORDER BY
+            // promotes a generated column) cannot be projected by source name -> skip pre-split for the
+            // whole load, using the same lookup gate as the base sort key above. The executor's
+            // mapToSource throw stays as the fail-safe for a metadata race between here and sampling.
+            if (InsertSelectSourceColumns.lookup(spec.sortKey(), targetToSource) == null) {
+                return null;
+            }
+        }
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
-                estimatedBytes, context.getCurrentComputeResource());
+                estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);
     }
 
     /**

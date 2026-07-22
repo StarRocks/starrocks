@@ -63,7 +63,7 @@ public:
     TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
                                     std::unique_ptr<LoadSpillMergeInputBatch> task, const Schema* schema,
                                     std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer,
-                                    bool op_aware);
+                                    bool op_aware, bool need_rssid_rowids = false);
 
     ~TabletInternalParallelMergeTask() override;
 
@@ -120,6 +120,11 @@ private:
     // Whether the merge input carries a trailing hidden __op column (see ctor). Drives the op-aware
     // upsert/delete split in run(); never inferred from the last column name.
     const bool _op_aware = false;
+
+    // When true (separate-sort-key PK unsort path), the merge output carries a per-row ordering key
+    // (rssid_rowids) that the writer needs to resolve duplicate primary keys by last-flushed-wins.
+    // Independent of _op_aware; when both are set, the op-split forwards the selected rssid_rowids.
+    bool _need_rssid_rowids = false;
 };
 
 } // namespace lake

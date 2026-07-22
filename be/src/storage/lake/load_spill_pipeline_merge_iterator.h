@@ -103,6 +103,12 @@ private:
     // that don't need ordering/deduplication.
     bool _do_agg = false;
 
+    // Separate-sort-key PK path: the merge orders output by sort key (not PK), so the writer needs a
+    // per-row ordering key (rssid_rowids, carrying slot_idx) to resolve duplicate primary keys by
+    // last-flushed-wins. When true, merge inputs emit rssid_rowids and tasks forward them to the
+    // unsort SST writer.
+    bool _need_rssid_rowids = false;
+
     // Currently available task for pipeline operator to consume
     std::shared_ptr<lake::TabletInternalParallelMergeTask> _current_task;
 

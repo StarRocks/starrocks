@@ -18,12 +18,10 @@ import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +36,7 @@ import org.mockito.Mockito;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -182,43 +181,34 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void dispatchInsertFromTableWithRollupSkipsBeforeSampling() {
-        // INSERT-from-table cannot remap a divergent rollup sort key to source columns, so a
-        // target with more than one visible index (base + rollup) must skip before sampling /
-        // grouping / pre-create -- regardless of partition shape. The gate is the FIRST line of
-        // dispatch, so none of the multi-partition scaffolding below (sampler, grouper) ever runs.
+    public void dispatchInsertFromTableWithRollupRoutesToMultiPartitionFlow() {
+        // INSERT-from-table with a rollup is no longer descoped: an automatic-partition target
+        // routes to the multi-partition flow, which constructs the data-tier sampler and groups.
         Database database = mock(Database.class);
         when(database.getId()).thenReturn(7L);
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
-        when(table.getVisibleIndexMetas()).thenReturn(
-                List.of(mock(MaterializedIndexMeta.class), mock(MaterializedIndexMeta.class)));
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
 
-        boolean savedHasInit = MetricRepo.hasInit;
-        MetricRepo.hasInit = true;
-        try (MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class);
-                MockedConstruction<ReservoirSampler> sampler = Mockito.mockConstruction(ReservoirSampler.class)) {
-            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
-            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+                MockedConstruction<ReservoirSampler> sampler = Mockito.mockConstruction(ReservoirSampler.class,
+                        (mock, ctx) -> when(mock.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), anyLong(), any()))
+                    .thenReturn(List.of());
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
                     () -> false, mock(ConnectContext.class));
 
-            Assertions.assertTrue(sampler.constructed().isEmpty(), "the data-tier sampler must never be constructed");
+            Assertions.assertEquals(1, sampler.constructed().size(),
+                    "INSERT-from-table with a rollup must reach the data-tier sampler");
             grouper.verify(() -> PartitionSampleGrouper.group(
-                    any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class), anyLong(), anyLong(), any()),
-                    never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any(), any(), any()), never());
-            Assertions.assertEquals(baseline + 1L,
-                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
-                    "INSERT-from-table with a rollup must bump the has_materialized_view_or_rollup bucket");
-        } finally {
-            MetricRepo.hasInit = savedHasInit;
+                    any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                    anyLong(), anyLong(), any()), times(1));
         }
     }
 
@@ -280,38 +270,30 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void singleFlowSkipsInsertFromTableWhenResolvedIndexTargetsHaveRollup() {
-        // Race regression: the dispatch-time descope gate reads target.getVisibleIndexMetas()
-        // before findEligibleTarget resolves the authoritative indexTargets. If a rollup becomes
-        // visible in between, the RESOLVED indexTargets can have 2 entries (base + rollup) even
-        // though the table had a single visible index at dispatch time. runSinglePartitionFlow
-        // must re-check the resolved set and skip -- not sample the rollup with the base-only
-        // INSERT-from-table source mapping.
+    public void singleFlowInsertFromTableWithRollupProceeds() {
+        // INSERT-from-table with a resolved base+rollup index set is no longer skipped:
+        // the single-partition flow builds the pipeline and submits.
         Database database = mock(Database.class);
         OlapTable table = mockTable(/*partitioned*/ false, /*automatic*/ false);
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
 
-        boolean savedHasInit = MetricRepo.hasInit;
-        MetricRepo.hasInit = true;
-        try (MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
                 MockedStatic<TabletPreSplitCoordinator> coordinator =
                         Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
             stubEligibleTargetWithRollup(targets, database, table);
-            String label = SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP.name().toLowerCase();
-            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+            stubPipelineFactory(pipelineStatic);
+            coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
                     LoadKind.INSERT_FROM_TABLE, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
-                    any(), any(), any(), any(), any()), never());
-            Assertions.assertEquals(baseline + 1L,
-                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
-                    "resolved rollup on INSERT-from-table must bump the has_materialized_view_or_rollup bucket");
-        } finally {
-            MetricRepo.hasInit = savedHasInit;
+                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
         }
     }
 
@@ -421,6 +403,142 @@ public class PreSplitFlowTest {
         }
     }
 
+    @Test
+    public void rowGroupOverlapFractionIsZeroForOrderedGroups() {
+        // Non-overlapping, ascending [min,max] ranges (source ordered by the sort key): every group's
+        // min is at/above the running max, so nothing overlaps and endpoint boundaries are meaningful.
+        List<RowGroupStatistics> ordered = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false),
+                new RowGroupStatistics(bigintTuple(20), bigintTuple(29), 100L, false));
+        Assertions.assertEquals(0.0, PreSplitFlow.rowGroupOverlapFraction(ordered), 1e-9);
+    }
+
+    @Test
+    public void rowGroupOverlapFractionIsOneForFullyOverlappingGroups() {
+        // Every group spans the whole range (source not ordered by the sort key): each group after the
+        // first has its min below the running max, so the overlap fraction is 1 -> caller falls back.
+        List<RowGroupStatistics> overlapping = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false));
+        Assertions.assertEquals(1.0, PreSplitFlow.rowGroupOverlapFraction(overlapping), 1e-9);
+    }
+
+    @Test
+    public void rowGroupOverlapFractionCountsPartialOverlap() {
+        // g0=[0,20], g1=[10,30] (min 10 < running max 20 -> overlaps), g2=[40,50] (min 40 >= max 30
+        // -> disjoint). 1 of the 2 groups after the first overlaps -> 0.5.
+        List<RowGroupStatistics> mixed = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(20), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(30), 100L, false),
+                new RowGroupStatistics(bigintTuple(40), bigintTuple(50), 100L, false));
+        Assertions.assertEquals(0.5, PreSplitFlow.rowGroupOverlapFraction(mixed), 1e-9);
+    }
+
+    @Test
+    public void metaTierMultiPartitionFallsBackWhenRowGroupsOverlap() {
+        // Fully-overlapping row groups (unordered source): the overlap gate returns null so the
+        // caller uses the data tier instead of collapsing every endpoint onto a couple of values.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> overlapping = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false));
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(overlapping))) {
+            Assertions.assertNull(
+                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
+                    "overlapping row groups must fall back to the data tier");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionEmitsEndpointsWhenOrdered() {
+        // Ordered, non-overlapping row groups (source sorted by the sort key): the meta tier emits
+        // paired min/max endpoints per row group as both the sort-key tuples and the parallel
+        // partition-source tuples, with no data scan.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> ordered = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false));
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(ordered))) {
+            SampleSet result = PreSplitFlow.runMetaTierMultiPartitionSampler(
+                    table, prepared, LoadKind.INSERT_FROM_FILES);
+
+            Assertions.assertNotNull(result, "ordered row groups must stay on the meta tier");
+            Assertions.assertFalse(result.getTuples().isEmpty(), "ordered row groups must emit endpoints");
+            Assertions.assertEquals(0, result.getTuples().size() % 2, "endpoints are emitted as min/max pairs");
+            Assertions.assertEquals(result.getTuples().size(), result.getPartitionSourceTuples().size(),
+                    "sort-key and partition-source tuples must stay parallel");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionWeightsEndpointsByRowCount() {
+        // A dense row group must contribute more endpoint copies than a sparse one so the boundary
+        // planner's row-quantiles reflect row density, not row-group count.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> unevenSizes = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 1_000_000L, false),    // dense
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false));        // sparse
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(unevenSizes))) {
+            SampleSet result = PreSplitFlow.runMetaTierMultiPartitionSampler(
+                    table, prepared, LoadKind.INSERT_FROM_FILES);
+
+            Assertions.assertNotNull(result);
+            long denseMinCopies = result.getTuples().stream()
+                    .filter(t -> "0".equals(t.getValues().get(0).getStringValue())).count();
+            long sparseMinCopies = result.getTuples().stream()
+                    .filter(t -> "10".equals(t.getValues().get(0).getStringValue())).count();
+            Assertions.assertTrue(denseMinCopies > sparseMinCopies,
+                    "dense row group copies (" + denseMinCopies + ") must exceed sparse (" + sparseMinCopies + ")");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionFallsBackWhenPositiveRowGroupLacksStats() {
+        // A row group that has rows but no usable min/max (here: truncated stats) would leave those
+        // rows unrepresented in the boundaries -> fall back to the data tier rather than planning from
+        // the remaining groups.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> withBadGroup = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, /*truncated*/ true),
+                new RowGroupStatistics(bigintTuple(20), bigintTuple(29), 100L, false));
+
+        try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(withBadGroup))) {
+            Assertions.assertNull(
+                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
+                    "a positive-row group without usable stats must fall back to the data tier");
+        }
+    }
+
+    @Test
+    public void metaTierMultiPartitionSkipsNonInsertFromFiles() {
+        // The meta-tier multi-partition path is INSERT-from-FILES only; other load kinds return null
+        // immediately (no provider construction, no footer read).
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        Assertions.assertNull(
+                PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_TABLE),
+                "non-INSERT_FROM_FILES load kinds must not use the meta tier");
+    }
+
     // ---------- helpers ----------
 
     /**
@@ -441,7 +559,18 @@ public class PreSplitFlowTest {
     private static PreSplitFlow.Prepared preparedFor(ScanContext scanContext) {
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         return new PreSplitFlow.Prepared(scanContext, sortKey, List.of(),
-                /*estimatedBytes*/ 0L, mock(ComputeResource.class));
+                /*estimatedBytes*/ 0L, mock(ComputeResource.class), List.of());
+    }
+
+    /**
+     * A {@link PreSplitFlow.Prepared} whose partition source column is also the sort key — the shape
+     * the meta-tier multi-partition sampler requires (it lifts each partition value out of the
+     * row-group min/max sort-key tuple by position).
+     */
+    private static PreSplitFlow.Prepared preparedWithPartitionInSortKey(ScanContext scanContext) {
+        Column sortCol = bigintColumn("sort_col");
+        return new PreSplitFlow.Prepared(scanContext, List.of(sortCol), List.of(sortCol),
+                /*estimatedBytes*/ 4096L, mock(ComputeResource.class), List.of());
     }
 
     /** Stub PreSplitTargets.findEligibleTarget to resolve a single-partition target for {@code table}. */

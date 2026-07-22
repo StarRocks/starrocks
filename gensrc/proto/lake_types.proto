@@ -372,6 +372,7 @@ message MetadataUpdateInfoPB {
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
+    optional TabletRangePB tablet_range = 7;
 }
 
 message BundleTabletMetadataPB {
@@ -421,6 +422,14 @@ message TxnLogPB {
         // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
         // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
         repeated uint32 del_op_offsets = 21;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
     }
 
     message OpCompaction {
@@ -534,6 +543,14 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
+        // New schema id/version allocated by FE for this fast-path ADD INDEX.
+        // apply_add_index stamps these onto the tablet metadata schema so every
+        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
+        // an id change, data loaded after the index — and compaction output —
+        // would keep reusing the cached pre-index schema and build no index.
+        optional int64 new_schema_id = 4;
+        optional int64 new_schema_version = 5;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -459,6 +460,10 @@ private:
     StatusOr<RowIdSparseRange> _sample_by_page();
 
     Status _apply_del_vector();
+    // Fold the non-PK delete survivors into _scan_range BEFORE _rewrite_predicates, so a rank-truncating
+    // ANN search ranks live rows only. Evaluates the original (un-rewritten) predicates over decoded values
+    // -- no global-dict-code wrapping, no dict/raw mismatch. Vector queries only (_del_predicate_preapplied).
+    Status _apply_del_predicate();
 
     Status _init_inverted_index_iterators();
 
@@ -540,6 +545,11 @@ private:
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
+    // True for a vector (ANN) query on a table carrying non-PK delete predicates: the delete survivors are
+    // folded into _scan_range up front by _apply_del_predicate, so the ANN search, the PRE gates and the
+    // exact rescan see live rows only. It also tells the read loop to skip its (now redundant) per-chunk
+    // delete evaluation. False for non-vector scans (they rely on the read loop's per-chunk filter).
+    bool _del_predicate_preapplied = false;
 
     Status _get_del_vec_st;
     Status _get_dcg_st;
@@ -865,6 +875,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
+    // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
+    // before the search. For the lake split-child path (precomputed scan range) this stays true because
+    // the seed already applied it to the range the child inherits.
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
     // Initialize vector index context only when needed
     if (_opts.use_vector_index) {
         _vector_index_ctx = std::make_unique<VectorIndexContext>();
@@ -883,6 +897,9 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         } else {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->k_factor;
         }
+        // Clamp to >= 1: k * a fractional k_factor/pq_refine_factor can truncate to 0, and the top-k
+        // heap in _exact_search_over_candidates would then admit no row and return an empty result set.
+        _vector_index_ctx->k = std::max<int64_t>(1, _vector_index_ctx->k);
 #ifdef WITH_TENANN
         _vector_index_ctx->query_view = tenann::PrimitiveSeqView{
                 .data = reinterpret_cast<uint8_t*>(_opts.vector_search_option->query_vector.data()),
@@ -963,6 +980,10 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _chunk_size = options.chunk_size;
     _predicate_columns = _opts.pred_tree.num_columns();
     _enable_predicate_col_late_materialize = _opts.enable_predicate_col_late_materialize;
+    // Recompute from the reuse-time options: this flag licenses skipping the read loop's per-chunk delete
+    // filter, so it must track the current delete_predicates, not the ctor-time ones (a reuse with a
+    // different delete-predicate set would otherwise skip filtering on a non-delete-narrowed range).
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
@@ -1039,6 +1060,11 @@ Status SegmentIterator::_init_scan_range_and_context() {
         if (apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
+        // After the index filters (smallest candidate) and before _rewrite_predicates (predicates still
+        // original-typed). ANN queries only.
+        if (_del_predicate_preapplied) {
+            RETURN_IF_ERROR(_apply_del_predicate());
+        }
     }
 
     // rewrite stage
@@ -1092,6 +1118,10 @@ Status SegmentIterator::_init_reused_scan() {
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
     }
+    // Rebuilt from the reuse-time delete predicates by _get_row_ranges_by_zone_map; that population uses
+    // map::insert (no overwrite), so a stale entry would make _apply_del_predicate's prune use the old
+    // predicate values. Clear it so the reused scan re-groups against the current predicates.
+    _del_predicates.clear();
     _bitmap_index_evaluator.close();
     // Release per-scan objects appended via _obj_pool.add() during _init_scan_range_and_context (rewritten
     // predicate iterators, dict-decode column iterators, ...). They are otherwise only freed by close(),
@@ -1142,6 +1172,11 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     RETURN_IF_ERROR(_apply_inverted_index());
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
+    }
+    // Fold non-PK delete survivors into the prepared range so split children inherit a delete-free range
+    // (ANN only). No _rewrite_predicates runs on this path, so the predicates are already original-typed.
+    if (_del_predicate_preapplied) {
+        RETURN_IF_ERROR(_apply_del_predicate());
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     RETURN_IF_ERROR(_apply_data_sampling());
@@ -1358,6 +1393,13 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         matched_cardinality = matched.cardinality();
         RETURN_IF(_scan_range.empty(), Status::OK());
         pre_narrowed = true;
+    } else if (_del_predicate_preapplied) {
+        // Deletes already folded into _scan_range by _apply_del_predicate. Treat the live set as
+        // pre-narrowed so the short-circuit / count gates still guard a filtered-HNSW under-return on a
+        // small or sparse live set. (With a residual, the branch above already ran over the live range.)
+        matched = range2roaring(_scan_range);
+        matched_cardinality = matched.cardinality();
+        pre_narrowed = true;
     }
 
     // Short-circuit (PRE only): score candidates exactly when the search cannot pay for itself --
@@ -1570,6 +1612,82 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     return result;
 }
 
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// Called from _apply_del_predicate BEFORE _rewrite_predicates, so the predicates are still original-typed
+// and columns read as decoded values -- no global-dict-code wrapping, no raw/dict mismatch. An unreadable
+// delete column is a hard error, not a silent skip (an over-wide survivor set would under-return the top-k).
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        const roaring::Roaring& candidate) {
+    if (candidate.isEmpty() || delete_predicates.empty()) {
+        return candidate;
+    }
+
+    std::set<ColumnId> del_cids;
+    delete_predicates.get_column_ids(&del_cids);
+    if (del_cids.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    struct PredColumn {
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : del_cids) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("delete-survivor bitmap: delete predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        pred_columns.emplace_back(PredColumn{field, column_iterators_by_cid[cid].get()});
+        pred_schema->append(field);
+    }
+
+    // DisjunctivePredicates::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring survivors;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [field, cit] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(cit->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(cit->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Seed 0 = not deleted; evaluate sets 1 for deleted rows, so a survivor stays 0.
+        selection.assign(bn, 0);
+        RETURN_IF_ERROR(delete_predicates.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i] == 0) {
+                survivors.add(r.begin() + i);
+            }
+        }
+    }
+    return survivors;
+}
+
 // Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
 // inverted-index fallback predicates are present (a MATCH inside an OR), the rowid buffer they
 // resolve chunk rows through (their bitmaps are ready -- _apply_inverted_index ran earlier).
@@ -1593,6 +1711,67 @@ StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
     // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
     _opts.pred_tree = PredicateTree();
     return matched;
+}
+
+Status SegmentIterator::_apply_del_predicate() {
+    // Evaluate the still-original-typed delete predicates over the (index-narrowed) _scan_range and keep
+    // the survivors. Runs before _rewrite_predicates; precondition _del_predicate_preapplied. Timed into
+    // del_filter_ns / rows_del_filtered so this work shows in the DeleteFilter profile section, since the
+    // read loop's per-chunk delete filter is skipped on this path.
+    if (_opts.delete_predicates.empty() || _scan_range.empty()) {
+        return Status::OK();
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
+
+    // Zone-map page prune: only pages whose zone map overlaps a delete column's predicate can hold a
+    // deleted row, so rows elsewhere survive without a read. The per-column OR groups (_del_predicates,
+    // built earlier by _get_row_ranges_by_zone_map) are a conservative superset -- safe for any delete
+    // shape (a deleted row's page always overlaps; multi-column conjuncts just prune less). Empty when
+    // page-level zone-map filtering is off or no delete column has a zone map -> evaluate everything.
+    // Runs before materializing the candidate bitmap: it needs only the range bound, so a segment whose
+    // deletes touch nothing here (the common case on a multi-segment table) returns without any bitmap
+    // work or a byte-identical _scan_range rebuild.
+    roaring::Roaring maybe_deleted;
+    bool pruned = !_del_predicates.empty();
+    if (pruned) {
+        const Range<> bound{_scan_range.begin(), _scan_range.end()};
+        for (const auto& [cid, or_pred] : _del_predicates) {
+            if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+                pruned = false; // unreadable delete column -> no pruning, evaluate the whole candidate
+                break;
+            }
+            SparseRange<> col_pages; // must be empty: get_row_ranges_by_zone_map DCHECKs it
+            std::vector<const ColumnPredicate*> preds{&or_pred};
+            RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(
+                    preds, /*del_predicate=*/nullptr, &col_pages, CompoundNodeType::OR, &bound));
+            maybe_deleted |= range2roaring(col_pages);
+        }
+    }
+    if (pruned && maybe_deleted.isEmpty()) {
+        // No page can hold a deleted row: every candidate survives and _scan_range is already correct.
+        _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(_scan_range.span_size());
+        return Status::OK();
+    }
+
+    const roaring::Roaring candidate = range2roaring(_scan_range);
+    // Rows in delete-clean pages survive without a read; only the maybe-deleted rows are evaluated exactly.
+    const roaring::Roaring to_eval = pruned ? (candidate & maybe_deleted) : candidate;
+    roaring::Roaring survivors = pruned ? (candidate - maybe_deleted) : roaring::Roaring();
+    _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(survivors.cardinality());
+    if (!to_eval.isEmpty()) {
+        ASSIGN_OR_RETURN(auto live, evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema,
+                                                                        _column_iterators, to_eval));
+        survivors |= live;
+    }
+    const size_t deleted = candidate.cardinality() - survivors.cardinality();
+    if (deleted == 0) {
+        // Zone-map false positive (value within a page's min/max but no row matches) or predicate matched
+        // nothing: _scan_range is already correct, skip the O(cardinality) roaring2range rebuild.
+        return Status::OK();
+    }
+    _opts.stats->rows_del_filtered += static_cast<int64_t>(deleted);
+    _scan_range = roaring2range(survivors);
+    return Status::OK();
 }
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
@@ -2739,8 +2918,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         _context_switch_count++;
     }
 
-    // remove (logical) deleted rows.
-    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    // remove (logical) deleted rows. Skipped when _apply_del_predicate already folded the delete
+    // survivors into _scan_range (ANN path): the rows reaching here are live by construction, so
+    // re-evaluating the delete predicates would read the delete columns again only to delete nothing.
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty() &&
+        !_del_predicate_preapplied) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         // NOTE: risk of using _selection.data() without initialization
@@ -3144,7 +3326,10 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
                 norm_v += vec[j] * vec[j];
             }
             float denom = query_norm * std::sqrt(norm_v);
-            distance_column->append(denom > 0 ? dot / denom : 0.0f);
+            float sim = denom > 0 ? dot / denom : 0.0f;
+            // Non-finite (NaN/Inf from Inf inputs) would break the top-k heap's ordering (NaN compares
+            // false both ways), so map it to the sentinel -- ranked worst, like a null vector.
+            distance_column->append(std::isfinite(sim) ? sim : sentinel);
         } else {
             // l2_distance = sum((q[j] - v[j])^2)
             float dist = 0;
@@ -3152,7 +3337,7 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
                 float diff = query_vec[j] - vec[j];
                 dist += diff * diff;
             }
-            distance_column->append(dist);
+            distance_column->append(std::isfinite(dist) ? dist : sentinel);
         }
     }
 
@@ -3204,6 +3389,23 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     const bool has_range = _vector_index_ctx->vector_range >= 0;
     const auto range = static_cast<float>(_vector_index_ctx->vector_range);
     const bool ascending = _vector_index_ctx->result_order == 0;
+
+    // Top-k mode keeps only the k best rows (bounded heap), matching the HNSW path's per-segment contract
+    // -- the upper TopN merges into the global top-k. Keeping every candidate would size id2distance_map
+    // and _scan_range to the whole live set (a memory cliff on a large delete-narrowed rescan). Range
+    // search cannot bound to k: it returns every row within the radius.
+    struct Cand {
+        float dist;
+        rowid_t rid;
+    };
+    // Heap top is the WORST kept row (evicted first): the largest distance when ascending (smaller is
+    // nearer), the smallest when descending (larger is nearer).
+    auto worse_on_top = [ascending](const Cand& a, const Cand& b) {
+        return ascending ? (a.dist < b.dist) : (a.dist > b.dist);
+    };
+    std::priority_queue<Cand, std::vector<Cand>, decltype(worse_on_top)> topk(worse_on_top);
+    const size_t k = static_cast<size_t>(_vector_index_ctx->k);
+
     roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
     for (auto it = rows.new_iterator(); it.has_more();) {
@@ -3219,17 +3421,30 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
         const uint32_t bn = r.end() - r.begin();
         for (uint32_t i = 0; i < bn; i++) {
             const float d = dvals[i];
-            if (has_range && !within_vector_range(d, range, ascending)) {
-                continue;
-            }
-            _vector_index_ctx->id2distance_map[r.begin() + i] = d;
+            const rowid_t rid = r.begin() + i;
             if (has_range) {
-                survivors.add(r.begin() + i);
+                if (!within_vector_range(d, range, ascending)) {
+                    continue;
+                }
+                _vector_index_ctx->id2distance_map[rid] = d;
+                survivors.add(rid);
+            } else if (k > 0) {
+                topk.push(Cand{d, rid});
+                if (topk.size() > k) {
+                    topk.pop();
+                }
             }
         }
     }
-    // Without a radius every candidate survives; skip the bitmap rebuild.
-    _scan_range = has_range ? roaring2range(survivors) : roaring2range(candidates);
+    if (!has_range) {
+        while (!topk.empty()) {
+            const Cand& c = topk.top();
+            _vector_index_ctx->id2distance_map[c.rid] = c.dist;
+            survivors.add(c.rid);
+            topk.pop();
+        }
+    }
+    _scan_range = roaring2range(survivors);
     return Status::OK();
 }
 

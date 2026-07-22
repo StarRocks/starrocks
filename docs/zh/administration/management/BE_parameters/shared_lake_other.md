@@ -173,6 +173,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：prepared-physical-split lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 segment 范围的 coarse-range morsel，让原本空闲的 driver 先忙起来，直到裁剪后的 refined 范围就绪。关闭它不会丢失数据（coarse 范围始终是 refined 范围从中相减的超集），只是用提前并行换取更少的冗余 coarse 扫描。
 - 引入版本：v4.2
 
+### lake_prepared_split_max_splitted_scan_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：仅在开启 prepared physical split scan（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 split morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 split morsel 拆得更细（把大 Tablet 切成更多子范围 morsel 以填充原本空闲的 driver），不会更粗。仅在存算分离集群中生效。
+- 引入版本：v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - 默认值：-1
