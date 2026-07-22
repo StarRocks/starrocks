@@ -183,6 +183,17 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+<<<<<<< HEAD
+=======
+    public static final LongCounterMetric COUNTER_PUBLISH_VERSION_DAEMON_LOOP =
+            new LongCounterMetric("publish_version_daemon_loop_total",
+                    MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
+
+    public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
+            new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
+                    "Times we have exhausted the budget");
+
+>>>>>>> e480be61c7 ([Enhancement] Add per query timeout budget for sync statistics (#76611))
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
      * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
@@ -734,6 +745,8 @@ public final class MetricRepo {
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
+
+        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL);
 
         // init system metrics
         initSystemMetrics();

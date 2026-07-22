@@ -85,6 +85,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TAuthInfo;
@@ -283,6 +284,7 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+    private StatisticsLoadBudget statisticsLoadBudget;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -1120,6 +1122,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public StatisticsLoadBudget getStatisticsLoadBudget() {
+        return statisticsLoadBudget;
+    }
+
+    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
+        this.statisticsLoadBudget = statisticsLoadBudget;
     }
 
     public QuerySource getQuerySource() {
