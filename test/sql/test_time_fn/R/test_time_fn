@@ -739,7 +739,7 @@ select week_iso(NULL);
 None
 -- !result
 
--- name: test_day_of_week_iso
+-- name: test_dayofweek_iso
 select dayofweek_iso("2023-01-01");
 -- result:
 7
