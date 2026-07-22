@@ -207,6 +207,14 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 struct LimitedMemAggState {
     size_t limited_memory_size{};
     bool has_limited(const Aggregator& aggregator) const;
+
+    // Compute the LIMITED_MEM budget as min(memory_usage, cap), floored at 1. Both streaming
+    // pre-agg sinks cap by config::streaming_agg_limited_memory_size. The floor is essential:
+    // set_execute_mode() latches this budget exactly once (enter_low_memory_mode() is a
+    // one-shot latch) and has_limited() tests `limited_memory_size > 0 && ...`, so a 0 budget
+    // would make has_limited() permanently false, silently degrading LIMITED_MEM back to AUTO
+    // with no memory cap and reintroducing the streaming pre-aggregation OOM.
+    static size_t clamp_budget(int64_t memory_usage, int64_t cap);
 };
 
 using AggregatorPtr = std::shared_ptr<Aggregator>;
@@ -640,6 +648,13 @@ protected:
 
 inline bool LimitedMemAggState::has_limited(const Aggregator& aggregator) const {
     return limited_memory_size > 0 && aggregator.memory_usage() >= limited_memory_size;
+}
+
+inline size_t LimitedMemAggState::clamp_budget(int64_t memory_usage, int64_t cap) {
+    if (memory_usage > cap) {
+        return cap;
+    }
+    return memory_usage > 0 ? static_cast<size_t>(memory_usage) : 1;
 }
 
 template <class T>
