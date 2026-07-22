@@ -984,6 +984,107 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalescePropagatesDateRangeWhenOneInputIsFullyNull() {
+        // Given COALESCE(fullyNullDate, dateCol) over DATETIME inputs
+        // CASE WHEN one input is fully null THEN min/max come from the reachable (non-null) date input END
+
+        final int rowCount = 100;
+        final double fullyNullFraction = 1.0;
+        final double dateColNullFraction = 0.2;
+        final double dateColMin =
+                getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2021-09-01", DateUtils.DATE_FORMATTER_UNIX));
+        final double dateColMax =
+                getLongFromDateTime(DateUtils.parseStringWithDefaultHSM("2022-07-01", DateUtils.DATE_FORMATTER_UNIX));
+
+        final double expectedMin = dateColMin;
+        final double expectedMax = dateColMax;
+
+        final ColumnRefOperator fullyNullDate = new ColumnRefOperator(0, DateType.DATETIME, "fullyNullDate", true);
+        final ColumnRefOperator dateCol = new ColumnRefOperator(1, DateType.DATETIME, "dateCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(fullyNullDate, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY).setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fullyNullFraction).setAverageRowSize(8).setDistinctValuesCount(0).build())
+                .addColumnStatistic(dateCol, ColumnStatistic.builder()
+                        .setMinValue(dateColMin).setMaxValue(dateColMax)
+                        .setNullsFraction(dateColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.DATETIME,
+                Lists.newArrayList(fullyNullDate, dateCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.2, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCoalescePropagatesTimeRangeWhenOneInputIsFullyNull() {
+        // Given COALESCE(fullyNullTime, timeCol) over TIME inputs (TIME min/max are seconds-of-day)
+        // CASE WHEN one input is fully null THEN min/max come from the reachable (non-null) time input END
+
+        final int rowCount = 100;
+        final double fullyNullFraction = 1.0;
+        final double timeColNullFraction = 0.2;
+        final double timeColMin = 3600;   // 01:00:00
+        final double timeColMax = 7200;   // 02:00:00
+
+        final double expectedMin = timeColMin;
+        final double expectedMax = timeColMax;
+
+        final ColumnRefOperator fullyNullTime = new ColumnRefOperator(0, DateType.TIME, "fullyNullTime", true);
+        final ColumnRefOperator timeCol = new ColumnRefOperator(1, DateType.TIME, "timeCol", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(fullyNullTime, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY).setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(fullyNullFraction).setAverageRowSize(8).setDistinctValuesCount(0).build())
+                .addColumnStatistic(timeCol, ColumnStatistic.builder()
+                        .setMinValue(timeColMin).setMaxValue(timeColMax)
+                        .setNullsFraction(timeColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.TIME,
+                Lists.newArrayList(fullyNullTime, timeCol));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.2, actualStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCoalesceLeavesRangeInfiniteWhenResultTypeIsNotSupported() {
+        // Given COALESCE(left, right) over VARCHAR inputs (result type is cannot be represented numerically)
+        // CASE WHEN the result type has no meaningful numeric range THEN min/max stay [-inf, +inf] END
+
+        final int rowCount = 100;
+        final ColumnRefOperator left = new ColumnRefOperator(0, VarcharType.VARCHAR, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, VarcharType.VARCHAR, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(left, ColumnStatistic.builder()
+                        .setMinValue(10).setMaxValue(20).setNullsFraction(0.2)
+                        .setAverageRowSize(16).setDistinctValuesCount(70).build())
+                .addColumnStatistic(right, ColumnStatistic.builder()
+                        .setMinValue(30).setMaxValue(40).setNullsFraction(0.5)
+                        .setAverageRowSize(16).setDistinctValuesCount(20).build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, VarcharType.VARCHAR,
+                Lists.newArrayList(left, right));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
     public void testWeek() {
         ColumnRefOperator left = new ColumnRefOperator(0, DateType.DATETIME, "left", true);
         ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
