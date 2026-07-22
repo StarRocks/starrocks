@@ -5,10 +5,10 @@ name: AI Sync Conflict Fix
 # Design: ci-tool/docs/workflow/sync-ai-conflict-fix-design.md
 #
 # One workflow covers the whole loop; jobs fan out by event via `if`:
-#   - labeled(conflict)   -> ai-resolve-one    : fast path, resolve a single PR the moment conflict is added
-#   - schedule / dispatch -> ai-scan-resolve   : fallback, scan all unhandled conflict sync PRs
+#   - labeled(conflict)   -> ai-resolve-on-label    : fast path, resolve a single PR the moment conflict is added
+#   - schedule / dispatch -> ai-resolve-scan   : fallback, scan all unhandled conflict sync PRs
 #                                                (catch missed events + PRs just released from pending)
-#   - closed(fix PR)      -> ai-clear-conflict : after the AI fix PR merges, auto-clear the origin PR's conflict (9.6)
+#   - closed(fix PR)      -> ai-clear-label : after the AI fix PR merges, auto-clear the origin PR's conflict (9.6)
 # Note: pull_request_target uses the base branch's copy of this workflow, so it must be merged to the
 #       default branch first to take effect.
 #
@@ -47,7 +47,7 @@ env:
 
 jobs:
   # -- Fast path: labeled(conflict), single PR ------------------------------------------------
-  ai-resolve-one:
+  ai-resolve-on-label:
     if: >
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&
@@ -69,7 +69,7 @@ jobs:
           bash bin/ai_conflict_fix.sh
 
   # -- Fallback: cron / dispatch, scan all unhandled conflict PRs, resolve one by one ---------
-  ai-scan-resolve:
+  ai-resolve-scan:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, ubuntu, ai]
     steps:
@@ -100,7 +100,7 @@ jobs:
           done
 
   # -- Closed loop: after the AI fix PR merges, auto-clear the origin sync PR's conflict (9.6) --
-  ai-clear-conflict:
+  ai-clear-label:
     if: >
       github.event_name == 'pull_request_target' &&
       github.event.action == 'closed' &&
