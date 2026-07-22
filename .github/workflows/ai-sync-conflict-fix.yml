@@ -1,0 +1,114 @@
+name: AI Sync Conflict Fix
+
+# AI auto-resolves content conflicts in a sync PR (plan B: companion fix PR), and after the fix PR
+# merges it auto-clears the conflict label.
+# Design: ci-tool/docs/workflow/sync-ai-conflict-fix-design.md
+#
+# One workflow covers the whole loop; jobs fan out by event via `if`:
+#   - labeled(conflict)   -> ai-resolve-one    : fast path, resolve a single PR the moment conflict is added
+#   - schedule / dispatch -> ai-scan-resolve   : fallback, scan all unhandled conflict sync PRs
+#                                                (catch missed events + PRs just released from pending)
+#   - closed(fix PR)      -> ai-clear-conflict : after the AI fix PR merges, auto-clear the origin PR's conflict (9.6)
+# Note: pull_request_target uses the base branch's copy of this workflow, so it must be merged to the
+#       default branch first to take effect.
+#
+# runner: [self-hosted, ubuntu, ai] native box (not docker), claude CLI pre-authed;
+#         `source lib/init.sh` injects GitHub credentials (GITHUB_ACCESS_TOKEN).
+
+on:
+  pull_request_target:
+    types: [labeled, closed]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "A single sync PR number (empty = scan all conflict PRs)"
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Group by event + object so resolve (keyed by sync PR number) and clear (keyed by fix PR)
+# do not cancel each other under a shared cancel-in-progress group.
+concurrency:
+  group: sync-ai-conflict-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_REPO: StarRocks/starrocks
+  # SLACK_BOT_TOKEN is an existing repo secret (used by ci-report / ai-sr-skills / etc.).
+  # The Slack channel is hardcoded in the ci-tool scripts, so it is not passed here.
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+jobs:
+  # -- Fast path: labeled(conflict), single PR ------------------------------------------------
+  ai-resolve-one:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'conflict' &&
+      contains(github.event.pull_request.labels.*.name, 'sync') &&
+      !contains(github.event.pull_request.labels.*.name, 'conflict-manual') &&
+      !contains(github.event.pull_request.labels.*.name, 'pending') &&
+      !contains(github.event.pull_request.labels.*.name, 'ERROR') &&
+      !contains(github.event.pull_request.labels.*.name, 'ai-conflict-fix') &&
+      !contains(github.event.pull_request.labels.*.name, 'ai-conflict-fix-failed')
+    runs-on: [self-hosted, ubuntu, ai]
+    steps:
+      - name: AI resolve conflict -> open fix PR
+        env:
+          PR_ID: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          bash bin/ai_conflict_fix.sh
+
+  # -- Fallback: cron / dispatch, scan all unhandled conflict PRs, resolve one by one ---------
+  ai-scan-resolve:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, ubuntu, ai]
+    steps:
+      - name: List & resolve pending conflict PRs
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ONE_PR: ${{ github.event.inputs.pr }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          export GH_TOKEN="${GITHUB_ACCESS_TOKEN}"
+
+          if [ -n "${ONE_PR}" ]; then
+            PRS="${ONE_PR}"
+          else
+            # open PRs with sync+conflict and none of conflict-manual/pending/ERROR/ai-conflict-fix*
+            PRS=$(gh pr list -R "${GITHUB_REPOSITORY}" --state open --label sync --label conflict \
+                    --json number,labels \
+                    -q '.[] | select(
+                          ([.labels[].name] | any(. == "conflict-manual" or . == "pending"
+                            or . == "ERROR" or . == "ai-conflict-fix" or . == "ai-conflict-fix-failed")) | not
+                        ) | .number')
+          fi
+          [ -n "${PRS}" ] || { echo "no pending conflict PR"; exit 0; }
+
+          for pr in ${PRS}; do
+            echo "===== handling sync PR #${pr} ====="
+            PR_ID="${pr}" bash bin/ai_conflict_fix.sh || true
+          done
+
+  # -- Closed loop: after the AI fix PR merges, auto-clear the origin sync PR's conflict (9.6) --
+  ai-clear-conflict:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      startsWith(github.event.pull_request.head.ref, 'ai-conflict-fix/')
+    runs-on: [self-hosted, ubuntu, ai]
+    steps:
+      - name: Clear conflict on origin sync PR (only if fix PR merged)
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          FIX_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          FIX_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+          bash bin/ai_conflict_clear.sh
