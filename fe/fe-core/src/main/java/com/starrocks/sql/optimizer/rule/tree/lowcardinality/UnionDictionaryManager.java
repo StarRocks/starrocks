@@ -70,7 +70,8 @@ public class UnionDictionaryManager {
         if (uniques.size() > Config.low_cardinality_threshold || totalDictSize > DICT_PAGE_MAX_SIZE - 32) {
             return null;
         }
-        List<ByteBuffer> sortedValues = uniques.stream().sorted().toList();
+        // Sort unsigned to match BE's memcmp order; plain sorted() is signed on JDK 8. See ColumnDict.UNSIGNED_LEX.
+        List<ByteBuffer> sortedValues = uniques.stream().sorted(ColumnDict.UNSIGNED_LEX).toList();
         ImmutableMap.Builder<ByteBuffer, Integer> builder = ImmutableMap.builder();
         for (int i = 0; i < sortedValues.size(); ++i) {
             builder.put(sortedValues.get(i), i + 1);
