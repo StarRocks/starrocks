@@ -679,6 +679,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 meta tier（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，meta tier 会回退到 data tier（行采样）。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_meta_tier_footer_read_parallelism`
+
+- 默认值: 16
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂 meta tier 从 `FILES()` 数据源并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
+- 引入版本: v4.1.0
+
 ### `tablet_pre_split_max_partitions_per_load`
 
 - 默认值: 32
