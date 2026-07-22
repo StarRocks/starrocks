@@ -105,21 +105,35 @@ public class CostModel {
 
     private static CostEstimate getCostEstimate(List<PhysicalPropertySet> childrenOutputProperties,
                                                 ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
+        return getCostEstimate(childrenOutputProperties, expressionContext, PhysicalPropertySet.EMPTY);
+    }
+
+    private static CostEstimate getCostEstimate(List<PhysicalPropertySet> childrenOutputProperties,
+                                                ExpressionContext expressionContext,
+                                                PhysicalPropertySet requiredProperty) {
+        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties, requiredProperty);
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
     public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
                                                               List<PhysicalPropertySet> childrenOutputProperties) {
+        return calculateCostWithChildrenOutProperty(expression, childrenOutputProperties, PhysicalPropertySet.EMPTY);
+    }
+
+    public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
+                                                              List<PhysicalPropertySet> childrenOutputProperties,
+                                                              PhysicalPropertySet requiredProperty) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
-        CostEstimate costEstimate = getCostEstimate(childrenOutputProperties, expressionContext);
+        CostEstimate costEstimate = getCostEstimate(childrenOutputProperties, expressionContext, requiredProperty);
         double realCost = getRealCost(costEstimate);
 
         LOG.debug("operator: {}, group id: {}, child group id: {}, " +
-                        "inputProperties: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
+                        "inputProperties: {}, requiredProperty: {}, outputRowCount: {}, outPutSize: {}, " +
+                        "costEstimate: {}, realCost: {}",
                 expressionContext.getOp(), expression.getGroup().getId(),
                 expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()),
                 childrenOutputProperties,
+                requiredProperty,
                 expressionContext.getStatistics().getOutputRowCount(),
                 expressionContext.getStatistics().getComputeSize(),
                 costEstimate, realCost);
@@ -139,8 +153,11 @@ public class CostModel {
 
         private final List<PhysicalPropertySet> inputProperties;
 
-        private CostEstimator(List<PhysicalPropertySet> inputProperties) {
+        private final PhysicalPropertySet requiredProperty;
+
+        private CostEstimator(List<PhysicalPropertySet> inputProperties, PhysicalPropertySet requiredProperty) {
             this.inputProperties = inputProperties;
+            this.requiredProperty = requiredProperty;
         }
 
         @Override
@@ -476,8 +493,10 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
-            return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
+            HashJoinCostModel joinCostModel =
+                    new HashJoinCostModel(context, inputProperties, requiredProperty, eqOnPredicates, statistics, join);
+            return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(),
+                    joinCostModel.getNetworkCost());
         }
 
         @Override

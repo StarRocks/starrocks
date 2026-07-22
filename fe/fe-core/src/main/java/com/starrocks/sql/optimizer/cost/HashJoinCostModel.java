@@ -16,9 +16,16 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -69,18 +76,25 @@ public class HashJoinCostModel {
 
     private final List<PhysicalPropertySet> inputProperties;
 
+    private final PhysicalPropertySet requiredProperty;
+
     private final List<BinaryPredicateOperator> eqOnPredicates;
 
     private final Statistics joinStatistics;
 
+    private final PhysicalHashJoinOperator joinOperator;
+
     public HashJoinCostModel(ExpressionContext context, List<PhysicalPropertySet> inputProperties,
-                             List<BinaryPredicateOperator> eqOnPredicates, final Statistics joinStatistics) {
+                             PhysicalPropertySet requiredProperty, List<BinaryPredicateOperator> eqOnPredicates,
+                             final Statistics joinStatistics, PhysicalHashJoinOperator joinOperator) {
         this.context = context;
         this.leftStatistics = context.getChildStatistics(0);
         this.rightStatistics = context.getChildStatistics(1);
         this.inputProperties = inputProperties;
+        this.requiredProperty = requiredProperty;
         this.eqOnPredicates = eqOnPredicates;
         this.joinStatistics = joinStatistics;
+        this.joinOperator = joinOperator;
     }
 
     public double getCpuCost() {
@@ -129,6 +143,106 @@ public class HashJoinCostModel {
             memCost = rightOutput;
         }
         return memCost;
+    }
+
+    public double getNetworkCost() {
+        JoinExecMode execMode = deriveJoinExecMode();
+        if (!canAdjustForPreservedLeftDistribution()) {
+            return 0;
+        }
+
+        // Broadcast can preserve a useful probe-side distribution that shuffle join would replace.
+        boolean shuffleOutputSatisfyRequired = shuffleJoinOutputSatisfyRequiredProperty();
+        double preservedDistributionCost = getPreservedDistributionCost();
+        if (JoinExecMode.BROADCAST == execMode && !shuffleOutputSatisfyRequired) {
+            return -preservedDistributionCost;
+        }
+
+        if (JoinExecMode.SHUFFLE == execMode && !inputProperties.get(0).getDistributionProperty()
+                .isSatisfy(requiredProperty.getDistributionProperty())) {
+            return preservedDistributionCost;
+        }
+
+        return 0;
+    }
+
+    private boolean canAdjustForPreservedLeftDistribution() {
+        if (CollectionUtils.isEmpty(inputProperties) || inputProperties.size() < 2 || requiredProperty == null) {
+            return false;
+        }
+
+        String joinHint = joinOperator.getJoinHint();
+        if (joinHint != null && !joinHint.isEmpty()) {
+            return false;
+        }
+
+        long broadcastRowCountLimit = ConnectContext.get().getSessionVariable().getBroadcastRowCountLimit();
+        if (broadcastRowCountLimit <= 0 || rightStatistics.getOutputRowCount() <= broadcastRowCountLimit) {
+            return false;
+        }
+
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (!joinType.isLeftTransform()) {
+            return false;
+        }
+
+        DistributionProperty requiredDistribution = requiredProperty.getDistributionProperty();
+        if (!requiredDistribution.isShuffle()) {
+            return false;
+        }
+
+        HashDistributionDesc.SourceType requiredType =
+                ((HashDistributionSpec) requiredDistribution.getSpec()).getHashDistributionDesc().getSourceType();
+        if (requiredType != HashDistributionDesc.SourceType.SHUFFLE_JOIN &&
+                requiredType != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+            return false;
+        }
+
+        if (!requiredDistributionColumnsFromLeftChild(requiredDistribution)) {
+            return false;
+        }
+
+        return inputProperties.get(0).getDistributionProperty().isSatisfy(requiredDistribution);
+    }
+
+    private boolean requiredDistributionColumnsFromLeftChild(DistributionProperty requiredDistribution) {
+        HashDistributionSpec requiredSpec = (HashDistributionSpec) requiredDistribution.getSpec();
+        ColumnRefSet leftColumns = context.getChildOutputColumns(0);
+        return requiredSpec.getShuffleColumns().stream()
+                .map(DistributionCol::getColId)
+                .allMatch(leftColumns::contains);
+    }
+
+    private boolean shuffleJoinOutputSatisfyRequiredProperty() {
+        List<DistributionCol> leftJoinColumns = getLeftJoinColumns();
+        if (leftJoinColumns.isEmpty()) {
+            return false;
+        }
+
+        DistributionSpec shuffleJoinDistribution = DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(leftJoinColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+        PhysicalPropertySet shuffleJoinOutputProperty =
+                new PhysicalPropertySet(DistributionProperty.createProperty(shuffleJoinDistribution));
+        return shuffleJoinOutputProperty.getDistributionProperty().isSatisfy(requiredProperty.getDistributionProperty());
+    }
+
+    private List<DistributionCol> getLeftJoinColumns() {
+        ColumnRefSet leftColumns = context.getChildOutputColumns(0);
+        return eqOnPredicates.stream()
+                .map(predicate -> {
+                    ScalarOperator firstChild = predicate.getChild(0);
+                    ScalarOperator secondChild = predicate.getChild(1);
+                    return leftColumns.containsAll(firstChild.getUsedColumns()) ? firstChild : secondChild;
+                })
+                .filter(ScalarOperator::isColumnRef)
+                .map(column -> (ColumnRefOperator) column)
+                .filter(leftColumns::contains)
+                .map(column -> new DistributionCol(column.getId(), true))
+                .toList();
+    }
+
+    private double getPreservedDistributionCost() {
+        return Math.max(joinStatistics.getOutputSize(context.getRootProperty().getOutputColumns()), 1);
     }
 
     private double getAvgProbeCost() {

@@ -751,6 +751,24 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    public void testLocalAggDistributionMismatchBroadcastJoinFromDump() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/local_agg_distribution_mismatch_broadcast_join");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Assertions.assertFalse(queryDumpInfo.getOriginStmt().contains("[BROADCAST]"));
+
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+        String targetJoinConjunct = "mock_2023";
+        String joinBlock = Stream.of(plan.split("(?m)(?=^\\s*\\d+:)"))
+                .filter(block -> block.contains("HASH JOIN"))
+                .filter(block -> block.contains("equal join conjunct:"))
+                .filter(block -> block.contains(targetJoinConjunct))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(plan));
+        PlanTestBase.assertContains(joinBlock, "join op: LEFT OUTER JOIN (BROADCAST)");
+    }
+
+    @Test
     public void testPushDistinctAggDownWindow() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window2"),
