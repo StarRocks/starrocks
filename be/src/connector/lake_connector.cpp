@@ -327,6 +327,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    if (thrift_lake_scan_node.__isset.sample_options) {
+        _params.sample_options = thrift_lake_scan_node.sample_options;
+    }
 
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();

@@ -1213,6 +1213,23 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+<<<<<<< HEAD
+=======
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                msg.lake_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
+            if (enableGlobalLateMaterialization) {
+                msg.lake_scan_node.setEnable_global_late_materialization(true);
+            }
+
+            if (sample != null && sample.isUseSampling()) {
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.lake_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
+            }
+
+>>>>>>> 52db44642f ([BugFix] Propagate sample options to lake scan (#71874))
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
@@ -1672,6 +1689,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
+
+        if (sample != null && sample.isUseSampling()) {
+            TTableSampleOptions sampleOptions = new TTableSampleOptions();
+            sample.toThrift(sampleOptions);
+            scanNode.setSample_options(sampleOptions);
+        }
+
         planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
