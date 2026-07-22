@@ -2056,12 +2056,24 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
 
     // 2. update primary index, and generate delete info.
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
+<<<<<<< HEAD
             metadata.get(), &output_rowset, _tablet_mgr, builder, &index, txn_id, base_version,
             op_compaction.lcrm_file(), &segment_id_to_add_dels, &delvecs);
     if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
         RETURN_IF_ERROR(resolver->execute_without_update_index());
     } else {
         RETURN_IF_ERROR(resolver->execute());
+=======
+            metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
+            &segment_id_to_add_dels, &delvecs);
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
+        if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            RETURN_IF_ERROR(resolver->execute_without_update_index());
+        } else {
+            RETURN_IF_ERROR(resolver->execute());
+        }
+>>>>>>> 28ecf695b8 ([Enhancement] Cover the remaining untraced lake publish-version steps (#76658))
     }
     // 3. add delvec to builder
     for (auto&& each : delvecs) {
@@ -2078,10 +2090,14 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                          delvec_page_pb, delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
-    // 5. update TabletMeta
+    // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total)
     RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    {
+        // index.apply_opcompaction opens the output index sstable(s) (footer + bloom filter), so it can do I/O.
+        TRACE_COUNTER_SCOPE_LATENCY_US("index_apply_opcompaction_us");
+        RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    }
 
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
