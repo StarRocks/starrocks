@@ -440,6 +440,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：同步等待统计信息的超时时间（当 `enable_sync_statistics_load` 启用时）。若在此时间内统计信息不可用，查询将在没有统计信息的情况下继续执行，这可能导致次优执行计划。请根据集群性能和工作负载特性将此值设置为合理的时间。
 - 引入版本：-
 
+### `sync_statistics_load_per_query_budget_ms`
+
+- 默认值：-1
+- 类型：Int
+- 单位：毫秒
+- 是否可变：Yes
+- 描述：当 `enable_sync_statistics_load` 启用时，单个查询同步等待统计信息的总预算。`-1` 表示使用 `sync_statistics_load_timeout_ms` 作为总预算。`0` 表示禁用统计信息同步等待。正数表示显式设置总预算。单次统计信息等待仍受 `sync_statistics_load_timeout_ms` 限制；预算耗尽后，查询将在缺少不可用统计信息的情况下继续执行。
+- 引入版本：-
+
 ### `enable_udf`
 
 - 默认值: false
