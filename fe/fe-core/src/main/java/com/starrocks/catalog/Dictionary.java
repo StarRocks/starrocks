@@ -155,6 +155,11 @@ public class Dictionary implements Writable {
     public void updateNextSchedulableTime(long refreshInterval) {
         if (refreshInterval > 0) {
             nextSchedulableTime.set(System.currentTimeMillis() + refreshInterval);
+        } else {
+            // Auto refresh is disabled. Pin to Long.MAX_VALUE so that the dictionary is never
+            // picked by the regular schedule. This also heals a stale nextSchedulableTime
+            // persisted by older versions, which used to re-arm the schedule on every refresh.
+            nextSchedulableTime.set(Long.MAX_VALUE);
         }
     }
 
@@ -227,12 +232,22 @@ public class Dictionary implements Writable {
     }
 
     private void buildRefreshInterval(String value) throws DdlException {
+        // refreshInterval is stored as int milliseconds, so a value whose millisecond form
+        // does not fit an int must be rejected explicitly instead of wrapping silently.
+        long intervalSeconds;
         try {
-            refreshInterval = Integer.parseInt(value) * 1000;
-        } catch (Exception e) {
+            intervalSeconds = Long.parseLong(value);
+        } catch (NumberFormatException e) {
             throw new DdlException("parse dictionary_refresh_interval failed" +
                                    ", given parameter: " + value);
         }
+        if (intervalSeconds > Integer.MAX_VALUE / 1000 || intervalSeconds < Integer.MIN_VALUE / 1000) {
+            throw new DdlException("dictionary_refresh_interval is out of range" +
+                                   ", should be within [" + Integer.MIN_VALUE / 1000 +
+                                   ", " + Integer.MAX_VALUE / 1000 + "] seconds" +
+                                   ", given parameter: " + value);
+        }
+        refreshInterval = (int) (intervalSeconds * 1000);
     }
 
     private void buildReadLatest(String value) throws DdlException {
@@ -330,7 +345,11 @@ public class Dictionary implements Writable {
         this.stateBeforeRefresh = this.state;
         this.state = DictionaryState.REFRESHING;
         this.lastSuccessRefreshTime = ts;
-        this.nextSchedulableTime.set(ts + refreshInterval);
+        // Do not touch nextSchedulableTime when auto refresh is disabled (refreshInterval <= 0),
+        // otherwise a manual refresh or warm up would re-enable the regular schedule.
+        if (refreshInterval > 0) {
+            this.nextSchedulableTime.set(ts + refreshInterval);
+        }
         this.setErrorMsg("");
     }
 
