@@ -128,6 +128,7 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+<<<<<<< HEAD
 // Metadata describing the data changes in this publish, used by Change Data Capture (CDC) to derive the
 // changes that the publish's loads introduced. It never carries over between publishes, so it must be
 // cleared whenever a new publish copies the previous metadata.
@@ -158,6 +159,8 @@ message CdcMetadataPB {
     map<uint32, DelvecPagePB> column_overlay_vecs = 4;
 }
 
+=======
+>>>>>>> 6718dbaf4f7... Revert "[Enhancement] Reserve proto/thrift placeholders for CDC metadata and changes scan (#75537)" (#76688)
 // An Index Delta Group (IDG) entry describes a standalone .idx file
 // produced by an ADD INDEX schema change. The file stores index blobs
 // for one or more (column, index_type) pairs for a single segment,
@@ -387,12 +390,15 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
+<<<<<<< HEAD
 
     // CDC: metadata ancestor chain for reverse traversal.
     // chain[0] = direct parent version; subsequent elements = older ancestors.
     // Length capped at max(1, cloud_native_tablet_metadata_ancestors_recorded) (default 5).
     repeated int64 metadata_ancestors = 50;
     optional CdcMetadataPB cdc_metadata = 51;
+=======
+>>>>>>> 6718dbaf4f7... Revert "[Enhancement] Reserve proto/thrift placeholders for CDC metadata and changes scan (#75537)" (#76688)
 }
 
 message MetadataUpdateInfoPB {
