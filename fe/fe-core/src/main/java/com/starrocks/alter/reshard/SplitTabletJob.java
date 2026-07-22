@@ -647,24 +647,26 @@ public class SplitTabletJob extends TabletReshardJob {
                     anySpreadPreSplit |= oldIndex != null && oldIndex.getRowCount() == 0;
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
-                        if (splittingTablet == null) {
+                        // getSplittingTablet() returns null for a fallback-to-identical replacement (BE
+                        // returned only the first child range -> fallbackToIdenticalTablet) and for merges,
+                        // so use the ReshardingTablet interface accessors below to still process an identical
+                        // replacement: a pre-split creates even that replacement in the SPREAD group only, so
+                        // its range must be collected for the reconcile or it is stranded SPREAD-only and
+                        // loses its colocate placement. An identical replacement introduces no boundary, so
+                        // skip the boundary/straddle logic for it.
+                        boolean identical = reshardingTablet.getIdenticalTablet() != null;
+                        if (splittingTablet == null && !identical) {
                             continue;
                         }
-                        // A pre-split creates even a fallback-to-identical replacement (BE returned only the
-                        // first child range -> fallbackToIdenticalTablet) in the SPREAD group only, so its
-                        // range must still be collected below for the reconcile — otherwise the replacement
-                        // is stranded SPREAD-only and loses colocate placement. An identical replacement
-                        // introduces no boundary, so skip the boundary/straddle logic for it.
-                        boolean identical = splittingTablet.isIdenticalTablet();
                         Tablet oldTablet = oldIndex == null ? null
-                                : oldIndex.getTablet(splittingTablet.getOldTabletId());
+                                : oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
                         if (!identical && oldTablet != null && oldTablet.getRange() != null
                                 && !ColocateRangeUtils.isContainedInOwningColocateRange(
                                         oldTablet.getRange().getRange(),
                                         currentRanges, sortKeyColumns, colocateColumnCount)) {
                             oldStradlesBoundary = true;
                         }
-                        for (Long newTabletId : splittingTablet.getNewTabletIds()) {
+                        for (Long newTabletId : reshardingTablet.getNewTabletIds()) {
                             Tablet newTablet = newIndex.getTablet(newTabletId);
                             if (newTablet == null || newTablet.getRange() == null) {
                                 continue;
