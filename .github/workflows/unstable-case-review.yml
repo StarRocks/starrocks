@@ -92,6 +92,11 @@ jobs:
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      # elastic-ut-review.sh clones the repo inside the ECI via
+      # https://$GITHUB_ACCESS_TOKEN@github.com/... . On forks/CelerData the
+      # [ubuntu, ai] runner's init.sh does not inject GITHUB_ACCESS_TOKEN, so
+      # pass the run token here (no-op for the public StarRocks/starrocks clone).
+      GITHUB_ACCESS_TOKEN: ${{ github.token }}
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
@@ -128,6 +133,9 @@ jobs:
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      # See FE-UT REVIEW: pass the run token so the in-ECI git clone in
+      # elastic-ut-review.sh has credentials on the [ubuntu, ai] runner.
+      GITHUB_ACCESS_TOKEN: ${{ github.token }}
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
