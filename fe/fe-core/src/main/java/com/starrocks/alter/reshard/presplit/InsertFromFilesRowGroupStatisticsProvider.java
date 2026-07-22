@@ -14,8 +14,10 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
@@ -23,6 +25,10 @@ import org.apache.hadoop.fs.FileStatus;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Production meta-tier {@link RowGroupStatisticsProvider} for the INSERT-from-FILES
@@ -49,15 +55,64 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         // count) from total file bytes, and ParquetMetadataSampler computes
         // K-1 row-quantile cuts from the full per-stripe stats list — a
         // partial enumeration would bias the cuts toward the prefix.
-        List<RowGroupStatistics> aggregated = new ArrayList<>();
+        List<FileStatus> files = new ArrayList<>();
         for (TBrokerFileStatus brokerFileStatus : sourceTable.loadFileList()) {
-            if (brokerFileStatus.isDir) {
-                continue;
+            if (!brokerFileStatus.isDir) {
+                files.add(PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus));
             }
-            FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-            aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
         }
-        return aggregated;
+        String loadTimeZone = context.loadTimeZone();
+        // Footer reads are independent per file and the sampler sorts the aggregated stats, so
+        // reading them concurrently only cuts wall time — each footer is a remote round-trip, and a
+        // serial pass over a many-file FILES() source otherwise dominates the pre-split hook.
+        int parallelism = Math.max(1,
+                Math.min(Config.tablet_pre_split_meta_tier_footer_read_parallelism, files.size()));
+        if (parallelism == 1) {
+            List<RowGroupStatistics> aggregated = new ArrayList<>();
+            for (FileStatus file : files) {
+                aggregated.addAll(format.read(file, hadoopConfig, sortKeyColumns, loadTimeZone));
+            }
+            return aggregated;
+        }
+        ExecutorService footerReadPool = Executors.newFixedThreadPool(parallelism,
+                new ThreadFactoryBuilder().setNameFormat("presplit-footer-reader-%d").setDaemon(true).build());
+        try {
+            List<Future<List<RowGroupStatistics>>> futures = new ArrayList<>(files.size());
+            for (FileStatus file : files) {
+                futures.add(footerReadPool.submit(
+                        () -> format.read(file, hadoopConfig, sortKeyColumns, loadTimeZone)));
+            }
+            List<RowGroupStatistics> aggregated = new ArrayList<>();
+            for (Future<List<RowGroupStatistics>> future : futures) {
+                aggregated.addAll(joinFooterRead(future));
+            }
+            return aggregated;
+        } finally {
+            footerReadPool.shutdownNow();
+        }
+    }
+
+    /**
+     * Awaits one footer-read task. A per-file {@link StarRocksException} (e.g. a
+     * {@link MetaTierUnavailableException} for truncated / unmappable stats) is rethrown unchanged
+     * so the pipeline falls back to the data tier exactly as the serial reader would; any other
+     * failure is wrapped as a checked {@link StarRocksException}.
+     */
+    private static List<RowGroupStatistics> joinFooterRead(Future<List<RowGroupStatistics>> future)
+            throws StarRocksException {
+        try {
+            return future.get();
+        } catch (ExecutionException executionFailure) {
+            Throwable cause = executionFailure.getCause();
+            if (cause instanceof StarRocksException starRocksException) {
+                throw starRocksException;
+            }
+            throw new StarRocksException("Parquet/ORC footer read failed during pre-split sampling: "
+                    + (cause == null ? executionFailure.getMessage() : cause.getMessage()), cause);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new StarRocksException("Interrupted while reading footers for pre-split sampling", interrupted);
+        }
     }
 
     private static InsertFromFilesScanContext requireInsertFromFilesContext(SampleRequest request)
