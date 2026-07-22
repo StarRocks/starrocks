@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -147,6 +149,153 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
+    @Test
+    void footerReadParallelismOneUsesSerialPathAndAggregates() throws Exception {
+        // parallelism == 1 takes the serial branch; aggregation must still cover every file.
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                            brokerFileStatus(writeBigintParquet(24, 1000L)),
+                            brokerFileStatus(writeBigintParquet(8, 2000L))),
+                    Long.MAX_VALUE);
+            Assertions.assertEquals(48L, totalRowCount(provider.fetch(request)));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void serialAndParallelReadsProduceIdenticalStatistics() throws Exception {
+        // Reading footers concurrently must not change the result: the same aggregated row count and
+        // row-group count whether parallelism is 1 (serial) or > 1 (concurrent), since futures are
+        // collected in file order.
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(16, 0L)),
+                brokerFileStatus(writeBigintParquet(24, 1000L)),
+                brokerFileStatus(writeBigintParquet(40, 2000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<RowGroupStatistics> serial = provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<RowGroupStatistics> parallel = provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE));
+
+            Assertions.assertEquals(80L, totalRowCount(parallel));
+            Assertions.assertEquals(totalRowCount(serial), totalRowCount(parallel));
+            Assertions.assertEquals(serial.size(), parallel.size(),
+                    "same row-group count regardless of parallelism");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void unreadableFileInParallelReadFallsBackToDataTier() throws Exception {
+        // A corrupt file among valid ones: the parallel footer read surfaces the per-file failure via
+        // joinFooterRead as a StarRocksException, so the pipeline falls back to the data tier.
+        Path good = writeBigintParquet(16, 0L);
+        java.nio.file.Path corrupt = tempDirectory.resolve("corrupt.parquet");
+        Files.write(corrupt, "not a parquet file".getBytes());
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(good), brokerFileStatus(new Path(corrupt.toUri()))),
+                    Long.MAX_VALUE);
+            Assertions.assertThrows(StarRocksException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void parallelReadPreservesMetaTierUnavailableSignal() throws Exception {
+        // joinFooterRead rethrows a StarRocksException *subclass* unchanged. That subtype matters: a
+        // MetaTierUnavailableException means "fall back to data tier", while a plain StarRocksException
+        // means "skip pre-split". A footer read that raises MetaTierUnavailableException (here: the
+        // sort-key column is absent from the Parquet schema) must surface through the parallel path as
+        // MetaTierUnavailableException, not get downgraded to a plain StarRocksException.
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet",
+                List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                        brokerFileStatus(writeBigintParquet(24, 1000L))));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(new Column("absent_sort_key", IntegerType.BIGINT)),   // not present in the file schema
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void nonPositiveParallelismClampsToSerialPath() throws Exception {
+        // Config <= 0 must not create a 0-thread pool: Math.max(1, ...) clamps it to the serial path,
+        // which still aggregates every file.
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 0;
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                            brokerFileStatus(writeBigintParquet(24, 1000L))),
+                    Long.MAX_VALUE);
+            Assertions.assertEquals(40L, totalRowCount(provider.fetch(request)));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void moreFilesThanParallelismAggregatesAllViaBoundedPool() throws Exception {
+        // files.size() > parallelism: the bounded pool must queue the excess tasks and still aggregate
+        // every file (parallelism caps concurrency, never coverage).
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(4, 0L)),
+                brokerFileStatus(writeBigintParquet(4, 1000L)),
+                brokerFileStatus(writeBigintParquet(4, 2000L)),
+                brokerFileStatus(writeBigintParquet(4, 3000L)),
+                brokerFileStatus(writeBigintParquet(4, 4000L)),
+                brokerFileStatus(writeBigintParquet(4, 5000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 2;   // fewer threads than files
+        try {
+            Assertions.assertEquals(24L, totalRowCount(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE))));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void parallelReadPreservesFileOrder() throws Exception {
+        // The parallel branch collects futures in submission order, so the aggregated stats must land
+        // in the same order as the serial branch — the sampler downstream relies on a stable ordering.
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(16, 0L)),
+                brokerFileStatus(writeBigintParquet(24, 1000L)),
+                brokerFileStatus(writeBigintParquet(40, 2000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<Long> serialOrder = rowCountsInOrder(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE)));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<Long> parallelOrder = rowCountsInOrder(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE)));
+
+            Assertions.assertEquals(serialOrder, parallelOrder, "aggregated stats must keep file order");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
         return PresplitTestSupport.writeParquetFixture(
                 tempDirectory,
@@ -190,5 +339,9 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
 
     private static long totalRowCount(List<RowGroupStatistics> rowGroupStatistics) {
         return rowGroupStatistics.stream().mapToLong(RowGroupStatistics::getRowCount).sum();
+    }
+
+    private static List<Long> rowCountsInOrder(List<RowGroupStatistics> rowGroupStatistics) {
+        return rowGroupStatistics.stream().map(RowGroupStatistics::getRowCount).toList();
     }
 }
