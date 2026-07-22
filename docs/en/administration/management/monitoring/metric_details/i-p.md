@@ -239,6 +239,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 ## `local_column_pool_bytes (Deprecated)`
 
+## `low_cardinality_dict_cache_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Total byte size of cached dictionary data in the low-cardinality global dictionary cache (`CacheDictManager`) on this FE. Tracked exactly by the cache (not sampled); it counts serialized dictionary data, which is a lower bound on the actual heap footprint. The cache is bounded by this size via the `low_cardinality_dict_cache_max_bytes` configuration.
+
 ## `max_disk_io_util_percent`
 
 - Unit: -

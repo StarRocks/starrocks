@@ -27,6 +27,8 @@ public final class ColumnDict {
     // while version means version in current period.
     private final long collectedVersion;
     private long version;
+    // Serialized dict bytes, precomputed so the cache weigher is O(1).
+    private final int byteSize;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long version) {
         // TODO: The default value of low_cardinality_threshold is 255. Should we set the check size to 255 or 256?
@@ -35,12 +37,26 @@ public final class ColumnDict {
         this.dict = dict;
         this.collectedVersion = version;
         this.version = version;
+        this.byteSize = computeByteSize(dict);
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
         this.dict = dict;
         this.collectedVersion = collectedVersion;
         this.version = version;
+        this.byteSize = computeByteSize(dict);
+    }
+
+    private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
+        int size = 0;
+        for (ByteBuffer buf : dict.keySet()) {
+            size += buf.limit() - buf.position() + Integer.BYTES; // string bytes + offset id
+        }
+        return size;
+    }
+
+    public int getByteSize() {
+        return byteSize;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {

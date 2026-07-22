@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -55,6 +56,9 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
+    // Estimated overhead for node + key + future, rounded up
+    public static final int ENTRY_OVERHEAD_BYTES = 256;
+
     public CacheDictManager() {
     }
 
@@ -71,7 +75,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 CompletableFuture<Optional<ColumnDict>> asyncLoad(
                         @NonNull ColumnIdentifier columnIdentifier,
                         @NonNull Executor executor) {
-                    return CompletableFuture.supplyAsync(() -> {
+                    CompletableFuture<Optional<ColumnDict>> future = CompletableFuture.supplyAsync(() -> {
                         try {
                             long tableId = columnIdentifier.getTableId();
                             ColumnId columnName = columnIdentifier.getColumnName();
@@ -96,6 +100,16 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                             throw new CompletionException(e);
                         }
                     }, executor);
+                    // Rejected columns are also in NO_DICT_STRING_COLUMNS (which short-circuits lookups),
+                    // so their cached empty is redundant and never invalidated -- drop it so empties can't
+                    // pile up under the byte cap. Async so it runs after Caffeine stores the entry.
+                    future.whenCompleteAsync((result, throwable) -> {
+                        if (throwable == null && result != null && !result.isPresent()
+                                && NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
+                            dictStatistics.synchronous().invalidate(columnIdentifier);
+                        }
+                    }, executor);
+                    return future;
                 }
 
                 @Override
@@ -106,10 +120,36 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 }
             };
 
+    // Bounded by total dict bytes, not entry count. Empty Optional (non-low-card column) weighs the overhead only.
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .maximumSize(Config.statistic_dict_columns)
+            .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
+            .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
+                    ENTRY_OVERHEAD_BYTES + value.map(ColumnDict::getByteSize).orElse(0))
             .executor(ThreadPoolManager.getDictCacheThread())
             .buildAsync(dictLoader);
+
+    // Exact total dict bytes, maintained by Caffeine (O(1)). Serialized size, a lower bound on heap.
+    public long getCacheWeightedBytes() {
+        return dictStatistics.synchronous().policy().eviction()
+                .map(eviction -> eviction.weightedSize().orElse(0L))
+                .orElse(0L);
+    }
+
+    // Apply low_cardinality_dict_cache_max_bytes changes to the live cache. Called once, after GlobalStateMgr is up.
+    public void registerConfigRefreshListener() {
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::refreshCacheMaximum);
+    }
+
+    private void refreshCacheMaximum() {
+        dictStatistics.synchronous().policy().eviction().ifPresent(eviction -> {
+            long oldMax = eviction.getMaximum();
+            long newMax = Config.low_cardinality_dict_cache_max_bytes;
+            if (oldMax != newMax) {
+                eviction.setMaximum(newMax);
+                LOG.info("update dict cache max bytes from {} to {}", oldMax, newMax);
+            }
+        });
+    }
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, ColumnId columnName, TStatisticData statisticData) {
         if (statisticData.dict == null) {

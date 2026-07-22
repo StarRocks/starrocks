@@ -561,3 +561,12 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
+
+### `low_cardinality_dict_cache_max_bytes`
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
+- Introduced in: v3.5.10
