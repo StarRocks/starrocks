@@ -2613,6 +2613,12 @@ public class SchemaChangeHandler extends AlterHandler {
         // available; the dispatch tail then classifies it as either a metadata-only trailing sort-key
         // add (async schema-evolution job) or the rewrite fallback.
         boolean rangeKeyAddPending = false;
+        // Set when a MODIFY COLUMN that widens an integer range sort-key column on a shared-data range
+        // table is routed (needsRangeRewriteSchemaChange + modifyColumnWidensRangeSortKeyIntType). Like
+        // rangeKeyAddPending, clause processing continues through finalAnalyze (preserving its
+        // compatibility / partition-column / short-key validation); the dispatch tail then builds the
+        // K-tablet rewrite job with the widened schema and the preserved sort key.
+        boolean rangeKeyWidenPending = false;
         // NOTE: be very careful with the order of processing alter clauses and early return!!!
         // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
@@ -2793,7 +2799,16 @@ public class SchemaChangeHandler extends AlterHandler {
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
                 AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.MODIFY_COLUMN);
                 List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
-                if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
+                boolean routedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, modifyColumnClause);
+                if (routedRangeRewrite && modifyColumnWidensRangeSortKeyIntType(olapTable, modifyColumnClause)) {
+                    // An in-scope integer widen of a range sort-key column on a shared-data range table:
+                    // route to the K-tablet data rewrite (data is recast to the wider type, boundaries
+                    // re-sampled). Do NOT early-return -- continue through finalAnalyze (compatibility /
+                    // partition-column / short-key validation), then build the job in the dispatch tail.
+                    rangeKeyWidenPending = true;
+                }
+                if (routedRangeRewrite
+                        && modifyColumnShiftsRangeSortKey(olapTable, modifyColumnClause)
                         && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
                     // A keyness flip on a shared-data range table whose flip shifts the range sort key:
                     // re-route/re-sort/re-aggregate all data into a freshly sampled K-tablet shadow
@@ -2919,6 +2934,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
             return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+        }
+
+        if (rangeKeyWidenPending) {
+            // A routed in-scope integer widen of a range sort-key column on a shared-data range table:
+            // rewrite all data into the wider type via a freshly sampled K-tablet shadow index, keeping
+            // the existing sort key. Single-clause only (mirrors the keyness-flip / ADD routing): a batch
+            // must not ship another clause's change under the rewritten schema.
+            if (alterClauses.size() > 1) {
+                throw new DdlException("MODIFY COLUMN that widens a range sort-key column on a "
+                        + "range-distribution table can not be combined with other alter operations");
+            }
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+            return createRangeRewriteJobForKeyWiden(db, olapTable,
+                    indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
         }
 
         if (!fastSchemaEvolution) {
@@ -4864,7 +4894,9 @@ public class SchemaChangeHandler extends AlterHandler {
             return ((ReorderColumnsClause) clause).getColumnsByPos().size() != table.getBaseSchema().size();
         }
         if (clause instanceof ModifyColumnClause) {
-            return modifyColumnShiftsRangeSortKey(table, (ModifyColumnClause) clause);
+            ModifyColumnClause modifyClause = (ModifyColumnClause) clause;
+            return modifyColumnShiftsRangeSortKey(table, modifyClause)
+                    || modifyColumnWidensRangeSortKeyIntType(table, modifyClause);
         }
         if (clause instanceof DropColumnClause) {
             String dropCol = ((DropColumnClause) clause).getColName();
@@ -4948,6 +4980,123 @@ public class SchemaChangeHandler extends AlterHandler {
                         keynessOverride).stream()
                 .map(Column::getName).collect(Collectors.toList());
         return !currentSortKeyNames.equals(candidateSortKeyNames);
+    }
+
+    /**
+     * Whether a MODIFY COLUMN widens an integer column that is in the base index's range sort key, with
+     * everything else about the column unchanged -- an order-preserving type widen that keeps every key
+     * value logically identical. Such a change is routed to {@link LakeRangeRewriteSchemaChangeJob},
+     * which rewrites the data into the wider type (the on-disk short-key index / segment metadata / range
+     * boundaries are re-derived at the wide type, so there is no mixed-width state to reconcile).
+     *
+     * <p>Eligible iff ALL of: the clause has no position move ({@code getColPos() == null}) and no rollup
+     * target -- the rewrite builder preserves the existing positional {@code sortKeyIdxes}, so a move
+     * would mis-map the sort key, and a {@link Column} comparison cannot observe position; the table is
+     * not PRIMARY_KEYS; the modified column is in the range sort key; and the resolved modified column
+     * differs from the original ONLY in the type ({@link Column#differsOnlyInType}, so keyness /
+     * nullability / default / aggregation / generated status are all unchanged, and generated columns are
+     * excluded on both sides), where the type change is an in-scope integer widen
+     * ({@link #isInScopeIntegerWiden}). A bundled nullability relaxation or default change, a generated
+     * column, or a position move therefore is NOT a pure widen and keeps its current (reject) behavior --
+     * finalAnalyze does not reject those on its own.
+     */
+    private static boolean modifyColumnWidensRangeSortKeyIntType(OlapTable table, ModifyColumnClause clause) {
+        // A position move, rollup target, or column properties are real changes beyond a pure type widen;
+        // the rewrite builder consumes only the resolved schema + preserved sort key, so reject them here
+        // (a Column comparison cannot observe them). Mirrors the guards in isCommentOnlyModification.
+        if (clause.getColPos() != null || clause.getRollupName() != null
+                || (clause.getProperties() != null && !clause.getProperties().isEmpty())) {
+            return false;
+        }
+        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        if (indexMeta == null) {
+            return false;
+        }
+        String columnName = clause.getColumnDef().getName();
+        Column oriColumn = null;
+        for (Column column : indexMeta.getSchema()) {
+            if (column.getName().equalsIgnoreCase(columnName)) {
+                oriColumn = column;
+                break;
+            }
+        }
+        if (oriColumn == null) {
+            return false;
+        }
+        boolean inRangeSortKey = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase(columnName));
+        if (!inRangeSortKey) {
+            return false;
+        }
+        Column modColumn = buildColumnInternal(clause.getColumnDef(), table);
+        if (oriColumn.isGeneratedColumn() || modColumn.isGeneratedColumn()) {
+            return false;
+        }
+        // Resolve the modified column's keyness exactly as processModifyColumn does before comparing:
+        // AGG_KEYS promotes a no-aggregation column to KEY, so `MODIFY COLUMN k BIGINT` (no KEY spelled)
+        // on an AGG table is still a pure key-type widen. Without this, the raw ColumnDef keyness would
+        // make differsOnlyInType spuriously reject it.
+        modColumn.setIsKey(resolveModifyColumnKeyness(table, clause.getColumnDef(), oriColumn));
+        return oriColumn.differsOnlyInType(modColumn)
+                && isInScopeIntegerWiden(oriColumn.getPrimitiveType(), modColumn.getPrimitiveType());
+    }
+
+    /**
+     * Whether {@code mod} is a strictly wider integer type than {@code ori}, within the in-scope integer
+     * family TINYINT &lt; SMALLINT &lt; INT &lt; BIGINT. LARGEINT is intentionally excluded (it crosses the
+     * FE {@code IntVariant} -&gt; {@code LargeIntVariant} boundary), as are all non-integer types.
+     */
+    private static boolean isInScopeIntegerWiden(PrimitiveType ori, PrimitiveType mod) {
+        int a = integerWidenRank(ori);
+        int b = integerWidenRank(mod);
+        return a > 0 && b > 0 && b > a;
+    }
+
+    private static int integerWidenRank(PrimitiveType type) {
+        if (type == null) {
+            return -1;
+        }
+        switch (type) {
+            case TINYINT:
+                return 1;
+            case SMALLINT:
+                return 2;
+            case INT:
+                return 3;
+            case BIGINT:
+                return 4;
+            default:
+                return -1;
+        }
+    }
+
+    /**
+     * Build a {@link LakeRangeRewriteSchemaChangeJob} for an in-scope integer widen of a range sort-key
+     * column (see {@link #modifyColumnWidensRangeSortKeyIntType}). Unlike the keyness-flip builder
+     * {@link #createRangeRewriteJob(Database, OlapTable, List)}, this does NOT strip the shadow name
+     * prefix (the widened column stays {@code __starrocks_shadow_}-prefixed so InsertPlanner materializes
+     * it as {@code CAST(origin AS widetype)}) and does NOT re-derive the sort key from key columns:
+     * a widen changes no key membership/order, so the table's EXISTING base-index sort key
+     * ({@code sortKeyIdxes}/{@code sortKeyUniqueIds}) is preserved verbatim (unique-ids/positions survive
+     * a MODIFY), including a divergent explicit {@code ORDER BY}. The short-key count is recomputed for
+     * the widened schema (a wider trailing key can shrink the short-key budget).
+     */
+    private AlterJobV2 createRangeRewriteJobForKeyWiden(Database db, OlapTable olapTable, List<Column> newSchema)
+            throws StarRocksException {
+        Preconditions.checkState(newSchema != null, "range-rewrite widen: missing new schema for base index");
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Integer> sortKeyIdxes = indexMeta.getSortKeyIdxes();
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        short shortKeyColumnCount = (sortKeyIdxes != null)
+                ? GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes)
+                : GlobalStateMgr.calcShortKeyColumnCount(newSchema, null);
+        return buildRangeRewriteJob(db, olapTable, baseIndexMetaId, newSchema, olapTable.getKeysType(),
+                sortKeyIdxes, sortKeyUniqueIds, shortKeyColumnCount);
     }
 
     /**

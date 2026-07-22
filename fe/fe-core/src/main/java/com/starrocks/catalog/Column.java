@@ -1004,6 +1004,55 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.isHidden == other.isHidden();
     }
 
+    /**
+     * Whether {@code other} differs from this column in {@link #getType()} ONLY -- i.e. a pure type
+     * change. Every other column attribute {@link #equals(Object)} considers must be identical,
+     * including {@link #isKey()} (keyness unchanged), except the comment (ignored, as in
+     * {@link #differsOnlyInKeyness}). The type is intentionally NOT compared here; the caller decides
+     * whether the type change is an allowed conversion (e.g. an order-preserving integer widen).
+     *
+     * <p>Maintenance: like {@link #differsOnlyInKeyness}, this attribute list must stay in sync with
+     * the column's compatibility checks (the fields {@link #equals(Object)} considers). If a new
+     * attribute is added there but not here, a MODIFY COLUMN that changes only that new attribute
+     * would be misclassified as a pure type change.
+     */
+    public boolean differsOnlyInType(Column other) {
+        if (other == null) {
+            return false;
+        }
+        if (!this.name.equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+        if (this.isKey != other.isKey) {
+            return false;
+        }
+        if (!(this.aggregationType == other.aggregationType ||
+                (AggregateType.isNullOrNone(this.aggregationType) &&
+                        AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            return false;
+        }
+        if (this.isAllowNull != other.isAllowNull) {
+            return false;
+        }
+        if (!this.isSameDefaultValue(other)) {
+            return false;
+        }
+        if (this.isGeneratedColumn() != other.isGeneratedColumn()) {
+            return false;
+        }
+        if (this.isGeneratedColumn() &&
+                !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
+            return false;
+        }
+        if (this.isAutoIncrement != other.isAutoIncrement) {
+            return false;
+        }
+        return this.isHidden == other.isHidden();
+    }
+
     public boolean isSchemaCompatible(Column other) {
         if (!this.name.equalsIgnoreCase(other.getName())) {
             return false;

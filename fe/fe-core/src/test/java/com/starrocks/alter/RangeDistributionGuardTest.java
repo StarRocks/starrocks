@@ -338,6 +338,183 @@ public class RangeDistributionGuardTest {
                 "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
     }
 
+    // ---- Integer sort-key widen -> data-rewrite route ----
+
+    // A range table with NOT NULL integer keys, so `MODIFY COLUMN k BIGINT KEY NOT NULL` is a PURE type
+    // widen (keyness + nullability unchanged). `keys`/`orderBy` let a test diverge the sort key from the
+    // key columns.
+    private static String intKeyRangeTableDdl(String name, String colDefs, String keys, String orderBy) {
+        return "create table " + name + " (" + colDefs + ")\n" + keys + "\norder by(" + orderBy + ")\n"
+                + "properties('replication_num' = '1');";
+    }
+
+    private AlterJobV2 buildJobFor(String tableName, String alterSql) throws Exception {
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", tableName);
+        return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenRoutedToRangeRewrite() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_dup",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_dup", "alter table t_widen_dup modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
+        // The rewrite carries the WIDENED column type (shadow-prefixed until flip).
+        LakeRangeRewriteSchemaChangeJob rewrite = (LakeRangeRewriteSchemaChangeJob) job;
+        Column widened = rewrite.getNewSchema().stream()
+                .filter(c -> Column.removeNamePrefix(c.getName()).equalsIgnoreCase("k1"))
+                .findFirst().orElseThrow();
+        assertEquals(PrimitiveType.BIGINT, widened.getPrimitiveType(),
+                "widened key must carry the new BIGINT type in the rewrite schema");
+        // The boundary sampler projects the widened key as CAST(origin AS wide) -- the real values, not a
+        // constant default (which would collapse the boundaries).
+        List<String> projection = rewrite.buildSampleProjectionForTest(
+                new java.util.TreeSet<>(java.util.List.of("k1", "k2", "v1")));
+        assertTrue(projection.stream().anyMatch(p -> p.toLowerCase(Locale.ROOT).contains("cast(`k1`")
+                        && p.toLowerCase(Locale.ROOT).contains("bigint")),
+                "sample projection must CAST the origin k1 to bigint, got: " + projection);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenPreservesExplicitSortKey() throws Exception {
+        // Sort key (k2, k1) diverges from the key column order (k1, k2). A widen of k1 must PRESERVE the
+        // explicit sort key, not re-derive it from the key columns.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_orderby",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k2, k1"));
+        AlterJobV2 job = buildJobFor("t_widen_orderby",
+                "alter table t_widen_orderby modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "newSortKeyIdxes");
+        assertEquals(List.of(1, 0), sortKeyIdxes,
+                "explicit ORDER BY (k2, k1) must be preserved across the widen, not re-derived to (k1, k2)");
+    }
+
+    @Test
+    public void testModifyIntKeyWidenTinyintToIntRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_tiny",
+                "k1 tinyint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_tiny", "alter table t_widen_tiny modify column k1 int key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenAggRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_agg",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int SUM", "AGGREGATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_agg", "alter table t_widen_agg modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenUniqueRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_uniq",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "UNIQUE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_uniq", "alter table t_widen_uniq modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyDupValueColumnInSortKeyWidenRouted() throws Exception {
+        // A DUP table can sort by a value column: ORDER BY (k1, v1) makes v1 a range sort-key column.
+        // Widening v1 (staying a value column) is still a pure widen of a range sort-key column and routes.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_dupval",
+                "k1 int NOT NULL, k2 int, v1 int NOT NULL", "DUPLICATE KEY(k1)", "k1, v1"));
+        AlterJobV2 job = buildJobFor("t_widen_dupval", "alter table t_widen_dupval modify column v1 bigint not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a DUP value column in the range sort key must route when widened, got: " + job);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenAggWithoutKeyKeywordRouted() throws Exception {
+        // On an AGG table a column with no aggregation method is a key column, so `MODIFY COLUMN k1
+        // BIGINT NOT NULL` (KEY omitted) still preserves keyness -- it is a pure widen and must route.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_agg_nokw",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int SUM", "AGGREGATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_agg_nokw", "alter table t_widen_agg_nokw modify column k1 bigint not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "an AGG key widen without the KEY keyword must still route, got: " + job);
+    }
+
+    @Test
+    public void testModifyKeyBigintToLargeintNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_large",
+                "k1 bigint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // BIGINT -> LARGEINT crosses the IntVariant/LargeIntVariant boundary: not an in-scope widen.
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_large modify column k1 largeint key not null");
+    }
+
+    @Test
+    public void testModifyKeyNarrowingNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_narrow",
+                "k1 bigint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_narrow modify column k1 int key not null");
+    }
+
+    @Test
+    public void testModifyKeyNonIntegerNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_nonint",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_nonint modify column k1 varchar(30) key not null");
+    }
+
+    @Test
+    public void testModifyIntKeyWidenWithPositionMoveNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_pos",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // A position move would break the preserved positional sort key -> not routed as a pure widen.
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_widen_pos modify column k1 bigint key not null first");
+    }
+
+    @Test
+    public void testModifyIntKeyBareDropKeyNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_bare",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // Bare MODIFY (no KEY) on a DUP key drops keyness -> a keyness change bundled with a type change,
+        // neither a pure widen nor a pure keyness flip -> rejected.
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_bare modify column k1 bigint");
+    }
+
+    @Test
+    public void testHashTableIntKeyWidenNotRoutedToRangeRewrite() throws Exception {
+        // Distribute by k2 so k1 (the widened key) is not the distribution column (modifying a
+        // distribution column is independently rejected, which would mask the routing check).
+        starRocksAssert.withTable("create table t_widen_hash (k1 int NOT NULL, k2 int NOT NULL, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\nDISTRIBUTED BY HASH(k2) BUCKETS 3\n"
+                + "properties('replication_num' = '1');");
+        // The universal wrapper (needsRangeRewriteSchemaChange requires isRangeDistribution) must keep a
+        // HASH-distributed table off the rewrite route.
+        AlterJobV2 job = buildJobFor("t_widen_hash", "alter table t_widen_hash modify column k1 bigint key not null");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a HASH-distributed table must NOT route to the range rewrite, got: " + job);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenMultiClauseRejected() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_multi",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        DdlException e = assertThrowsDdlException(() -> buildJobFor("t_widen_multi",
+                "alter table t_widen_multi modify column k1 bigint key not null, add column v2 int"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("combined"),
+                "expected a multi-clause rejection, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testModifyValueColumnWidenNotRoutedToRangeRewrite() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_value",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // v1 is NOT in the sort key: a value-column widen is an ordinary schema change, not the range rewrite.
+        AlterJobV2 job = buildJobFor("t_widen_value", "alter table t_widen_value modify column v1 bigint");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a non-sort-key value column widen must NOT route to the range rewrite, got: " + job);
+    }
+
     @Test
     public void testOptimizeRejectedOnRangeDistribution() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_optimize"));
@@ -517,15 +694,19 @@ public class RangeDistributionGuardTest {
                 "alter table t_guard_shrink modify column k1 varchar(5) KEY NOT NULL");
     }
 
+    // An integer sort-key widen (INT -> BIGINT) is now ROUTED to the data-rewrite job (see
+    // testModifyIntKeyWidenRoutedToRangeRewrite). A type change that is NOT an in-scope integer widen --
+    // e.g. INT -> DECIMAL, which changes the FE Variant subclass -- stays rejected by the range-sort-key
+    // guard.
     @Test
-    public void testNonVarcharTypeChangeSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+    public void testNonIntegerTypeChangeSortKeyColumnRejectedOnRangeDistribution() throws Exception {
         starRocksAssert.withTable(
                 "create table t_guard_int (k1 int NOT NULL, k2 int NOT NULL, v1 int)\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "order by(k1, k2)\n" +
                 "properties('replication_num' = '1');");
         assertAlterRejectedWithRangeDistribution(
-                "alter table t_guard_int modify column k1 bigint KEY NOT NULL");
+                "alter table t_guard_int modify column k1 decimal(20, 0) KEY NOT NULL");
     }
 
     /**
