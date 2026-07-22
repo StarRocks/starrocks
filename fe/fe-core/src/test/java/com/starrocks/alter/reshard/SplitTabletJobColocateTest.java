@@ -532,9 +532,13 @@ public class SplitTabletJobColocateTest {
                 .getLatestBaseIndex().getShardGroupId();
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
-            // Return ONLY the first child's range (the whole unsplit range) → BE identical fallback.
+            // Return ONLY the first child's range → the missing second range triggers BE identical
+            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). The concrete range
+            // is contained in the single owning ColocateRange so the reconcile can place it; the
+            // identical flag itself is size-based (newTabletIds.size() == 1), not range-based.
             Map<Long, TabletRangePB> result = new HashMap<>();
-            result.put(newTabletIds.get(0), new TabletRange().toProto());
+            result.put(newTabletIds.get(0),
+                    new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
             return result;
         });
         Map<Long, List<Long>> reassignedAdd = new HashMap<>();
