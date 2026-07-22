@@ -37,6 +37,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/load_spill_pipeline_merge_context.h"
@@ -267,12 +268,14 @@ private:
 
     int64_t _max_buffer_size;
 
-    // Snapshot the in-transaction upsert/delete-order feature flag once for the whole load.
-    // lake_enable_pk_preserve_txn_delete_order is a mutable BE config, but it must not change
-    // mid-load: it drives both whether the spill path keeps the __op column (fixing LoadChunkSpiller's
-    // serde/schema from the first chunk) and whether finish() emits the del_op_offsets array. Reading
-    // it live in each place could tear a single load across the legacy and op-aware paths.
-    const bool _preserve_txn_delete_order = config::lake_enable_pk_preserve_txn_delete_order;
+    // Effective "preserve in-transaction upsert/delete order" for this load, snapshotted ONCE (in
+    // build_schema_and_writer, once the schema is known) via pk_preserve_txn_delete_order_enabled(): the
+    // config OR the separate-sort-key load-spill path (which always needs op-aware ordering). It must not
+    // change mid-load: it drives both whether the spill path keeps the __op column (fixing
+    // LoadChunkSpiller's serde/schema from the first chunk) and whether finish() emits del_op_offsets.
+    // Reading the mutable configs live in each place could tear a single load across the legacy and
+    // op-aware paths.
+    bool _preserve_txn_delete_order = false;
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
@@ -401,15 +404,23 @@ const DictColumnsValidMap* DeltaWriterImpl::global_dict_columns_valid_info() con
 //    WHY: Condition merge requires reading old values during ingestion, which conflicts with spilling
 // 2. Partial updates are involved
 //    WHY: Partial updates need to merge with existing data, requiring all columns in memory
-// 3. Separate sort keys are used
-//    WHY: Sort key handling requires special memory layout incompatible with spilling
+// 3. Separate sort keys are used AND eager PK-index build is NOT supported for this schema
+//    Note: separate-sort-key tables normally DO spill -- the spill orders the merge output by the
+//    sort key (primary keys are not adjacent), so duplicate primary keys are resolved by the unsort
+//    SST writer, which runs under eager build. Spilling is disabled only for the narrow case where
+//    eager build is unavailable (V1 single non-VARCHAR/CHAR key, or metadata not yet cached), because
+//    there is then no unsort SST writer to resolve dups and lazy publish rebuild would tie-break by
+//    sort-key order instead of flush order. In that case the load falls back to the non-spill memtable
+//    path, which is correct: for PK tables the memtable sorts by primary key and removes duplicates
+//    first, then re-sorts by the sort key (see MemTable::_sort).
 //
 // For non-PK tables: Always allow spilling if globally enabled (no special constraints)
 bool DeltaWriterImpl::should_enable_load_spill() const {
     return config::enable_load_spill &&
            (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS ||
             ((config::ignore_merge_condition_inside_same_transaction || _merge_condition.empty()) &&
-             !is_partial_update() && !_tablet_schema->has_separate_sort_key()));
+             !is_partial_update() &&
+             (!_tablet_schema->has_separate_sort_key() || pk_index_eager_build_supported(*_tablet_schema))));
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -418,6 +429,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
+        // Snapshot the effective preserve-order decision once, now that the schema is known.
+        _preserve_txn_delete_order = pk_preserve_txn_delete_order_enabled(*_tablet_schema);
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                         _txn_id, nullptr, false /** no compaction**/,
@@ -432,6 +445,12 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
+            // Eager PK-index build (the unsort SST writer that a separate-sort-key spill load needs to
+            // dedup non-adjacent duplicate primary keys) is enabled at merge time by try_enable, which
+            // fires for any spilled load and, for separate-sort-key tables, regardless of size
+            // (merge_blocks_to_segments / init_parallel_merge). A single flush never spills and takes the
+            // direct write_single_flush* path, which does not need it. So there is no build-time force
+            // here; the decision follows the data volume (whether the load actually spills).
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
                 // Pass txn_id to LoadSpillBlockManager so that spill files are placed under
                 // the flat layout <tablet_root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq>,
@@ -845,11 +864,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         // Carry the per-del op_offset (parallel to dels_meta, index by del_id) so the apply/persist
         // path can preserve in-transaction upsert/delete ordering. A kUnknownDelOpOffset entry (spill /
         // concurrent flush) keeps the array aligned and is read as "not recorded" -> max segment id.
-        // Downgrade-safety gate: only emit the array when explicitly enabled. While disabled (the
-        // default), it stays empty so apply/persist/rebuild uniformly fall back to the legacy "delete
-        // after all segments" path -- this never writes the new on-disk state that a pre-fix BE
-        // (rollback / not-yet-upgraded node / cross-version OpReplication target) would misread into a
-        // duplicate primary key. See config::lake_enable_pk_preserve_txn_delete_order.
+        // Only emitted when the effective preserve-order snapshot is on (pk_preserve_txn_delete_order_enabled
+        // -- the config, which defaults on, OR any separate-sort-key table). The separate-sort-key path
+        // MUST emit it: its parallel merge can split a key's DELETE and later re-UPSERT across tasks, and
+        // without the offsets the earlier del file would erase the later re-insert. This is new on-disk
+        // state (del_op_offsets) that a pre-feature BE (rollback / not-yet-upgraded node / cross-version
+        // OpReplication target) would misread; its read side must be deployed fleet-wide before relying on
+        // it (see the seg_delvecs read-side backport).
         if (_preserve_txn_delete_order) {
             for (size_t i = 0; i < del_idx; ++i) {
                 op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
@@ -861,6 +882,24 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     }
     for (auto& sst_range : _tablet_writer->sst_ranges()) {
         op_write->add_sst_ranges()->CopyFrom(sst_range);
+    }
+    // Per-segment dedup delete vectors from the unsort SST writer (separate-sort-key PK). Kept
+    // parallel to `ssts` by index; an entry with no data means that segment had no dedup losers.
+    // The bitmap version is a placeholder here; publish stamps it with the real tablet version.
+    // Only the separate-sort-key path can leave intra-segment duplicate-PK losers, so only it emits
+    // seg_delvecs: the common sort-key==PK path would otherwise append one empty entry per SST (and hand
+    // a pre-feature publisher an unknown field for no reason). Publish guards missing indices as empty,
+    // so emitting nothing here is equivalent to emitting all-empty entries.
+    if (_tablet_schema->has_separate_sort_key()) {
+        for (const auto& seg_del_rowids : _tablet_writer->seg_delvecs()) {
+            auto* seg_delvec_pb = op_write->add_seg_delvecs();
+            if (!seg_del_rowids.empty()) {
+                DelVector dv;
+                dv.init(0 /* version stamped at publish */, seg_del_rowids.data(), seg_del_rowids.size());
+                seg_delvec_pb->set_version(0);
+                seg_delvec_pb->set_data(dv.save());
+            }
+        }
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());

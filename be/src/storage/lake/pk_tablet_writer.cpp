@@ -17,13 +17,17 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
 #include "common/config_rowset_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/Types_types.h"
 #include "platform/key_cache.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
+#include "storage/lake/pk_tablet_unsort_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
@@ -52,7 +56,7 @@ HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 Status HorizontalPkTabletWriter::write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
                                        SegmentPB* segment) {
     RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data, segment));
-    RETURN_IF_ERROR(_pk_sst_writer->append_sst_record(data));
+    RETURN_IF_ERROR(_pk_sst_writer->append_sst_record(data, &rssid_rowids));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
     }
@@ -63,6 +67,85 @@ Status HorizontalPkTabletWriter::write(const Chunk& data, SegmentPB* segment, bo
     RETURN_IF_ERROR(HorizontalGeneralTabletWriter::write(data, segment, eos));
     RETURN_IF_ERROR(_pk_sst_writer->append_sst_record(data));
     return Status::OK();
+}
+
+Status HorizontalPkTabletWriter::write_single_flush(const Chunk& data, SegmentPB* segment, bool eos) {
+    // See TabletWriter::write_single_flush. A single flush is unique-by-PK, so it does not need the eager
+    // unsort SST writer (whose sole job is cross-flush duplicate-key resolution). Clear the eager-build
+    // flag so reset_segment_writer builds a DefaultSSTWriter -> no eager PK-index SST; publish then
+    // rebuilds the index lazily via the order-independent parallel_upsert -- identical to the
+    // eager-build-off path. Safe to clear here: a single-flush load never spills/merges/clones, so
+    // reset_segment_writer (during this write) is the only remaining reader of the flag.
+    _enable_pk_index_eager_build = false;
+    return HorizontalGeneralTabletWriter::write(data, segment, eos);
+}
+
+Status HorizontalPkTabletWriter::write_single_flush_with_op(const Chunk& chunk_with_op, SegmentPB* segment, bool eos) {
+    // See TabletWriter::write_single_flush_with_op. The memtable already deduplicated this flush by
+    // primary key (last-op-wins), so it is unique-by-PK and each key is EITHER an upsert OR a delete --
+    // the unsort SST writer's cross-flush dedup is unnecessary. Split __op and route each part through the
+    // single-flush write: upserts to a plain sort-key-ordered segment (eager SST skipped), deletes encoded
+    // to a del file. Mirrors MemTable::_split_upserts_deletes + the flush_chunk_with_deletes shortcut.
+
+    // Work on a mutable copy: RawDataVisitor reads the op column via mutable_raw_data(), and we drop the
+    // __op column before writing the segment.
+    auto data_chunk = chunk_with_op.clone_unique();
+    const size_t op_col_id = data_chunk->num_columns() - 1;
+    const size_t nrows = data_chunk->num_rows();
+
+    // Read the trailing __op column (0 == UPSERT, otherwise DELETE) and partition rows BEFORE removing it
+    // (the raw-data pointer is invalidated by remove_column_by_index). Same as MemTable::_split_upserts_deletes.
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(data_chunk->get_column_by_index(op_col_id)->accept(&visitor));
+    const auto* ops = visitor.result();
+    std::vector<uint32_t> upsert_idx;
+    std::vector<uint32_t> delete_idx;
+    for (uint32_t i = 0; i < nrows; i++) {
+        (ops[i] == TOpType::DELETE ? delete_idx : upsert_idx).push_back(i);
+    }
+    const size_t ndel = delete_idx.size();
+
+    // Drop __op so the chunk matches the segment schema (data columns only).
+    data_chunk->remove_column_by_index(op_col_id);
+
+    if (ndel == 0) {
+        // All upserts: write the whole flush as one segment.
+        return write_single_flush(*data_chunk, segment, eos);
+    }
+
+    // Encode the delete rows' primary keys to a del file (same encoding the primary index uses).
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema()->primary_key_encoding_type_or_error());
+    std::vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema()->num_key_columns());
+    for (size_t i = 0; i < tablet_schema()->num_key_columns(); i++) {
+        pk_columns.push_back(static_cast<uint32_t>(i));
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema(), pk_columns);
+    MutableColumnPtr deletes;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &deletes, pk_encoding_type));
+    PrimaryKeyEncoder::encode_selective(pkey_schema, *data_chunk, delete_idx.data(), delete_idx.size(), deletes.get(),
+                                        pk_encoding_type);
+    RETURN_IF_ERROR(flush_del_file(*deletes, kUnknownDelOpOffset));
+
+    // Write only the upsert rows to the segment.
+    const size_t nupsert = upsert_idx.size();
+    auto upserts = data_chunk->clone_empty_with_schema(nupsert);
+    upserts->append_selective(*data_chunk, upsert_idx.data(), 0, nupsert);
+    return write_single_flush(*upserts, segment, eos);
+}
+
+Status HorizontalPkTabletWriter::append_pk_index_deletes(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) {
+    // The op-aware merge can feed DELETE rows before the first write() that lazily sets up the segment
+    // and SST writers (a delete-first or delete-only batch), so _pk_sst_writer may still be null here.
+    // Do the same lazy init write() does; guarding on _seg_writer == nullptr means the following upsert
+    // write() reuses this same segment/SST writer rather than resetting it (which would drop the deletes).
+    if (_seg_writer == nullptr) {
+        RETURN_IF_ERROR(reset_segment_writer(false));
+    }
+    // DELETE rows are only fed to the eager PK-index SST writer (to resolve the latest op per key);
+    // they are NOT written to a segment. Only the unsort SST writer acts on them; other SST writers
+    // no-op (deletes reach them via the caller's del file instead).
+    return _pk_sst_writer->append_delete_records(data, &rssid_rowids);
 }
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t op_offset) {
@@ -101,7 +184,13 @@ Status HorizontalPkTabletWriter::reset_segment_writer(bool eos) {
     // reset sst file writer
     if (_pk_sst_writer == nullptr) {
         if (enable_pk_index_eager_build()) {
-            _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            if (tablet_schema()->has_separate_sort_key()) {
+                // Separate sort key: primary keys arrive in sort-key (not PK) order, so buffer+sort
+                // them in the unsort writer instead of streaming into a sorted SST.
+                _pk_sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            } else {
+                _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            }
         } else {
             _pk_sst_writer = std::make_unique<DefaultSSTWriter>();
         }
@@ -152,6 +241,15 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         auto [sst_file_info, sst_range] = std::move(sst_ret);
         _ssts.emplace_back(sst_file_info);
         _sst_ranges.emplace_back(sst_range);
+        // Keep _seg_delvecs positionally aligned with _ssts (empty for the sort-key==PK path).
+        _seg_delvecs.emplace_back(_pk_sst_writer->take_deleted_rowids());
+        // The unsort writer (separate-sort-key op-aware path) cannot route deletes through the merge
+        // task's del file, so it hands back the winning DELETEs' encoded keys here; write them to a del
+        // file so publish erases the rows (including any written by an earlier transaction). op_offset is
+        // kUnknownDelOpOffset -- the real value is assigned when this batch is consolidated (merge_other_writer).
+        if (auto del_keys = _pk_sst_writer->take_delete_keys(); del_keys != nullptr && !del_keys->empty()) {
+            RETURN_IF_ERROR(flush_del_file(*del_keys, kUnknownDelOpOffset));
+        }
     }
     return Status::OK();
 }
@@ -200,14 +298,22 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
     if (_pk_sst_writers.size() <= _current_writer_index) {
         std::unique_ptr<DefaultSSTWriter> sst_writer;
         if (enable_pk_index_eager_build()) {
-            sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            if (tablet_schema()->has_separate_sort_key()) {
+                // Separate sort key: the vertical compaction task moves the PK columns into the key
+                // column group (appended after the sort-key columns), so this writer sees them here
+                // but not at chunk positions [0, num_key). The unsort writer buffers+sorts the PKs
+                // (they arrive in sort-key order) and projects them via `column_indexes`.
+                sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            } else {
+                sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+            }
         } else {
             sst_writer = std::make_unique<DefaultSSTWriter>();
         }
         RETURN_IF_ERROR(sst_writer->reset_sst_writer(_location_provider, _fs));
         _pk_sst_writers.emplace_back(std::move(sst_writer));
     }
-    RETURN_IF_ERROR(_pk_sst_writers[_current_writer_index]->append_sst_record(data));
+    RETURN_IF_ERROR(_pk_sst_writers[_current_writer_index]->append_sst_record(data, &rssid_rowids, &column_indexes));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->append(rssid_rowids));
     }
@@ -221,6 +327,7 @@ Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
             auto [sst_file_info, sst_range] = std::move(sst_ret);
             _ssts.emplace_back(sst_file_info);
             _sst_ranges.emplace_back(sst_range);
+            _seg_delvecs.emplace_back(sst_writer->take_deleted_rowids());
         }
     }
     _pk_sst_writers.clear();
