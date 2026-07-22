@@ -58,6 +58,12 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
         int field_number = read_params.next_uniq_id;
         for (auto& path : *read_params.column_access_paths) {
+            // See olap_meta_scanner: only JSONV2 extended (linear) paths become synthetic tablet
+            // columns; skip non-extended cbo_prune_subfield multi-child trees, which linear_path()
+            // cannot handle and which the reader consumes via its leaf iterator instead.
+            if (!path->is_extended()) {
+                continue;
+            }
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
 
