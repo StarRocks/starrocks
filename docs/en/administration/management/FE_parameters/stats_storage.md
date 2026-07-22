@@ -79,6 +79,14 @@ This topic introduces the following types of FE configurations:
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
 
+### `low_cardinality_dict_cache_max_bytes`
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
+- Introduced in: v4.1.0
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
