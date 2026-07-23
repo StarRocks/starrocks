@@ -14,6 +14,8 @@
 
 #include "exprs/binary_predicate.h"
 
+#include <cmath>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -442,7 +444,16 @@ public:
             } else {
                 // all not null = value eq
                 using CppType = RunTimeCppType<Type>;
-                builder.append(OP::template apply<CppType, CppType, bool>(v1.value(row), v2.value(row)));
+                CppType x = v1.value(row);
+                CppType y = v2.value(row);
+                if constexpr (std::is_floating_point_v<CppType>) {
+                    // Null-safe equal is "not distinct from": NaN is not distinct from NaN,
+                    // unlike plain '=' which keeps IEEE NaN != NaN.
+                    builder.append((std::isnan(x) && std::isnan(y)) ||
+                                   OP::template apply<CppType, CppType, bool>(x, y));
+                } else {
+                    builder.append(OP::template apply<CppType, CppType, bool>(x, y));
+                }
             }
         }
 
@@ -472,7 +483,10 @@ public:
             auto* elseif_value = IRHelper::bool_to_cond(b, b.CreateXor(l_null, r_null));
             llvm::Value* cmp;
             if constexpr (lt_is_float<Type>) {
-                cmp = b.CreateFCmpOEQ(l, r);
+                // Null-safe equal treats NaN as not distinct from NaN. FCmpOEQ is false for NaN,
+                // so OR in the both-NaN case (FCmpUNO(x, x) is true iff x is NaN).
+                auto* both_nan = b.CreateAnd(b.CreateFCmpUNO(l, l), b.CreateFCmpUNO(r, r));
+                cmp = b.CreateOr(b.CreateFCmpOEQ(l, r), both_nan);
             } else {
                 cmp = b.CreateICmpEQ(l, r);
             }
