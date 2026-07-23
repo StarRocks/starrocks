@@ -202,22 +202,22 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes");
         analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
         analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes");
-        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
-        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
+        analyzeSuccess("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vj), count(distinct vj1) from ttypes");
 
         // single count distinct
         analyzeSuccess("select count(distinct vm) from ttypes");
         analyzeSuccess("select count(distinct vs) from ttypes");
-        analyzeFail("select count(distinct vj) from ttypes");
+        analyzeSuccess("select count(distinct vj) from ttypes");
         analyzeSuccess("select count(distinct vm) from ttypes group by v1");
         analyzeSuccess("select count(distinct vs) from ttypes group by v1");
-        analyzeFail("select count(distinct vj) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vj) from ttypes group by v1");
         analyzeSuccess("select count(distinct va),count(distinct vm) from ttypes group by v1");
 
         // group by complex types
         analyzeSuccess("select count(*) from ttypes group by vm");
         analyzeSuccess("select count(*) from ttypes group by vs");
-        analyzeFail("select count(*) from ttypes group by vj");
+        analyzeSuccess("select count(*) from ttypes group by vj");
     }
 
     @Test

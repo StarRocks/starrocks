@@ -238,22 +238,33 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean canGroupBy() {
+        return canGroupBy(false);
+    }
+
+    // Staging mechanism (see design spec): JSON is groupable only at the top level.
+    // To later support nested JSON, change the JSON branch to `return true;` and
+    // collapse this back to the original uniform recursion.
+    private boolean canGroupBy(boolean nested) {
         if (isArrayType()) {
-            return ((ArrayType) this).getItemType().canGroupBy();
+            return ((ArrayType) this).getItemType().canGroupBy(true);
         }
         if (isMapType()) {
-            return ((MapType) this).getKeyType().canGroupBy() && ((MapType) this).getValueType().canGroupBy();
+            return ((MapType) this).getKeyType().canGroupBy(true)
+                    && ((MapType) this).getValueType().canGroupBy(true);
         }
         if (isStructType()) {
             for (StructField sf : ((StructType) this).getFields()) {
-                if (!sf.getType().canGroupBy()) {
+                if (!sf.getType().canGroupBy(true)) {
                     return false;
                 }
             }
             return true;
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType();
+        if (isJsonType()) {
+            // top-level JSON supports group by; nested JSON does not
+            return !nested;
+        }
+        return !isOnlyMetricType() && !isFunctionType() && !isVariantType();
     }
 
     public boolean canOrderBy() {
