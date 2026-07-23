@@ -38,6 +38,7 @@ namespace starrocks::pipeline {
 namespace {
 
 constexpr int TIMER_TASK_REMOVED = 0;
+constexpr int TIMER_TASK_RUNNING = 1;
 
 timespec past_abstime() {
     timespec ts = butil::microseconds_to_timespec(butil::gettimeofday_us());
