@@ -28,6 +28,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduClient;
 import org.apache.kudu.client.KuduException;
@@ -86,7 +87,9 @@ public class KuduMetadataTest {
     @Test
     public void testGetTable(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
-                SCHEMA_EMULATION_PREFIX, Optional.empty());
+                SCHEMA_EMULATION_PREFIX, Optional.empty(),
+                KuduConnector.DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
         new Expectations() {
             {
                 client.tableExists(anyString);
@@ -116,7 +119,9 @@ public class KuduMetadataTest {
     @Test
     public void testListTableNames() throws KuduException {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER,
-                true, SCHEMA_EMULATION_PREFIX, Optional.empty());
+                true, SCHEMA_EMULATION_PREFIX, Optional.empty(),
+                KuduConnector.DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
         List<String> tableNames = Lists.newArrayList("impala::db1.tbl1", "db1.tbl1");
         new Expectations() {
             {
@@ -132,7 +137,9 @@ public class KuduMetadataTest {
     @Test
     public void testGetRemoteFiles(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws KuduException {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
-                SCHEMA_EMULATION_PREFIX, Optional.empty());
+                SCHEMA_EMULATION_PREFIX, Optional.empty(),
+                KuduConnector.DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
         new Expectations() {
             {
@@ -159,7 +166,9 @@ public class KuduMetadataTest {
     @Test
     public void testUnsupportedGetTableStatistics(@Mocked org.apache.kudu.client.KuduTable mockedTable) throws Exception {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
-                SCHEMA_EMULATION_PREFIX, Optional.empty());
+                SCHEMA_EMULATION_PREFIX, Optional.empty(),
+                KuduConnector.DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
         RpcRemoteException exception = createRpcRemoteException("server sent error Invalid argument: " +
                 "Call on service kudu.master.MasterService received at " +
                 "0.0.0.0:7051 from 0.0.0.0:43670 with an invalid method name: GetTableStatistics");
@@ -180,6 +189,81 @@ public class KuduMetadataTest {
                 TvrTableSnapshot.empty());
         Assertions.assertEquals((double) Config.default_statistics_output_row_count,
                 statistics.getOutputRowCount(), 0.01);
+    }
+
+    @Test
+    public void testKuduClientCacheKeyIncludesTimeouts() {
+        // Use a master address distinct from other tests so the static client cache is not polluted
+        // by entries created elsewhere in this test class.
+        String master = "localhost:17051";
+        long opTimeoutSmall = 60_000L;
+        long opTimeoutLarge = 90_000L;
+        long adminTimeout = 45_000L;
+
+        // First catalog with the smaller op timeout populates the cache.
+        new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), master, true,
+                SCHEMA_EMULATION_PREFIX, Optional.empty(), opTimeoutSmall, adminTimeout);
+        Assertions.assertTrue(
+                KuduMetadata.clientCacheContains(master, opTimeoutSmall, adminTimeout),
+                "Cache should contain the first catalog's (master, opTimeout, adminTimeout) key");
+
+        // A second catalog pointing to the same master but with a different op timeout must not be
+        // collapsed onto the first entry — the cache key has to honour the timeout configuration.
+        new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), master, true,
+                SCHEMA_EMULATION_PREFIX, Optional.empty(), opTimeoutLarge, adminTimeout);
+        Assertions.assertTrue(
+                KuduMetadata.clientCacheContains(master, opTimeoutLarge, adminTimeout),
+                "Second catalog with a larger op timeout should produce a distinct client cache entry");
+
+        // The first entry must remain reachable (i.e. the second catalog did not evict it).
+        Assertions.assertTrue(
+                KuduMetadata.clientCacheContains(master, opTimeoutSmall, adminTimeout),
+                "First catalog's cache entry must still be present after the second catalog is created");
+
+        // Distinct admin timeout must also produce a distinct cache entry.
+        long adminTimeoutLarger = 90_000L;
+        new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), master, true,
+                SCHEMA_EMULATION_PREFIX, Optional.empty(), opTimeoutSmall, adminTimeoutLarger);
+        Assertions.assertTrue(
+                KuduMetadata.clientCacheContains(master, opTimeoutSmall, adminTimeoutLarger),
+                "Catalog with a different admin timeout should produce a distinct client cache entry");
+    }
+
+    @Test
+    public void testGetRemoteFilesEncodesScanRequestTimeout(@Mocked org.apache.kudu.client.KuduTable mockedTable,
+            @Mocked KuduScanToken.KuduScanTokenBuilder builder) throws KuduException {
+        // The configured operation timeout must be encoded into every scan token via
+        // KuduScanTokenBuilder.scanRequestTimeout(...) so the BE-side scanner honours it. Deleting that
+        // call in KuduMetadata.getRemoteFiles makes the Verifications block below fail (regression lock).
+        long customOpTimeout = 600_000L;
+        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
+                SCHEMA_EMULATION_PREFIX, Optional.empty(),
+                customOpTimeout,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
+        List<String> requiredNames = Lists.newArrayList("f2", "dt");
+        new Expectations() {
+            {
+                client.tableExists(anyString);
+                result = true;
+                client.openTable(anyString);
+                result = mockedTable;
+                client.newScanTokenBuilder((org.apache.kudu.client.KuduTable) any);
+                result = builder;
+                builder.build();
+                result = tokens;
+            }
+        };
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
+        KuduTable kuduTable = (KuduTable) table;
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build();
+        metadata.getRemoteFiles(kuduTable, params);
+
+        new Verifications() {
+            {
+                builder.scanRequestTimeout(customOpTimeout);
+                times = 1;
+            }
+        };
     }
 
     private RpcRemoteException createRpcRemoteException(String message) throws Exception {
