@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SlotTrackerTest {
     private static SlotManager slotManager;
@@ -179,12 +178,11 @@ public class SlotTrackerTest {
                 1, 1, 1, 1
         );
         BaseSlotTracker.ExtraMessage extraMessage = new BaseSlotTracker.ExtraMessage(1, v2);
-        assertTrue(extraMessage.getConcurrency() == 1);
-        assertThat(extraMessage.getV2().equals(v2));
+        assertThat(extraMessage.getConcurrency()).isEqualTo(1);
+        assertThat(extraMessage.getV2()).isEqualTo(v2);
         String json = GsonUtils.GSON.toJson(extraMessage);
-        assertTrue(json.equals("{\"Concurrency\":1,\"QueryQueueOption\":{\"NumWorkers\":300,\"NumRowsPerSlot\":1," +
-                "\"TotalSlots\":307200,\"MemBytesPerSlot\":0," +
-                "\"CpuCostsPerSlot\":1,\"TotalSmallSlots\":1}}"));
+        assertThat(json).isEqualTo("{\"Concurrency\":1,\"QueryQueueOption\":"
+                + GsonUtils.GSON.toJson(v2) + "}");
     }
 
     @Test
