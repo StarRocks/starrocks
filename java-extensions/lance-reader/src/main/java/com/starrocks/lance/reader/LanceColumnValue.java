@@ -25,10 +25,15 @@ import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.SmallIntVector;
-import org.apache.arrow.vector.TimeStampMicroVector;
+import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.complex.BaseListVector;
+import org.apache.arrow.vector.complex.FixedSizeListVector;
+import org.apache.arrow.vector.complex.ListVector;
+import org.apache.arrow.vector.types.TimeUnit;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -117,19 +122,58 @@ public class LanceColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
-        if (vector instanceof TimeStampMicroVector) {
-            long micros = ((TimeStampMicroVector) vector).get(rowIndex);
-            long epochSecond = micros / 1_000_000;
-            int nanoAdjustment = (int) ((micros % 1_000_000) * 1000);
+        if (vector instanceof TimeStampVector) {
+            long value = ((TimeStampVector) vector).get(rowIndex);
+            TimeUnit unit = ((ArrowType.Timestamp) vector.getField().getType()).getUnit();
+            long unitsPerSecond;
+            int nanosPerUnit;
+            switch (unit) {
+                case SECOND:
+                    unitsPerSecond = 1;
+                    nanosPerUnit = 0;
+                    break;
+                case MILLISECOND:
+                    unitsPerSecond = 1_000;
+                    nanosPerUnit = 1_000_000;
+                    break;
+                case MICROSECOND:
+                    unitsPerSecond = 1_000_000;
+                    nanosPerUnit = 1_000;
+                    break;
+                case NANOSECOND:
+                    unitsPerSecond = 1_000_000_000;
+                    nanosPerUnit = 1;
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unsupported Arrow timestamp unit: " + unit);
+            }
+            long epochSecond = Math.floorDiv(value, unitsPerSecond);
+            int nanoAdjustment = (int) (Math.floorMod(value, unitsPerSecond) * nanosPerUnit);
             return LocalDateTime.ofInstant(
                     Instant.ofEpochSecond(epochSecond, nanoAdjustment), ZoneOffset.UTC);
         }
-        return LocalDateTime.ofInstant(Instant.EPOCH, ZoneOffset.UTC);
+        throw new IllegalStateException("Expected Arrow timestamp vector, got: " + vector.getClass().getName());
     }
 
     @Override
     public void unpackArray(List<ColumnValue> values) {
-        throw new UnsupportedOperationException("Lance array type is not yet supported.");
+        if (!(vector instanceof BaseListVector)) {
+            throw new IllegalStateException("Expected Arrow list vector, got: " + vector.getClass().getName());
+        }
+        BaseListVector listVector = (BaseListVector) vector;
+        FieldVector dataVector;
+        if (vector instanceof ListVector) {
+            dataVector = ((ListVector) vector).getDataVector();
+        } else if (vector instanceof FixedSizeListVector) {
+            dataVector = ((FixedSizeListVector) vector).getDataVector();
+        } else {
+            throw new IllegalStateException("Unsupported Arrow list vector: " + vector.getClass().getName());
+        }
+        int start = listVector.getElementStartIndex(rowIndex);
+        int end = listVector.getElementEndIndex(rowIndex);
+        for (int i = start; i < end; i++) {
+            values.add(dataVector.isNull(i) ? null : new LanceColumnValue(dataVector, i));
+        }
     }
 
     @Override
