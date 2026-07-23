@@ -21,6 +21,7 @@ from alembic.autogenerate import comparators
 from alembic.autogenerate.api import AutogenContext
 from alembic.ddl import DefaultImpl
 from alembic.operations.ops import AlterColumnOp, AlterTableOp, UpgradeOps
+from alembic.util import to_list
 from sqlalchemy import Column
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import ArgumentError
@@ -299,6 +300,39 @@ def check_similar_string_and_warn(
         )
 
 
+def _build_name_to_table(
+    metadata: List[sa_schema.MetaData],
+    default_schema: Optional[str],
+    kind: str,
+    object_label: str,
+) -> Dict[Tuple[Optional[str], str], Table]:
+    """Build a ``(schema, name) -> Table`` lookup from one or more MetaData objects.
+
+    Mirrors Alembic core's duplicate-key awareness: when the same
+    ``(schema, name)`` appears in more than one MetaData a warning is
+    emitted so the conflict is not silently resolved to the last definition.
+    """
+    result: Dict[Tuple[Optional[str], str], Table] = {}
+    for m in metadata:
+        for table in m.tables.values():
+            table_kind = table.info.get(TableObjectInfoKey.TABLE_KIND)
+            if not table_kind or table_kind.upper() != kind:
+                continue
+            key = (
+                table.schema if table.schema != default_schema else None,
+                table.name,
+            )
+            if key in result:
+                warnings.warn(
+                    f"Duplicate {object_label} {key!r} found across multiple MetaData "
+                    f"objects; the last definition will be used. This may indicate "
+                    f"the same {object_label} is defined in more than one base.",
+                    UserWarning,
+                )
+            result[key] = table
+    return result
+
+
 @comparators_dispatch_for_starrocks("schema")
 def _autogen_for_views(
     autogen_context: AutogenContext,
@@ -310,8 +344,9 @@ def _autogen_for_views(
 
     Scan views in database and compare with metadata.
     """
+
     inspector: Inspector = autogen_context.inspector
-    metadata = autogen_context.metadata
+    metadata = to_list(autogen_context.metadata)
     default_schema = inspector.bind.dialect.default_schema_name
 
     conn_view_names: Set[Tuple[Optional[str], str]] = set()
@@ -330,7 +365,8 @@ def _autogen_for_views(
     # Get all views from metadata and apply name filters, normalize schema (default -> None)
     all_normed_metadata_view_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
         and autogen_context.run_name_filters(
             table.name, "view", {"schema_name": table.schema}
@@ -370,7 +406,8 @@ def _compare_views(
     autogen_context: AutogenContext,
 ) -> None:
     """Compare views between database and metadata, generating add/drop/alter operations."""
-    metadata = autogen_context.metadata
+
+    metadata = to_list(autogen_context.metadata)
     logger.debug("start to compare views, conn_view_names (from DB): %s, metadata_view_names (from metadata): %s",
         conn_view_names, metadata_view_names)
 
@@ -383,11 +420,9 @@ def _compare_views(
         ]
     )
     # Build a lookup from (schema, name) to Table object for metadata views (using normalized schema)
-    view_name_to_table = {
-        (table.schema if table.schema != default_schema else None, table.name): table
-        for table in metadata.tables.values()
-        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
-    }
+    view_name_to_table = _build_name_to_table(
+        metadata, default_schema, TableKind.VIEW, "view"
+    )
     metadata_view_names = metadata_view_names_no_dflt
 
     # Added views (in metadata but not in database)
@@ -805,7 +840,7 @@ def _autogen_for_mvs(
     Scan materialized views in database and compare with metadata.
     """
     inspector: Inspector = autogen_context.inspector
-    metadata = autogen_context.metadata
+    metadata = to_list(autogen_context.metadata)
     default_schema = inspector.bind.dialect.default_schema_name
 
     conn_mv_names: Set[Tuple[Optional[str], str]] = set()
@@ -825,7 +860,8 @@ def _autogen_for_mvs(
     # Get all MVs from metadata and apply name filters, normalize schema (default -> None)
     all_normed_metadata_mv_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
-        for table in metadata.tables.values()
+        for m in metadata
+        for table in m.tables.values()
         if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
         and autogen_context.run_name_filters(
             table.name, "materialized_view", {"schema_name": table.schema}
@@ -865,7 +901,8 @@ def _compare_mvs(
     autogen_context: AutogenContext,
 ) -> None:
     """Compare materialized views between database and metadata, generating add/drop/alter operations."""
-    metadata = autogen_context.metadata
+
+    metadata = to_list(autogen_context.metadata)
     logger.debug("Start to compare mvs, conn_mv_names (from DB): %s, metadata_mv_names (from metadata): %s",
         conn_mv_names, metadata_mv_names)
 
@@ -878,11 +915,9 @@ def _compare_mvs(
         ]
     )
     # Build a lookup from (schema, name) to Table object for metadata MVs (using normalized schema)
-    mv_name_to_table = {
-        (table.schema if table.schema != default_schema else None, table.name): table
-        for table in metadata.tables.values()
-        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
-    }
+    mv_name_to_table = _build_name_to_table(
+        metadata, default_schema, TableKind.MATERIALIZED_VIEW, "materialized view"
+    )
     metadata_mv_names = metadata_mv_names_no_dflt
 
     # Added MVs (in metadata but not in database)
