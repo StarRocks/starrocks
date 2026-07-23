@@ -351,7 +351,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   :::
 
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
-- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
+- `mv_rewrite_staleness_second`：如果当前物化视图最近一次**完整**刷新被确认的时间（以该次刷新开始的时刻计算）在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。否则，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。请注意，仅覆盖部分分区的刷新操作（例如手动执行的 `REFRESH ... PARTITION START ... END`）不会更新该新鲜度基线。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
 
@@ -364,7 +364,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `disable`：禁用基于该异步物化视图进行自动查询改写。
   - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
     - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
-    - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
+    - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最近一次被确认的完整刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
   - `force_mv`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。`force_mv` 语义即专门为该场景设计。当启用该语义时：
     - 如果物化视图未定义 `partition_retention_condition` 属性，则无论基表是否有更新，都强制使用进行改写。
