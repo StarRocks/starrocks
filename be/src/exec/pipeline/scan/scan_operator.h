@@ -24,6 +24,7 @@
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
 #include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/scan/warm_slot_reservation.h"
 #include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
@@ -149,6 +150,21 @@ protected:
 
     virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
 
+    // Footer-prefetch: connector operators submit metadata-only ScanTasks to the scan
+    // executor while io-task slots are free. Expose the executor + workgroup injected by pipeline
+    // setup (set_scan_executor / set_workgroup) without making the members public. The WG queue
+    // dereferences task.workgroup, so a submitted task must carry this workgroup.
+    workgroup::ScanExecutor* scan_executor() const { return _scan_executor; }
+    const workgroup::WorkGroupPtr& scan_workgroup() const { return _workgroup; }
+    // Weak query handle for lifetime-guarding io-task lambdas (footer prefetch mirrors the data
+    // io-task pattern: lock before touching `this`).
+    const std::weak_ptr<QueryContext>& query_ctx() const { return _query_ctx; }
+
+    // Footer-prefetch hook: called from the scheduling paths whenever data io-tasks are below the
+    // cap (spare slots). Default no-op; ConnectorScanOperator submits metadata-only prefetch tasks
+    // to the scan executor on those spare slots, ahead of the data scan.
+    virtual void try_submit_metadata_prefetch(RuntimeState* state) {}
+
     ChunkPtr get_chunk_from_buffer() {
         auto& chunk_buffer = get_chunk_buffer();
         ChunkPtr chunk = nullptr;
@@ -263,6 +279,12 @@ protected:
     bool _is_finished = false;
 
     std::atomic<int> _num_running_io_tasks = 0;
+    // Footer warm tasks (connector scans) reserve slots here, separate from _num_running_io_tasks
+    // (data only), so warm fills spare io-task slots without perturbing the adaptive governor or
+    // the data re-submit gate. pending_finish() waits on it; set_finishing() disables it. The
+    // teardown-race contract (no warm re-arm after the driver observed a zero count) lives in
+    // WarmSlotReservation.
+    WarmSlotReservation _warm_slots;
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;

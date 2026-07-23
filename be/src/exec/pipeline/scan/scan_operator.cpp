@@ -322,7 +322,13 @@ bool ScanOperator::has_output() const {
 
 bool ScanOperator::pending_finish() const {
     DCHECK(is_finished());
-    return false;
+    // Footer warm tasks (connector scans) capture `this` and must keep the operator alive until they
+    // drain. Express that here, NOT in is_finished(): warm tasks produce no output, so they must not
+    // affect output-completion semantics, and gating is_finished() would (a) fire this DCHECK on the
+    // forced set_finished of the cancel path and (b) still not defer close() there. pending_finish()
+    // is the designed post-set_finished async-work gate and holds the driver in PENDING_FINISH (both
+    // normal and cancel) until warm drains. 0 for non-connector scans, so their behavior is unchanged.
+    return _warm_slots.running() > 0;
 }
 
 bool ScanOperator::is_finished() const {
@@ -386,6 +392,10 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
+    // Reject any warm reservation from here on so a warm task cannot re-arm after the driver
+    // observes a zero warm count via pending_finish() (see WarmSlotReservation). Store before
+    // reading the warm count downstream.
+    _warm_slots.disable();
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
     set_buffer_finished();
@@ -531,7 +541,14 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         }
     }
 
-    _peak_io_tasks_counter->set(_num_running_io_tasks);
+    // Data io-tasks had first pick of this instance's slots above; fill whatever the data scan left
+    // spare (governor throttle) with footer warm tasks, ahead of the scan. Warm runs on its own
+    // counter, so it neither perturbs the adaptive governor nor blocks data re-submission while
+    // total (data + warm) stays within the per-instance cap. No-op unless overridden (connector
+    // scans) and the feature is armed.
+    try_submit_metadata_prefetch(state);
+
+    _peak_io_tasks_counter->set(_num_running_io_tasks + _warm_slots.running());
     return Status::OK();
 }
 
@@ -574,6 +591,14 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
             }
         }
         _is_io_task_running[chunk_source_index] = false;
+    }
+
+    // A data io-task finished. While a build stall parks the driver OUTPUT_FULL (is_buffer_full, so
+    // pull_chunk -- and thus _try_to_trigger_next_scan -- does not run), drive footer prefetch from
+    // here so warm uses the idle slots; the active path fills spare slots after data. Outside the
+    // lock to avoid nesting the footer-state mutex under _task_mutex.
+    if (is_buffer_full()) {
+        try_submit_metadata_prefetch(state);
     }
 }
 

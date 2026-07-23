@@ -22,12 +22,14 @@ set(EXEC_PRIMITIVE_TEST_FILES
     data_sink/data_sink_core_test.cpp
     exec_node_exec_primitive_test.cpp
     ${BE_TEST_JNI_ENV_STUB}
+    footer_prefetch_state_exec_primitive_test.cpp
     morsel_primitive_test.cpp
     pipeline_event_exec_primitive_test.cpp
     pipeline_metrics_exec_primitive_test.cpp
     pipeline_observer_exec_primitive_test.cpp
     result_to_arrow_converter_exec_primitive_test.cpp
     runtime_filter_exec_primitive_test.cpp
+    warm_slot_reservation_exec_primitive_test.cpp
 )
 
 set(EXEC_PRIMITIVE_TEST_LINK_LIBS

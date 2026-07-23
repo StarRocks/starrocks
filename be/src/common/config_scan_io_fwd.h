@@ -164,6 +164,19 @@ CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 
 CONF_mInt64(arrow_read_batch_size, "4096");
 
+// Kill-switch for Parquet footer prefetch: warm upcoming files' footers into cache on the scan
+// executor using io-task slots the data scan leaves spare (adaptive-governor throttle) or while a
+// downstream build stall parks the scan. Per-operator concurrency is capped by
+// connector_footer_prefetch_max_inflight; how far ahead it runs derives from scan dop.
+CONF_mBool(enable_connector_footer_prefetch, "true");
+
+// Max concurrent footer-warm tasks per connector scan operator.
+CONF_mInt32(connector_footer_prefetch_max_inflight, "4");
+
+// Footer-prefetch lead window, in files each in-flight warm task may run ahead of the scan cursor:
+// lead_distance = scan_dop * connector_footer_prefetch_max_inflight * this.
+CONF_mInt32(connector_footer_prefetch_lead_multiplier, "16");
+
 // larger buffer size means fewer reads, but higher memory usage
 CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 

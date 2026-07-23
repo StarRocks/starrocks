@@ -89,6 +89,7 @@ add_executable(connector_hive_test
         ${BE_TEST_MACOS_LINK_STUBS}
         ${BE_TEST_JNI_ENV_STUB}
         hive/hive_test_main.cpp
+        hive/footer_prefetch_task_test.cpp
         hive/hive_connector_test.cpp
         hive/hive_chunk_sink_test.cpp
         hive/scanner/cache_select_scanner_test.cpp

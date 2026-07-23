@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <mutex>
 #include <unordered_map>
 
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
+#include "connector/hive/footer_prefetch_task.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "connector_primitive/connector.h"
@@ -56,6 +58,13 @@ public:
     void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
+    // Build the footer-prefetch sidecar for these (Parquet) scan ranges: resolve each root file's
+    // native path the same way the real scan does, share one FileSystem and datacache policy. Empty
+    // if no cache can hold a warmed footer. Reusable for incremental batches (tail-append into
+    // FooterPrefetchState).
+    FooterPrefetchPlan build_footer_prefetch_items(RuntimeState* state,
+                                                   const std::vector<TScanRangeParams>& scan_ranges);
+
     friend class HiveDataSource;
 
 protected:
@@ -63,6 +72,15 @@ protected:
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    // Shared footer-prefetch open context (one FileSystem per scan), built once and reused
+    // across the initial and incremental build_footer_prefetch_items calls.
+    std::shared_ptr<pipeline::FooterOpenContext> _footer_open_ctx;
+    // Guards the lazy init of _footer_open_ctx / its FileSystem in build_footer_prefetch_items:
+    // that builder can run on the prepare thread (decompose / initial feed) and concurrently on
+    // brpc handler threads (incremental scan-range delivery), so the shared context must not be
+    // initialized without synchronization. Called at most a handful of times per scan (never per
+    // row), so a plain mutex is free.
+    std::mutex _footer_open_ctx_mutex;
 };
 
 class HiveDataSource final : public DataSource {
