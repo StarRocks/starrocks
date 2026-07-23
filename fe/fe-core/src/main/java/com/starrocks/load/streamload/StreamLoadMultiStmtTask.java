@@ -427,20 +427,49 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         String commitErrorMsg = null;
         try {
             LOG.info("commit {} sub tasks", taskMaps.size());
+            // Fire every table's channel first. prepareChannel only dispatches the
+            // coordinator (Coordinator.exec() is non-blocking); issuing them up front lets
+            // the per-table flushes overlap on the BEs instead of running one-at-a-time. The
+            // blocking join happens below in waitCoordFinish, so splitting the fire and the
+            // wait bounds total commit latency by the slowest table rather than the sum. New
+            // loads are rejected once the task is COMMITING, so taskMaps is stable across the
+            // two iterations below.
+            List<StreamLoadTask> dispatched = Lists.newArrayList();
             for (StreamLoadTask task : taskMaps.values()) {
                 task.prepareChannel(0, task.getTableName(), headers, resp);
                 if (!resp.stateOK()) {
                     commitErrorMsg = "prepareChannel failed";
-                    return;
+                    break;
                 }
+                dispatched.add(task);
+            }
+            // Wait for every dispatched coordinator and add its result to the transaction.
+            // Run this even when a prepare failed above: the loads already dispatched must be
+            // added via loadData so the rollback path aborts them with their tablet infos --
+            // otherwise the explicit transaction would carry no items and rollbackStmt would
+            // take its empty-item branch, skipping abortTransaction. A per-task result keeps
+            // an earlier prepare failure from poisoning the wait check below.
+            for (StreamLoadTask task : dispatched) {
                 if (task.checkNeedPrepareTxn()) {
-                    task.waitCoordFinish(resp);
-                }
-                if (!resp.stateOK()) {
-                    commitErrorMsg = "waitCoordFinish failed";
-                    return;
+                    TransactionResult waitResp = new TransactionResult();
+                    task.waitCoordFinish(waitResp);
+                    if (!waitResp.stateOK()) {
+                        if (commitErrorMsg == null) {
+                            commitErrorMsg = "waitCoordFinish failed";
+                            resp.setErrorMsg(waitResp.msg);
+                        }
+                        // waitCoordFinish already aborted the shared transaction on failure
+                        // (cancelTask -> abortTransaction). Stop draining: calling loadData for
+                        // a later table after the transaction is aborted would add it to an
+                        // already-aborted transaction. The remaining dispatched coordinators are
+                        // cancelled by the rollback path (tryRollbackNow -> cancelCoordinatorOnly).
+                        break;
+                    }
                 }
                 TransactionStmtExecutor.loadData(dbId, task.getTable().getId(), task.getTxnStateItem(), context);
+            }
+            if (commitErrorMsg != null) {
+                return;
             }
             TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
             if (context.getState().isError()) {
