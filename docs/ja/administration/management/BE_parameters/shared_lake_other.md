@@ -185,6 +185,32 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: prepared-physical-split lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（split morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、split morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
 - 導入バージョン: v4.2
 
+### lake_publish_memory_limit_percent
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: %
+- 変更可能: いいえ
+- 説明: 共有データクラスタで、Lake の publish パスのメモリ予約トラッカーが保持できるプロセスメモリ上限の割合（パーセント）。publish 中、StarRocks はタブレットメタデータのディープコピー、正規化、シリアライズを行います。このトラッカーはその一時的なメモリ使用量を制限し、メタデータが肥大化し publish の並行度が高い場合でもプロセスが OOM に陥らないようにします。推定使用量が残りの割当を超える publish は、再試行可能な `ResourceBusy` ステータスで拒否され、FE が再試行します。値は [0, 100] の範囲に丸められます。値 `0` はこのトラッカーによる制限を無効化し（無制限トラッカーとして登録）、この動作のロールバックスイッチとして機能します。トラッカーのバイト上限は BE 起動時に一度だけ計算されるため、変更不可です。
+- 導入バージョン: -
+
+### lake_publish_metadata_estimate_multiplier
+
+- デフォルト: 3
+- タイプ: Int
+- 変更可能: はい
+- 説明: 共有データクラスタで、publish の一時的なメタデータ使用量を `k * base_tablet_metadata_size` として推定するための乗数 `k`。publish パスはメタデータのコピーをおよそ 3 つ同時に保持する（変更後の作業コピー、正規化コピー、シリアライズバッファ）ため、デフォルトは `3` です。この推定値が、`lake_publish_memory_limit_percent` で制御されるトラッカーに対して publish パスが予約するサイズになります。publish のたびに読み取られるため、実行時に調整できます。
+- 導入バージョン: -
+
+### lake_publish_process_memory_urgent_pct
+
+- デフォルト: 85
+- タイプ: Int
+- 単位: %
+- 変更可能: はい
+- 説明: 共有データクラスタで、Lake publish パスのプロセスメモリのバックストップしきい値。プロセスメモリ使用量がプロセスメモリ上限のこの割合を超えると、単一 publish と集約（aggregate）publish の両方のタスクが、メモリが低下するまで再試行可能な `ResourceBusy` ステータスで拒否され、publish がノードを OOM に追い込むのを防ぎます。これは `memory_urgent_level`（永続インデックスのフラッシュや Data Cache の縮小も駆動する）とは独立した専用のパラメータであり、それらのサブシステムに影響を与えずにインシデント時に調整できます。値 `0` はこのバックストップを無効化します。publish のたびに読み取られるため、実行時に調整できます。
+- 導入バージョン: -
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - デフォルト: -1

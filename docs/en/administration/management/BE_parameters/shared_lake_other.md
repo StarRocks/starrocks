@@ -185,6 +185,32 @@ This topic introduces the following types of BE configurations:
 - Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the prepared-physical-split lake scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
 - Introduced in: v4.2
 
+### lake_publish_memory_limit_percent
+
+- Default: 30
+- Type: Int
+- Unit: %
+- Is mutable: No
+- Description: In a shared-data cluster, the percentage of the BE/CN process memory limit that the lake publish-path memory reservation tracker may hold. During publish, StarRocks deep-copies, normalizes, and serializes tablet metadata; this tracker bounds that transient footprint so that bloated metadata under high publish concurrency cannot drive the process into an out-of-memory condition. A publish whose estimated footprint would exceed the remaining budget is rejected with a retryable `ResourceBusy` status, which the FE retries. Clamped to the range [0, 100]. The value `0` disables the per-tracker gate (an unlimited tracker is registered) and serves as the rollback switch for this behavior. Immutable, because the tracker's byte limit is computed once at BE startup.
+- Introduced in: -
+
+### lake_publish_metadata_estimate_multiplier
+
+- Default: 3
+- Type: Int
+- Is mutable: Yes
+- Description: In a shared-data cluster, the multiplier `k` used to estimate a publish's transient metadata footprint as `k * base_tablet_metadata_size`. The publish path holds roughly three concurrent copies of the metadata (the mutated working copy, the normalization copy, and the serialized buffer), so the default is `3`. This estimate is what the publish path reserves against the tracker controlled by `lake_publish_memory_limit_percent`. It is read on every publish, so it can be tuned at runtime.
+- Introduced in: -
+
+### lake_publish_process_memory_urgent_pct
+
+- Default: 85
+- Type: Int
+- Unit: %
+- Is mutable: Yes
+- Description: In a shared-data cluster, the process-memory backstop for the lake publish path. When process memory consumption exceeds this percentage of the process memory limit, both single and aggregate publish tasks are rejected with a retryable `ResourceBusy` status until memory drops, preventing publish from pushing a node into an out-of-memory condition. This is a dedicated knob, independent of `memory_urgent_level` (which also drives persistent-index flush and Data Cache shrink), so it can be tuned during an incident without affecting those subsystems. The value `0` disables the backstop. It is read on every publish, so it can be tuned at runtime.
+- Introduced in: -
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - Default: -1
