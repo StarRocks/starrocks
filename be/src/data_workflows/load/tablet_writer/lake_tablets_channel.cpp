@@ -964,6 +964,14 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             // already created for the tablet, usually in incremental open case
             continue;
         }
+        // Flat JSON policy carried with the load plan (FE-authoritative). When present, the
+        // segment writer uses it instead of the best-effort tablet-metadata cache. Same value
+        // for every tablet in this channel.
+        std::shared_ptr<FlatJsonConfig> flat_json_config;
+        if (params.has_flat_json_config()) {
+            flat_json_config = std::make_shared<FlatJsonConfig>();
+            flat_json_config->update(params.flat_json_config());
+        }
         ASSIGN_OR_RETURN(auto writer, lake::AsyncDeltaWriterBuilder()
                                               .set_tablet_manager(_tablet_manager)
                                               .set_tablet_id(tablet.tablet_id())
@@ -971,6 +979,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_partition_id(tablet.partition_id())
                                               .set_slot_descriptors(slots)
                                               .set_merge_condition(params.merge_condition())
+                                              .set_flat_json_config(flat_json_config)
                                               .set_miss_auto_increment_column(params.miss_auto_increment_column())
                                               .set_db_id(_schema->db_id())
                                               .set_table_id(params.table_id())

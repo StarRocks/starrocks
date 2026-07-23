@@ -126,7 +126,8 @@ public:
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
-                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
+                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline,
+                             std::shared_ptr<FlatJsonConfig> flat_json_config)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -148,7 +149,8 @@ public:
               _bundle_writable_file_context(bundle_writable_file_context),
               _global_dicts(global_dicts),
               _is_multi_statements_txn(is_multi_statements_txn),
-              _force_build_vector_index_inline(force_build_vector_index_inline) {}
+              _force_build_vector_index_inline(force_build_vector_index_inline),
+              _flat_json_config(std::move(flat_json_config)) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -338,6 +340,11 @@ private:
     // shadow tablet's existing data is fully indexed during the ALTER, matching DirectSchemaChange.
     bool _force_build_vector_index_inline = false;
 
+    // Table-level Flat JSON policy carried from the load plan (shared-data). When set, it is
+    // handed to the internal TabletWriter so the segment writer decides flattening from this
+    // FE-authoritative value instead of the best-effort tablet-metadata cache.
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
+
     // Record the time when DeltaWriter is opened
     int64_t _begin_time_ms = 0;
 
@@ -442,6 +449,9 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
+        }
+        if (_flat_json_config != nullptr) {
+            _tablet_writer->set_flat_json_config(_flat_json_config);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
@@ -1350,7 +1360,7 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
             _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
             _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
             _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
-            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline);
+            _is_multi_statements_txn, _tablet_schema, _force_build_vector_index_inline, _flat_json_config);
     return std::make_unique<DeltaWriter>(impl);
 }
 

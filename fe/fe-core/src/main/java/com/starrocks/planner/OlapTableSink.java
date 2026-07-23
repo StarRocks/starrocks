@@ -235,6 +235,13 @@ public class OlapTableSink extends DataSink {
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
+        // Carry the table's Flat JSON policy with the load plan so the (shared-data) segment
+        // writer decides flattening from this FE-authoritative value instead of the best-effort
+        // tablet-metadata cache. Only set when the table has an explicit property; otherwise the
+        // writer falls back to the global config (unchanged behavior for property-less tables).
+        if (dstTable.containsFlatJsonConfig()) {
+            tSink.setFlat_json_config(dstTable.getFlatJsonConfig().toTFlatJsonConfig());
+        }
         tSink.setEnable_lake_per_partition_coordinator_txn_log(
                 Config.lake_enable_per_partition_coordinator_txn_log);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
