@@ -19,13 +19,14 @@ import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.FileContent;
-import org.apache.iceberg.ManifestContent;
+import org.apache.iceberg.ManifestEntryScanHelper;
+import org.apache.iceberg.ManifestEntryScanHelper.LiveEntry;
 import org.apache.iceberg.ManifestFile;
-import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Type;
@@ -45,9 +46,8 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
 
     private final String manifestBean;
     private ManifestFile manifestFile;
-    private CloseableIterator<? extends ContentFile<?>> reader;
+    private CloseableIterator<LiveEntry> entryReader;
     private List<PartitionField> partitionFields;
-    private Long lastUpdateTime;
     private Integer spedId;
     private Schema schema;
     private GenericRecord reusedRecord;
@@ -62,8 +62,6 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         this.manifestFile = deserializeFromBase64(manifestBean);
         this.schema = table.schema();
         this.spedId = manifestFile.partitionSpecId();
-        this.lastUpdateTime = table.snapshot(manifestFile.snapshotId()) != null ?
-                table.snapshot(manifestFile.snapshotId()).timestampMillis() : null;
         this.partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
         this.reusedRecord = GenericRecord.create(getResultType());
     }
@@ -72,12 +70,16 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     public int doGetNext() {
         int numRows = 0;
         for (; numRows < getTableSize(); numRows++) {
-            if (!reader.hasNext()) {
+            if (!entryReader.hasNext()) {
                 break;
             }
-            ContentFile<?> file = reader.next();
+            LiveEntry entry = entryReader.next();
+            ContentFile<?> file = entry.file();
+            Snapshot snapshot = table.snapshot(entry.snapshotId());
+            Long lastUpdatedAt = snapshot != null ? snapshot.timestampMillis() : null;
+            Long lastUpdatedSnapshotId = snapshot != null ? snapshot.snapshotId() : null;
             for (int i = 0; i < requiredFields.length; i++) {
-                Object fieldData = get(requiredFields[i], file);
+                Object fieldData = get(requiredFields[i], file, lastUpdatedAt, lastUpdatedSnapshotId);
                 if (fieldData == null) {
                     appendData(i, null);
                 } else {
@@ -91,8 +93,8 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
 
     @Override
     public void doClose() throws IOException {
-        if (reader != null) {
-            reader.close();
+        if (entryReader != null) {
+            entryReader.close();
         }
         reusedRecord = null;
 
@@ -101,17 +103,7 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
     @Override
     protected void initReader() {
         Map<Integer, PartitionSpec> specs = table.specs();
-        if (manifestFile.content() == ManifestContent.DATA) {
-            reader = ManifestFiles.read(manifestFile, fileIO, specs)
-                    .select(SCAN_COLUMNS)
-                    .caseSensitive(false)
-                    .iterator();
-        } else {
-            reader = ManifestFiles.readDeleteManifest(manifestFile, fileIO, specs)
-                    .select(SCAN_COLUMNS)
-                    .caseSensitive(false)
-                    .iterator();
-        }
+        entryReader = ManifestEntryScanHelper.liveEntries(manifestFile, fileIO, specs, SCAN_COLUMNS).iterator();
     }
 
     private Types.StructType getResultType() {
@@ -126,7 +118,7 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
         return Types.StructType.of(fields);
     }
 
-    private Object get(String columnName, ContentFile<?> file) {
+    private Object get(String columnName, ContentFile<?> file, Long lastUpdatedAt, Long lastUpdatedSnapshotId) {
         FileContent content = file.content();
         switch (columnName) {
             case "partition_value":
@@ -148,7 +140,9 @@ public class IcebergPartitionsTableScanner extends AbstractIcebergMetadataScanne
             case "equality_delete_file_count":
                 return content == FileContent.EQUALITY_DELETES ? 1L : 0L;
             case "last_updated_at":
-                return lastUpdateTime;
+                return lastUpdatedAt;
+            case "last_updated_snapshot_id":
+                return lastUpdatedSnapshotId;
             default:
                 throw new IllegalArgumentException("Unrecognized column name " + columnName);
         }
