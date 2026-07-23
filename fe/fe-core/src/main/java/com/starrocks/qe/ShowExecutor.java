@@ -1546,8 +1546,18 @@ public class ShowExecutor {
                 return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
             }
             RoutineLoadJob routineLoadJob = routineLoadJobList.get(0);
-            if (routineLoadJob.getDataSourceTypeName().equals("PULSAR")) {
-                throw new SemanticException("not support pulsar datasource");
+            try {
+                String dbFullName = routineLoadJob.getDbFullName();
+                String tblName = routineLoadJob.getTableName();
+                try {
+                    Authorizer.checkAnyActionOnTable(context, new TableName(dbFullName, tblName));
+                } catch (AccessDeniedException e) {
+                    // No privilege → return empty result, same as SHOW ROUTINE LOAD.
+                    return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+                }
+            } catch (MetaNotFoundException e) {
+                LOG.warn(e.getMessage(), e);
+                throw new SemanticException(e.getMessage());
             }
             StringBuilder createRoutineLoadSql = new StringBuilder();
             try {
