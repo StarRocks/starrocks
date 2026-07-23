@@ -205,9 +205,17 @@ How should I deliver the 2 verified fixes?
   4. Type something.
 ```
 
-Check the edits, and if you are happy with them check the box to backport to the appropriate branch(es).
+The skill produces two things:
 
-Review the draft PR and merge what's right. Full behavior and the report format:
+- A **draft `[Doc]` PR** with the verified fixes. Its body is filled from the repo's
+  PR template — including the type, behavior-change, and version **backport** boxes —
+  so it can actually be merged. Review the edits, confirm the backport version(s),
+  then un-draft.
+- A **tracking issue** listing every example it did *not* auto-fix (version-gated,
+  not self-contained, illustrative, or needing judgment), so those aren't lost when
+  the run scrolls by. Work through that issue separately.
+
+Full behavior and the report format:
 [.claude/skills/sql-doc-autofix/README.md](../.claude/skills/sql-doc-autofix/README.md).
 
 ### 7. Tear down

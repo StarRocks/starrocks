@@ -49,10 +49,15 @@ python3 docs/scripts/autofix_candidates.py \
 Then invoke the **`sql-doc-autofix`** skill in Claude Code.
 
 ## What it produces
-A **draft** `[Doc]` PR (target `main`, backport-labeled): **Fixes** (`file:line`,
-before → after, "verified on `<cluster version>`") + **Not fixed (for review)**
-(version-gated / needs-setup / illustrative, each with a recommendation). You
-review, then un-draft.
+Two things, so nothing is lost:
+1. A **draft** `[Doc]` PR (target `main`) with the **verified fixes** — its body is
+   built from `.github/PULL_REQUEST_TEMPLATE.md` with the required checkboxes filled
+   (Doc type, behavior-change = No, backport version), so it's actually mergeable.
+   You review, then un-draft.
+2. A **tracking issue** (`documentation,docs-maintainer`) listing every example it
+   did **not** auto-fix (version-gated / needs-setup / illustrative / review),
+   grouped and checkboxed — an existing same-title issue is updated rather than
+   duplicated. The PR and issue cross-link.
 
 ## Classification (the guardrail)
 **"Executes" ≠ "correct documentation."** Every candidate is classified before any

@@ -65,15 +65,34 @@ write_query: USE docfix_scratch;   -- do ALL test writes here
 - On success record `file`, `line`, `before`, `after`, verified statement; then
   `write_query: DROP DATABASE docfix_scratch;`.
 
-## Step 3 — Assemble a DRAFT PR
-- Branch off `origin/main` in a git worktree (docs fixes target `main`, then
-  backport). Confirm each example exists on `main` before editing.
-- Apply each verified edit to its source `.md`/`.mdx`.
-- Open a **draft** `[Doc]` PR whose body has (1) **Fixes** — `file:line`,
-  before → after, "verified: runs on `<cluster version>`"; (2) **Not fixed (for
-  review)** — version-gated / needs-setup / illustrative, each with its
-  classification and recommendation.
-- Leave it a draft. A human reviews and un-drafts.
+## Step 3 — Deliver: a DRAFT PR for the fixes + a tracking ISSUE for the rest
+Produce **both**, so nothing scrolls by and gets lost:
+
+**Draft PR — the verified fixes.** Branch off `origin/main` in a git worktree
+(docs fixes target `main`, then backport). Confirm each example exists on `main`
+before editing; apply each verified edit to its source `.md`/`.mdx`.
+Build the PR body **from `.github/PULL_REQUEST_TEMPLATE.md`** — PRs missing the
+template's checkboxes cannot be merged, so render it and fill it in (do not write a
+freeform body, and `gh pr create --body` overrides the template so you must supply
+the filled template yourself):
+- `## What type of PR is this:` → `- [x] Doc`
+- behavior-change question → `- [x] No, this PR will not result in a change in
+  behavior.` (a docs-only fix) and uncheck the default `Yes`
+- put the **Fixes** table (`file:line`, before → after, "verified: runs on
+  `<cluster version>`") under *What I'm doing:*, and write `Fixes #<tracking issue>`
+- backport section → `- [x] I have checked the version labels ...` and the
+  `- [x] <version>` box for the release you verified (e.g. `4.1`)
+
+Open it as a **draft** `[Doc]` PR; a human reviews and un-drafts.
+
+**Tracking issue — everything NOT auto-fixed.** So the version-gated /
+needs-setup / illustrative / review items are captured (not just flashed on
+screen), open a GitHub issue labeled `documentation,docs-maintainer`, titled
+`SQL doc examples needing review — <version>`. Body: a checkbox list grouped by
+category, each item `file:line` + its one-line reason. **If an open issue with
+that title already exists, update it instead of opening a duplicate.**
+
+Cross-link the two (PR body → issue, issue → PR) and report both URLs at the end.
 
 ## Never
 - Never un-draft or merge; never commit without operator review.
