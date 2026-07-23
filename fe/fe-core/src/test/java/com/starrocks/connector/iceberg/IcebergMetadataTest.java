@@ -142,6 +142,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
@@ -2281,6 +2282,16 @@ public class IcebergMetadataTest extends TableTestBase {
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
         metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
+
+        new Verifications() {
+            {
+                List<ConnectContext> renameContexts = new ArrayList<>();
+                icebergHiveCatalog.renameTable(withCapture(renameContexts), anyString, anyString, anyString);
+                Assertions.assertFalse(renameContexts.isEmpty(), "renameTable should have been invoked");
+                renameContexts.forEach(renameContext ->
+                        Assertions.assertNotNull(renameContext, "rename must pass a non-null ConnectContext"));
+            }
+        };
 
         // modify table properties/comment
         clauses.clear();
