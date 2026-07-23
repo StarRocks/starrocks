@@ -2973,7 +2973,8 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
-        // To keep compatibility with old mv, drop mv will be checked in execution logic, and only new mv is checked
+        // The statement may target an async MV object or a legacy synchronous rollup.
+        // Resolve the target and check the corresponding privilege in execution logic.
         return null;
     }
 

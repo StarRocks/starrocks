@@ -37,10 +37,14 @@ package com.starrocks.alter;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -89,6 +93,7 @@ import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -206,6 +211,18 @@ public class AlterJobMgr {
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
             targetTable = (OlapTable) table;
+            ConnectContext context = ConnectContext.get();
+            try {
+                Authorizer.checkTableAction(context, db.getFullName(), targetTable.getName(), PrivilegeType.ALTER);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.ALTER.name(),
+                        ObjectType.TABLE.name(),
+                        targetTable.getName());
+            }
             // check table state
             if (targetTable.getState() != OlapTableState.NORMAL) {
                 if (stmt.isForceDrop()) {
