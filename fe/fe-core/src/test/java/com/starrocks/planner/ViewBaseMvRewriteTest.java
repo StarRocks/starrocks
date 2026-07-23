@@ -527,4 +527,40 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.dropView("v2");
         starRocksAssert.dropTable("test_t1");
     }
+
+    @Test
+    public void testViewBasedMvRewritePruneColumns() {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        /*
+         * Verify that column pruning works correctly after view-based MV rewrite.
+         * view_q1 has 8 aggregation columns (sum_qty, sum_base_price, sum_disc_price,
+         * sum_charge, avg_qty, avg_price, avg_disc, count_order) plus 3 group-by columns.
+         * When the query only selects a subset of columns, the unused columns should be
+         * pruned from the plan even after MV rewrite replaces the tree with the
+         * pre-PRUNE_COLUMNS snapshot.
+         */
+        {
+            String mv = "select * from view_q1";
+            String query = "select l_returnflag, sum_qty from view_q1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            // Verify that unused aggregation columns are not present in the plan
+            checker.notContain("sum_base_price");
+            checker.notContain("sum_disc_price");
+            checker.notContain("sum_charge");
+            checker.notContain("avg_price");
+            checker.notContain("avg_disc");
+        }
+        {
+            String mv = "select * from view_q1";
+            String query = "select l_returnflag, l_linestatus, count_order from view_q1" +
+                    " where l_shipdate <= date '1998-12-01'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            // Verify that unused aggregation columns are pruned
+            checker.notContain("sum_qty");
+            checker.notContain("sum_base_price");
+            checker.notContain("sum_disc_price");
+            checker.notContain("avg_qty");
+            checker.notContain("avg_price");
+        }
+    }
 }
