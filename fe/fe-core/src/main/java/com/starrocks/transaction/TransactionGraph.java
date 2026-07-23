@@ -29,6 +29,14 @@ import java.util.stream.Collectors;
 
 /**
  * store transactions' dependency relationships
+ *
+ * The dependency graph is modeled as the overlay of one doubly-linked writer
+ * chain per table: for every table T a node writes, the node stores its
+ * immediate predecessor (tablePrev[T]) and successor (tableNext[T]) on T's
+ * chain. Keeping the per-table chain explicit makes add/remove deterministic
+ * linked-list operations and avoids reverse-engineering chain membership from
+ * an unlabeled dependency set.
+ *
  * this class is used in DatabaseTransactionMgr and all methods are protected by mgr's lock
  * so this class does not require additional synchronization
  */
@@ -36,30 +44,22 @@ public class TransactionGraph {
     private static final Logger LOG = LogManager.getLogger(TransactionGraph.class);
 
     static class Node {
-        long txnId;
-        List<Long> writeTableIds;
-        // transactions this txn depends
-        Set<Node> ins;
-        // transactions depending on this txn
-        Set<Node> outs;
+        final long txnId;
+        final List<Long> writeTableIds;
+
+        // For every table this node writes, the immediate predecessor on that
+        // table's chain. An absent key means this node is the head of that
+        // table's chain (no predecessor for that table).
+        final Map<Long, Node> tablePrev;
+        // Symmetric: the immediate successor on each table's chain. An absent
+        // key means this node is the tail of that table's chain.
+        final Map<Long, Node> tableNext;
 
         Node(long txnId, List<Long> writeTableIds) {
             this.txnId = txnId;
             this.writeTableIds = writeTableIds;
-        }
-
-        void addIns(Node in) {
-            if (ins == null) {
-                ins = new HashSet<>();
-            }
-            ins.add(in);
-        }
-
-        void addOuts(Node out) {
-            if (outs == null) {
-                outs = new HashSet<>();
-            }
-            outs.add(out);
+            this.tablePrev = new HashMap<>(writeTableIds.size());
+            this.tableNext = new HashMap<>(writeTableIds.size());
         }
 
         @Override
@@ -88,7 +88,7 @@ public class TransactionGraph {
     private Map<Long, Node> nodes = new HashMap<>();
     private Set<Node> nodesWithoutIns = new HashSet<>();
 
-    // tableid -> txnId that lastly write this table
+    // tableId -> tail node of that table's writer chain
     private Map<Long, Node> lastTableWriter = new HashMap<>();
 
     public TransactionGraph() {
@@ -105,15 +105,15 @@ public class TransactionGraph {
         }
         Node node = new Node(txnId, writeTableIds);
         for (long tableId : writeTableIds) {
-            Node previous = lastTableWriter.put(tableId, node);
-            if (previous != null) {
-                Preconditions.checkState(previous != node, "duplicate node {}", txnId);
-                node.addIns(previous);
-                previous.addOuts(node);
+            Node prev = lastTableWriter.put(tableId, node);
+            if (prev != null) {
+                Preconditions.checkState(prev != node, "duplicate node {}", txnId);
+                node.tablePrev.put(tableId, prev);
+                prev.tableNext.put(tableId, node);
             }
         }
         nodes.put(txnId, node);
-        if (node.ins == null || node.ins.isEmpty()) {
+        if (node.tablePrev.isEmpty()) {
             nodesWithoutIns.add(node);
         }
     }
@@ -123,27 +123,46 @@ public class TransactionGraph {
         if (node == null) {
             return;
         }
-        if (node.ins != null && !node.ins.isEmpty()) {
-            LOG.warn("remove txn " + txnId + " with dependency: " + node.ins + " this may happen during FE upgrading");
-            for (Node dep : node.ins) {
-                dep.outs.remove(node);
-            }
+        if (!node.tablePrev.isEmpty()) {
+            LOG.warn("remove txn " + txnId + " with dependency: " + node.tablePrev.values()
+                    + " this may happen during FE upgrading");
         }
         nodes.remove(txnId);
         nodesWithoutIns.remove(node);
+
+        // Splice node out of every table's chain it participated in. Per-table
+        // linked-list maintenance keeps predecessor/successor relationships
+        // exact and never creates cross-table edges.
         for (long tableId : node.writeTableIds) {
-            Node holder = lastTableWriter.get(tableId);
-            if (holder == node) {
-                lastTableWriter.remove(tableId);
+            Node prev = node.tablePrev.get(tableId);   // null => node is head of T
+            Node next = node.tableNext.get(tableId);   // null => node is tail of T
+
+            if (prev != null) {
+                if (next != null) {
+                    prev.tableNext.put(tableId, next);
+                } else {
+                    prev.tableNext.remove(tableId);
+                }
             }
-        }
-        if (node.outs == null) {
-            return;
-        }
-        for (Node next : node.outs) {
-            next.ins.remove(node);
-            if (next.ins.isEmpty()) {
-                nodesWithoutIns.add(next);
+            if (next != null) {
+                if (prev != null) {
+                    next.tablePrev.put(tableId, prev);
+                } else {
+                    next.tablePrev.remove(tableId);
+                    if (next.tablePrev.isEmpty()) {
+                        nodesWithoutIns.add(next);
+                    }
+                }
+            }
+
+            // node was the tail of T iff next == null. In that case the new
+            // tail is prev (possibly null, meaning T has no writer left).
+            if (next == null) {
+                if (prev != null) {
+                    lastTableWriter.put(tableId, prev);
+                } else {
+                    lastTableWriter.remove(tableId);
+                }
             }
         }
     }
@@ -155,26 +174,21 @@ public class TransactionGraph {
     // The size of ins of node with txnId must be zero
     public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
         List<Long> txns = new ArrayList<>();
-        if (nodes.containsKey(txnId)) {
-            Node node = nodes.get(txnId);
-            if (node.writeTableIds.size() > 1) {
-                txns.add(txnId);
-                return txns;
-            }
-            int count = 0;
-            // can not judge by ins.size()
-            // for the ins.size of the txn with multi table can be one
-            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)) {
-                count++;
-                txns.add(node.txnId);
-
-                // the node which size of write table is one, their size of outs can not be greater than two
-                if (node.outs != null) {
-                    node = node.outs.stream().findAny().orElse(null);
-                } else {
-                    node = null;
-                }
-            }
+        Node node = nodes.get(txnId);
+        if (node == null) {
+            return txns;
+        }
+        if (node.writeTableIds.size() > 1) {
+            txns.add(txnId);
+            return txns;
+        }
+        // Walk exactly the writer chain of the single table this node writes.
+        long tableId = node.writeTableIds.get(0);
+        int count = 0;
+        while (count < maxBatchSize && node != null && node.writeTableIds.size() == 1) {
+            count++;
+            txns.add(node.txnId);
+            node = node.tableNext.get(tableId);
         }
         return txns.size() >= minBatchSize ? txns : new ArrayList<>();
     }
@@ -195,12 +209,13 @@ public class TransactionGraph {
             return;
         }
         path.add(node.txnId);
-        if (node.outs == null) {
+        if (node.tableNext.isEmpty()) {
             print(path, builder);
             return;
         }
-
-        for (Node out : node.outs) {
+        // Distinct successor nodes across all tables this node writes.
+        Set<Node> outs = new HashSet<>(node.tableNext.values());
+        for (Node out : outs) {
             travelGraph(out, path, builder);
             path.remove(path.size() - 1);
         }
