@@ -44,6 +44,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en"
 
+
+def derive_repo_root(docs_root: Path) -> Path:
+    """Repo root used to compute display paths, derived from docs_root rather than
+    the script location — so the tool can audit a *different* checkout's docs
+    (e.g. a release-branch checkout). Walk up to the first ancestor containing
+    docs/en; fall back to the script-anchored REPO_ROOT."""
+    docs_root = Path(docs_root).resolve()
+    for parent in (docs_root, *docs_root.parents):
+        if (parent / "docs" / "en").is_dir():
+            return parent
+    return REPO_ROOT
+
 # ── SQL category detection ───────────────────────────────────────────────────
 
 _CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
@@ -104,10 +116,16 @@ _FENCE_OPEN_RE = re.compile(r"^```\s*sql\s*$", re.IGNORECASE)
 _FENCE_CLOSE_RE = re.compile(r"^```\s*$")
 
 
-def extract_samples(docs_root: Path) -> list[SqlSample]:
+def extract_samples(docs_root: Path, repo_root: Path | None = None) -> list[SqlSample]:
+    docs_root = Path(docs_root).resolve()
+    repo_root = (Path(repo_root).resolve() if repo_root is not None
+                 else derive_repo_root(docs_root))
     samples: list[SqlSample] = []
     for path in sorted(docs_root.rglob("*.md")) + sorted(docs_root.rglob("*.mdx")):
-        rel = str(path.relative_to(REPO_ROOT))
+        try:
+            rel = str(path.resolve().relative_to(repo_root))
+        except ValueError:
+            rel = str(path)          # foreign/oddly-nested path — never crash
         lines = path.read_text(errors="replace").splitlines()
         n = len(lines)
         i = 0
