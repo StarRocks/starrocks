@@ -1107,6 +1107,33 @@ public class GlobalTransactionMgrTest {
         Assertions.assertEquals(1, followerTransMgr.getTransactionNum());
     }
 
+    // A terminal-state cache entry (populated on eviction, in memory only) must survive an image
+    // save/load, otherwise a checkpoint (which evicts before saveImage) followed by a restart/failover
+    // would answer a recommit with "transaction not found". End-to-end regression for that P1 gap.
+    @Test
+    public void testSaveLoadTerminalStateCache() throws Exception {
+        DatabaseTransactionMgr masterDbMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        // Seed the cache as a real count-eviction would (clearTransactionState -> cache.put).
+        masterDbMgr.restoreTerminalStateCacheRecord(987654321L, "evicted_label", TransactionStatus.VISIBLE, null,
+                System.currentTimeMillis());
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        masterTransMgr.saveTransactionStateV2(pseudoImage.getImageWriter());
+
+        GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
+        followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
+        followerTransMgr.loadTransactionStateV2(reader);
+        reader.close();
+
+        // The follower, which never saw the original transaction, resolves the evicted outcome from
+        // the restored cache instead of returning UNKNOWN.
+        DatabaseTransactionMgr followerDbMgr =
+                followerTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        Assertions.assertEquals(TransactionStatus.VISIBLE, followerDbMgr.getTxnState(987654321L).getStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE, followerDbMgr.getLabelState("evicted_label").getStatus());
+    }
+
     @Test
     public void testRetryCommitOnRateLimitExceededTimeout()
             throws StarRocksException {

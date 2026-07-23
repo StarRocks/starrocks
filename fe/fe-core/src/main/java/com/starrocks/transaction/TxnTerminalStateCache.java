@@ -16,7 +16,9 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -94,26 +96,43 @@ class TxnTerminalStateCache {
      * could never be returned by {@link #valid}, so caching it would only waste capacity).
      */
     synchronized void put(TransactionState state) {
+        insert(state.getTransactionId(), state.getLabel(), state.getTransactionStatus(), state.getReason(),
+                state.getFinishTime());
+    }
+
+    /**
+     * Restore an entry loaded from the FE image. Applies the same admission rules as {@link #put}
+     * (enabled, terminal, not born-dead), so a stale record in an old image is dropped on load.
+     */
+    synchronized void restore(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
+        insert(txnId, label, status, reason, finishTime);
+    }
+
+    private void insert(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
         if (Config.transaction_terminal_state_cache_num <= 0) {
             return;
         }
-        TransactionStatus status = state.getTransactionStatus();
         if (status != TransactionStatus.VISIBLE && status != TransactionStatus.ABORTED) {
             return;
         }
-        long finishTime = state.getFinishTime();
         if (finishTime > 0 && (System.currentTimeMillis() - finishTime) / 1000 > Config.label_keep_max_second) {
             // Born dead: already older than the read window, so it would never satisfy a read.
             return;
         }
-        long txnId = state.getTransactionId();
-        Record r = new Record(txnId, state.getLabel(), status, state.getReason(), finishTime);
+        Record r = new Record(txnId, label, status, reason, finishTime);
         byTxnId.put(txnId, r);
         // Largest txn id wins for a reused label, matching getLabelState()'s "largest id" semantics.
-        Record existing = byLabel.get(r.label);
+        Record existing = byLabel.get(label);
         if (existing == null || txnId >= existing.txnId) {
-            byLabel.put(r.label, r);
+            byLabel.put(label, r);
         }
+    }
+
+    /**
+     * @return a snapshot of the currently cached records, for FE image serialization.
+     */
+    synchronized List<Record> snapshot() {
+        return new ArrayList<>(byTxnId.values());
     }
 
     /**

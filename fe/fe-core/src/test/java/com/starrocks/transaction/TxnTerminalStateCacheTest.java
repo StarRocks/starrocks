@@ -107,6 +107,34 @@ public class TxnTerminalStateCacheTest {
         assertNull(cache.getByLabel("x"));
     }
 
+    // Image round-trip: snapshot() then restore() into a fresh cache reproduces the entries, so the
+    // outcomes survive a checkpoint/restart (the P1 gap: checkpoint evicts before saveImage).
+    @Test
+    public void testSnapshotRestoreRoundTrip() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache src = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        src.put(terminalTxn(100L, "v", TransactionStatus.VISIBLE, now));
+        src.put(terminalTxn(200L, "a", TransactionStatus.ABORTED, now));
+
+        TxnTerminalStateCache dst = new TxnTerminalStateCache();
+        for (TxnTerminalStateCache.Record r : src.snapshot()) {
+            dst.restore(r.txnId, r.label, r.status, r.reason, r.finishTime);
+        }
+
+        assertEquals(2, dst.size());
+        assertNotNull(dst.getByTxnId(100L));
+        assertEquals(TransactionStatus.VISIBLE, dst.getByLabel("v").status);
+        assertEquals(TransactionStatus.ABORTED, dst.getByTxnId(200L).status);
+
+        // restore() applies the same admission rules: a born-dead record is dropped on load.
+        TxnTerminalStateCache dst2 = new TxnTerminalStateCache();
+        Config.label_keep_max_second = 10;
+        dst2.restore(300L, "old", TransactionStatus.VISIBLE, null, now - 20_000L);
+        assertEquals(0, dst2.size());
+    }
+
     // Only final statuses are cached; a non-terminal state is ignored.
     @Test
     public void testNonTerminalNotCached() {
