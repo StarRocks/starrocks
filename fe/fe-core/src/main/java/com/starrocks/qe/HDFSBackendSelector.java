@@ -48,7 +48,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
-import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -285,14 +284,7 @@ public class HDFSBackendSelector implements BackendSelector {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "computeScanRangeAssignment")) {
             computeGeneralAssignment();
             if (useIncrementalScanRanges) {
-                boolean hasMore = scanNode.hasMoreScanRanges();
-                TScanRangeParams end = new TScanRangeParams();
-                end.setScan_range(new TScanRange());
-                end.setEmpty(true);
-                end.setHas_more(hasMore);
-                for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
-                    assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
-                }
+                BackendSelector.appendIncrementalScanRangeSentinel(scanNode, workerProvider, assignment);
             }
         }
     }

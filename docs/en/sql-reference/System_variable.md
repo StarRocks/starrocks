@@ -866,6 +866,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_olap_incremental_scan_ranges
+
+* **Description**: Whether scan ranges of OLAP scans on cloud-native tables are delivered to running fragment instances in batches (incremental delivery) instead of all at once at deploy time. The batch size reuses `connector_incremental_scan_ranges_size`. Takes effect only in shared-data clusters, for plain scans without colocation, bucket-shuffle, or replicated joins; it is independent of `enable_connector_incremental_scan_ranges`, which controls the same behavior for external (connector) scans.
+* **Default**: false
+* **Data Type**: boolean
+* **Introduced in**: -
+
 ### enable_optimize_skew_join_v1
 
 * **Scope**: Session

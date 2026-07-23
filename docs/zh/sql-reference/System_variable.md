@@ -738,6 +738,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_olap_incremental_scan_ranges
+
+* 描述: 是否将云原生表 OLAP 扫描的 Scan Range 分批（增量）下发给运行中的 Fragment 实例，而不是在部署时一次性下发。批大小复用 `connector_incremental_scan_ranges_size`。仅在存算分离集群中，对不含 Colocate、Bucket Shuffle 或 Replicated Join 的普通扫描生效；与控制外部（Connector）扫描相同行为的 `enable_connector_incremental_scan_ranges` 相互独立。
+* 默认值: false
+* 引入版本: -
+
 ### enable_parallel_merge
 
 * 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。

@@ -140,6 +140,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private static volatile long estimatedScanRangeFootprint = 0;
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private boolean incrementalScanRangeDelivery = false;
+    private int incrementalDeliveryCursor = 0;
+    private boolean reachLimit = false;
     private final List<String> selectedPartitionNames = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
@@ -891,7 +894,48 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
      */
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return result;
+        if (!incrementalScanRangeDelivery || maxScanRangeLength <= 0) {
+            return result;
+        }
+        int end = (int) Math.min(result.size(), incrementalDeliveryCursor + maxScanRangeLength);
+        List<TScanRangeLocations> batch = new ArrayList<>(result.subList(incrementalDeliveryCursor, end));
+        incrementalDeliveryCursor = end;
+        return batch;
+    }
+
+    /**
+     * Arms incremental (batched) scan-range delivery for this node. Only the scheduler
+     * (BackendSelectorFactory) may arm it, and only for eligible plain scans: the scheduler
+     * passes a non-zero batch size to every scan node whenever incremental delivery is on
+     * for the job, and an unarmed OLAP scan must keep returning its full range set.
+     */
+    public void enableIncrementalScanRangeDelivery() {
+        this.incrementalScanRangeDelivery = true;
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return incrementalScanRangeDelivery && !reachLimit && incrementalDeliveryCursor < result.size();
+    }
+
+    /**
+     * Number of scan ranges not yet handed to the scheduler; 0 unless incremental delivery is armed.
+     */
+    public int numRemainingScanRanges() {
+        return hasMoreScanRanges() ? result.size() - incrementalDeliveryCursor : 0;
+    }
+
+    @Override
+    public void setReachLimit() {
+        this.reachLimit = true;
+    }
+
+    @Override
+    public void prepareRetry() {
+        // Matches the connector scan nodes' contract: a retry that reuses this node must restart
+        // incremental delivery from the first range, or tablets [0, cursor) are silently dropped.
+        incrementalDeliveryCursor = 0;
+        reachLimit = false;
     }
 
     public void setUsePreparedPhysicalSplitScan(boolean usePreparedPhysicalSplitScan) {
