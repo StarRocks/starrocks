@@ -55,6 +55,24 @@ This topic introduces the following types of FE configurations:
 
 ## Logging
 
+### `audit_loader_batch_max_bytes`
+
+- Default: 52428800
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The byte cap of the builtin audit loader buffer on each FE, which is also the maximum size of a single load batch. When the buffer reaches the cap, a flush is triggered immediately. If the downstream keeps absorbing slower than the audit inflow and the buffer stays full, excess audit events are dropped and counted (the FE log prints a rate-limited warning) to protect FE memory — this feature targets operational and security analysis and does not guarantee zero audit loss under extreme overload. Note that a flush transiently holds up to about 3x the batch size in extra memory copies, so make sure the FE heap is sufficient before increasing this value. A single SQL statement text is kept up to 1 MB in the table and truncated beyond that. Effective only when `enable_audit_loader` is enabled.
+- Introduced in: v4.2
+
+### `audit_loader_load_interval_seconds`
+
+- Default: 60
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum interval between two flushes of the builtin audit loader. Audit events are batched in FE memory and written to the audit table at this interval (or earlier when the buffer reaches `audit_loader_batch_max_bytes`), so the visibility latency of audit data is roughly this interval plus the load time. A smaller value lowers visibility latency at the cost of more frequent load transactions. Effective only when `enable_audit_loader` is enabled.
+- Introduced in: v4.2
+
 ### `audit_log_delete_age`
 
 - Default: 30d
@@ -238,6 +256,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Threshold (in ms) used by JournalWriter to detect and log slow edit-log batch writes. After a batch commit, if the batch duration exceeds this value, JournalWriter emits a WARN with batch size, duration and current journal queue size (rate-limited to once every ~2s). This setting only controls logging/alerts for potential IO or replication latency on the FE leader; it does not change commit or roll behavior (see `edit_log_roll_num` and commit-related settings). Metric updates still occur regardless of this threshold.
 - Introduced in: v3.2.3
+
+### `enable_audit_loader`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the builtin audit loader. When enabled, the FE persists audit events (queries and connections) into the internal table `_statistics_.starrocks_audit_tbl` so audit data can be analyzed directly with SQL. The audit table is created automatically by the Leader FE after the feature is enabled (partitioned by day with a default retention of 30 days, adjustable via `ALTER TABLE ... SET ("partition_live_number"="N")`, which the system will not override; if the table is dropped by mistake it is recreated automatically as an empty table). When an external dynamic AUDIT plugin (for example, the auditloader plugin) is installed in the cluster, this feature automatically stays inert to avoid importing audit data twice, and recovers automatically after the external plugin is uninstalled. This feature is independent of and can coexist with `fe.audit.log`. Note: `ADMIN SET FRONTEND CONFIG` only takes effect on the currently connected FE and is lost after a restart; enable it on every FE in a multi-FE cluster, and write it into each FE's `fe.conf` for persistence.
+- Introduced in: v4.2
 
 ### `enable_audit_sql`
 

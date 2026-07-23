@@ -184,6 +184,17 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean audit_log_enable_compress = false;
 
+    @ConfField(mutable = true, comment = "Whether to enable the builtin audit loader, which persists audit " +
+            "events into the internal table _statistics_.starrocks_audit_tbl. Disabled by default. It stays " +
+            "inert while an external dynamic AUDIT plugin is installed, to avoid importing audit data twice.")
+    public static boolean enable_audit_loader = false;
+    @ConfField(mutable = true, comment = "Max interval in seconds between two builtin audit loader flushes.")
+    public static long audit_loader_load_interval_seconds = 60;
+    @ConfField(mutable = true, comment = "Per-FE byte cap of the builtin audit loader buffer, also the max " +
+            "size of a single load batch. Events beyond the cap are dropped and counted. Note a flush " +
+            "transiently holds up to ~3x the batch size in extra copies, so keep this conservative.")
+    public static long audit_loader_batch_max_bytes = 52428800L; // 50MB
+
     @ConfField(mutable = true)
     public static long slow_lock_threshold_ms = 3000L;
 
