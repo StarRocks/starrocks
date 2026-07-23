@@ -42,6 +42,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final List<Ordering> enforceOrderBy;
     private final boolean useHashBasedPartition;
     private final boolean isSkewed;
+    private final boolean forceMergeSort;
 
     // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
     private final ScalarOperator skewColumn;
@@ -60,6 +61,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                                   boolean isSkewed,
                                   ScalarOperator skewColumn,
                                   List<ScalarOperator> skewValues,
+                                  boolean forceMergeSort,
                                   boolean inputIsBinary,
                                   long limit,
                                   ScalarOperator predicate,
@@ -74,6 +76,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.isSkewed = isSkewed;
         this.skewColumn = skewColumn;
         this.skewValues = skewValues;
+        this.forceMergeSort = forceMergeSort;
         this.inputIsBinary = inputIsBinary;
         this.limit = limit;
         this.predicate = predicate;
@@ -114,6 +117,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     public List<ScalarOperator> getSkewValues() {
         return skewValues;
+    }
+
+    public boolean isForceMergeSort() {
+        return forceMergeSort;
     }
 
     public boolean isInputIsBinary() {
@@ -161,13 +168,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                 Objects.equals(isSkewed, that.isSkewed) &&
                 Objects.equals(skewColumn, that.skewColumn) &&
                 Objects.equals(skewValues, that.skewValues) &&
+                Objects.equals(forceMergeSort, that.forceMergeSort) &&
                 Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed, skewColumn, skewValues, inputIsBinary);
+                useHashBasedPartition, isSkewed, forceMergeSort, skewColumn, skewValues, inputIsBinary);
     }
 
     @Override

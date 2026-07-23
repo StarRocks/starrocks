@@ -37,7 +37,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
@@ -77,11 +76,22 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
     ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
+    bool force_merge_sort = _tnode.analytic_node.__isset.force_merge_sort && _tnode.analytic_node.force_merge_sort;
 
     if (_tnode.analytic_node.partition_exprs.empty()) {
         // analytic's dop must be 1 if with no partition clause
         ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
                 context, runtime_state(), id(), ops_with_sink);
+    } else if (force_merge_sort) {
+        // force_merge_sort feeds the AnalyticNode through OrderedPartitionExchanger, which assumes a single,
+        // globally-ordered input stream (dop=1). When the upstream DOP is > 1 data already is partitioned
+        // and sorting already happened. This can occur when there are multiple analytics with different frames
+        // but same partitioning and order by clauses. So only interpolate when DOP == 1; otherwise run the analytic
+        // directly on the parallel streams, which is correct.
+        if (upstream_source_op->degree_of_parallelism() == 1) {
+            ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_ordered_partition_exchange(
+                    context, runtime_state(), id(), ops_with_sink, _partition_exprs);
+        }
     } else if (_use_hash_based_partition) {
         bool has_outer_join_child =
                 _tnode.analytic_node.__isset.has_outer_join_child && _tnode.analytic_node.has_outer_join_child;
@@ -137,5 +147,4 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
 
     return ops_with_source;
 }
-
 } // namespace starrocks

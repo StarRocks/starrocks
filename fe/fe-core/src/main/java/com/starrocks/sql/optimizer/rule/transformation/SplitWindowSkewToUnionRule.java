@@ -134,7 +134,8 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             return partitionExprs != null
                     && partitionExprs.size() == 1
                     && lwo.getOrderByElements() != null
-                    && !lwo.getOrderByElements().isEmpty();
+                    && !lwo.getOrderByElements().isEmpty()
+                    && !lwo.isForceMergeSort();
         }
         return false;
     }

@@ -419,6 +419,7 @@ public class WindowTransformer {
                     .setEnforceSortColumns(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
                     .setUseHashBasedPartition(windowOperator.useHashBasedPartition)
                     .setIsSkewed(windowOperator.isSkewed)
+                    .setForceMergeSort(windowOperator.forceMergeSort)
                     .setSkewColumn(skewColumnOp)
                     .setSkewValues(skewValueOps)
                     .build());
@@ -754,6 +755,7 @@ public class WindowTransformer {
         // it will be also treated as the same window clause. So this field should not be involved in the equals and
         // hashCode method.
         private boolean isSkewed;
+        private boolean forceMergeSort;
 
         // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
         private Expr skewColumn;
@@ -792,10 +794,12 @@ public class WindowTransformer {
                 this.isSkewed = analyticExpr.isSkewed();
                 this.skewColumn = analyticExpr.getSkewColumn();
                 this.skewValues = analyticExpr.getSkewValues();
+                this.forceMergeSort = analyticExpr.isForceMergeSort();
             } else {
                 this.isSkewed = false;
                 this.skewColumn = null;
                 this.skewValues = List.of();
+                this.forceMergeSort = false;
             }
         }
 
@@ -830,7 +834,15 @@ public class WindowTransformer {
         }
 
         public void setSkewed() {
-            isSkewed = true;
+            this.isSkewed = true;
+        }
+
+        public boolean isForceMergeSort() {
+            return forceMergeSort;
+        }
+
+        public void setForceMergeSort() {
+            this.forceMergeSort = true;
         }
 
         public void setSkewColumn(Expr skewColumn) {

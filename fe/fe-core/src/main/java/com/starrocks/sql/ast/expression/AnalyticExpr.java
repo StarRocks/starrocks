@@ -84,6 +84,7 @@ public class AnalyticExpr extends Expr {
 
     private boolean useHashBasedPartition;
     private boolean isSkewed;
+    private boolean forceMergeSort;
 
     // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
     private Expr skewColumn;
@@ -143,8 +144,12 @@ public class AnalyticExpr extends Expr {
                     this.skewHint = hint;
                     this.skewColumn = skewColumn;
                     this.skewValues = skewValues;
+                } else if (HintNode.HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(hint)) {
+                    this.skewHint = hint;
+                    this.forceMergeSort = true;
                 } else {
-                    Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash' or 'skew' or 'skewed'");
+                    Preconditions.checkState(false,
+                            "partition by hint can only be 'sort' or 'hash' or 'skew' or 'skewed' or 'merge_sort'");
                 }
             }
         }
@@ -170,6 +175,7 @@ public class AnalyticExpr extends Expr {
         skewHint = other.skewHint;
         useHashBasedPartition = other.useHashBasedPartition;
         isSkewed = other.isSkewed;
+        forceMergeSort = other.forceMergeSort;
         skewColumn = (other.skewColumn != null ? other.skewColumn.clone() : null);
         skewValues = ExprUtils.cloneList(other.skewValues);
         sqlString = other.sqlString;
@@ -220,6 +226,10 @@ public class AnalyticExpr extends Expr {
         return skewValues;
     }
 
+    public boolean isForceMergeSort() {
+        return forceMergeSort;
+    }
+
     @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!super.equalsWithoutChild(obj)) {
@@ -236,6 +246,7 @@ public class AnalyticExpr extends Expr {
                 Objects.equals(skewHint, o.skewHint) &&
                 Objects.equals(useHashBasedPartition, o.useHashBasedPartition) &&
                 Objects.equals(isSkewed, o.isSkewed) &&
+                Objects.equals(forceMergeSort, o.forceMergeSort) &&
                 Objects.equals(skewColumn, o.skewColumn) &&
                 Objects.equals(skewValues, o.skewValues) &&
                 Objects.equals(fnCall.getIgnoreNulls(), o.fnCall.getIgnoreNulls());
@@ -336,7 +347,7 @@ public class AnalyticExpr extends Expr {
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
         return Objects.hash(type, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
-                useHashBasedPartition, isSkewed, skewColumn, skewValues);
+                useHashBasedPartition, isSkewed, forceMergeSort, skewColumn, skewValues);
     }
 
 }
