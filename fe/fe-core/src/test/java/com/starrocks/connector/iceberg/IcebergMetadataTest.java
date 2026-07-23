@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -522,6 +523,67 @@ public class IcebergMetadataTest extends TableTestBase {
 
             metadata.createDb(connectContext, "iceberg_db", new HashMap<>());
         });
+    }
+
+    @Test
+    public void testCreateTableTranslatesConnectorAlreadyExists(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog, @Mocked CreateTableStmt stmt) {
+        new Expectations() {
+            {
+                stmt.getDbName();
+                result = "db";
+                minTimes = 0;
+                stmt.getTableName();
+                result = "tbl";
+                minTimes = 0;
+                stmt.getColumns();
+                result = Lists.newArrayList(new Column("id", IntegerType.INT));
+                minTimes = 0;
+                stmt.getPartitionDesc();
+                result = null;
+                minTimes = 0;
+
+                icebergHiveCatalog.createTable((ConnectContext) any, anyString, anyString, (Schema) any,
+                        (PartitionSpec) any, anyString, (SortOrder) any, (Map<String, String>) any);
+                result = new org.apache.iceberg.exceptions.AlreadyExistsException("Table already exists: db.tbl");
+                times = 1;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        AlreadyExistsException e = assertThrows(AlreadyExistsException.class,
+                () -> metadata.createTable(connectContext, stmt));
+        Assertions.assertTrue(e.getMessage().contains("tbl"),
+                "translated message should carry the table name, but was: " + e.getMessage());
+    }
+
+    @Test
+    public void testCreateTableReturnsConnectorResult(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog, @Mocked CreateTableStmt stmt) throws Exception {
+        new Expectations() {
+            {
+                stmt.getDbName();
+                result = "db";
+                minTimes = 0;
+                stmt.getTableName();
+                result = "tbl";
+                minTimes = 0;
+                stmt.getColumns();
+                result = Lists.newArrayList(new Column("id", IntegerType.INT));
+                minTimes = 0;
+                stmt.getPartitionDesc();
+                result = null;
+                minTimes = 0;
+
+                icebergHiveCatalog.createTable((ConnectContext) any, anyString, anyString, (Schema) any,
+                        (PartitionSpec) any, anyString, (SortOrder) any, (Map<String, String>) any);
+                result = true;
+                times = 1;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
     }
 
     @Test

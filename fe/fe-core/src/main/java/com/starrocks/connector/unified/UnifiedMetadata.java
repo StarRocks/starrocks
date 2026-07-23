@@ -282,7 +282,7 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
-    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
         requireNonNull(stmt.getEngineName(), "engine name is null");
         Table.TableType type = Table.TableType.deserialize(stmt.getEngineName().toUpperCase());
         return metadataMap.get(type).createTable(context, stmt);
