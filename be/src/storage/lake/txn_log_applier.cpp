@@ -1247,9 +1247,13 @@ private:
         const auto end_input_pos = pre_input_pos + 1;
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
             if (iter != last_input_pos) {
+                // Drop the delete_predicate before archiving into compaction_inputs; it is consumed
+                // only by vacuum/file cleanup, never by readers, so it is pure metadata bloat here.
+                (*iter).clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
             } else {
                 // might be a partial compaction, use real last input rowset
+                last_input_rowset.clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(last_input_rowset));
             }
         }

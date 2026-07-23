@@ -1248,5 +1248,55 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     EXPECT_EQ("dcg_77.cols", meta->dcg_meta().dcgs().at(77).column_files(0));
 }
 
+// Regression for the metadata-reclaim change on the non-PK path: when
+// NonPrimaryKeyTxnLogApplier archives compaction input rowsets into
+// compaction_inputs, the delete_predicate must be dropped from the archived copy
+// (covers both the std::move(*iter) branch and the last_input_rowset branch).
+TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40050);
+    auto meta = build_non_pk_metadata(40050);
+    meta->set_next_rowset_id(10);
+
+    // Two adjacent live rowsets, each carrying a delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segment_metas()->set_filename("seg0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segment_metas()->set_filename("seg1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40050);
+    log->set_txn_id(200);
+    auto* op_compaction = log->mutable_op_compaction();
+    op_compaction->add_input_rowsets(1);
+    op_compaction->add_input_rowsets(2);
+    auto* output = op_compaction->mutable_output_rowset();
+    output->set_num_rows(30);
+    output->set_data_size(300);
+    output->add_segment_metas()->set_filename("out.dat");
+    op_compaction->set_compact_version(2);
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // Input rowsets archived into compaction_inputs must NOT retain delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
 } // namespace lake
 } // namespace starrocks
