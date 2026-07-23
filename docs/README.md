@@ -77,8 +77,8 @@ Before contributing, please read this article carefully to quickly understand th
 ## Verifying SQL samples
 
 The `sql-reference` docs contain thousands of runnable SQL examples. This procedure
-checks that they still execute on a StarRocks release and, optionally, drafts fixes
-for the ones that don't.
+checks that they still run on a StarRocks release and drafts fixes for the ones
+that don't.
 
 **The one rule: test one version at a time, and match it.** The docs you check and
 the cluster you run must be the **same StarRocks version** — otherwise examples for
@@ -86,98 +86,75 @@ newer features look "broken" when the release simply doesn't have them yet.
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) (includes Compose).
-- Python 3.
-- [`uv`](https://docs.astral.sh/uv/) — only for the optional fix step (step 4).
-- A **clone** of this repo (`git clone https://github.com/StarRocks/starrocks.git`).
-  A normal clone contains this tooling and already knows every release branch via
-  `origin/branch-*` — you don't need a separate copy of the branch you're
-  verifying. You run the checker from your clone (on `main`); you do **not** switch
-  its branch. To verify a *released* version you create a one-time worktree for that
-  branch in Step 2, and point `--docs-root` at it.
+- [Docker](https://docs.docker.com/get-docker/) (includes Compose)
+- Python 3 and [`uv`](https://docs.astral.sh/uv/)
+- A clone of this repo (`git clone https://github.com/StarRocks/starrocks.git`) — a
+  normal clone has this tooling and knows every release branch via `origin/*`, so
+  you never switch its branch.
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) with the `starrocks`
+  MCP server (from the repo's `.mcp.json`) — used in step 4.
 
-### 1. Start a matching StarRocks cluster
+### 0. Overview
 
-Set `SR_VERSION` to the release you're verifying (it must match the docs version
-you check in Step 2), then start the shared-nothing (FE + BE) cluster:
+You verify one release end to end — say **4.1**. `SR_VERSION` is the only thing you
+set; every step below uses it:
+
+1. **Set `SR_VERSION`** to the release you're verifying.
+2. **Create a worktree** of that release branch — its docs are what you check.
+3. **Start a StarRocks cluster** on that version — the examples run there.
+4. **Run the `sql-doc-autofix` skill** — it checks the docs' SQL on the cluster and
+   opens a draft PR with suggested fixes.
+5. **Tear down.**
+
+### 1. Set the version
 
 ```bash
-export SR_VERSION=4.1   # e.g. 4.1 when verifying branch-4.1 docs
+export SR_VERSION=4.1   # the release you're verifying; every step below uses this
+```
+
+### 2. Create a worktree of that release branch
+
+A one-time command per version. It fetches the branch and checks it out in a new
+directory, without touching your current branch:
+
+```bash
+git fetch origin branch-$SR_VERSION
+git worktree add ../sr-branch-$SR_VERSION -b branch-$SR_VERSION origin/branch-$SR_VERSION
+```
+
+Before a later run, refresh it with `git -C ../sr-branch-$SR_VERSION pull`.
+
+### 3. Start a matching StarRocks cluster
+
+```bash
 docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait
 ```
 
-The FE is reachable on `127.0.0.1:9030` (user `root`, no password). For cluster
-details, teardown, or the shared-data (cloud-native) cluster, see
+The FE is on `127.0.0.1:9030` (user `root`, no password). For the shared-data
+(cloud-native) cluster or teardown details, see
 [docs/docker/doc-verification/README.md](docker/doc-verification/README.md).
 
-### 2. Detect broken examples
+### 4. Check the examples and draft fixes
 
-Point the checker at the docs for the version you're verifying with `--docs-root`
-— those docs do not have to live in this checkout.
+In Claude Code (with the `starrocks` MCP server attached), run the
+**`sql-doc-autofix`** skill and have it verify `$SR_VERSION`, whose docs are at
+`../sr-branch-$SR_VERSION/docs/en/sql-reference`. The skill:
 
-**Current (`main`) docs** — use this checkout directly:
+- runs the checker against those docs on your cluster and sorts every example into
+  **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not self-contained),
+  **ENV** (test-cluster limitation), or **SKIP** (not runnable by design);
+- for the genuinely fixable **FAIL** items, proposes a corrected statement, verifies
+  it on the cluster, and opens a **draft** PR — it never merges;
+- flags version-gated or illustrative examples instead of "fixing" them, because
+  *runs on the cluster* is not the same as *correct documentation*.
 
-```bash
-python3 docs/scripts/run_sql_samples.py \
-    --docs-root docs/en/sql-reference \
-    --host 127.0.0.1 --port 9030 --user root \
-    --format md > /tmp/sql-report.md
-```
-
-**A released version (e.g. 4.1)** — create a worktree of that release branch. This
-fetches the branch from `origin` and checks it out in a new directory; it does not
-touch your current branch, and you need no prior copy of it. One time:
-
-```bash
-git fetch origin branch-4.1
-git worktree add ../sr-branch-4.1 -b branch-4.1 origin/branch-4.1
-```
-
-Then run the checker against it (repeatable — the worktree persists):
-
-```bash
-python3 docs/scripts/run_sql_samples.py \
-    --docs-root ../sr-branch-4.1/docs/en/sql-reference \
-    --host 127.0.0.1 --port 9030 --user root \
-    --format md > /tmp/sql-report.md
-```
-
-Refresh the worktree before later runs with `git -C ../sr-branch-4.1 pull`.
-Substitute the branch you're verifying (e.g. `branch-3.5`) in all three commands.
-(A second full clone works too, but a worktree shares one `.git` and is lighter.)
-
-Open `/tmp/sql-report.md`. Its header confirms the docs and cluster versions are
-aligned — if it warns they aren't, fix that before trusting the results. Every
-example is sorted into a bucket:
-
-- **PASS** — ran cleanly.
-- **FAIL** — errored; this is the work list of candidate doc bugs.
-- **UNRESOLVED** — references a table/object defined elsewhere (not self-contained).
-- **ENV** — failed because of the small test cluster, not the docs.
-- **SKIP** — not meant to run as-is (external systems, syntax notation, transcripts).
-
-Only **FAIL** items are candidate doc bugs. Add `--profile shared-data` if you
-started the shared-data cluster instead.
-
-### 3. Review the FAIL list
-
-Work through the **FAIL** entries in the report (each shows `file:line`, the
-statement, and the error). Note that "runs on the cluster" is not the same as
-"correct documentation": some failures are features newer than this build, or
-examples that are illustrative by design — see the classification guidance in
-step 4's README before editing.
-
-### 4. (Optional) Generate fix suggestions automatically
-
-The `sql-doc-autofix` Claude Code skill classifies each FAIL item and, only for
-genuinely fixable ones, proposes a corrected statement, verifies it against the
-running cluster (via the StarRocks MCP server), and opens a **draft** PR for review.
-It never merges. Full setup and usage:
+Review the draft PR and merge what's right. Full behavior and the report format:
 [.claude/skills/sql-doc-autofix/README.md](../.claude/skills/sql-doc-autofix/README.md).
 
 ### 5. Tear down
 
 ```bash
 docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml down
+git worktree remove ../sr-branch-$SR_VERSION   # optional
 ```
 
