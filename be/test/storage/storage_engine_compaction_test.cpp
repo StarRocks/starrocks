@@ -221,8 +221,8 @@ TEST_F(StorageEngineCompactionTest, test_run_manual_cumulative_compaction) {
     ASSERT_GE(tablet->calc_cumulative_compaction_score(), 2);
 
     int64_t versions_before = tablet->version_count();
-    ASSERT_OK(CompactionAction::do_compaction(tablet->tablet_id(),
-                                             to_string(CompactionType::CUMULATIVE_COMPACTION), ""));
+    ASSERT_OK(
+            CompactionAction::do_compaction(tablet->tablet_id(), to_string(CompactionType::CUMULATIVE_COMPACTION), ""));
     ASSERT_LT(tablet->version_count(), versions_before);
 }
 
