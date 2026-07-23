@@ -66,6 +66,19 @@ struct MapAggAggregateFunctionState : public AggregateFunctionEmptyState {
             }
         }
     }
+
+    // Off-pool heap charged into the operator's agg-state memory so it shows in
+    // Aggregator::memory_usage(): the value column plus an approximate size of the
+    // open-addressing hash map (slots + one control byte each; phmap exposes no exact byte
+    // count). String keys live in the operator mem pool (already counted there), so they are
+    // excluded to avoid double counting.
+    int64_t mem_usage() const {
+        int64_t usage = static_cast<int64_t>(hash_map.capacity()) * (sizeof(typename MyHashMap::value_type) + 1);
+        if (value_column != nullptr) {
+            usage += value_column->memory_usage();
+        }
+        return usage;
+    }
 };
 
 template <LogicalType KT, typename MyHashMap = std::map<int, size_t>>
@@ -86,18 +99,22 @@ public:
             return;
         }
         const auto& key_column = down_cast<const KeyColumnType&>(*ColumnHelper::get_data_column(columns[0]));
+        int64_t prev_memory = this->data(state).mem_usage();
         this->data(state).update(ctx->mem_pool(), key_column, *columns[1], row_num, 1);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto map_column = down_cast<const MapColumn*>(ColumnHelper::get_data_column(column));
         auto& offsets = map_column->offsets().immutable_data();
+        int64_t prev_memory = this->data(state).mem_usage();
         if (offsets[row_num + 1] > offsets[row_num]) {
             this->data(state).update(
                     ctx->mem_pool(),
                     *down_cast<const KeyColumnType*>(ColumnHelper::get_data_column(map_column->keys_column().get())),
                     map_column->values(), offsets[row_num], offsets[row_num + 1] - offsets[row_num]);
         }
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
