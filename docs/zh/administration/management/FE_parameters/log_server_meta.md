@@ -64,6 +64,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 审计日志文件的保留期限。默认值 `30d` 指定每个审计日志文件可以保留 30 天。StarRocks 会检查每个审计日志文件，并删除 30 天前生成的那些。
 - 引入版本: -
 
+### `audit_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.audit.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `audit_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `audit_log_delete_age` 或不在最新的 `audit_log_delete_count` 个文件之内时会被删除。该参数主要与 `audit_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
 ### `audit_log_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -98,6 +107,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: StarRocks 为其生成审计日志条目的模块。默认情况下，StarRocks 为 `slow_query` 模块和 `query` 模块生成审计日志。`connection` 模块从 v3.0 版本开始支持。模块名称用逗号 (,) 和空格分隔。
+- 引入版本: -
+
+### `audit_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.audit.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `audit_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `audit_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `audit_log_roll_num`）限制，请设置 `audit_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
 - 引入版本: -
 
 ### `audit_log_roll_interval`
@@ -147,6 +165,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 控制 FE 大查询日志文件 (`fe.big_query.log.*`) 在自动删除前的保留时间。该值作为 IfLastModified age 传递给 Log4j 的删除策略 — 任何最后修改时间早于此值的轮转大查询日志都将被删除。支持的后缀包括 `d`（天）、`h`（小时）、`m`（分钟）和 `s`（秒）。示例：`7d`（7 天）、`10h`（10 小时）、`60m`（60 分钟）和 `120s`（120 秒）。此项与 `big_query_log_roll_interval` 和 `big_query_log_roll_num` 共同决定哪些文件被保留或清除。
 - 引入版本: v3.2.0
 
+### `big_query_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.big_query.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `big_query_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `big_query_log_delete_age` 或不在最新的 `big_query_log_delete_count` 个文件之内时会被删除。该参数主要与 `big_query_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
 ### `big_query_log_dir`
 
 - 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
@@ -164,6 +191,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 启用每个模块大查询日志记录的模块名称后缀列表。典型值是逻辑组件名称。例如，默认的 `query` 会生成 `big_query.query`。
 - 引入版本: v3.2.0
+
+### `big_query_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.big_query.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `big_query_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `big_query_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `big_query_log_roll_num`）限制，请设置 `big_query_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
+- 引入版本: -
 
 ### `big_query_log_roll_interval`
 
@@ -192,6 +228,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: dump 日志文件的保留期限。默认值 `7d` 指定每个 dump 日志文件可以保留 7 天。StarRocks 会检查每个 dump 日志文件，并删除 7 天前生成的那些。
 - 引入版本: -
 
+### `dump_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.dump.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `dump_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `dump_log_delete_age` 或不在最新的 `dump_log_delete_count` 个文件之内时会被删除。该参数主要与 `dump_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
 ### `dump_log_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -208,6 +253,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: StarRocks 为其生成 dump 日志条目的模块。默认情况下，StarRocks 为 query 模块生成 dump 日志。模块名称用逗号 (,) 和空格分隔。
+- 引入版本: -
+
+### `dump_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.dump.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `dump_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `dump_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `dump_log_roll_num`）限制，请设置 `dump_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
 - 引入版本: -
 
 ### `dump_log_roll_interval`
@@ -284,6 +338,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统会在将敏感 SQL 内容写入日志、查询详细记录以及查询 profile 之前替换或隐藏这些内容。遵循此配置的代码路径包括 ConnectProcessor.formatStmt（审计日志）、StmtExecutor.addRunningQueryDetail（查询详细信息）、SimpleExecutor.formatSQL（内部执行器日志），以及 StmtExecutor.buildTopLevelProfile / processProfileAsync（profile 的 `Summary` 段中的 `Sql Statement` 与 `ExplainPlan` info-string）。启用此功能后，无效的 SQL 可能会被替换为固定的脱敏消息，凭据（用户/密码）将被隐藏，并且 SQL 格式化程序必须生成 sanitized 表示（它还可以启用摘要式输出）。对于通过会话变量 `enable_explain_in_profile` 加入的 `ExplainPlan` 字段，此配置还会强制对嵌入的 `EXPLAIN COSTS` 文本启用文字（literal）摘要渲染，从而避免 profile 中的 `Sql Statement` 已被脱敏但 `ExplainPlan` 仍然暴露原始字面量。这减少了审计/内部日志和 profile 中敏感字面量和凭据的泄露，但也意味着日志、查询详细信息和 profile 不再包含原始完整 SQL 文本（这可能会影响回放或调试）。
 - 引入版本: -
 
+### `feature_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.features.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `feature_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `feature_log_delete_age` 或不在最新的 `feature_log_delete_count` 个文件之内时会被删除。该参数主要与 `feature_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
+### `feature_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.features.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `feature_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `feature_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `feature_log_roll_num`）限制，请设置 `feature_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
+- 引入版本: -
+
 ### `internal_log_delete_age`
 
 - 默认值: 7d
@@ -292,6 +364,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 指定 FE 内部日志文件（写入 `internal_log_dir`）的保留期限。该值是一个持续时间字符串。支持的后缀：`d`（天）、`h`（小时）、`m`（分钟）、`s`（秒）。示例：`7d`（7 天）、`10h`（10 小时）、`60m`（60 分钟）、`120s`（120 秒）。此项作为 `<IfLastModified age="..."/>` 谓词替换到 Log4j 配置中，该谓词由 RollingFile Delete 策略使用。最后修改时间早于此持续时间的文件将在日志轮转期间删除。增加此值可更快释放磁盘空间，或减少此值可更长时间保留内部物化视图或统计信息日志。
 - 引入版本: v3.2.4
+
+### `internal_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.internal.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `internal_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `internal_log_delete_age` 或不在最新的 `internal_log_delete_count` 个文件之内时会被删除。该参数主要与 `internal_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
 
 ### `internal_log_dir`
 
@@ -319,6 +400,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 将接收专用内部日志记录的模块标识符列表。对于每个条目 X，Log4j 将创建一个名为 `internal.<X>` 的日志记录器，其级别为 INFO，并且 additivity="false"。这些日志记录器被路由到内部 appender（写入 `fe.internal.log`），或者在 `sys_log_to_console` 启用时路由到控制台。根据需要使用短名称或包片段 — 确切的日志记录器名称变为 `internal.` + 配置的字符串。内部日志文件轮转和保留遵循 `internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval` 和 `log_roll_size_mb`。添加模块会导致其运行时消息分离到内部日志记录器流中，以便于调试和审计。
 - 引入版本: v3.2.4
+
+### `internal_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.internal.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `internal_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `internal_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `internal_log_roll_num`）限制，请设置 `internal_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
+- 引入版本: -
 
 ### `internal_log_roll_interval`
 
@@ -410,6 +500,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 系统日志文件或审计日志文件的最大大小。
 - 引入版本: -
 
+### `plan_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.plan.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `plan_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `plan_log_delete_age` 或不在最新的 `plan_log_delete_count` 个文件之内时会被删除。该参数主要与 `plan_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
+### `plan_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.plan.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `plan_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `plan_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `plan_log_roll_num`）限制，请设置 `plan_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
+- 引入版本: -
+
 ### `proc_profile_file_retained_days`
 
 - 默认值: 1
@@ -437,6 +545,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 控制 FE profile 日志文件在符合删除条件之前保留多长时间。该值注入到 Log4j 的 `<IfLastModified age="..."/>` 策略（通过 `Log4jConfig`）中，并与轮转设置（如 `profile_log_roll_interval` 和 `profile_log_roll_num`）一起应用。支持的后缀：`d`（天）、`h`（小时）、`m`（分钟）、`s`（秒）。例如：`7d`（7 天）、`10h`（10 小时）、`60m`（60 分钟）、`120s`（120 秒）。
 - 引入版本: v3.2.5
 
+### `profile_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.profile.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `profile_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `profile_log_delete_age` 或不在最新的 `profile_log_delete_count` 个文件之内时会被删除。该参数主要与 `profile_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
 ### `profile_log_dir`
 
 - 默认值: `Config.STARROCKS_HOME_DIR` + "/log"
@@ -454,6 +571,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 0 表示记录所有 profile（无阈值）。设为正数可仅记录较慢的查询以降低日志量。
 - 引入版本：-
+
+### `profile_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.profile.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `profile_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `profile_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `profile_log_roll_num`）限制，请设置 `profile_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
+- 引入版本: -
 
 ### `profile_log_roll_interval`
 
@@ -555,6 +681,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 系统日志文件的保留期限。默认值 `7d` 指定每个系统日志文件可以保留 7 天。StarRocks 会检查每个系统日志文件，并删除 7 天前生成的那些。
 - 引入版本: -
 
+### `sys_log_delete_count`
+
+- 默认值: -1
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: 磁盘上保留的 `fe.log` 和 `fe.warn.log` 滚动归档文件数量的硬性上限，由 Log4j `Delete` 动作通过 `IfAccumulatedFileCount` 条件强制执行。小于或等于 `0` 时禁用该上限（仅由 `sys_log_delete_age` 控制保留）。设置为正值时，当某个归档文件早于 `sys_log_delete_age` 或不在最新的 `sys_log_delete_count` 个文件之内时会被删除。该参数主要与 `sys_log_roll_file_index = nomax` 配合使用以限制磁盘占用。
+- 引入版本: -
+
 ### `sys_log_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -607,6 +742,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: 系统日志条目分类的严重性级别。有效值：`INFO`、`WARN`、`ERROR` 和 `FATAL`。
+- 引入版本: -
+
+### `sys_log_roll_file_index`
+
+- 默认值: min
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: Log4j `DefaultRolloverStrategy` 为 `fe.log` 和 `fe.warn.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `sys_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `sys_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `sys_log_roll_num`）限制，请设置 `sys_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
 - 引入版本: -
 
 ### `sys_log_roll_interval`

@@ -64,6 +64,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：監査ログファイルの保持期間。デフォルト値 `30d` は、各監査ログファイルが 30 日間保持できることを指定します。StarRocks は各監査ログファイルをチェックし、30 日以上前に生成されたファイルを削除します。
 - 導入時期：-
 
+### `audit_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.audit.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `audit_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `audit_log_delete_age` より古い場合、または最新の `audit_log_delete_count` 個に含まれない場合に削除されます。主に `audit_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
 ### `audit_log_dir`
 
 - デフォルト：`StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -98,6 +107,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：No
 - 説明：StarRocks が監査ログエントリを生成するモジュール。デフォルトでは、StarRocks は `slow_query` モジュールと `query` モジュールの監査ログを生成します。`connection` モジュールは v3.0 以降でサポートされています。モジュール名をコンマ (,) とスペースで区切ります。
+- 導入時期：-
+
+### `audit_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.audit.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `audit_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `audit_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`audit_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `audit_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
 - 導入時期：-
 
 ### `audit_log_roll_interval`
@@ -138,6 +156,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE の大容量クエリログファイル (`fe.big_query.log.*`) が自動削除されるまでの保持期間を制御します。この値は、Log4j の削除ポリシーに IfLastModified age として渡されます。最終更新時刻がこの値よりも古いローテーションされた大容量クエリログは削除されます。`d` (日)、`h` (時間)、`m` (分)、`s` (秒) などの接尾辞をサポートしています。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。この項目は `big_query_log_roll_interval` および `big_query_log_roll_num` と連携して、どのファイルを保持またはパージするかを決定します。
 - 導入時期：v3.2.0
 
+### `big_query_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.big_query.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `big_query_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `big_query_log_delete_age` より古い場合、または最新の `big_query_log_delete_count` 個に含まれない場合に削除されます。主に `big_query_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
 ### `big_query_log_dir`
 
 - デフォルト：`Config.STARROCKS_HOME_DIR + "/log"`
@@ -155,6 +182,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：モジュールごとの大容量クエリロギングを有効にするモジュール名サフィックスのリスト。一般的な値は論理コンポーネント名です。たとえば、デフォルトの `query` は `big_query.query` を生成します。
 - 導入時期：v3.2.0
+
+### `big_query_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.big_query.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `big_query_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `big_query_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`big_query_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `big_query_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
+- 導入時期：-
 
 ### `big_query_log_roll_interval`
 
@@ -183,6 +219,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ダンプログファイルの保持期間。デフォルト値 `7d` は、各ダンプログファイルが 7 日間保持できることを指定します。StarRocks は各ダンプログファイルをチェックし、7 日以上前に生成されたファイルを削除します。
 - 導入時期：-
 
+### `dump_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.dump.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `dump_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `dump_log_delete_age` より古い場合、または最新の `dump_log_delete_count` 個に含まれない場合に削除されます。主に `dump_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
 ### `dump_log_dir`
 
 - デフォルト：`StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -199,6 +244,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：No
 - 説明：StarRocks がダンプログエントリを生成するモジュール。デフォルトでは、StarRocks はクエリモジュールのダンプログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
+- 導入時期：-
+
+### `dump_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.dump.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `dump_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `dump_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`dump_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `dump_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
 - 導入時期：-
 
 ### `dump_log_roll_interval`
@@ -275,6 +329,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、システムはログ、クエリ詳細レコード、およびクエリプロファイルに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、SimpleExecutor.formatSQL (内部エクゼキュータログ)、および StmtExecutor.buildTopLevelProfile / processProfileAsync (プロファイルの `Summary` セクションに格納される `Sql Statement` および `ExplainPlan` info-string) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。セッション変数 `enable_explain_in_profile` によって追加される `ExplainPlan` フィールドについても、本設定により埋め込まれる `EXPLAIN COSTS` テキストのリテラルが強制的にダイジェスト化されるため、プロファイル内で `Sql Statement` が非機密化されているにもかかわらず `ExplainPlan` が元のリテラルを露出してしまうことを防ぎます。これにより、監査/内部ログおよびプロファイルでの機密リテラルや資格情報の漏洩が減少しますが、ログ、クエリ詳細、およびプロファイルに元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
 - 導入時期：-
 
+### `feature_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.features.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `feature_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `feature_log_delete_age` より古い場合、または最新の `feature_log_delete_count` 個に含まれない場合に削除されます。主に `feature_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
+### `feature_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.features.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `feature_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `feature_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`feature_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `feature_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
+- 導入時期：-
+
 ### `internal_log_delete_age`
 
 - デフォルト：7d
@@ -283,6 +355,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：FE 内部ログファイル (`internal_log_dir` に書き込まれます) の保持期間を指定します。値は期間文字列です。サポートされている接尾辞: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。この項目は、RollingFile Delete ポリシーで使用される `<IfLastModified age="..."/>` 述語として log4j 設定に代入されます。最終変更時刻がこの期間よりも古いファイルは、ログのロールオーバー中に削除されます。この値を増やすとディスク領域をより早く解放できます。減らすと内部マテリアライズドビューまたは統計ログをより長く保持できます。
 - 導入時期：v3.2.4
+
+### `internal_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.internal.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `internal_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `internal_log_delete_age` より古い場合、または最新の `internal_log_delete_count` 個に含まれない場合に削除されます。主に `internal_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
 
 ### `internal_log_dir`
 
@@ -310,6 +391,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：専用の内部ロギングを受け取るモジュール識別子のリスト。各エントリ X について、Log4j はレベル INFO と additivity="false" の `internal.<X>` という名前のロガーを作成します。これらのロガーは、内部アペンダー ( `fe.internal.log` に書き込まれます) または `sys_log_to_console` が有効になっている場合はコンソールにルーティングされます。必要に応じて短い名前またはパッケージフラグメントを使用します。正確なロガー名は `internal.` + 構成された文字列になります。内部ログファイルのローテーションと保持は、`internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval`、および `log_roll_size_mb` に従います。モジュールを追加すると、実行時メッセージが内部ロガーストリームに分離され、デバッグと監査が容易になります。
 - 導入時期：v3.2.4
+
+### `internal_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.internal.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `internal_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `internal_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`internal_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `internal_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
+- 導入時期：-
 
 ### `internal_log_roll_interval`
 
@@ -401,6 +491,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：システムログファイルまたは監査ログファイルの最大サイズ。
 - 導入時期：-
 
+### `plan_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.plan.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `plan_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `plan_log_delete_age` より古い場合、または最新の `plan_log_delete_count` 個に含まれない場合に削除されます。主に `plan_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
+### `plan_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.plan.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `plan_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `plan_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`plan_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `plan_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
+- 導入時期：-
+
 ### `proc_profile_file_retained_days`
 
 - デフォルト：1
@@ -428,6 +536,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE プロファイルログファイルが削除対象となるまでの保持期間を制御します。この値は Log4j の `<IfLastModified age="..."/>` ポリシー (`Log4jConfig` 経由) に注入され、`profile_log_roll_interval` や `profile_log_roll_num` などのローテーション設定と組み合わせて適用されます。サポートされる接尾辞: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。
 - 導入時期：v3.2.5
 
+### `profile_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.profile.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `profile_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `profile_log_delete_age` より古い場合、または最新の `profile_log_delete_count` 個に含まれない場合に削除されます。主に `profile_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
 ### `profile_log_dir`
 
 - デフォルト：`Config.STARROCKS_HOME_DIR` + "/log"
@@ -445,6 +562,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Milliseconds
 - 変更可能：Yes
 - 説明：`fe.profile.log` に書き込むクエリの最小レイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみ profile を記録します。0 に設定するとすべての profile を記録します（しきい値なし）。正の値に設定すると、遅いクエリのみを記録してログ量を削減できます。
+- 導入時期：-
+
+### `profile_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.profile.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `profile_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `profile_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`profile_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `profile_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
 - 導入時期：-
 
 ### `profile_log_roll_interval`
@@ -547,6 +673,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが 7 日間保持できることを指定します。StarRocks は各システムログファイルをチェックし、7 日以上前に生成されたファイルを削除します。
 - 導入時期：-
 
+### `sys_log_delete_count`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：-
+- 変更可能：No
+- 説明：ディスク上に保持される `fe.log` および `fe.warn.log` のロールされたアーカイブ数の上限（ハードキャップ）。Log4j の `Delete` アクションが `IfAccumulatedFileCount` 条件を用いて適用します。`0` 以下の場合はキャップを無効化します（保持は `sys_log_delete_age` のみで制御）。正の値を設定すると、アーカイブは `sys_log_delete_age` より古い場合、または最新の `sys_log_delete_count` 個に含まれない場合に削除されます。主に `sys_log_roll_file_index = nomax` と併用してディスク使用量を制限するために使用します。
+- 導入時期：-
+
 ### `sys_log_dir`
 
 - デフォルト：`StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -599,6 +734,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：No
 - 説明：システムログエントリが分類される重大度レベル。有効な値: `INFO`、`WARN`、`ERROR`、および `FATAL`。
+- 導入時期：-
+
+### `sys_log_roll_file_index`
+
+- デフォルト：min
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Log4j の `DefaultRolloverStrategy` が `fe.log` および `fe.warn.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `sys_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `sys_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`sys_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `sys_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
 - 導入時期：-
 
 ### `sys_log_roll_interval`

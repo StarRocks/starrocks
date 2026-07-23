@@ -59,6 +59,7 @@ import java.util.Set;
 // don't use trace. use INFO, WARN, ERROR, FATAL
 public class Log4jConfig extends XmlConfiguration {
     private static final Set<String> DEBUG_LEVELS = ImmutableSet.of("FATAL", "ERROR", "WARN", "INFO", "DEBUG");
+    private static final Set<String> VALID_FILE_INDEXES = ImmutableSet.of("min", "max", "nomax");
 
     private static final String APPENDER_TEMPLATE = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
             "\n" +
@@ -73,10 +74,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"${sys_roll_file_index}\">\n" +
             "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.log.*\" />\n" +
-            "          <IfLastModified age=\"${sys_log_delete_age}\" />\n" +
+            "${sys_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -86,10 +86,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"${sys_roll_file_index}\">\n" +
             "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.warn.log.*\" />\n" +
-            "          <IfLastModified age=\"${sys_log_delete_age}\" />\n" +
+            "${sys_wf_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -99,10 +98,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${audit_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${audit_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${audit_roll_num}\" fileIndex=\"${audit_roll_file_index}\">\n" +
             "        <Delete basePath=\"${audit_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.audit.log.*\" />\n" +
-            "          <IfLastModified age=\"${audit_log_delete_age}\" />\n" +
+            "${audit_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -112,10 +110,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${dump_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${dump_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${dump_roll_num}\" fileIndex=\"${dump_roll_file_index}\">\n" +
             "        <Delete basePath=\"${dump_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.dump.log.*\" />\n" +
-            "          <IfLastModified age=\"${dump_log_delete_age}\" />\n" +
+            "${dump_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -125,10 +122,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${big_query_log_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${big_query_log_roll_num}\" fileIndex=\"${big_query_roll_file_index}\">\n" +
             "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.big_query.log.*\" />\n" +
-            "          <IfLastModified age=\"${big_query_log_delete_age}\" />\n" +
+            "${big_query_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -139,10 +135,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${profile_log_roll_size_mb}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${profile_log_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${profile_log_roll_num}\" fileIndex=\"${profile_roll_file_index}\">\n" +
             "        <Delete basePath=\"${profile_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.profile.log.*\" />\n" +
-            "          <IfLastModified age=\"${profile_log_delete_age}\" />\n" +
+            "${profile_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -154,10 +149,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${feature_log_roll_size_mb}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${feature_log_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${feature_log_roll_num}\" fileIndex=\"${feature_roll_file_index}\">\n" +
             "        <Delete basePath=\"${feature_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.features.log.*\" />\n" +
-            "          <IfLastModified age=\"${feature_log_delete_age}\" />\n" +
+            "${feature_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -168,10 +162,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${internal_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${internal_log_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${internal_log_roll_num}\" fileIndex=\"${internal_roll_file_index}\">\n" +
             "        <Delete basePath=\"${internal_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.internal.log.*\" />\n" +
-            "          <IfLastModified age=\"${internal_log_delete_age}\" />\n" +
+            "${internal_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -182,10 +175,9 @@ public class Log4jConfig extends XmlConfiguration {
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${plan_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${plan_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${plan_roll_num}\" fileIndex=\"${plan_roll_file_index}\">\n" +
             "        <Delete basePath=\"${plan_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
-            "          <IfFileName glob=\"fe.plan.log.*\" />\n" +
-            "          <IfLastModified age=\"${plan_log_delete_age}\" />\n" +
+            "${plan_delete_conditions}" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -257,6 +249,12 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("sys_log_delete_age", String.valueOf(Config.sys_log_delete_age));
         properties.put("sys_log_level", sysLogLevel);
         properties.put("sys_file_pattern", getIntervalPattern("sys_log_roll_interval", Config.sys_log_roll_interval));
+        properties.put("sys_roll_file_index",
+                validateFileIndex("sys_log_roll_file_index", Config.sys_log_roll_file_index));
+        properties.put("sys_delete_conditions",
+                buildDeleteConditions("fe.log.*", String.valueOf(Config.sys_log_delete_age), Config.sys_log_delete_count));
+        properties.put("sys_wf_delete_conditions",
+                buildDeleteConditions("fe.warn.log.*", String.valueOf(Config.sys_log_delete_age), Config.sys_log_delete_count));
         properties.put("sys_file_postfix", compressSysLog ? ".gz" : "");
         properties.put("audit_file_postfix", compressAuditLog ? ".gz" : "");
 
@@ -267,6 +265,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("audit_log_delete_age", String.valueOf(Config.audit_log_delete_age));
         properties.put("audit_file_pattern",
                 getIntervalPattern("audit_log_roll_interval", Config.audit_log_roll_interval));
+        properties.put("audit_roll_file_index",
+                validateFileIndex("audit_log_roll_file_index", Config.audit_log_roll_file_index));
+        properties.put("audit_delete_conditions",
+                buildDeleteConditions("fe.audit.log.*", String.valueOf(Config.audit_log_delete_age),
+                        Config.audit_log_delete_count));
 
         // dump log config — always co-located with fe.log (sys_log_dir)
         properties.put("dump_log_dir", Config.sys_log_dir);
@@ -275,6 +278,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("dump_log_delete_age", String.valueOf(Config.dump_log_delete_age));
         properties.put("dump_file_pattern",
                 getIntervalPattern("dump_log_roll_interval", Config.dump_log_roll_interval));
+        properties.put("dump_roll_file_index",
+                validateFileIndex("dump_log_roll_file_index", Config.dump_log_roll_file_index));
+        properties.put("dump_delete_conditions",
+                buildDeleteConditions("fe.dump.log.*", String.valueOf(Config.dump_log_delete_age),
+                        Config.dump_log_delete_count));
 
         // big query log config
         properties.put("big_query_log_dir", Config.big_query_log_dir);
@@ -283,6 +291,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("big_query_log_delete_age", String.valueOf(Config.big_query_log_delete_age));
         properties.put("big_query_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.big_query_log_roll_interval));
+        properties.put("big_query_roll_file_index",
+                validateFileIndex("big_query_log_roll_file_index", Config.big_query_log_roll_file_index));
+        properties.put("big_query_delete_conditions",
+                buildDeleteConditions("fe.big_query.log.*", String.valueOf(Config.big_query_log_delete_age),
+                        Config.big_query_log_delete_count));
 
         // profile log config
         properties.put("profile_log_dir", Config.profile_log_dir);
@@ -291,6 +304,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("profile_log_delete_age", String.valueOf(Config.profile_log_delete_age));
         properties.put("profile_file_pattern",
                 getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
+        properties.put("profile_roll_file_index",
+                validateFileIndex("profile_log_roll_file_index", Config.profile_log_roll_file_index));
+        properties.put("profile_delete_conditions",
+                buildDeleteConditions("fe.profile.log.*", String.valueOf(Config.profile_log_delete_age),
+                        Config.profile_log_delete_count));
 
         // feature log config
         properties.put("feature_log_dir", Config.feature_log_dir);
@@ -299,6 +317,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("feature_log_delete_age", String.valueOf(Config.feature_log_delete_age));
         properties.put("feature_file_pattern",
                 getIntervalPattern("feature_log_roll_interval", Config.feature_log_roll_interval));
+        properties.put("feature_roll_file_index",
+                validateFileIndex("feature_log_roll_file_index", Config.feature_log_roll_file_index));
+        properties.put("feature_delete_conditions",
+                buildDeleteConditions("fe.features.log.*", String.valueOf(Config.feature_log_delete_age),
+                        Config.feature_log_delete_count));
 
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);
@@ -307,6 +330,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("internal_log_delete_age", String.valueOf(Config.internal_log_delete_age));
         properties.put("internal_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
+        properties.put("internal_roll_file_index",
+                validateFileIndex("internal_log_roll_file_index", Config.internal_log_roll_file_index));
+        properties.put("internal_delete_conditions",
+                buildDeleteConditions("fe.internal.log.*", String.valueOf(Config.internal_log_delete_age),
+                        Config.internal_log_delete_count));
 
         // plan log config — always co-located with fe.log (sys_log_dir)
         properties.put("plan_log_dir", Config.sys_log_dir);
@@ -315,6 +343,11 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("plan_log_delete_age", String.valueOf(Config.plan_log_delete_age));
         properties.put("plan_file_pattern",
                 getIntervalPattern("plan_log_roll_interval", Config.plan_log_roll_interval));
+        properties.put("plan_roll_file_index",
+                validateFileIndex("plan_log_roll_file_index", Config.plan_log_roll_file_index));
+        properties.put("plan_delete_conditions",
+                buildDeleteConditions("fe.plan.log.*", String.valueOf(Config.plan_log_delete_age),
+                        Config.plan_log_delete_count));
 
         // appender layout
         final String jsonLoggingConfValue = "json";
@@ -443,6 +476,29 @@ public class Log4jConfig extends XmlConfiguration {
         newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
                 sb.toString());
         return newXmlConfTemplate;
+    }
+
+    private static String validateFileIndex(String name, String fileIndex) throws IOException {
+        if (fileIndex == null || !VALID_FILE_INDEXES.contains(StringUtils.lowerCase(fileIndex.trim()))) {
+            throw new IOException(name + " config error: " + fileIndex + ", must be one of min/max/nomax");
+        }
+        return fileIndex.trim();
+    }
+
+    private static String buildDeleteConditions(String glob, String deleteAge, int deleteCount) {
+        StringBuilder sb = new StringBuilder();
+        if (deleteCount > 0) {
+            sb.append("          <IfFileName glob=\"").append(glob).append("\">\n");
+            sb.append("            <IfAny>\n");
+            sb.append("              <IfLastModified age=\"").append(deleteAge).append("\" />\n");
+            sb.append("              <IfAccumulatedFileCount exceeds=\"").append(deleteCount).append("\" />\n");
+            sb.append("            </IfAny>\n");
+            sb.append("          </IfFileName>\n");
+        } else {
+            sb.append("          <IfFileName glob=\"").append(glob).append("\" />\n");
+            sb.append("          <IfLastModified age=\"").append(deleteAge).append("\" />\n");
+        }
+        return sb.toString();
     }
 
     private static String getIntervalPattern(String name, String config) throws IOException {
