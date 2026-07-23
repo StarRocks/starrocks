@@ -37,6 +37,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/chunk_accumulator.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/range.h"
@@ -867,6 +868,28 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
 
     accumulator.finalize();
     auto accumulated = accumulator.pull();
+    if (accumulated == nullptr) {
+        // pull() returns nullptr when the accumulator produced no chunk, i.e. nothing was
+        // materialized. Previously this null was dereferenced unconditionally below
+        // (accumulated->schema()), which crashes the CN with SIGSEGV.
+        //
+        // There are two ways to get here:
+        //  - There were no row locators to look up (empty lookup request). _build_row_id_range
+        //    returns an empty locator set only when its input has 0 rows, so an empty chunk with
+        //    the requested slots is the correct result.
+        //  - Row locators existed but none could be materialized. Under a version-consistent read
+        //    a located row must be readable, so this indicates the tablet changed under us between
+        //    the position scan and this fetch (concurrent ingest/updates/deletes, or
+        //    compaction/GC). Fail loudly so the query retries on a consistent snapshot rather than
+        //    silently returning fewer rows. (A missing rowset already surfaces as an error earlier
+        //    via _tablet_adaptor->get_iterator -> "not found lake rssid".)
+        if (!row_locators.empty()) {
+            return Status::InternalError(
+                    "late materialization produced no rows for a non-empty set of row locators; "
+                    "the tablet changed between the position scan and the lookup fetch");
+        }
+        return ChunkPtr(RuntimeChunkHelper::new_chunk(slots, 0));
+    }
 
     for (const auto& slot : slots) {
         size_t column_index = accumulated->schema()->get_field_index_by_name(slot->col_name());
