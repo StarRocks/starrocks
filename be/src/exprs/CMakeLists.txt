@@ -136,6 +136,7 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
+  ds_theta_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

@@ -329,6 +329,13 @@ public class FunctionSet {
     public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
     public static final String DS_HLL_COMBINE = "ds_hll_combine";
     public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
+    public static final String DS_THETA_ACCUMULATE = "ds_theta_accumulate";
+    public static final String DS_THETA_COMBINE = "ds_theta_combine";
+    public static final String DS_THETA_ESTIMATE = "ds_theta_estimate";
+    public static final String DS_THETA_UNION = "ds_theta_union";
+    public static final String DS_THETA_INTERSECT = "ds_theta_intersect";
+    public static final String DS_THETA_A_NOT_B = "ds_theta_a_not_b";
+    public static final String DS_THETA_INTERSECT_COND_AGG = "ds_theta_intersect_cond_agg";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -949,6 +956,9 @@ public class FunctionSet {
                     .add(DS_HLL_ACCUMULATE)
                     .add(DS_HLL_COMBINE)
                     .add(DS_HLL_ESTIMATE)
+                    .add(DS_THETA_ACCUMULATE)
+                    .add(DS_THETA_COMBINE)
+                    .add(DS_THETA_INTERSECT_COND_AGG)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1415,6 +1425,11 @@ public class FunctionSet {
                     Lists.newArrayList(t), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                     true, false, true));
 
+            // ds_theta_accumulate(col) — emits serialized compact theta sketch
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA_ACCUMULATE,
+                    Lists.newArrayList(t), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                    true, false, true));
+
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), HLLType.HLL, VarbinaryType.VARBINARY,
@@ -1462,6 +1477,16 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
                 Lists.newArrayList(VarbinaryType.VARBINARY), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                 true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_COMBINE,
+                Lists.newArrayList(VarbinaryType.VARBINARY), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_INTERSECT_COND_AGG,
+                Lists.newArrayList(VarbinaryType.VARBINARY, IntegerType.INT), FloatType.DOUBLE, VarbinaryType.VARBINARY,
+                true, false, true));
+        // DS_THETA_ESTIMATE is registered as a scalar function via gensrc/script/functions.py.
+        // It deserializes a compact theta sketch row-by-row and returns the estimate as DOUBLE.
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
