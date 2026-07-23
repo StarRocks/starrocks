@@ -77,17 +77,26 @@ size_t scan_scalar_bytes(void* dst, const void* src, size_t esz, const uint8_t* 
 // Map a runtime element width to a compile-time-width call of `SCAN<Elem>`.
 // Every real column width is enumerated so only exotic widths fall through to
 // the runtime-sized copy.
-#define FILTER_WIDTH_DISPATCH(SCAN)                                                \
-    switch (element_size) {                                                        \
-    case 1: return FILTER_CALL(SCAN, uint8_t);                                     \
-    case 2: return FILTER_CALL(SCAN, uint16_t);                                    \
-    case 3: return FILTER_CALL(SCAN, Bytes<3>);                                    \
-    case 4: return FILTER_CALL(SCAN, uint32_t);                                    \
-    case 8: return FILTER_CALL(SCAN, uint64_t);                                    \
-    case 12: return FILTER_CALL(SCAN, Bytes<12>);                                  \
-    case 16: return FILTER_CALL(SCAN, Bytes<16>);                                  \
-    case 32: return FILTER_CALL(SCAN, Bytes<32>);                                  \
-    default: return scan_scalar_bytes(dst, src, element_size, selector, from, to); \
+#define FILTER_WIDTH_DISPATCH(SCAN)                                           \
+    switch (element_size) {                                                   \
+    case 1:                                                                   \
+        return FILTER_CALL(SCAN, uint8_t);                                    \
+    case 2:                                                                   \
+        return FILTER_CALL(SCAN, uint16_t);                                   \
+    case 3:                                                                   \
+        return FILTER_CALL(SCAN, Bytes<3>);                                   \
+    case 4:                                                                   \
+        return FILTER_CALL(SCAN, uint32_t);                                   \
+    case 8:                                                                   \
+        return FILTER_CALL(SCAN, uint64_t);                                   \
+    case 12:                                                                  \
+        return FILTER_CALL(SCAN, Bytes<12>);                                  \
+    case 16:                                                                  \
+        return FILTER_CALL(SCAN, Bytes<16>);                                  \
+    case 32:                                                                  \
+        return FILTER_CALL(SCAN, Bytes<32>);                                  \
+    default:                                                                  \
+        return scan_scalar_bytes(dst, src, element_size, selector, from, to); \
     }
 
 #if defined(__x86_64__)
