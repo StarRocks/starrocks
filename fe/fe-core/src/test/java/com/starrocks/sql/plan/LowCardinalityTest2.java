@@ -2174,18 +2174,49 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "RESULT SINK\n" +
                 "\n" +
-                "  12:Decode\n" +
-                "  |  <dict id 59> : <string id 40>\n" +
-                "  |  <dict id 60> : <string id 42>\n" +
-                "  |  <dict id 61> : <string id 43>\n" +
+                "  14:Decode\n" +
+                "  |  <dict id 65> : <string id 40>\n" +
+                "  |  <dict id 66> : <string id 42>\n" +
+                "  |  <dict id 67> : <string id 43>\n" +
+                "  |  <dict id 56> : <string id 48>\n" +
+                "  |  <dict id 57> : <string id 39>\n" +
+                "  |  <dict id 58> : <string id 44>\n" +
+                "  |  <dict id 59> : <string id 45>\n" +
+                "  |  <dict id 60> : <string id 46>\n" +
+                "  |  <dict id 61> : <string id 47>\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  \n" +
-                "  |----11:Decode\n" +
-                "  |    |  <dict id 62> : <string id 29>\n" +
+                "  |----13:Project\n" +
+                "  |    |  <slot 29> : 29: case\n" +
+                "  |    |  <slot 35> : 35: ifnull\n" +
+                "  |    |  <slot 62> : 62: cast\n" +
+                "  |    |  <slot 63> : 63: cast\n" +
+                "  |    |  <slot 64> : 64: cast\n" +
+                "  |    |  <slot 74> : 2\n" +
+                "  |    |  <slot 75> : 2\n" +
+                "  |    |  <slot 76> : 1\n" +
+                "  |    |  <slot 77> : 2\n" +
+                "  |    |  <slot 78> : 2\n" +
+                "  |    |  <slot 79> : 1\n" +
                 "  |    |  \n" +
-                "  |    10:EXCHANGE\n" +
+                "  |    12:Decode\n" +
+                "  |    |  <dict id 68> : <string id 29>\n" +
+                "  |    |  \n" +
+                "  |    11:EXCHANGE\n" +
                 "  |    \n" +
+                "  6:Project\n" +
+                "  |  <slot 15> : 15: concat\n" +
+                "  |  <slot 21> : 21: round\n" +
+                "  |  <slot 50> : 50: c_user\n" +
+                "  |  <slot 51> : 51: c_dept\n" +
+                "  |  <slot 52> : 52: c_par\n" +
+                "  |  <slot 69> : 2\n" +
+                "  |  <slot 70> : 1\n" +
+                "  |  <slot 71> : 1\n" +
+                "  |  <slot 72> : 1\n" +
+                "  |  <slot 73> : 1\n" +
+                "  |  \n" +
                 "  5:EXCHANGE\n");
     }
 
@@ -3266,5 +3297,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
             connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
             connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
         }
+    }
+
+    @Test
+    void testUnionAllConstantInputsOnly() throws Exception {
+        String sql = """
+                select c_user, "abc", null const FROM low_card_t1 as s
+                UNION ALL
+                select c_mr, null, null FROM low_card_t2;
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "9:Decode\n" +
+                "  |  <dict id 28> : <string id 24>\n" +
+                "  |  <dict id 30> : <string id 23>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [28, INT, true] | [25, BOOLEAN, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [26: c_user, INT, true] | [31: expr, INT, false] | [13: expr, BOOLEAN, true]\n" +
+                "  |      [29: cast, INT, true] | [32: expr, INT, true] | [20: expr, BOOLEAN, true]", plan);
+        String thrift = getThriftPlan(sql);
+        Assertions.assertTrue(thrift.contains("TGlobalDict(columnId:28"), thrift);
     }
 }

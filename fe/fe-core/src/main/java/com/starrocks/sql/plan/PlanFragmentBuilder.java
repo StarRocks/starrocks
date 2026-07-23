@@ -211,6 +211,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -3824,6 +3825,10 @@ public class PlanFragmentBuilder {
                 setOperationFragment.addChildren(inputFragment.getChildren());
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
+                if (optExpr.getOp() instanceof PhysicalUnionOperator) {
+                    setOperationFragment.mergeQueryGlobalDicts(
+                            ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
+                }
                 ExecGroup inputExecGroup = inputExecGroups.get(i);
                 execGroups.remove(inputExecGroup);
                 if (inputFragment.getPlanRoot() instanceof ExchangeNode) {
