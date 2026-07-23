@@ -20,6 +20,7 @@
 #include "base/string/parse_util.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
@@ -237,6 +238,14 @@ Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
     _update_mem_tracker->set_level(2);
+    // P3 (SR-38350): off-tree, byte-limited admission tracker for the lake publish path. pct is clamped to
+    // [0,100]; pct==0 maps to an unlimited (-1) tracker -- the deliberate kill switch, NOT a 0-byte limit
+    // that would freeze all publishing on the node.
+    int32_t lake_publish_pct = std::max(0, std::min(100, config::lake_publish_memory_limit_percent));
+    int64_t lake_publish_limit = (lake_publish_pct == 0) ? -1 : bytes_limit * lake_publish_pct / 100;
+    _lake_publish_mem_tracker = regist_tracker(MemTrackerType::LAKE_PUBLISH, lake_publish_limit, nullptr);
+    _lake_publish_mem_tracker->set_level(2);
+    LOG(INFO) << "lake publish mem gate limit=" << lake_publish_limit << " (pct=" << lake_publish_pct << ")";
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
     _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);

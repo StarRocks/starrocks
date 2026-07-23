@@ -182,6 +182,32 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：仅在开启 prepared physical split scan（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 split morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 split morsel 拆得更细（把大 Tablet 切成更多子范围 morsel 以填充原本空闲的 driver），不会更粗。仅在存算分离集群中生效。
 - 引入版本：v4.2
 
+### lake_publish_memory_limit_percent
+
+- 默认值：30
+- 类型：Int
+- 单位：%
+- 是否动态：否
+- 描述：存算分离集群下，Lake 发布（publish）路径的内存预留 tracker 可占用的进程内存上限的百分比。发布过程中，StarRocks 会对 Tablet 元数据进行深拷贝、规范化和序列化；该 tracker 用于限制这部分瞬时内存占用，避免元数据膨胀且发布并发较高时将进程推入 OOM。当一次发布的预估占用会超出剩余额度时，该发布会以可重试的 `ResourceBusy` 状态被拒绝，并由 FE 重试。取值会被限制在 [0, 100] 范围内。取值为 `0` 时禁用该 tracker 级别的限流（注册为无限制 tracker），可作为该行为的回滚开关。该参数不可动态修改，因为 tracker 的字节上限在 BE 启动时计算一次。
+- 引入版本：-
+
+### lake_publish_metadata_estimate_multiplier
+
+- 默认值：3
+- 类型：Int
+- 是否动态：是
+- 描述：存算分离集群下，用于将一次发布的瞬时元数据占用估算为 `k * base_tablet_metadata_size` 的乘数 `k`。发布路径大约同时持有三份元数据副本（修改后的工作副本、规范化副本以及序列化缓冲区），因此默认值为 `3`。该估算值即为发布路径向由 `lake_publish_memory_limit_percent` 控制的 tracker 预留的大小。每次发布时都会读取该值，因此可在运行时动态调整。
+- 引入版本：-
+
+### lake_publish_process_memory_urgent_pct
+
+- 默认值：85
+- 类型：Int
+- 单位：%
+- 是否动态：是
+- 描述：存算分离集群下，Lake 发布路径的进程内存兜底阈值。当进程内存占用超过进程内存上限的该百分比时，单副本发布和聚合发布任务都会以可重试的 `ResourceBusy` 状态被拒绝，直到内存下降为止，从而避免发布将节点推入 OOM。这是一个独立的参数，与 `memory_urgent_level`（同时驱动持久化索引刷盘和 Data Cache 收缩）相互独立，因此可在故障处理时单独调整而不影响这些子系统。取值为 `0` 时禁用该兜底。每次发布时都会读取该值，因此可在运行时动态调整。
+- 引入版本：-
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - 默认值：-1

@@ -41,6 +41,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/strings/join.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/combined_txn_log_writer.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -61,6 +62,11 @@
 #include "storage/tablet_index.h"
 
 namespace starrocks {
+
+// P3 (SR-38350): defined in storage/lake/transactions.cpp; bumped when a publish is throttled by the memory gate.
+namespace lake {
+extern bvar::Adder<int64_t> g_lake_publish_mem_rejected;
+}
 
 namespace {
 ThreadPool* get_thread_pool(ExecEnv* env, TTaskType::type type) {
@@ -804,6 +810,19 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
                                                 const AggregatePublishVersionRequest* request,
                                                 PublishVersionResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
+    // P3 (SR-38350): coarse process-memory backstop at aggregate entry. Uses ONLY the dedicated process
+    // backstop knob, NOT the shared lake-publish tracker: the aggregator also runs co-located sub-publishes,
+    // so reserving the shared tracker here could starve them and livelock (plan §4c / Fable F2), and per-tablet
+    // sizes are unknown here (metadata lives on remote nodes).
+    {
+        int32_t urgent_pct = std::max(0, std::min(100, config::lake_publish_process_memory_urgent_pct));
+        if (urgent_pct > 0 && RuntimeEnv::GetInstance()->process_mem_tracker()->limit_exceeded_by_ratio(urgent_pct)) {
+            lake::g_lake_publish_mem_rejected << 1;
+            Status::ResourceBusy("aggregate publish throttled: process memory urgent")
+                    .to_protobuf(response->mutable_status());
+            return;
+        }
+    }
     AggregatePublishContext ctx;
     ctx.response = response;
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
