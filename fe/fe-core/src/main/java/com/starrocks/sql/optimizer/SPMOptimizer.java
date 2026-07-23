@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowOuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteAggIfRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
@@ -172,6 +173,7 @@ public class SPMOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new RewriteAggIfRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
 

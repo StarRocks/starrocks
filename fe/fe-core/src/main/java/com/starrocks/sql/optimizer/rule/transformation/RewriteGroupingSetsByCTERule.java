@@ -18,10 +18,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -107,7 +105,8 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
             aggregate.getAggregations().keySet().stream().map(k -> aggregate.getAggregations().get(k).getUsedColumns())
                     .forEach(allCteConsumeRequiredColumns::union);
             allCteConsumeRequiredColumns.union(groupingSetKeys);
-            LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, allCteConsumeRequiredColumns, columnRefFactory);
+            LogicalCTEConsumeOperator cteConsume =
+                    CTERewriterUtils.buildCteConsume(cteProduce, allCteConsumeRequiredColumns, columnRefFactory);
 
             // rewrite aggregate
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -192,32 +191,5 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         OptExpression result = OptExpression.create(cteAnchor, cteProduce, rightTree);
 
         return Lists.newArrayList(result);
-    }
-
-    private LogicalCTEConsumeOperator buildCteConsume(OptExpression cteProduce, ColumnRefSet requiredColumns,
-                                                      ColumnRefFactory factory) {
-        LogicalCTEProduceOperator produceOperator = (LogicalCTEProduceOperator) cteProduce.getOp();
-        int cteId = produceOperator.getCteId();
-
-        // create cte consume, cte output columns
-        Map<ColumnRefOperator, ColumnRefOperator> consumeOutputMap = Maps.newHashMap();
-        for (int columnId : requiredColumns.getColumnIds()) {
-            ColumnRefOperator produceOutput = factory.getColumnRef(columnId);
-            ColumnRefOperator consumeOutput =
-                    factory.create(produceOutput, produceOutput.getType(), produceOutput.isNullable());
-            consumeOutputMap.put(consumeOutput, produceOutput);
-        }
-        // If there is no requiredColumns, we need to add least one column which is smallest
-        if (consumeOutputMap.isEmpty()) {
-            List<ColumnRefOperator> outputColumns =
-                    produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            map(factory::getColumnRef).collect(Collectors.toList());
-            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
-            ColumnRefOperator consumeOutput =
-                    factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());
-            consumeOutputMap.put(consumeOutput, smallestColumn);
-        }
-
-        return new LogicalCTEConsumeOperator(cteId, consumeOutputMap);
     }
 }
