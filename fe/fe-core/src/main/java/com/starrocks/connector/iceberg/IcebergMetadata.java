@@ -98,6 +98,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
+import com.starrocks.thrift.TIcebergPreviousDeleteFile;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -2538,6 +2539,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         final List<TIcebergDataFile> dataFiles = commitInfos.stream()
                 .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
 
+        // File-scoped old deletes the BE folded into new deletion vectors; the delete commit
+        // removes exactly these.
+        final List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles =
+                IcebergDeletionVectorSupport.collectRewrittenDeleteFiles(commitInfos);
+
         // Commit task that performs the actual Iceberg transaction commit
         IcebergCommitQueueManager.CommitTask commitTask = () -> {
             IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
@@ -2578,7 +2584,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                         dbName, tableName, extra, context);
             } else if (hasPositionDeletes) {
                 // Pure (non-MERGE) DELETE (unchanged)
-                commitDeleteOperation(transaction, nativeTbl, dataFiles, branch,
+                commitDeleteOperation(transaction, nativeTbl, dataFiles, rewrittenDeleteFiles, branch,
                         dbName, tableName, extra, context);
             } else {
                 // Pure INSERT/OVERWRITE, or an empty MERGE (unchanged)
@@ -2645,10 +2651,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private org.apache.iceberg.DeleteFile buildPositionDeleteFile(
-            TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
+            TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
+            Map<String, DataFile> scannedByLocation) {
         // Iceberg V3 deletion vector: a Puffin blob rather than a Parquet position-delete file.
-        if ("puffin".equalsIgnoreCase(dataFile.getFormat())) {
-            return IcebergDeletionVectorSupport.buildDeletionVectorFile(dataFile, partitionSpec, nativeTbl);
+        // Its spec/partition come from the referenced data file itself (partition evolution).
+        if (IcebergDeletionVectorSupport.PUFFIN_FORMAT.equalsIgnoreCase(dataFile.getFormat())) {
+            return IcebergDeletionVectorSupport.buildDeletionVectorFile(dataFile, nativeTbl, scannedByLocation);
         }
 
         FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(partitionSpec)
@@ -2702,14 +2710,20 @@ public class IcebergMetadata implements ConnectorMetadata {
     // inside commitWithCleanup so a rejected deletion-vector entry cleans up the BE-written Puffin files.
     private void prepareDeleteRowDelta(RowDelta rowDelta, List<TIcebergDataFile> dataFiles,
                                        PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
-                                       Object extra, Long baseSnapshotId, ConnectContext context) {
+                                       Object extra, Long baseSnapshotId, ConnectContext context,
+                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles) {
+        // A deletion vector's entry carries the referenced data file's OWN spec and partition
+        // (partition evolution); the scanned data files are the source.
+        Map<String, DataFile> scannedByLocation = IcebergDeletionVectorSupport.scannedDataFilesByLocation(extra);
         ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
         for (TIcebergDataFile dataFile : dataFiles) {
-            rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl));
+            rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl, scannedByLocation));
             if (dataFile.isSetReferenced_data_file()) {
                 referencedDataFiles.add(dataFile.getReferenced_data_file());
             }
         }
+        // Remove exactly the file-scoped old deletes the BE reports it folded into new deletion vectors.
+        IcebergDeletionVectorSupport.removeRewrittenDeletes(rowDelta, rewrittenDeleteFiles, extra);
         if (baseSnapshotId != null) {
             rowDelta.validateFromSnapshot(baseSnapshotId);
         }
@@ -2738,7 +2752,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private void commitDeleteOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
-                                       List<TIcebergDataFile> dataFiles, String branch,
+                                       List<TIcebergDataFile> dataFiles,
+                                       List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles, String branch,
                                        String dbName, String tableName, Object extra,
                                        ConnectContext context) {
         long startMs = System.currentTimeMillis();
@@ -2765,7 +2780,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Build and validate the RowDelta inside commitWithCleanup so any failure — a rejected DV
             // entry, the duplicate-DV check, or the commit itself — deletes the BE-written Puffin files.
             commitWithCleanup(() -> {
-                prepareDeleteRowDelta(rowDelta, dataFiles, partitionSpec, nativeTbl, extra, baseSnapshotId, context);
+                prepareDeleteRowDelta(rowDelta, dataFiles, partitionSpec, nativeTbl, extra, baseSnapshotId, context,
+                        rewrittenDeleteFiles);
                 IcebergDeletionVectorSupport.validateSingleDeletionVectorPerFile(dataFiles);
                 rowDelta.commit();
                 transaction.commitTransaction();
@@ -2775,8 +2791,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             Snapshot newSnapshot = nativeTbl.currentSnapshot();
             if (newSnapshot != null && newSnapshot.summary() != null) {
                 Map<String, String> summary = newSnapshot.summary();
-                long deletedRows = Long.parseLong(
-                        summary.getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                // A merged deletion vector's record_count also counts folded-in historical
+                // deletes; prefer the BE-reported per-statement contribution.
+                long deletedRows = IcebergDeletionVectorSupport.currentStatementDeletedRows(dataFiles)
+                        .orElseGet(() -> Long.parseLong(
+                                summary.getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0")));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
                 ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
@@ -2818,7 +2837,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         for (TIcebergDataFile dataFile : dataFiles) {
             if (dataFile.isSetFile_content() &&
                     dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES) {
-                rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl));
+                // UPDATE/MERGE emit V2 position deletes only (V3 is rejected at analysis), so
+                // no scanned-data-file map is needed here.
+                rowDelta.addDeletes(buildPositionDeleteFile(dataFile, partitionSpec, nativeTbl, Map.of()));
                 if (dataFile.isSetReferenced_data_file()) {
                     referencedDataFiles.add(dataFile.getReferenced_data_file());
                 }
@@ -3203,6 +3224,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         public Long getBaseSnapshotId() {
             return baseSnapshotId;
         }
+
+        public void putPreviousDeleteFile(String key, DeleteFile file) {
+            previousDeleteByKey.put(key, file);
+        }
+
+        public DeleteFile getPreviousDeleteFile(String key) {
+            return previousDeleteByKey.get(key);
+        }
+
+        // uniqueDeleteFileKey -> the original DeleteFile collected at plan time; commit
+        // resolves the BE-reported rewritten entries through this map for removeDeletes.
+        private final Map<String, DeleteFile> previousDeleteByKey = new HashMap<>();
     }
 
     public static class DynamicOverwrite implements BatchWrite {

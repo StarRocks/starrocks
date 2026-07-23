@@ -302,11 +302,12 @@ Status IcebergTableSinkPipelineBuilder::create_dv_delete_sink_context(
     dv_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
     dv_sink_ctx->runtime_state = runtime_state;
     dv_sink_ctx->writer_tag = "delete";
+    if (t_iceberg_sink.__isset.previous_delete_files) {
+        dv_sink_ctx->previous_delete_files =
+                std::make_shared<const std::vector<TIcebergPreviousDeleteFile>>(t_iceberg_sink.previous_delete_files);
+    }
 
-    // Delete rows carry columns: _file, _pos, and (for partitioned tables) partition columns.
     const auto& output_exprs = _sink.get_output_expr();
-    dv_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
-    dv_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
 
     // Build column name → slot reference map so IcebergDvSink::add() can locate _file/_pos.
     TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
@@ -335,16 +336,6 @@ Status IcebergTableSinkPipelineBuilder::create_dv_delete_sink_context(
     // (which would produce multiple DVs per file).
     if (slots.empty() || slots[0]->col_name() != "_file") {
         return Status::InternalError("DV delete sink expects the _file column as the first output expression");
-    }
-
-    // Partition evaluators let the sink compute each data file's partition_path (the DV entry
-    // partition), even though the DV shuffle key is _file, not the partition columns.
-    if (!iceberg_table_desc->is_unpartitioned_table()) {
-        std::vector<TExpr> partition_expr = iceberg_table_desc->get_partition_exprs();
-        const auto& partition_source_column_names = iceberg_table_desc->partition_source_column_names();
-        RETURN_IF_ERROR(update_iceberg_partition_expr_slot_refs_by_map(partition_expr, dv_sink_ctx->column_slot_map,
-                                                                       partition_source_column_names));
-        dv_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
 
     connector::IcebergConnector iceberg_connector;

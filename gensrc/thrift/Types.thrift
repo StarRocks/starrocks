@@ -623,6 +623,9 @@ struct TIcebergDataFile {
     // never collides on ordinals.
     50: optional i64 content_offset
     51: optional i64 content_size_in_bytes
+    // For deletion-vector entries: positions contributed by the current statement only.
+    // record_count is the merged total and also counts folded-in historical deletes.
+    52: optional i64 added_delete_rows
 }
 
 // A previously-existing delete for a data file, handed to / returned by the BE
@@ -631,11 +634,17 @@ struct TIcebergDataFile {
 struct TIcebergPreviousDeleteFile {
     1: optional string path
     2: optional string format
-    3: optional string referenced_data_file
+    // All scanned data files Iceberg scan planning associated this delete file with — one
+    // entry per delete file, not one per association. A file-scoped delete (file_scoped ==
+    // true) references exactly one data file.
+    3: optional list<string> referenced_data_files
     4: optional i64 content_offset
     5: optional i64 content_size_in_bytes
     6: optional i64 record_count
     7: optional bool file_scoped
+    // Byte length of the delete file (DeleteFile.fileSizeInBytes); lets the BE merge path
+    // avoid get_file_size, which is unsupported on object storage.
+    8: optional i64 file_size_in_bytes
 }
 
 struct THiveFileInfo {

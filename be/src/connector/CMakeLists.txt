@@ -101,6 +101,7 @@ target_link_libraries(ConnectorIceberg PUBLIC
         ConnectorPrimitive
         FormatCore
         FormatParquet
+        Formats
         ChunkCore
         Types
         Common

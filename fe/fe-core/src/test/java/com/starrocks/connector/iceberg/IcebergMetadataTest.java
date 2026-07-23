@@ -58,6 +58,7 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
@@ -129,6 +130,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
+import com.starrocks.thrift.TIcebergPreviousDeleteFile;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -3267,14 +3269,14 @@ public class IcebergMetadataTest extends TableTestBase {
             dv.setReferenced_data_file(FILE_A.path().toString());
             dv.setContent_offset(offset);
             dv.setContent_size_in_bytes(40);
-            // The table is partitioned (SPEC_A), so the entry must carry the referenced data
-            // file's partition, as the BE sink does.
-            dv.setPartition_path(v3Table.location() + "/data/data_bucket=0/");
-            dv.setPartition_null_fingerprint("0");
             TSinkCommitInfo ci = new TSinkCommitInfo();
             ci.setIceberg_data_file(dv);
             commitInfos.add(ci);
         }
+
+        // The commit resolves each entry's spec/partition from the scanned data files.
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Set.of(FILE_A));
 
         // The commit path stamps audit info before the uniqueness check fires.
         new MockUp<NodeMgr>() {
@@ -3291,7 +3293,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.finishSink("iceberg_db", "iceberg_table", commitInfos, null, null, connectContext));
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", commitInfos, null, extra, connectContext));
         Assertions.assertTrue(ex.getMessage().contains("multiple deletion vectors"),
                 "expected duplicate-DV rejection, got: " + ex.getMessage());
     }
@@ -3320,9 +3322,12 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         // A concurrent DELETE wins the race and lands a deletion vector on FILE_A after the frozen
-        // base snapshot.
+        // base snapshot. A DV entry takes its partition from the referenced data file, so the scanned
+        // data file must be registered on the sink extra.
+        IcebergMetadata.IcebergSinkExtra winnerExtra = new IcebergMetadata.IcebergSinkExtra();
+        winnerExtra.addScannedDataFiles(Set.of(FILE_A));
         metadata.finishSink("iceberg_db", "iceberg_table",
-                Lists.newArrayList(buildDeletionVectorCommit(v3Table, "/data/dv_winner.puffin", 4L)), null);
+                Lists.newArrayList(buildDeletionVectorCommit(v3Table, "/data/dv_winner.puffin", 4L)), null, winnerExtra);
         v3Table.refresh();
         long concurrentSnapshotId = v3Table.currentSnapshot().snapshotId();
         Assertions.assertNotEquals(baseSnapshotId, concurrentSnapshotId,
@@ -3333,6 +3338,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // (wired in for DV deletes) must abort it rather than silently dropping the winner's deletes.
         IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
         extra.setBaseSnapshotId(baseSnapshotId);
+        extra.addScannedDataFiles(Set.of(FILE_A));
         Assertions.assertThrows(Exception.class,
                 () -> metadata.finishSink("iceberg_db", "iceberg_table",
                         Lists.newArrayList(buildDeletionVectorCommit(v3Table, "/data/dv_loser.puffin", 100L)), null, extra),
@@ -3360,6 +3366,143 @@ public class IcebergMetadataTest extends TableTestBase {
         TSinkCommitInfo ci = new TSinkCommitInfo();
         ci.setIceberg_data_file(dv);
         return ci;
+    }
+
+    @Test
+    public void testCommitDvRemovesRewrittenAndUsesReferencedFilePartition() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_remove_rewritten", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).commit();
+        // The pre-existing deletion vector that the new one supersedes.
+        String oldPuffin = v3Table.location() + "/data/old_dv.puffin";
+        DeleteFile oldDv = FileMetadata.deleteFileBuilder(SPEC_A)
+                .ofPositionDeletes()
+                .withPath(oldPuffin)
+                .withFormat(FileFormat.PUFFIN)
+                .withFileSizeInBytes(100)
+                .withRecordCount(2)
+                .withReferencedDataFile(FILE_A.location())
+                .withContentOffset(4)
+                .withContentSizeInBytes(40)
+                .withPartitionPath("data_bucket=0")
+                .build();
+        v3Table.newRowDelta().addDeletes(oldDv).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), v3Table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-dv-remove";
+            }
+        };
+
+        // Plan-time state: the scanned data file and the collected previous delete.
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Set.of(FILE_A));
+        extra.putPreviousDeleteFile(
+                IcebergDeletionVectorSupport.uniqueDeleteFileKey(oldPuffin, 4L), oldDv);
+
+        // BE result: one new DV (old one folded in) + the rewritten report.
+        String newPuffin = v3Table.location() + "/data/new_dv.puffin";
+        TIcebergDataFile dv = new TIcebergDataFile();
+        dv.setPath(newPuffin);
+        dv.setFormat("puffin");
+        dv.setRecord_count(3);
+        // The merged record_count above includes historical positions; only one row was
+        // deleted by this statement (exercises the metrics path that prefers this field).
+        dv.setAdded_delete_rows(1);
+        dv.setFile_size_in_bytes(120);
+        dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        dv.setReferenced_data_file(FILE_A.location());
+        dv.setContent_offset(4);
+        dv.setContent_size_in_bytes(40);
+        TSinkCommitInfo ci = new TSinkCommitInfo();
+        ci.setIceberg_data_file(dv);
+        TIcebergPreviousDeleteFile rewritten = new TIcebergPreviousDeleteFile();
+        rewritten.setPath(oldPuffin);
+        rewritten.setFormat("puffin");
+        rewritten.setReferenced_data_files(Lists.newArrayList(FILE_A.location()));
+        rewritten.setContent_offset(4);
+        rewritten.setContent_size_in_bytes(40);
+        rewritten.setFile_scoped(true);
+        ci.setRewritten_delete_files(Lists.newArrayList(rewritten));
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(ci), null, extra, connectContext);
+
+        // The old DV is removed and the new one carries the referenced data file's own
+        // spec/partition.
+        v3Table.refresh();
+        List<DeleteFile> liveDeletes = Lists.newArrayList();
+        for (FileScanTask task : v3Table.newScan().planFiles()) {
+            liveDeletes.addAll(task.deletes());
+        }
+        Assertions.assertEquals(1, liveDeletes.size());
+        DeleteFile committed = liveDeletes.get(0);
+        Assertions.assertEquals(newPuffin, committed.location());
+        Assertions.assertEquals(FILE_A.specId(), committed.specId());
+        Assertions.assertEquals(FILE_A.partition(), committed.partition());
+    }
+
+    @Test
+    public void testCommitRejectsUnknownRewrittenDelete() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        TestTables.TestTable v3Table = create(SCHEMA_A, SPEC_A, "ta_v3_unknown_rewritten", 3);
+        v3Table.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), v3Table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Set.of(FILE_A)); // previousDeleteByKey deliberately empty
+
+        TIcebergDataFile dv = new TIcebergDataFile();
+        dv.setPath(v3Table.location() + "/data/new_dv.puffin");
+        dv.setFormat("puffin");
+        dv.setRecord_count(1);
+        dv.setFile_size_in_bytes(60);
+        dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        dv.setReferenced_data_file(FILE_A.location());
+        dv.setContent_offset(4);
+        dv.setContent_size_in_bytes(40);
+        TSinkCommitInfo ci = new TSinkCommitInfo();
+        ci.setIceberg_data_file(dv);
+        TIcebergPreviousDeleteFile bogus = new TIcebergPreviousDeleteFile();
+        bogus.setPath(v3Table.location() + "/data/never_collected.parquet");
+        bogus.setFormat("parquet");
+        bogus.setFile_scoped(true);
+        ci.setRewritten_delete_files(Lists.newArrayList(bogus));
+
+        // Removing a delete that was never part of the planned set would permanently lose
+        // deletes if inferred loosely — it must fail instead.
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(ci), null, extra,
+                        connectContext));
+        Assertions.assertTrue(ex.getMessage().contains("not part of the planned previous-delete set"),
+                "expected unknown-rewritten rejection, got: " + ex.getMessage());
     }
 
     @Test

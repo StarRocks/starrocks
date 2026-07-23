@@ -126,7 +126,7 @@ public class IcebergPlannerUtils {
      * ({@code _file}/{@code _pos} at output positions 0/1). Falls back to the first match
      * when those slots cannot be resolved.
      */
-    private static IcebergScanNode findScanNodeFor(ExecPlan execPlan, IcebergTable targetTable) {
+    public static IcebergScanNode findScanNodeFor(ExecPlan execPlan, IcebergTable targetTable) {
         if (execPlan == null || execPlan.getScanNodes() == null || targetTable == null) {
             return null;
         }

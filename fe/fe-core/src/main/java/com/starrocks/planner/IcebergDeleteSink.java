@@ -24,8 +24,11 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TIcebergPreviousDeleteFile;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
+
+import java.util.List;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DELETE_PARQUET_COMPRESSION;
@@ -51,6 +54,9 @@ public class IcebergDeleteSink extends DataSink {
     private final int formatVersion;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
+    // The table's live position deletes, shipped to the BE deletion-vector sink so a touched
+    // data file's pre-existing deletes are folded into its new deletion vector.
+    private List<TIcebergPreviousDeleteFile> previousDeleteFiles = List.of();
 
     /**
      * Constructor for IcebergDeleteSink
@@ -143,6 +149,9 @@ public class IcebergDeleteSink extends DataSink {
         tIcebergTableSink.setIs_static_partition_sink(false);
         // >= 3 => BE writes a Puffin deletion vector instead of a Parquet position-delete file.
         tIcebergTableSink.setFormat_version(formatVersion);
+        if (!previousDeleteFiles.isEmpty()) {
+            tIcebergTableSink.setPrevious_delete_files(previousDeleteFiles);
+        }
         // DeleteSink only emits position-delete files; the codec belongs in the
         // delete-file slot. `compression_type` is reserved for data files now.
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
@@ -180,6 +189,10 @@ public class IcebergDeleteSink extends DataSink {
      */
     public void setSinkExtraInfo(com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo) {
         this.sinkExtraInfo = sinkExtraInfo;
+    }
+
+    public void setPreviousDeleteFiles(List<TIcebergPreviousDeleteFile> previousDeleteFiles) {
+        this.previousDeleteFiles = previousDeleteFiles;
     }
 
     /**

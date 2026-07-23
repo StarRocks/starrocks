@@ -112,9 +112,8 @@ public class DeletePlanner {
 
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
             if (IcebergDeletionVectorSupport.isV3(icebergTable)) {
-                // V3 DELETE writes deletion vectors: fail fast on the not-yet-supported cases,
-                // then shuffle by _file so a data file yields a single deletion vector.
-                IcebergDeletionVectorSupport.assertV3DeleteSupported(icebergTable);
+                // V3 DELETE writes deletion vectors: shuffle by _file so a data file yields a
+                // single deletion vector.
                 requiredProperty = IcebergDeletionVectorSupport.createFileHashShuffleProperty(outputColumns);
             } else {
                 // For V2 Iceberg, create shuffled property based on partitioning.
@@ -333,6 +332,12 @@ public class DeletePlanner {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
         icebergSinkExtra.setBaseSnapshotId(IcebergPlannerUtils.extractBaseSnapshotId(execPlan, icebergTable));
+        // The target's DATA scan nodes materialized their planning synchronously
+        // (IcebergScanNode.setupScanRangeLocations), so every scanned data file's previous
+        // deletes and DataFile are available before the sink thrift is finalized.
+        if (formatVersion >= 3) {
+            IcebergDeletionVectorSupport.attachPreviousDeletes(execPlan, icebergTable, icebergSinkExtra, dataSink);
+        }
         // Set the sink extra info to be used during commit
         dataSink.setSinkExtraInfo(icebergSinkExtra);
 

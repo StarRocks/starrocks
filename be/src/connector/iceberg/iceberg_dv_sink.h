@@ -25,7 +25,9 @@
 #include "connector/common/partition_chunk_writer.h"
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/common/utils.h"
+#include "formats/iceberg/iceberg_delete_builder.h"
 #include "formats/puffin/iceberg_dv_writer.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 class FileSystem;
@@ -46,10 +48,10 @@ struct IcebergDvSinkContext : public ConnectorSinkContext {
     // "_file"/"_pos" -> slot ref node, used to locate columns in incoming chunks.
     std::unordered_map<std::string, TExprNode> column_slot_map;
 
-    // Partition metadata (empty when the table is unpartitioned).
-    std::vector<std::string> partition_column_names;
-    std::vector<std::string> transform_exprs;
-    std::vector<std::unique_ptr<ColumnEvaluator>> partition_evaluators;
+    // Pre-existing position deletes (old DVs / position-delete files), associated per data
+    // file by FE scan planning; finish() folds each touched file's entries into its new vector.
+    // Shared across sink drivers (read-only, one instance per driver would multiply memory).
+    std::shared_ptr<const std::vector<TIcebergPreviousDeleteFile>> previous_delete_files;
 
     // Tag inserted into the Puffin file-name prefix (matches the V2 delete sink: "delete").
     std::string writer_tag;
@@ -70,7 +72,9 @@ private:
 // IcebergDvSink writes Iceberg V3 Deletion Vectors. It receives delete rows (_file, _pos),
 // groups them by referenced data file, accumulates positions into IcebergDvWriter, and at
 // finish() writes all bitmaps as deletion-vector-v1 blobs into one Puffin file at the table
-// data root, emitting one TIcebergDataFile commit info per data file.
+// data root, emitting one TIcebergDataFile commit info per data file. The entry's partition
+// metadata is attached by the FE commit from the referenced data file itself, so the sink is
+// partition-agnostic.
 //
 // It derives from PartitionedConnectorChunkSink to reuse the ConnectorSinkOperator lifecycle,
 // but owns no PartitionChunkWriters (close-time finalize; the DV bitmaps cannot be
@@ -80,8 +84,8 @@ class IcebergDvSink final : public PartitionedConnectorChunkSink {
 public:
     IcebergDvSink(std::shared_ptr<FileSystem> fs, std::shared_ptr<LocationProvider> location_provider,
                   std::unordered_map<std::string, TExprNode> column_slot_map,
-                  std::vector<std::string> partition_column_names, std::vector<std::string> transform_exprs,
-                  std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_evaluators, RuntimeState* state);
+                  std::shared_ptr<const std::vector<TIcebergPreviousDeleteFile>> previous_delete_files,
+                  RuntimeState* state);
     ~IcebergDvSink() override = default;
 
     Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
@@ -95,20 +99,21 @@ public:
     size_t num_data_files_for_test() const { return _dv_writer.num_data_files(); }
 
 private:
-    struct PartitionInfo {
-        std::string partition_path;   // <data_root>/<partition_name>
-        std::string null_fingerprint; // per-field '1' if null else '0'
-    };
+    // Folds each touched data file's previous deletes into _dv_writer. Merged file-scoped
+    // entries are returned grouped by referenced data file for the removeDeletes round trip.
+    Status merge_previous_deletes(
+            std::map<std::string, std::vector<TIcebergPreviousDeleteFile>, std::less<>>* rewritten_by_ref);
+
+    // Streams the (file_path, pos) rows of a previous parquet/orc position-delete file into cb.
+    Status read_previous_delete_rows(const TIcebergPreviousDeleteFile& prev,
+                                     const formats::IcebergPositionDeleteReader::RowCallback& cb) const;
 
     std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<LocationProvider> _location_provider;
     std::unordered_map<std::string, TExprNode> _column_slot_map;
-    std::vector<std::string> _transform_exprs;
+    std::shared_ptr<const std::vector<TIcebergPreviousDeleteFile>> _previous_delete_files;
 
     formats::IcebergDvWriter _dv_writer;
-    // referenced_data_file -> partition (captured lazily from the first row seen for that file).
-    // std::less<> enables string_view lookup without allocating a std::string per row.
-    std::map<std::string, PartitionInfo, std::less<>> _partition_by_file;
     bool _finished = false;
 };
 

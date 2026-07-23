@@ -35,6 +35,7 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +55,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -77,6 +80,10 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
+    // Materialized-planning outputs for the V3 deletion-vector delete sink; null unless this is
+    // the DELETE target's DATA scan node on a format-version >= 3 table.
+    private Map<String, List<DeleteFile>> previousDeletesByRef = null;
+    private Map<String, DataFile> plannedDataFiles = null;
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
 
@@ -170,7 +177,15 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
-        this.enableIncrementalScanRanges = enableIncrementalScanRanges;
+        // V3 deletion-vector DELETE: the sink needs every scanned data file's pre-existing
+        // deletes (task.deletes()) before fragments are deployed, so the target DATA scan node
+        // plans all FileScanTasks up front instead of delivering scan ranges incrementally.
+        // usedForDelete is inferred from projected _file/_pos, so a SELECT projecting them on a
+        // V3 table also loses incremental delivery — no correctness impact.
+        boolean collectPreviousDeletes = usedForDelete
+                && morParams.getScanTaskType() != IcebergMORParams.ScanTaskType.EQ_DELETE
+                && icebergTable.getFormatVersion() >= 3;
+        this.enableIncrementalScanRanges = enableIncrementalScanRanges && !collectPreviousDeletes;
         Preconditions.checkNotNull(tvrVersionRange, "tvrVersionRange id is null");
         if (tvrVersionRange.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -220,7 +235,7 @@ public class IcebergScanNode extends ScanNode {
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
-        if (enableIncrementalScanRanges) {
+        if (this.enableIncrementalScanRanges) {
             remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(icebergTable, params);
         } else {
             List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
@@ -237,11 +252,24 @@ public class IcebergScanNode extends ScanNode {
                 Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
                 remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
             }
+            if (collectPreviousDeletes) {
+                previousDeletesByRef = new LinkedHashMap<>();
+                plannedDataFiles = new LinkedHashMap<>();
+                IcebergDeletionVectorSupport.collectPreviousDeletes(splits, previousDeletesByRef, plannedDataFiles);
+            }
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
                 scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
+    }
+
+    public Map<String, List<DeleteFile>> getPreviousDeletesByRef() {
+        return previousDeletesByRef == null ? Map.of() : previousDeletesByRef;
+    }
+
+    public Map<String, DataFile> getPlannedDataFiles() {
+        return plannedDataFiles == null ? Map.of() : plannedDataFiles;
     }
 
     private void setupCloudCredential() {

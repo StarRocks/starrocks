@@ -17,10 +17,13 @@ package com.starrocks.epack.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
-import com.starrocks.connector.iceberg.IcebergPartitionData;
-import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.IcebergRemoteFileInfo;
+import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.sql.IcebergPlannerUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -28,23 +31,41 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergPreviousDeleteFile;
+import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.SnapshotSummary;
+import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.util.ContentFileUtil;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
+import java.util.stream.Collectors;
 
 /**
  * Planner- and commit-side support for writing Iceberg V3 deletion vectors (Puffin DV blobs
- * replacing Parquet position-delete files on format-version &gt;= 3 tables).
+ * replacing Parquet position-delete files on format-version &gt;= 3 tables), including the
+ * previous-delete merge round trip: shipping each scanned data file's pre-existing position
+ * deletes to the BE sink and removing exactly the file-scoped originals it folded in.
  */
 public final class IcebergDeletionVectorSupport {
+
+    /** The thrift-level format tag of a Puffin deletion-vector entry ("puffin"). */
+    public static final String PUFFIN_FORMAT = FileFormat.PUFFIN.name().toLowerCase(Locale.ROOT);
 
     private IcebergDeletionVectorSupport() {
     }
@@ -55,41 +76,6 @@ public final class IcebergDeletionVectorSupport {
      */
     public static boolean isV3(IcebergTable icebergTable) {
         return icebergTable.getFormatVersion() >= 3;
-    }
-
-    /**
-     * Happy-path guard for V3 DELETE. The deletion-vector write path does not yet merge a data
-     * file's pre-existing deletes, nor express per-file partition under partition-spec evolution
-     * (both are planned follow-ups), so reject those cases up front rather than silently dropping
-     * deletes or writing mismatched partition metadata.
-     */
-    public static void assertV3DeleteSupported(IcebergTable icebergTable) {
-        Table nativeTbl = icebergTable.getNativeTable();
-        if (nativeTbl.specs().size() > 1) {
-            throw new StarRocksPlannerException(
-                    "Iceberg V3 DELETE is not yet supported on tables with evolved partition specs: "
-                            + icebergTable.getName(), ErrorType.UNSUPPORTED);
-        }
-        Snapshot current = nativeTbl.currentSnapshot();
-        if (current != null && hasExistingDeleteFiles(nativeTbl, current)) {
-            throw new StarRocksPlannerException(
-                    "Iceberg V3 DELETE is not yet supported on tables with pre-existing delete files "
-                            + "(previous-delete merge lands in a follow-up): " + icebergTable.getName(),
-                    ErrorType.UNSUPPORTED);
-        }
-    }
-
-    private static boolean hasExistingDeleteFiles(Table nativeTbl, Snapshot current) {
-        String total = current.summary() == null ? null
-                : current.summary().get(SnapshotSummary.TOTAL_DELETE_FILES_PROP);
-        if (total != null) {
-            try {
-                return Long.parseLong(total) > 0;
-            } catch (NumberFormatException ignore) {
-                // fall through to the manifest-based check
-            }
-        }
-        return !current.deleteManifests(nativeTbl.io()).isEmpty();
     }
 
     /**
@@ -115,13 +101,176 @@ public final class IcebergDeletionVectorSupport {
     }
 
     /**
+     * Collects each scanned data file's pre-existing position deletes and its DataFile from the
+     * target scan node's materialized planning. Deduped by location: split/coalesce produces
+     * multiple tasks per data file.
+     */
+    public static void collectPreviousDeletes(List<RemoteFileInfo> splits,
+                                              Map<String, List<DeleteFile>> previousDeletesByRef,
+                                              Map<String, DataFile> plannedDataFiles) {
+        for (RemoteFileInfo remoteFileInfo : splits) {
+            IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
+            FileScanTask task = icebergRemoteFileInfo.getFileScanTask();
+            String location = task.file().location();
+            if (plannedDataFiles.putIfAbsent(location, task.file()) != null) {
+                continue;
+            }
+            List<DeleteFile> positionDeletes = new ArrayList<>();
+            for (DeleteFile deleteFile : task.deletes()) {
+                if (deleteFile.content() == FileContent.POSITION_DELETES) {
+                    positionDeletes.add(deleteFile);
+                }
+            }
+            if (!positionDeletes.isEmpty()) {
+                previousDeletesByRef.put(location, positionDeletes);
+            }
+        }
+    }
+
+    /**
+     * Hands the DELETE target's materialized planning result (scanned data files and their
+     * pre-existing deletes) to the deletion-vector sink.
+     */
+    public static void attachPreviousDeletes(ExecPlan execPlan, IcebergTable icebergTable,
+                                             IcebergMetadata.IcebergSinkExtra sinkExtra,
+                                             IcebergDeleteSink dataSink) {
+        // Take the planning result from the DML target's scan node only (same resolution as
+        // extractBaseSnapshotId): a same-table subquery — possibly time-traveled onto another
+        // snapshot — must not contribute its associations.
+        IcebergScanNode target = IcebergPlannerUtils.findScanNodeFor(execPlan, icebergTable);
+        if (target == null) {
+            return;
+        }
+        sinkExtra.addScannedDataFiles(new HashSet<>(target.getPlannedDataFiles().values()));
+        dataSink.setPreviousDeleteFiles(buildPreviousDeleteFiles(target.getPreviousDeletesByRef(), sinkExtra));
+    }
+
+    /**
+     * Converts the per-file previous deletes (Iceberg's DeleteFileIndex association,
+     * sequence-aware and duplicate-DV guarded) into the sink's thrift form, indexing file-scoped
+     * originals for the removeDeletes round trip. The association is predicate-independent, so
+     * earlier deletes of other rows in a touched file cannot resurrect. A partition-scoped
+     * delete becomes ONE entry carrying its associated-file list, never one entry per
+     * association.
+     */
+    public static List<TIcebergPreviousDeleteFile> buildPreviousDeleteFiles(
+            Map<String, List<DeleteFile>> previousDeletesByRef, IcebergMetadata.IcebergSinkExtra extra) {
+        List<TIcebergPreviousDeleteFile> result = Lists.newArrayList();
+        Map<String, TIcebergPreviousDeleteFile> partitionScopedByPath = new LinkedHashMap<>();
+        for (Map.Entry<String, List<DeleteFile>> entry : previousDeletesByRef.entrySet()) {
+            String referencedDataFile = entry.getKey();
+            for (DeleteFile file : entry.getValue()) {
+                if (ContentFileUtil.referencedDataFileLocation(file) == null) {
+                    partitionScopedByPath.computeIfAbsent(file.location(), path -> {
+                        TIcebergPreviousDeleteFile prev = new TIcebergPreviousDeleteFile();
+                        prev.setPath(path);
+                        prev.setFormat(file.format().name().toLowerCase(Locale.ROOT));
+                        prev.setFile_scoped(false);
+                        prev.setRecord_count(file.recordCount());
+                        prev.setFile_size_in_bytes(file.fileSizeInBytes());
+                        prev.setReferenced_data_files(Lists.newArrayList());
+                        return prev;
+                    }).addToReferenced_data_files(referencedDataFile);
+                    continue;
+                }
+                boolean isDv = ContentFileUtil.isDV(file);
+                TIcebergPreviousDeleteFile prev = new TIcebergPreviousDeleteFile();
+                prev.setPath(file.location());
+                prev.setFormat(file.format().name().toLowerCase(Locale.ROOT));
+                prev.setFile_scoped(true);
+                prev.setReferenced_data_files(Lists.newArrayList(referencedDataFile));
+                if (isDv) {
+                    prev.setContent_offset(file.contentOffset());
+                    prev.setContent_size_in_bytes(file.contentSizeInBytes());
+                }
+                prev.setRecord_count(file.recordCount());
+                // Lets the BE merge path skip get_file_size (unsupported on object storage).
+                prev.setFile_size_in_bytes(file.fileSizeInBytes());
+                // Only file-scoped deletes may ever be removed, so only they enter the
+                // removable-set index.
+                extra.putPreviousDeleteFile(uniqueDeleteFileKey(
+                        file.location(), isDv ? file.contentOffset() : null), file);
+                result.add(prev);
+            }
+        }
+        result.addAll(partitionScopedByPath.values());
+        return result;
+    }
+
+    /**
+     * Unique delete-file key for removeDeletes: several DV blobs share one Puffin path and a
+     * data file may accumulate several delete files, so DVs key by (path, content_offset) and
+     * other deletes by path.
+     */
+    public static String uniqueDeleteFileKey(String path, Long contentOffset) {
+        return contentOffset == null ? path : path + "@" + contentOffset;
+    }
+
+    /**
+     * The file-scoped old deletes the BE folded into new deletion vectors; the delete commit
+     * removes exactly these.
+     */
+    public static List<TIcebergPreviousDeleteFile> collectRewrittenDeleteFiles(List<TSinkCommitInfo> commitInfos) {
+        return commitInfos.stream()
+                .filter(TSinkCommitInfo::isSetRewritten_delete_files)
+                .flatMap(ci -> ci.getRewritten_delete_files().stream())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * The scanned data files indexed by location — the source of each deletion-vector entry's
+     * spec and partition (a file written under an older spec keeps that spec).
+     */
+    public static Map<String, DataFile> scannedDataFilesByLocation(Object extra) {
+        Map<String, DataFile> scannedByLocation = new HashMap<>();
+        if (extra instanceof IcebergMetadata.IcebergSinkExtra) {
+            for (DataFile scanned : ((IcebergMetadata.IcebergSinkExtra) extra).getScannedDataFiles()) {
+                scannedByLocation.put(scanned.location(), scanned);
+            }
+        }
+        return scannedByLocation;
+    }
+
+    /**
+     * Removes exactly the file-scoped old deletes the BE reports it folded into new deletion
+     * vectors, resolved by unique key against the plan-time collection.
+     */
+    public static void removeRewrittenDeletes(RowDelta rowDelta,
+                                              List<TIcebergPreviousDeleteFile> rewrittenDeleteFiles, Object extra) {
+        for (TIcebergPreviousDeleteFile rewritten : rewrittenDeleteFiles) {
+            String key = uniqueDeleteFileKey(rewritten.getPath(),
+                    PUFFIN_FORMAT.equalsIgnoreCase(rewritten.getFormat()) && rewritten.isSetContent_offset()
+                            ? rewritten.getContent_offset() : null);
+            DeleteFile original = extra instanceof IcebergMetadata.IcebergSinkExtra
+                    ? ((IcebergMetadata.IcebergSinkExtra) extra).getPreviousDeleteFile(key) : null;
+            if (original == null) {
+                throw new StarRocksConnectorException(
+                        "rewritten delete file was not part of the planned previous-delete set: " + key);
+            }
+            rowDelta.removeDeletes(original);
+        }
+    }
+
+    /**
+     * Rows deleted by the current statement, summed from the BE-reported added_delete_rows (a
+     * merged deletion vector's record_count also counts historical deletes). Empty unless EVERY
+     * entry carries the field, so a partial mix falls back to the snapshot summary.
+     */
+    public static OptionalLong currentStatementDeletedRows(List<TIcebergDataFile> dataFiles) {
+        if (!dataFiles.isEmpty() && dataFiles.stream().allMatch(TIcebergDataFile::isSetAdded_delete_rows)) {
+            return OptionalLong.of(dataFiles.stream().mapToLong(TIcebergDataFile::getAdded_delete_rows).sum());
+        }
+        return OptionalLong.empty();
+    }
+
+    /**
      * Builds the Iceberg {@link org.apache.iceberg.DeleteFile} for a BE-written deletion vector:
      * a Puffin blob rather than a Parquet position-delete file. DV blobs carry no Parquet column
      * stats (no withMetrics) but must carry the blob's location within the Puffin file (content
      * offset/size) and the referenced data file.
      */
     public static org.apache.iceberg.DeleteFile buildDeletionVectorFile(
-            TIcebergDataFile dataFile, PartitionSpec partitionSpec, Table nativeTbl) {
+            TIcebergDataFile dataFile, Table nativeTbl, Map<String, DataFile> scannedByLocation) {
         // A deletion vector must carry its referenced data file and blob coordinates. These
         // are primitive thrift getters (an unset field silently reads 0), so validate before
         // build() rather than committing metadata with a bogus offset/size that only fails on
@@ -132,12 +281,20 @@ public final class IcebergDeletionVectorSupport {
                     "Iceberg deletion vector is missing referenced_data_file/content_offset/content_size_in_bytes: "
                             + dataFile.getPath());
         }
-        if (partitionSpec.isPartitioned() && !dataFile.isSetPartition_path()) {
+        // The entry's spec and partition come from the referenced data file itself; the table's
+        // current spec would mismatch under partition evolution.
+        DataFile referenced = scannedByLocation.get(dataFile.getReferenced_data_file());
+        if (referenced == null) {
             throw new StarRocksConnectorException(
-                    "Iceberg deletion vector for a partitioned table is missing partition_path: "
-                            + dataFile.getPath());
+                    "scanned data file not found for deletion vector referencing "
+                            + dataFile.getReferenced_data_file());
         }
-        FileMetadata.Builder dvBuilder = FileMetadata.deleteFileBuilder(partitionSpec)
+        PartitionSpec referencedSpec = nativeTbl.specs().get(referenced.specId());
+        if (referencedSpec == null) {
+            throw new StarRocksConnectorException(
+                    "unknown partition spec " + referenced.specId() + " for data file " + referenced.location());
+        }
+        FileMetadata.Builder dvBuilder = FileMetadata.deleteFileBuilder(referencedSpec)
                 .ofPositionDeletes()
                 .withPath(dataFile.path)
                 .withFormat(FileFormat.PUFFIN)
@@ -146,15 +303,7 @@ public final class IcebergDeletionVectorSupport {
                 .withReferencedDataFile(dataFile.getReferenced_data_file())
                 .withContentOffset(dataFile.getContent_offset())
                 .withContentSizeInBytes(dataFile.getContent_size_in_bytes())
-                .withPartition(partitionSpec.isPartitioned() ?
-                        IcebergPartitionData.partitionDataFromPath(
-                                IcebergMetadata.getIcebergRelativePartitionPath(
-                                        IcebergUtil.tableDataLocation(nativeTbl),
-                                        dataFile.partition_path),
-                                dataFile.isSetPartition_null_fingerprint() ?
-                                        dataFile.getPartition_null_fingerprint() :
-                                        "0".repeat(partitionSpec.fields().size()),
-                                partitionSpec) : null);
+                .withPartition(referencedSpec.isPartitioned() ? referenced.partition() : null);
         return dvBuilder.build();
     }
 
@@ -165,7 +314,7 @@ public final class IcebergDeletionVectorSupport {
      */
     public static boolean isDeletionVectorDelete(List<TIcebergDataFile> dataFiles) {
         for (TIcebergDataFile dataFile : dataFiles) {
-            if ("puffin".equalsIgnoreCase(dataFile.getFormat()) && dataFile.isSetReferenced_data_file()) {
+            if (PUFFIN_FORMAT.equalsIgnoreCase(dataFile.getFormat()) && dataFile.isSetReferenced_data_file()) {
                 return true;
             }
         }
@@ -180,7 +329,7 @@ public final class IcebergDeletionVectorSupport {
     public static void validateSingleDeletionVectorPerFile(List<TIcebergDataFile> dataFiles) {
         Map<String, Integer> dvCountByRef = new HashMap<>();
         for (TIcebergDataFile dataFile : dataFiles) {
-            if ("puffin".equalsIgnoreCase(dataFile.getFormat()) && dataFile.isSetReferenced_data_file()) {
+            if (PUFFIN_FORMAT.equalsIgnoreCase(dataFile.getFormat()) && dataFile.isSetReferenced_data_file()) {
                 int count = dvCountByRef.merge(dataFile.getReferenced_data_file(), 1, Integer::sum);
                 if (count >= 2) {
                     throw new StarRocksConnectorException(

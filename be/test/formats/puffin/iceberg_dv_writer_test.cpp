@@ -199,4 +199,30 @@ TEST(IcebergDvWriterTest, RejectsEmptyReferencedDataFile) {
     EXPECT_FALSE(writer.finish(wf.get()).ok());
 }
 
+TEST(IcebergDvWriterTest, ContainsReflectsAccumulatedFiles) {
+    IcebergDvWriter writer;
+    EXPECT_FALSE(writer.contains("fileA"));
+    writer.add("fileA", 3);
+    EXPECT_TRUE(writer.contains("fileA"));
+    EXPECT_FALSE(writer.contains("fileB"));
+    roaring64_bitmap_t* bm = roaring64_bitmap_create();
+    roaring64_bitmap_add(bm, 7);
+    writer.merge_bitmap("fileB", bm); // merge also creates the entry
+    roaring::api::roaring64_bitmap_free(bm);
+    EXPECT_TRUE(writer.contains("fileB"));
+}
+
+TEST(IcebergDvWriterTest, FileCardinalitiesCountDistinctPositionsPerFile) {
+    IcebergDvWriter writer;
+    EXPECT_TRUE(writer.file_cardinalities().empty());
+    writer.add("fileA", 1);
+    writer.add("fileA", 1); // dedup
+    writer.add("fileA", 2);
+    writer.add("fileB", 9);
+    auto cardinalities = writer.file_cardinalities();
+    ASSERT_EQ(cardinalities.size(), 2u);
+    EXPECT_EQ(cardinalities["fileA"], 2);
+    EXPECT_EQ(cardinalities["fileB"], 1);
+}
+
 } // namespace starrocks::formats

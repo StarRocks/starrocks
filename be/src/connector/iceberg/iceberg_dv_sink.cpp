@@ -16,13 +16,16 @@
 
 #include <fmt/format.h>
 
+#include <set>
+
 #include "base/uid_util.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "connector/common/partition_chunk_writer_memory_manager.h"
-#include "connector/iceberg/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "formats/column_evaluator.h"
+#include "formats/iceberg/iceberg_delete_builder.h"
+#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -57,21 +60,20 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDvSinkProvider::create_sink(int3
                                                runtime_state->be_number(), driver_id, "puffin", ctx->writer_tag);
 
     return std::make_unique<IcebergDvSink>(shared_fs, location_provider, ctx->column_slot_map,
-                                           ctx->partition_column_names, ctx->transform_exprs,
-                                           ColumnEvaluator::clone(ctx->partition_evaluators), runtime_state);
+                                           ctx->previous_delete_files, runtime_state);
 }
 
 IcebergDvSink::IcebergDvSink(std::shared_ptr<FileSystem> fs, std::shared_ptr<LocationProvider> location_provider,
                              std::unordered_map<std::string, TExprNode> column_slot_map,
-                             std::vector<std::string> partition_column_names, std::vector<std::string> transform_exprs,
-                             std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_evaluators, RuntimeState* state)
-        : PartitionedConnectorChunkSink(std::move(partition_column_names), std::move(partition_evaluators),
+                             std::shared_ptr<const std::vector<TIcebergPreviousDeleteFile>> previous_delete_files,
+                             RuntimeState* state)
+        : PartitionedConnectorChunkSink(/*partition_columns=*/{}, /*partition_column_evaluators=*/{},
                                         /*partition_chunk_writer_factory=*/nullptr, state,
                                         /*support_null_partition=*/true),
           _fs(std::move(fs)),
           _location_provider(std::move(location_provider)),
           _column_slot_map(std::move(column_slot_map)),
-          _transform_exprs(std::move(transform_exprs)) {}
+          _previous_delete_files(std::move(previous_delete_files)) {}
 
 Status IcebergDvSink::init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
                            SinkMemoryManager* sink_mem_mgr) {
@@ -86,7 +88,6 @@ Status IcebergDvSink::init(formats::AsyncFlushStreamPoller* poller, RuntimeProfi
     DCHECK(sink_mem_mgr != nullptr);
     auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
     init_profile();
-    RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
     _partition_writer_mem_mgr = op_mem_mgr.get();
     _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
@@ -115,12 +116,8 @@ Status IcebergDvSink::add(const ChunkPtr& chunk) {
     BinaryColumn* file_data = ColumnHelper::get_binary_column(chunk->get_column_raw_ptr_by_slot_id(file_slot));
     ColumnViewer<TYPE_BIGINT> pos_view(pos_col);
 
-    // Stream rows straight into the writer: IcebergDvWriter::add takes a string_view and only
-    // materializes the key for files it has not seen yet, so this loop is allocation-free per
-    // row. Because DV shuffles by _file, one sink instance can hold data files that belong to
-    // different partitions, so each file's partition is captured once from its first row (a
-    // data file belongs to exactly one partition, so any of its rows yields the same value).
-    const bool partitioned = !_partition_column_names.empty();
+    // The sink is partition-agnostic: the FE commit derives each entry's partition from the
+    // referenced data file itself.
     for (int i = 0; i < num_rows; ++i) {
         if (file_col->is_null(i)) {
             return Status::InternalError("_file is NULL value");
@@ -128,27 +125,86 @@ Status IcebergDvSink::add(const ChunkPtr& chunk) {
         if (pos_col->is_null(i)) {
             return Status::InternalError("_pos is NULL value");
         }
-        const Slice file_path = file_data->get_slice(i);
-        _dv_writer.add(file_path, static_cast<uint64_t>(pos_view.value(i)));
-        if (partitioned && _partition_by_file.find(std::string_view(file_path)) == _partition_by_file.end()) {
-            // One-row representative chunk so iceberg_make_partition_name (which reads row 0)
-            // evaluates this file's partition columns.
-            ChunkPtr rep = chunk->clone_empty();
-            uint32_t idx = i;
-            rep->append_selective(*chunk, &idx, 0, 1);
-            std::vector<int8_t> null_list;
-            ASSIGN_OR_RETURN(std::string part_name,
-                             IcebergUtils::iceberg_make_partition_name(_partition_column_names,
-                                                                       _partition_column_evaluators, _transform_exprs,
-                                                                       rep.get(), _support_null_partition, null_list));
-            std::string fingerprint(null_list.size(), '0');
-            for (size_t k = 0; k < null_list.size(); ++k) {
-                fingerprint[k] = null_list[k] ? '1' : '0';
-            }
-            _partition_by_file.emplace(
-                    file_path.to_string(),
-                    PartitionInfo{_location_provider->root_location(part_name), std::move(fingerprint)});
+        _dv_writer.add(file_data->get_slice(i), static_cast<uint64_t>(pos_view.value(i)));
+    }
+    return Status::OK();
+}
+
+Status IcebergDvSink::read_previous_delete_rows(const TIcebergPreviousDeleteFile& prev,
+                                                const formats::IcebergPositionDeleteReader::RowCallback& cb) const {
+    // Prefer the FE-forwarded length: get_file_size is unsupported on object storage.
+    int64_t length;
+    if (prev.__isset.file_size_in_bytes) {
+        length = prev.file_size_in_bytes;
+    } else {
+        ASSIGN_OR_RETURN(length, _fs->get_file_size(prev.path));
+    }
+    ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(prev.path));
+    return formats::IcebergPositionDeleteReader::read_rows(file.get(), prev.path, length, prev.format,
+                                                           _state->chunk_size(), _state->timezone(),
+                                                           FormatScannerOptions{}, /*stats=*/nullptr, cb);
+}
+
+Status IcebergDvSink::merge_previous_deletes(
+        std::map<std::string, std::vector<TIcebergPreviousDeleteFile>, std::less<>>* rewritten_by_ref) {
+    if (_previous_delete_files == nullptr) {
+        return Status::OK();
+    }
+    for (const auto& prev : *_previous_delete_files) {
+        if (!prev.__isset.referenced_data_files || prev.referenced_data_files.empty()) {
+            return Status::InternalError("previous delete file is missing referenced_data_files: " + prev.path);
         }
+        const bool file_scoped = prev.__isset.file_scoped && prev.file_scoped;
+        if (!file_scoped) {
+            // Partition-scoped position delete: merged for this driver's touched files, but NOT
+            // reported as rewritten — other data files in the partition still rely on it.
+            std::set<std::string_view> touched_refs;
+            for (const auto& ref : prev.referenced_data_files) {
+                if (_dv_writer.contains(ref)) {
+                    touched_refs.insert(ref);
+                }
+            }
+            if (touched_refs.empty()) {
+                continue;
+            }
+            RETURN_IF_ERROR(read_previous_delete_rows(prev, [&](const Slice& file_path, int64_t pos) {
+                if (touched_refs.find(std::string_view(file_path)) != touched_refs.end()) {
+                    _dv_writer.add(file_path, static_cast<uint64_t>(pos));
+                }
+            }));
+            continue;
+        }
+        if (prev.referenced_data_files.size() != 1) {
+            return Status::InternalError("file-scoped previous delete must reference exactly one data file: " +
+                                         prev.path);
+        }
+        const std::string& ref = prev.referenced_data_files[0];
+        if (!_dv_writer.contains(ref)) {
+            continue; // untouched data file: no new DV is written for it, leave it alone
+        }
+        if (prev.format == "puffin") {
+            if (!prev.__isset.content_offset || !prev.__isset.content_size_in_bytes) {
+                return Status::InternalError(
+                        "previous deletion vector is missing content_offset/content_size_in_bytes: " + prev.path);
+            }
+            ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(prev.path));
+            std::vector<uint8_t> buffer(prev.content_size_in_bytes);
+            RETURN_IF_ERROR(file->read_at_fully(prev.content_offset, buffer.data(), buffer.size()));
+            ASSIGN_OR_RETURN(auto* bm, formats::IcebergDeletionVectorReader::parse_dv_blob(
+                                               buffer.data(), buffer.size(),
+                                               prev.__isset.record_count ? prev.record_count : -1, nullptr));
+            _dv_writer.merge_bitmap(ref, bm);
+            roaring64_bitmap_free(bm);
+        } else {
+            // A file-scoped delete references exactly one data file; the filter guards
+            // malformed rows.
+            RETURN_IF_ERROR(read_previous_delete_rows(prev, [&](const Slice& file_path, int64_t pos) {
+                if (file_path == ref) {
+                    _dv_writer.add(file_path, static_cast<uint64_t>(pos));
+                }
+            }));
+        }
+        (*rewritten_by_ref)[ref].push_back(prev);
     }
     return Status::OK();
 }
@@ -158,6 +214,17 @@ Status IcebergDvSink::finish() {
     if (_dv_writer.empty()) {
         return Status::OK(); // nothing deleted -> no orphan zero-blob Puffin
     }
+
+    // Snapshot per-file counts BEFORE merging: the metrics must report this DELETE's rows,
+    // not the merged DV cardinality (which includes historical positions).
+    const auto added_rows_by_file = _dv_writer.file_cardinalities();
+    int64_t current_delete_rows = 0;
+    for (const auto& [_, rows] : added_rows_by_file) {
+        current_delete_rows += rows;
+    }
+
+    std::map<std::string, std::vector<TIcebergPreviousDeleteFile>, std::less<>> rewritten_by_ref;
+    RETURN_IF_ERROR(merge_previous_deletes(&rewritten_by_ref));
 
     const std::string location = _location_provider->get(); // <data_root>/{prefix}_{idx}.puffin
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(location));
@@ -173,7 +240,6 @@ Status IcebergDvSink::finish() {
     const int64_t file_size = static_cast<int64_t>(file->size());
     RETURN_IF_ERROR(file->close());
 
-    int64_t total_deleted_rows = 0;
     for (const auto& e : entries) {
         TIcebergDataFile df;
         df.__set_path(location);
@@ -184,20 +250,19 @@ Status IcebergDvSink::finish() {
         df.__set_content_size_in_bytes(e.content_size_in_bytes);
         df.__set_record_count(e.record_count);
         df.__set_file_size_in_bytes(file_size);
-        auto pit = _partition_by_file.find(e.referenced_data_file);
-        if (pit != _partition_by_file.end()) {
-            df.__set_partition_path(pit->second.partition_path);
-            df.__set_partition_null_fingerprint(pit->second.null_fingerprint);
+        if (auto it = added_rows_by_file.find(e.referenced_data_file); it != added_rows_by_file.end()) {
+            df.__set_added_delete_rows(it->second);
         }
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(df);
+        // The FE removes exactly the file-scoped deletes folded into this file's new DV.
+        auto rit = rewritten_by_ref.find(e.referenced_data_file);
+        if (rit != rewritten_by_ref.end()) {
+            commit_info.__set_rewritten_delete_files(rit->second);
+        }
         _state->add_sink_commit_info(commit_info);
-        total_deleted_rows += e.record_count;
     }
-    // Report deleted rows into the load counters (what the V2 delete sink does per commit
-    // callback), so DML row accounting reflects the DV deletes. record_count is the bitmap
-    // cardinality, i.e. distinct deleted positions.
-    _state->update_num_rows_load_sink(total_deleted_rows);
+    _state->update_num_rows_load_sink(current_delete_rows);
     return Status::OK();
 }
 

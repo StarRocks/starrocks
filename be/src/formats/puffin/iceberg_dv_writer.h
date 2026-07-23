@@ -58,12 +58,26 @@ public:
     void add(std::string_view referenced_data_file, uint64_t position);
 
     // Set-union an existing deletion bitmap into the accumulator for a data file (creates the
-    // entry if absent). Lets a previously-written DV be merged in without expanding it to rows.
-    // `other` is not modified or freed.
+    // entry if absent). `other` is not modified or freed.
     void merge_bitmap(std::string_view referenced_data_file, const roaring64_bitmap_t* other);
 
     bool empty() const { return _bitmaps.empty(); }
     size_t num_data_files() const { return _bitmaps.size(); }
+
+    // Whether positions have been accumulated (or merged) for this data file.
+    bool contains(std::string_view referenced_data_file) const {
+        return _bitmaps.find(referenced_data_file) != _bitmaps.end();
+    }
+
+    // Distinct positions per data file. Taken BEFORE merging previous deletes, these are the
+    // current statement's deleted-row counts; merged bitmaps also contain historical positions.
+    std::map<std::string, int64_t, std::less<>> file_cardinalities() const {
+        std::map<std::string, int64_t, std::less<>> result;
+        for (const auto& [file, bm] : _bitmaps) {
+            result.emplace(file, static_cast<int64_t>(roaring64_bitmap_get_cardinality(bm)));
+        }
+        return result;
+    }
 
     // Write all accumulated bitmaps as DV blobs into `file` (one Puffin container), in ascending
     // referenced-data-file order. Returns one entry per data file. Single-shot: a second call
