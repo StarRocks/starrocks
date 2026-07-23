@@ -147,25 +147,29 @@ public class Authorizer {
 
     public static void checkViewAction(ConnectContext context, TableName tableName,
                                        PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        getInstance().getAccessControlOrDefault(catalog)
                 .checkViewAction(context, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        getInstance().getAccessControlOrDefault(catalog)
                 .checkAnyActionOnView(context, tableName);
     }
 
     public static void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                                    PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        getInstance().getAccessControlOrDefault(catalog)
                 .checkMaterializedViewAction(context, tableName, privilegeType);
     }
 
     public static void checkAnyActionOnMaterializedView(ConnectContext context,
                                                         TableName tableName) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        getInstance().getAccessControlOrDefault(catalog)
                 .checkAnyActionOnMaterializedView(context, tableName);
     }
 
@@ -196,41 +200,42 @@ public class Authorizer {
             case MYSQL:
             case ELASTICSEARCH:
             case HIVE:
-            case HIVE_VIEW:
             case ICEBERG:
-            case ICEBERG_VIEW:
             case HUDI:
             case JDBC:
             case DELTALAKE:
             case FILE:
             case SCHEMA:
             case PAIMON:
-            case PAIMON_VIEW:
             case ODPS:
             case KUDU:
-                // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(context, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
-                    checkTableAction(context, dbName, tbl.getName(), privilegeType);
+                    checkTableAction(context, new TableName(tbl.getCatalogName(), dbName, tbl.getName()),
+                            privilegeType);
                 }
                 break;
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
-                // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
-                    checkAnyActionOnMaterializedView(context, new TableName(dbName, tbl.getName()));
+                    checkAnyActionOnMaterializedView(context,
+                            new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
-                    checkMaterializedViewAction(context, new TableName(dbName, tbl.getName()),
-                            privilegeType);
+                    checkMaterializedViewAction(context,
+                            new TableName(tbl.getCatalogName(), dbName, tbl.getName()), privilegeType);
                 }
                 break;
             case VIEW:
-                // `privilegeType == null` meaning we don't check specified action, just any action
+            case HIVE_VIEW:
+            case ICEBERG_VIEW:
+            case PAIMON_VIEW:
                 if (privilegeType == null) {
-                    checkAnyActionOnView(context, new TableName(dbName, tbl.getName()));
+                    checkAnyActionOnView(context,
+                            new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
-                    checkViewAction(context, new TableName(dbName, tbl.getName()), privilegeType);
+                    checkViewAction(context,
+                            new TableName(tbl.getCatalogName(), dbName, tbl.getName()), privilegeType);
                 }
                 break;
             default:
@@ -311,14 +316,17 @@ public class Authorizer {
                 () -> controller.checkAnyActionOnDb(context, catalogName, db),
                 () -> controller.checkAnyActionOnAnyTable(context, catalogName, db)
         );
-        List<AccessControlChecker> extraCheckers = ImmutableList.of(
-                () -> controller.checkAnyActionOnAnyView(context, db),
-                () -> controller.checkAnyActionOnAnyMaterializedView(context, db),
+        List<AccessControlChecker> viewMvCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(context, catalogName, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(context, catalogName, db)
+        );
+        List<AccessControlChecker> internalOnlyCheckers = ImmutableList.of(
                 () -> controller.checkAnyActionOnAnyFunction(context, db),
                 () -> controller.checkAnyActionOnPipe(context, new PipeName("*", "*"))
         );
         List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
-                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
+                ListUtils.union(ListUtils.union(basicCheckers, viewMvCheckers), internalOnlyCheckers) :
+                ListUtils.union(basicCheckers, viewMvCheckers);
 
         AccessDeniedException lastExcepton = null;
         for (AccessControlChecker checker : appliedCheckers) {
