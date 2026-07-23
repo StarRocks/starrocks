@@ -1,0 +1,60 @@
+-- name: test_shared_scan
+-- Exercises the shared-scan code paths re-enabled for event-based scheduling:
+-- the round-robin BalancedChunkBuffer, the targeted per-consumer wakeup in
+-- ChunkSource, and the driver_sequence-indexed source-observer registry.
+-- Few tablets + dop > 1 + many chunks so the shared round-robin buffer rotates
+-- across all consumer drivers. Shared-on results must match shared-off.
+DROP TABLE IF EXISTS test_shared_scan_t;
+-- result:
+-- !result
+CREATE TABLE test_shared_scan_t (
+    k INT NOT NULL,
+    v BIGINT NOT NULL,
+    s VARCHAR(32) NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_shared_scan_t
+SELECT generate_series, generate_series * 2, concat('r', generate_series)
+FROM TABLE(generate_series(1, 300000));
+-- result:
+-- !result
+SET pipeline_dop = 4;
+-- result:
+-- !result
+SET enable_pipeline_event_scheduler = true;
+-- result:
+-- !result
+SET enable_shared_scan = true;
+-- result:
+-- !result
+SELECT count(*), sum(v), min(s), max(s), max(k), min(k) FROM test_shared_scan_t;
+-- result:
+300000	90000300000	r1	r99999	300000	1
+-- !result
+SELECT k % 4 AS g, count(*) c, sum(v) sv FROM test_shared_scan_t GROUP BY g ORDER BY g;
+-- result:
+0	75000	22500300000
+1	75000	22499850000
+2	75000	22500000000
+3	75000	22500150000
+-- !result
+SET enable_shared_scan = false;
+-- result:
+-- !result
+SELECT count(*), sum(v), min(s), max(s), max(k), min(k) FROM test_shared_scan_t;
+-- result:
+300000	90000300000	r1	r99999	300000	1
+-- !result
+SELECT k % 4 AS g, count(*) c, sum(v) sv FROM test_shared_scan_t GROUP BY g ORDER BY g;
+-- result:
+0	75000	22500300000
+1	75000	22499850000
+2	75000	22500000000
+3	75000	22500150000
+-- !result
+DROP TABLE test_shared_scan_t;
+-- result:
+-- !result
