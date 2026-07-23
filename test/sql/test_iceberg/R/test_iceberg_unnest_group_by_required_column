@@ -1,0 +1,129 @@
+-- name: test_iceberg_unnest_group_by_required_column
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table t_required (
+  id bigint not null,
+  arr array<int>,
+  opt_id bigint
+) properties ("format-version" = "2");
+-- result:
+-- !result
+function: assert_query_contains("show create table t_required", "NOT NULL")
+-- result:
+None
+-- !result
+insert into t_required values (1, [10, 20], 100), (2, [30, 40], 200), (3, [50], 300);
+-- result:
+-- !result
+select id from t_required, unnest(arr) group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select id from t_required, unnest([1, 2]) group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select count(distinct id) from t_required, unnest([1, 2]);
+-- result:
+3
+-- !result
+select k from (select id + 1 as k from t_required) v, unnest([1, 2]) group by k order by k;
+-- result:
+2
+3
+4
+-- !result
+select id from t_required group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select id from ((select id from t_required) union all (select id from t_required)) v group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select id from t_required group by rollup(id) order by id;
+-- result:
+None
+1
+2
+3
+-- !result
+select id from (select id from t_required order by id limit 2) v group by id order by id;
+-- result:
+1
+2
+-- !result
+select max(id), min(id) from t_required;
+-- result:
+3	1
+-- !result
+select opt_id from t_required, unnest(arr) group by opt_id order by opt_id;
+-- result:
+100
+200
+300
+-- !result
+drop table t_required force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+-- name: test_olap_unnest_group_by_not_null_column
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_required (
+  id bigint not null,
+  arr array<int>,
+  opt_id bigint
+) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_required values (1, [10, 20], 100), (2, [30, 40], 200), (3, [50], 300);
+-- result:
+-- !result
+select id from t_required, unnest(arr) group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select id from t_required, unnest([1, 2]) group by id order by id;
+-- result:
+1
+2
+3
+-- !result
+select count(distinct id) from t_required, unnest([1, 2]);
+-- result:
+3
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
