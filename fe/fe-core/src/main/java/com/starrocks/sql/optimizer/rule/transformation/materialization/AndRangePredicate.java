@@ -116,7 +116,32 @@ public class AndRangePredicate extends RangePredicate {
                 return null;
             }
         } else {
+            // eg: src = AND(pt=20251212, OR(gmv>0, id>0)), target = OR(gmv>0, id>0)
+            // Check if any child of AND can cover the OR target (returns TRUE),
+            // in which case the compensation is the remaining AND children.
             OrRangePredicate orRangePredicate = (OrRangePredicate) other;
+            boolean matchedByChild = false;
+            for (RangePredicate childRangePredicate : childPredicates) {
+                ScalarOperator child = childRangePredicate.simplify(orRangePredicate);
+                if (ConstantOperator.TRUE.equals(child)) {
+                    // this child covers the OR target entirely; compensation = other AND children
+                    matchedByChild = true;
+                    for (RangePredicate sibling : childPredicates) {
+                        if (sibling == childRangePredicate) {
+                            continue;
+                        }
+                        ScalarOperator siblingScalar = sibling.toScalarOperator();
+                        if (siblingScalar != null && !siblingScalar.equals(ConstantOperator.TRUE)) {
+                            simpliedPredicates.add(siblingScalar);
+                        }
+                    }
+                    break;
+                }
+            }
+            if (matchedByChild) {
+                return Utils.compoundAnd(simpliedPredicates);
+            }
+            // fallback: try original logic - let AND simplify each OR child
             for (RangePredicate rangePredicate : orRangePredicate.getChildPredicates()) {
                 ScalarOperator simplied = simplify(rangePredicate);
                 if (simplied != null) {
