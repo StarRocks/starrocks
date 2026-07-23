@@ -85,15 +85,24 @@ _SKIP_RULES: list[tuple[str, re.Pattern]] = [
     # ("col > 5") is not mistaken for a prompt.
     ("cli-transcript", re.compile(r"(?m)^\s*[A-Za-z][\w.\-]*(\s*\[[^\]]*\])?>\s")),
     ("output-sample",  re.compile(r"(?m)^\s*\+[-+]{3,}\+\s*$")),
+    # Pasted client output, not SQL: "Query OK, 0 rows affected", "Empty set",
+    # "N rows in set (0.01 sec)".
+    ("client-output",  re.compile(r"(?im)^\s*(Query OK|Empty set|\d+ rows?\s+(affected|in set))")),
     ("cli-terminator", re.compile(r"\\G")),   # MySQL client \G vertical-output terminator
     # UDFs need a jar + FE/BE config the bare cluster doesn't have.
     ("udf", re.compile(r"\b(CREATE(\s+OR\s+REPLACE)?|DROP)\s+(GLOBAL\s+)?"
                        r"(AGGREGATE\s+|TABLE\s+)?FUNCTION\b", re.I)),
     # Template placeholder ellipsis (e.g. SQL_command_template.md).
     ("placeholder-ellipsis", re.compile(r"\.\.\.")),
-    # Syntax-reference notation, not runnable SQL: [OPTIONAL KEYWORD] blocks in
-    # Synopsis sections (e.g. CREATE [GLOBAL] FUNCTION, SHOW [FULL] TABLES).
+    # Syntax-reference notation, not runnable SQL (Synopsis sections):
+    #  - [OPTIONAL KEYWORD]            e.g. CREATE [GLOBAL] FUNCTION
     ("syntax-notation", re.compile(r"\[[A-Z][A-Z ]{2,}\]")),
+    #  - alternation inside brackets   e.g. ANALYZE [FULL|SAMPLE] TABLE
+    ("syntax-notation", re.compile(r"\[[^\]\n]*\|[^\]\n]*\]")),
+    #  - optional qualifier            e.g. SHOW CREATE VIEW [db_name.]view_name
+    ("syntax-notation", re.compile(r"\[[A-Za-z_][\w]*\.\]")),
+    #  - grammar production line       e.g. `auth_option: { IDENTIFIED BY ... }`
+    ("syntax-notation", re.compile(r"(?m)^\s*[a-z_]\w*\s*:\s*[{\[]")),
 ]
 
 # Server errors that mean the example just isn't self-contained (references a
@@ -102,27 +111,47 @@ _SKIP_RULES: list[tuple[str, re.Pattern]] = [
 _UNRESOLVED_CODES = {5501, 5502, 1055}
 _UNRESOLVED_MSGS = ("unknown database", "unknown table", "unknown column",
                     "cannot be resolved", "not found", "unknown catalog",
-                    "is not found", "unknown function", "no matching function")
+                    "is not found", "unknown function", "no matching function",
+                    "unknown user")
 
 
 def _is_unresolved(code, msg: str) -> bool:
     if code in _UNRESOLVED_CODES:
         return True
     m = msg.lower()
-    return any(k in m for k in _UNRESOLVED_MSGS)
+    if any(k in m for k in _UNRESOLVED_MSGS):
+        return True
+    # An object the example references but that isn't present in a fresh cluster
+    # (resource / repository / snapshot / user / task / pipe / prepared stmt …) —
+    # not self-contained. Covers "does not exist" / "is not exist" / "not exists".
+    # Exclude the config case ("... does not exist or is not mutable"), which is
+    # a version/build concern and stays a FAIL candidate.
+    if "not exist" in m and "mutable" not in m:
+        return True
+    return False
+
+
+def _is_notation(msg: str) -> bool:
+    """A parser rejection of a synopsis metacharacter ('[' optional-clause or
+    '{' alternation) — the block is syntax reference notation, not runnable SQL.
+    Real array subscripts / map literals parse fine, so a rejected '[' or '{'
+    reliably indicates notation."""
+    m = msg.lower()
+    return "unexpected input '['" in m or "unexpected input '{'" in m
 
 
 # Errors from the test cluster's shape, not the docs (e.g. single-BE replication
 # limits, disabled UDFs). A distinct bucket so FAIL stays doc-rot signal.
 _ENV_MSGS = ("replication num should be", "udf is not enabled",
-             "be number", "backend number")
+             "be number", "backend number",
+             "shared nothing mode", "shared_data", "run_mode")
 
 
 def _is_env(msg: str) -> bool:
     m = msg.lower()
     return any(k in m for k in _ENV_MSGS)
 _SHARED_DATA_RULES: list[re.Pattern] = [
-    re.compile(r"\b(STORAGE\s+VOLUME|cloud_native|datacache\.)\b", re.I),
+    re.compile(r"\b(STORAGE\s+VOLUME|storage_volume|cloud_native|datacache\.)\b", re.I),
 ]
 
 
@@ -268,6 +297,8 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
                         status = "UNRESOLVED"
                     elif _is_env(msg):
                         status = "ENV"
+                    elif _is_notation(msg):
+                        status, msg = "SKIP", "syntax-notation"
                     else:
                         status = "FAIL"
                     failed = (stmt, msg, status)
