@@ -138,6 +138,22 @@ TEST_F(BrpcStubCacheTest, test_cleanup) {
     ASSERT_NE(stub3, stub1);
 }
 
+TEST_F(BrpcStubCacheTest, test_active_access_keeps_stub_alive) {
+    config::brpc_stub_expire_s = 2;
+    BrpcStubCache cache(&_env);
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(address);
+        ASSERT_EQ(stub1, stub);
+    }
+}
+
 TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
     config::brpc_stub_expire_s = 1;
     LakeServiceBrpcStubCache cache;

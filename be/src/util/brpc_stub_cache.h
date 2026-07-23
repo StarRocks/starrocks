@@ -49,19 +49,20 @@
 
 namespace starrocks {
 
-constexpr int TIMER_TASK_RUNNING = 1;
-
 class ExecEnv;
 
 template <typename StubCacheT>
 class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
 public:
-    EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
-    void Run() override { _cache->cleanup_expired(_endpoint); }
+    EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint) {}
+    void Run() override { _cache->cleanup_expired(_endpoint, this); }
+    void renew_deadline_locked(int64_t deadline_us) { _deadline_us = deadline_us; }
+    int64_t deadline_locked() const { return _deadline_us; }
 
 private:
     StubCacheT* _cache;
     butil::EndPoint _endpoint;
+    int64_t _deadline_us{0};
 };
 
 class BrpcStubCache {
@@ -72,7 +73,7 @@ public:
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr);
     std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
-    void cleanup_expired(const butil::EndPoint& endpoint);
+    void cleanup_expired(const butil::EndPoint& endpoint, EndpointCleanupTask<BrpcStubCache>* cleanup_task);
 
 private:
     struct StubPool {
@@ -94,7 +95,7 @@ class HttpBrpcStubCache {
 public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
-    void cleanup_expired(const butil::EndPoint& endpoint);
+    void cleanup_expired(const butil::EndPoint& endpoint, EndpointCleanupTask<HttpBrpcStubCache>* cleanup_task);
     void shutdown();
 
 private:
@@ -114,7 +115,7 @@ class LakeServiceBrpcStubCache {
 public:
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
-    void cleanup_expired(const butil::EndPoint& endpoint);
+    void cleanup_expired(const butil::EndPoint& endpoint, EndpointCleanupTask<LakeServiceBrpcStubCache>* cleanup_task);
     void shutdown();
 
 private:
