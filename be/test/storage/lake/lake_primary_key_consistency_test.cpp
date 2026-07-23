@@ -219,7 +219,8 @@ private:
 class LakePrimaryKeyConsistencyTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     LakePrimaryKeyConsistencyTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS);
+        const bool separate_sort_key = GetParam().separate_sort_key;
+        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS, separate_sort_key);
         _tablet_metadata->set_enable_persistent_index(true);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
@@ -253,8 +254,15 @@ public:
         items.emplace_back(PICT_OP::COMPACT, 10);
         items.emplace_back(PICT_OP::RELOAD, 10);
         items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 17);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        if (!separate_sort_key) {
+            // Partial updates are not supported on a separate-sort-key table when the partial columns
+            // ({c0, c1}) do not cover the sort key (ROW mode) or touch a sort-key column (COLUMN mode),
+            // and they never take the load-spill / unsort-SST path under test anyway
+            // (should_enable_load_spill disables spilling for partial updates). Skip them for the
+            // ORDER BY != PK variant; the remaining ops fully drive the separate-sort-key write path.
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        }
         items.emplace_back(PICT_OP::CONDITION_UPDATE, 5);
         items.emplace_back(PICT_OP::MIXED_UPSERT_DELETE, 17);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
@@ -304,18 +312,18 @@ public:
                 _old_pk_index_parallel_compaction_task_split_threshold_bytes;
     }
 
-    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
+    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type, bool separate_sort_key = false) {
         auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(next_id());
         metadata->set_version(1);
         metadata->set_cumulative_point(0);
         metadata->set_next_rowset_id(1);
         //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  STRING | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        //  |   c2   |  INT | NO  |  NO  |
+        //  | column | type | KEY | NULL | SORTKEY(when separate) |
+        //  +--------+------+-----+------+------------------------+
+        //  |   c0   |  STRING | YES |  NO  |          NO          |
+        //  |   c1   |  INT | NO  |  NO  |          YES         |
+        //  |   c2   |  INT | NO  |  NO  |          YES         |
         auto schema = metadata->mutable_schema();
         schema->set_keys_type(keys_type);
         schema->set_id(next_id());
@@ -347,6 +355,12 @@ public:
             c2->set_is_key(false);
             c2->set_is_nullable(false);
             c2->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+        if (separate_sort_key) {
+            // ORDER BY (c1, c2) while the primary key is c0, so the sort key differs from the primary
+            // key. num_short_key_columns stays 1 (the short key is the c1 prefix of the sort key).
+            schema->add_sort_key_idxes(1);
+            schema->add_sort_key_idxes(2);
         }
         return metadata;
     }
@@ -842,7 +856,12 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{
-                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+                         ::testing::Values(PrimaryKeyParam{.persistent_index_type =
+                                                                   PersistentIndexTypePB::CLOUD_NATIVE},
+                                           // ORDER BY != PK: separate sort key (c1, c2) exercises the
+                                           // load-spill + unsort-SST-writer + op-aware merge path.
+                                           PrimaryKeyParam{.persistent_index_type =
+                                                                   PersistentIndexTypePB::CLOUD_NATIVE,
+                                                           .separate_sort_key = true}));
 
 } // namespace starrocks::lake
