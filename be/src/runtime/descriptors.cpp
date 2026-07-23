@@ -449,6 +449,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::KUDU_TABLE:
             desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool, mr);
             break;
+        case TTableType::LANCE_TABLE:
+            desc = ALLOC_DESC(LanceTableDescriptor, tdesc, mr);
+            break;
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
         }
