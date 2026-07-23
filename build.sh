@@ -500,6 +500,11 @@ if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
     addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
 fi
 
+java_ext_mvn_opts="${addon_mvn_opts}"
+if [ "${WITH_CONNECTOR_LANCE}" = "OFF" ]; then
+    java_ext_mvn_opts="${java_ext_mvn_opts} -DskipLanceReader"
+fi
+
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
@@ -621,9 +626,9 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "Build Java Extensions"
         cd ${STARROCKS_HOME}/java-extensions
         if [ ${CLEAN} -eq 1 ]; then
-            ${MVN_CMD} clean
+            ${MVN_CMD} ${java_ext_mvn_opts} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+        ${MVN_CMD} ${java_ext_mvn_opts} package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
