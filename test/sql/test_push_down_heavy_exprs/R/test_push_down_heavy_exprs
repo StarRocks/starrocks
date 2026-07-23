@@ -254,3 +254,78 @@ WHERE field_date_1 BETWEEN '2025-12-23' AND '2025-12-25'
 -- result:
 0
 -- !result
+create table hcse_basic (x bigint, y bigint) properties("replication_num"="1");
+-- result:
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into hcse_basic select /*+SET_VAR(push_down_heavy_exprs=true)*/ regexp_count(c0, "a") + regexp_count(c0, "b"), regexp_count(c0, "b") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(cast(x as string), ",", cast(y as string)))) fp from hcse_basic;
+-- result:
+-- !result
+truncate table hcse_basic;
+-- result:
+-- !result
+insert into hcse_basic select /*+SET_VAR(push_down_heavy_exprs=false)*/ regexp_count(c0, "a") + regexp_count(c0, "b"), regexp_count(c0, "b") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(cast(x as string), ",", cast(y as string)))) fp from hcse_basic;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+create table hcse_nested (a varchar(65533), b varchar(65533), c varchar(65533), d varchar(65533)) properties("replication_num"="1");
+-- result:
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into hcse_nested select /*+SET_VAR(push_down_heavy_exprs=true)*/ regexp_replace(regexp_replace(c0, "[0-9]", ""), "[.]", ""), regexp_replace(regexp_replace(c0, "[0-9]", ""), "[.]", ""), regexp_replace(c0, "[0-9]", ""), regexp_replace(c0, "[0-9]", "") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(a, "|", b, "|", c, "|", d))) fp from hcse_nested;
+-- result:
+-- !result
+truncate table hcse_nested;
+-- result:
+-- !result
+insert into hcse_nested select /*+SET_VAR(push_down_heavy_exprs=false)*/ regexp_replace(regexp_replace(c0, "[0-9]", ""), "[.]", ""), regexp_replace(regexp_replace(c0, "[0-9]", ""), "[.]", ""), regexp_replace(c0, "[0-9]", ""), regexp_replace(c0, "[0-9]", "") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(a, "|", b, "|", c, "|", d))) fp from hcse_nested;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result
+create table hcse_trans (p bigint, q bigint, r varchar(65533), w varchar(65533)) properties("replication_num"="1");
+-- result:
+-- !result
+truncate table result;
+-- result:
+-- !result
+insert into hcse_trans select /*+SET_VAR(push_down_heavy_exprs=true)*/ regexp_count(substr(regexp_replace(c0, "[0-9]", ""), 1, 3), "a"), regexp_count(substr(regexp_replace(c0, "[0-9]", ""), 1, 3), "b"), substr(regexp_replace(c0, "[0-9]", ""), 1, 3), regexp_replace(c0, "[0-9]", "") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(cast(p as string), ",", cast(q as string), ",", r, ",", w))) fp from hcse_trans;
+-- result:
+-- !result
+truncate table hcse_trans;
+-- result:
+-- !result
+insert into hcse_trans select /*+SET_VAR(push_down_heavy_exprs=false)*/ regexp_count(substr(regexp_replace(c0, "[0-9]", ""), 1, 3), "a"), regexp_count(substr(regexp_replace(c0, "[0-9]", ""), 1, 3), "b"), substr(regexp_replace(c0, "[0-9]", ""), 1, 3), regexp_replace(c0, "[0-9]", "") from t0;
+-- result:
+-- !result
+insert into result select sum(murmur_hash3_32(concat(cast(p as string), ",", cast(q as string), ",", r, ",", w))) fp from hcse_trans;
+-- result:
+-- !result
+select assert_true(count(fp)=2 and count(distinct fp)=1) from result;
+-- result:
+1
+-- !result

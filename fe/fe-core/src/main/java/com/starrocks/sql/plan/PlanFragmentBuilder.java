@@ -536,6 +536,24 @@ public class PlanFragmentBuilder {
                 return Collections.emptyMap();
             }
 
+            // The scan computes each pushed expression independently from base columns, so an expression that
+            // references a heavy common sub-expression (directly, or through the light common sub-expressions
+            // inlined before the pushdown) cannot be pushed down. Keep it in the ProjectNode, where it reads
+            // the referenced sub-expression's slot; heavy common sub-expressions computed purely from base
+            // columns are still pushed down and materialized by the scan.
+            Map<ColumnRefOperator, ScalarOperator> lightCommonSubExprs = new HashMap<>(commonSubExprs);
+            heavyCommonSubExprs.keySet().forEach(lightCommonSubExprs::remove);
+            ReplaceColumnRefRewriter lightCommonSubExprInliner =
+                    new ReplaceColumnRefRewriter(lightCommonSubExprs, true);
+            ColumnRefSet heavyCommonSubExprRefs = new ColumnRefSet(heavyCommonSubExprs.keySet());
+            Predicate<ScalarOperator> referencesHeavyCommonSubExpr = expr ->
+                    lightCommonSubExprInliner.rewrite(expr).getUsedColumns().isIntersect(heavyCommonSubExprRefs);
+            heavyExprs.values().removeIf(referencesHeavyCommonSubExpr);
+            heavyCommonSubExprs.values().removeIf(referencesHeavyCommonSubExpr);
+            if (heavyCommonSubExprs.isEmpty() && heavyExprs.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
             // Heavy exprs should be removed from ProjectNode's commonSubExprs to avoid trivial mapping from
             // slotId to itself in commonSubExprs.
             heavyCommonSubExprs.forEach((k, v) -> commonSubExprs.remove(k));
