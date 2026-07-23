@@ -38,8 +38,17 @@
 
 #include <utility>
 
+<<<<<<< HEAD:be/test/runtime/fragment_mgr_test.cpp
 #include "common/config.h"
 #include "exec/data_sink.h"
+=======
+#include "base/testutil/assert.h"
+#include "base/url_coding.h"
+#include "common/config_thrift_server_fwd.h"
+#include "common/util/thrift_util.h"
+#include "compute_env/query/query_runtime_state.h"
+#include "exec/exec_env.h"
+>>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/test/orchestration/query_orchestrator_test.cpp
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -279,4 +288,34 @@ TEST_F(FragmentMgrTest, ExecExternalPlanFragmentLooksUpSlotWithEmptyColName) {
     EXPECT_TRUE(st.is_not_found()) << "expected NotFound from unknown tablet, got: " << st;
 }
 
+<<<<<<< HEAD:be/test/runtime/fragment_mgr_test.cpp
 } // namespace starrocks
+=======
+TEST_F(QueryOrchestratorTest, BuildExternalQueryOptionsBoundsDeliveryTimeout) {
+    TScanOpenParams params;
+    params.__set_batch_size(4096);
+    params.__set_query_timeout(900);
+    params.__set_mem_limit(2147483648LL);
+
+    TQueryOptions options = QueryOrchestrator::build_external_query_options(params);
+
+    // External scan QueryContexts always take the second-chance path after their fragments finish
+    // (each open_scanner declares a single-instance fragment while all scanners share one query_id),
+    // and without an explicit query_delivery_timeout the delivery deadline falls back to
+    // query_timeout. The fabricated options must bound it with the regular default.
+    ASSERT_TRUE(options.__isset.query_delivery_timeout);
+    EXPECT_EQ(pipeline::QueryRuntimeState::DEFAULT_EXPIRE_SECONDS, options.query_delivery_timeout);
+
+    // FragmentExecutor takes min(query_timeout, query_delivery_timeout), so a connector-provided
+    // query_timeout smaller than the default still wins; verify it is carried through unchanged.
+    EXPECT_TRUE(options.__isset.query_timeout);
+    EXPECT_EQ(900, options.query_timeout);
+
+    EXPECT_EQ(4096, options.batch_size);
+    EXPECT_EQ(2147483648LL, options.mem_limit);
+    EXPECT_EQ(TQueryType::EXTERNAL, options.query_type);
+    EXPECT_FALSE(options.use_page_cache);
+}
+
+} // namespace starrocks::orchestration
+>>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/test/orchestration/query_orchestrator_test.cpp
