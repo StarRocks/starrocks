@@ -89,10 +89,12 @@ newer features look "broken" when the release simply doesn't have them yet.
 - [Docker](https://docs.docker.com/get-docker/) (includes Compose).
 - Python 3.
 - [`uv`](https://docs.astral.sh/uv/) — only for the optional fix step (step 4).
-- A checkout of this repo containing this tooling (i.e. `main`). You run the
-  checker from here — you do **not** switch it to the release branch you're
-  verifying. To verify a released version's docs, you add a separate worktree for
-  that branch in Step 2; the checker reads docs from any path via `--docs-root`.
+- A **clone** of this repo (`git clone https://github.com/StarRocks/starrocks.git`).
+  A normal clone contains this tooling and already knows every release branch via
+  `origin/branch-*` — you don't need a separate copy of the branch you're
+  verifying. You run the checker from your clone (on `main`); you do **not** switch
+  its branch. To verify a *released* version you create a one-time worktree for that
+  branch in Step 2, and point `--docs-root` at it.
 
 ### 1. Start a matching StarRocks cluster
 
@@ -122,18 +124,27 @@ python3 docs/scripts/run_sql_samples.py \
     --format md > /tmp/sql-report.md
 ```
 
-**A released version (e.g. 4.1)** — add a second working tree for that release
-branch once (so this checkout keeps the tooling), then point `--docs-root` at it:
+**A released version (e.g. 4.1)** — create a worktree of that release branch. This
+fetches the branch from `origin` and checks it out in a new directory; it does not
+touch your current branch, and you need no prior copy of it. One time:
 
 ```bash
-git worktree add ../starrocks-4.1 branch-4.1    # one-time; a branch-4.1 docs checkout
+git fetch origin branch-4.1
+git worktree add ../sr-branch-4.1 -b branch-4.1 origin/branch-4.1
+```
+
+Then run the checker against it (repeatable — the worktree persists):
+
+```bash
 python3 docs/scripts/run_sql_samples.py \
-    --docs-root ../starrocks-4.1/docs/en/sql-reference \
+    --docs-root ../sr-branch-4.1/docs/en/sql-reference \
     --host 127.0.0.1 --port 9030 --user root \
     --format md > /tmp/sql-report.md
 ```
 
-(A second full clone works too, but a worktree shares the repo and is lighter.)
+Refresh the worktree before later runs with `git -C ../sr-branch-4.1 pull`.
+Substitute the branch you're verifying (e.g. `branch-3.5`) in all three commands.
+(A second full clone works too, but a worktree shares one `.git` and is lighter.)
 
 Open `/tmp/sql-report.md`. Its header confirms the docs and cluster versions are
 aligned — if it warns they aren't, fix that before trusting the results. Every
