@@ -193,7 +193,8 @@ struct OlapReaderStatistics {
 // OlapWriterStatistics used to collect statistics when write data to storage
 struct OlapWriterStatistics {
     int64_t write_remote_ns = 0;    // how much time is spent on write
-    int64_t bytes_write_remote = 0; // how many bytes are written
+    int64_t bytes_write_remote = 0; // how many bytes the underlying stream reports as written to remote
+    int64_t bytes_written = 0;      // actual finalized segment bytes written (ground truth from finalize())
     int64_t segment_count = 0;      // how many files are written
 };
 

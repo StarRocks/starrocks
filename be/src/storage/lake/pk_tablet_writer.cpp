@@ -225,6 +225,7 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         // files are never vacuumed.
         record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
+        _stats.bytes_written += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
         if (segment) {
