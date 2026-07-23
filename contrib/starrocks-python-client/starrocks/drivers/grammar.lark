@@ -34,7 +34,10 @@ refresh_clause: "REFRESH"i (refresh_moment | refresh_type | (refresh_moment refr
 
 !refresh_type: async_scheme | "MANUAL"i | "INCREMENTAL"i
 
-async_scheme: "ASYNC"i ASYNC_DETAILS?
+// StarRocks 4.1+ renders a periodic async refresh (ASYNC ... EVERY / START) with the
+// SCHEDULE keyword in SHOW CREATE MATERIALIZED VIEW. Accept it as an alias of ASYNC; the
+// transformer canonicalizes both to "ASYNC ..." so reflected and metadata forms match.
+async_scheme: ("ASYNC"i | "SCHEDULE"i) ASYNC_DETAILS?
 ASYNC_DETAILS: /[\s\S]+/ // Match any character including newlines
 
 %import common.CNAME

@@ -1045,7 +1045,15 @@ def _compare_mv_refresh(
         if val is None:
             return None
         # Collapse whitespace and compare case-insensitively
-        return " ".join(str(val).split()).upper()
+        normalized = " ".join(str(val).split()).upper()
+        # StarRocks 4.1+ renders a periodic async refresh (ASYNC ... EVERY / START) with the
+        # SCHEDULE keyword in SHOW CREATE MATERIALIZED VIEW, while users typically declare it as
+        # ASYNC. Treat the leading SCHEDULE keyword as ASYNC so equivalent schemes do not diff.
+        if normalized.startswith("SCHEDULE"):
+            normalized = "ASYNC" + normalized[len("SCHEDULE"):]
+        # Normalize START("...") (SHOW CREATE) vs START('...') (metadata) quote styles.
+        normalized = normalized.replace('"', "'")
+        return normalized
 
     conn_refresh_raw = conn_mv_attributes.get(TableInfoKey.REFRESH)
     meta_refresh_raw = meta_mv_attributes.get(TableInfoKey.REFRESH)

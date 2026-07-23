@@ -231,6 +231,13 @@ class TestMVRefreshParser:
             ("REFRESH ASYNC EVERY (INTERVAL 1 DAY)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
             ("REFRESH ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)", {"refresh_moment": None, "refresh_type": "ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)"}),
             ("refresh deferred async", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}), # Case-insensitivity
+            # StarRocks 4.1+ renders a periodic async refresh with the SCHEDULE keyword in
+            # SHOW CREATE MATERIALIZED VIEW. It is canonicalized back to "ASYNC ..." so the
+            # reflected form matches an "ASYNC EVERY(...)" metadata definition.
+            ("REFRESH SCHEDULE EVERY(INTERVAL 10 MINUTE)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY(INTERVAL 10 MINUTE)"}),
+            ("REFRESH SCHEDULE START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)",
+             {"refresh_moment": None, "refresh_type": "ASYNC START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)"}),
+            ("refresh schedule every(interval 5 minute)", {"refresh_moment": None, "refresh_type": "ASYNC every(interval 5 minute)"}),
         ]
     )
     def test_correct_clauses(self, clause, expected):

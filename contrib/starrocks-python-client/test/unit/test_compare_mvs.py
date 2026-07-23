@@ -198,3 +198,28 @@ class TestCompareMaterializedView:
         _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
         eq_(len(upgrade_ops.ops), 0)
+
+    @pytest.mark.parametrize(
+        "conn_refresh, meta_refresh",
+        [
+            # StarRocks 4.1+ reflects a periodic async refresh with the SCHEDULE keyword,
+            # while metadata declares it as ASYNC. These must be treated as equivalent.
+            ("SCHEDULE EVERY(INTERVAL 10 MINUTE)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
+            # START() quoting differs between SHOW CREATE (double) and metadata (single).
+            (
+                'SCHEDULE START("2024-01-01 10:00:00") EVERY(INTERVAL 1 HOUR)',
+                "ASYNC START('2024-01-01 10:00:00') EVERY(INTERVAL 1 HOUR)",
+            ),
+            # Case/whitespace only differences.
+            ("async every(interval 10 minute)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
+        ],
+    )
+    def test_no_change_mv_refresh_schedule_alias(self, conn_refresh, meta_refresh):
+        """No change: 4.1 SCHEDULE refresh keyword is equivalent to metadata ASYNC."""
+        upgrade_ops = ops.UpgradeOps([])
+        conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", refresh=conn_refresh)
+        meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1", starrocks_refresh=meta_refresh)
+
+        _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
+
+        eq_(len(upgrade_ops.ops), 0)
