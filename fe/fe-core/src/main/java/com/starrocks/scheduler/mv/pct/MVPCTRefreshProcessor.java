@@ -151,6 +151,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             mvPctRefreshSynchronizer.updatePCTToRefreshMetas(false);
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             if (refreshScope == null || refreshScope.isEmpty()) {
+                // An empty refresh scope means base tables were checked and the MV is already fresh.
+                confirmFreshness();
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -336,6 +338,14 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                 newProperties.put(TaskRun.PINNED_REFRESH_JOB_ID, startTaskRunId);
             }
         }
+        // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
+        // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+            long processStartTime = mvContext.getStatus().getProcessStartTime();
+            newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
+                    mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            ? String.valueOf(processStartTime) : "0");
+        }
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -373,6 +383,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         // Report the job as continued only if the successor run was accepted; a rejected submit (e.g. queue
         // full) means no successor runs, so the current run stays the job's terminal run.
         return taskManager.executeTask(taskName, option).getStatus() == SubmitResult.SubmitStatus.SUBMITTED;
+    }
+
+    @Override
+    public boolean hasNextBatchRun() {
+        return mvContext.hasNextBatchPartition();
     }
 
     @VisibleForTesting
