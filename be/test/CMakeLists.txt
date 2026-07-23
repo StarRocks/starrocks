@@ -439,5 +439,8 @@ if (APPLE)
     target_sources(builtin_functions_fuzzy_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 
-add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
-add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
+# Standalone executable for disk_info_test (needs to control DiskInfo::init() before gtest runs)
+ADD_BE_TEST(common/system/disk_info_test)
+
+add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test disk_info_test)
+add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test disk_info_test)
