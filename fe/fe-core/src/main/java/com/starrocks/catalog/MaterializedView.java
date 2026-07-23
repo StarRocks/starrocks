@@ -266,6 +266,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.fileNumber = -1;
         }
 
+        // NOTE: stores the connector-native modified-time unit (e.g. Hive uses epoch seconds). Recorded
+        // values are compared per-partition against live PartitionInfo.getModifiedTime() from the same
+        // connector; their aggregate (refreshScheme.lastRefreshTime) additionally feeds the rollback
+        // guard in isStalenessSatisfied(), which intentionally compares raw — see that method. Do not
+        // compare them against wall-clock-millis baselines. Normalizing at this persistence boundary
+        // would need a compatibility plan for already-persisted values.
         public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
             return new BasePartitionInfo(-1, info.getVersion(), info.getModifiedTime());
         }
@@ -1229,45 +1235,62 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Check weather this materialized view's staleness is satisfied.
+     * Check whether this materialized view's staleness is satisfied for query rewrite.
      *
-     * @return
+     * Staleness baseline: the start time of the last COMPLETE refresh batch whose freshness was
+     * confirmed ({@code lastFreshnessConfirmedAt}), NOT {@code lastRefreshTime}. The latter is
+     * overwritten by every task run with the max visible version time of the base partitions that
+     * run consumed, so a chained partial run refreshing one recently-committed partition would keep
+     * renewing the whole MV's freshness while other partitions lag beyond the tolerance
+     * (cross-partition staleness masking).
      */
     @VisibleForTesting
     public boolean isStalenessSatisfied() {
         if (this.maxMVRewriteStaleness <= 0) {
             return false;
         }
-        // Define:
-        //      MV's stalness = max of all base tables' refresh timestamp  - mv's refresh timestamp .
-        // Check staleness by using all base tables' refresh timestamp and this mv's refresh timestamp,
-        // if MV's staleness is greater than user's config `maxMVRewriteStaleness`:
-        // we think this mv is outdated, otherwise we can use this mv to rewrite user's query.
-        long mvRefreshTimestamp = getLastRefreshTime();
         Optional<Long> baseTableRefreshTimestampOpt = maxBaseTableRefreshTimestamp();
         // If we can not find the base table's refresh timestamp, just return false directly.
         if (!baseTableRefreshTimestampOpt.isPresent()) {
             return false;
         }
-
         long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
-        long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
         ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
-        if (mvStaleness < 0) {
-            // A base table's refresh timestamp regressed below the MV's own refresh timestamp, e.g. after an
-            // Iceberg `rollback_to_snapshot`/`rollback_to_timestamp`. Treat as outdated rather than trusting a
-            // negative staleness, otherwise the MV would be served as fresh without re-checking base tables.
-            LOG.debug("MV is outdated because base tables' lastRefreshTime {} is before MV's lastRefreshTime {}",
+        // A base table's refresh timestamp regressed below what the MV has absorbed (e.g. after an
+        // Iceberg rollback_to_snapshot/rollback_to_timestamp, or after dropping the newest base
+        // partitions): treat as outdated rather than trusting the staleness window. Both operands are
+        // intentionally compared RAW. For OLAP tables both are epoch millis, so the comparison is
+        // exact. For Iceberg the recorded lastRefreshTime is in microseconds while the snapshot
+        // timestamp is in millis, so this guard fires permanently — preserving the previous
+        // conservative behavior of never applying staleness-based rewrite to Iceberg MVs. For
+        // Hive the recorded side is in seconds while the max refresh timestamp is normalized to
+        // millis, so this guard effectively never fires there and staleness relies on the confirmed
+        // baseline below. For JDBC both sides are epoch millis, so the comparison is exact.
+        if (baseTableRefreshTimestamp < getLastRefreshTime()) {
+            LOG.debug("MV is outdated because base tables' refresh timestamp {} regressed below MV's "
+                            + "lastRefreshTime {}",
                     DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
-                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId));
+                    DateUtils.formatTimeStampInMill(getLastRefreshTime(), currentTimeZoneId));
             return false;
         }
+        long lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
+        // Freshness has never been confirmed by a complete refresh (new MV, only partial refreshes so
+        // far, or an upgraded FE before its first complete refresh finished): be conservative and fall
+        // back to per-partition change checks.
+        if (lastFreshnessConfirmedAt <= 0) {
+            LOG.debug("MV's staleness is not satisfied because its freshness has never been confirmed "
+                    + "by a complete refresh");
+            return false;
+        }
+        // A negative gap is the quiet-MV common case: no base commits since the confirmed batch
+        // started, so the MV is fresh.
+        long mvStaleness = (baseTableRefreshTimestamp - lastFreshnessConfirmedAt) / 1000;
         if (mvStaleness > this.maxMVRewriteStaleness) {
-            LOG.debug("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
-                            "MV's lastRefreshTime {}) is greater than the staleness config {}",
-                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
-                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId),
+            LOG.debug("MV is outdated because MV's staleness {}s (baseTables' max refresh timestamp {} "
+                            + "- MV's lastFreshnessConfirmedAt {}) is greater than the staleness config {}s",
                     mvStaleness,
+                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(lastFreshnessConfirmedAt, currentTimeZoneId),
                     maxMVRewriteStaleness);
             return false;
         }

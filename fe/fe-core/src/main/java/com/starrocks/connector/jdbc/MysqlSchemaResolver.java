@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -255,7 +254,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
-            long createTime = TimeUtils.getEpochSeconds();
+            long createTime = System.currentTimeMillis();
             if (null != rs) {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").

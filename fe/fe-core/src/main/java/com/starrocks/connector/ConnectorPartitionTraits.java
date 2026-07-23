@@ -224,7 +224,11 @@ public abstract class ConnectorPartitionTraits {
     }
 
     /**
-     * The max of refresh ts for all partitions
+     * The max refresh/modified timestamp over the table's partitions, in EPOCH MILLISECONDS.
+     * Implementations must convert the connector's native modified-time unit (see
+     * {@link com.starrocks.connector.PartitionInfo#getModifiedTimeUnit()}) to milliseconds, because
+     * callers compare this value against wall-clock-millis baselines (e.g. the MV rewrite staleness
+     * check against lastFreshnessConfirmedAt).
      */
     public abstract Optional<Long> maxPartitionRefreshTs();
 
