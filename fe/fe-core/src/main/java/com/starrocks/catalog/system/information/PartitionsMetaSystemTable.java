@@ -68,6 +68,7 @@ public class PartitionsMetaSystemTable {
                         .column("METADATA_SWITCH_VERSION", IntegerType.BIGINT)
                         .column("MIN_VI_BUILT_VERSION", IntegerType.BIGINT)
                         .column("MAX_VI_BUILT_VERSION", IntegerType.BIGINT)
+                        .column("VACUUM_VERSION", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
