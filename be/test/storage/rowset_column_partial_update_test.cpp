@@ -42,7 +42,9 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/empty_iterator.h"
 #include "storage_primitive/union_iterator.h"
 
@@ -214,6 +216,119 @@ public:
                 CHECK_OK(writer->flush_chunk(*chunk));
             }
         }
+        RowsetSharedPtr partial_rowset = *writer->build();
+        partial_rowset->set_schema(tablet->tablet_schema());
+
+        return partial_rowset;
+    }
+
+    TabletSharedPtr create_tablet_with_gin_index(int64_t tablet_id, int32_t schema_hash,
+                                                 const std::string& imp_lib = "builtin") {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::VARCHAR;
+        k3.column_type.__set_len(255);
+        request.tablet_schema.columns.push_back(k3);
+
+        TOlapTableIndex gin_index;
+        gin_index.__set_index_id(1);
+        gin_index.__set_index_name("gin_v2");
+        gin_index.__set_columns({"v2"});
+        gin_index.__set_index_type(TIndexType::GIN);
+        gin_index.__set_common_properties({{"imp_lib", imp_lib}});
+        gin_index.__set_index_properties({{"parser", "none"}});
+        request.tablet_schema.__set_indexes({gin_index});
+
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+        _tablets.push_back(tablet);
+        return tablet;
+    }
+
+    RowsetSharedPtr create_str_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                      const std::function<std::string(int64_t)>& str_func) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            std::string v = str_func(key);
+            cols[2]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
+    RowsetSharedPtr create_partial_str_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                              const std::function<std::string(int64_t)>& str_func,
+                                              std::vector<int32_t>& column_indexes,
+                                              const std::shared_ptr<TabletSchema>& partial_schema,
+                                              PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.full_tablet_schema = tablet->tablet_schema();
+        writer_context.is_partial_update = true;
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.partial_update_mode = mode;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(partial_schema);
+
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        for (int64_t key : keys) {
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(key));
+            std::string v = str_func(key);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(Slice(v)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
         partial_rowset->set_schema(tablet->tablet_schema());
 
@@ -1675,6 +1790,137 @@ TEST_P(RowsetColumnPartialUpdateTest, test_meta_reader_with_multiple_dcg_columns
     auto status = collecter.open();
     // Success or failure is okay - we're testing code coverage
 }
+
+// Count rows matching `v2 == value` through a TabletReader scan, optionally letting the
+// GIN inverted index prune rows. Also re-checks every returned row against the predicate,
+// which catches the erased-predicate-without-recheck failure mode.
+static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, int64_t version, ColumnId cid,
+                                                const std::string& value, bool enable_gin_filter) {
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
+    RETURN_IF_ERROR(reader.prepare());
+    TabletReaderParams params;
+    params.enable_gin_filter = enable_gin_filter;
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), cid, Slice(value)));
+    PredicateAndNode and_node;
+    and_node.add_child(PredicateColumnNode(pred.get()));
+    params.pred_tree = PredicateTree::create(std::move(and_node));
+    std::vector<ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(reader.get_segment_iterators(params, &seg_iters));
+    int64_t rows = 0;
+    for (auto& iter : seg_iters) {
+        // Chunk column order follows the iterator's output schema, which is not necessarily
+        // keyed by ColumnId; resolve the value column's position by matching the field id.
+        const Schema& out_schema = iter->schema();
+        int value_pos = -1;
+        for (size_t i = 0; i < out_schema.num_fields(); i++) {
+            if (out_schema.field(i)->id() == cid) {
+                value_pos = static_cast<int>(i);
+                break;
+            }
+        }
+        if (value_pos < 0) {
+            return Status::InternalError("value column not present in scan output schema");
+        }
+        auto chunk = ChunkFactory::new_chunk(out_schema, 100);
+        while (true) {
+            chunk->reset();
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            for (int r = 0; r < chunk->num_rows(); r++) {
+                if (chunk->columns()[value_pos]->get(r).get_slice().to_string() != value) {
+                    return Status::InternalError("returned row does not match the predicate");
+                }
+            }
+            rows += chunk->num_rows();
+        }
+        iter->close();
+    }
+    return rows;
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_gin_index_check) {
+    // Column-mode partial update rewrites a column into a DCG (.cols) file while the base
+    // segment's inverted index still reflects pre-update values. The reader must serve the
+    // GIN index from the DCG segment, or GIN-filtered queries silently return wrong rows.
+    const int N = 100;
+    auto tablet = create_tablet_with_gin_index(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
+    commit_rowsets(tablet, rowsets, version);
+
+    // GIN-accelerated read against the base segment works.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
+
+    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
+    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
+    std::vector<int32_t> column_indexes = {0, 2};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
+            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (bool gin_filter : {true, false}) {
+        // An updated row must be found by its new value ...
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
+        // ... and must no longer be found by its old value.
+        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
+        // Rows the update did not touch keep working.
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
+    }
+}
+
+#ifndef __APPLE__
+// CLucene (the shared-nothing default implementation) is not produced for DCG .cols files.
+// After a column-mode partial update on the indexed column, the base segment's CLucene index
+// is stale, so no index is served for the updated column: ordinary predicates must fall back
+// to evaluating on the fresh data and still return correct results. This exercises the
+// write-side skip (segment_writer.cpp) and the read-side CLucene branch (segment_iterator.cpp).
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_clucene_gin_index_check) {
+    const int N = 100;
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
+    commit_rowsets(tablet, rowsets, version);
+
+    // Base-segment CLucene index accelerates the pre-update read.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
+
+    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
+    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
+    std::vector<int32_t> column_indexes = {0, 2};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
+            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
+    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    for (bool gin_filter : {true, false}) {
+        // Updated rows resolve to the fresh value; the stale CLucene index is not consulted.
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
+        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
+    }
+}
+#endif
 
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
                          ::testing::Values(RowsetColumnPartialUpdateParam{1}, RowsetColumnPartialUpdateParam{1024},
