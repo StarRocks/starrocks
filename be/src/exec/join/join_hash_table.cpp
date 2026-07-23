@@ -612,12 +612,11 @@ void JoinHashTable::_init_join_keys() {
 }
 
 int64_t JoinHashTable::mem_usage() const {
-    // Theoretically, `_table_items` may be a nullptr after a cancel, even though in practice we haven’t observed any
-    // cases where `_table_items` was unexpectedly cleared or left uninitialized.
-    // To prevent potential null pointer exceptions, we add a defensive check here.
+    // `_table_items` is legitimately null after a cancel: the build hash table can be reset/torn down
+    // while a memory-tracking query (ht_mem_usage from estimated_memory_reserved / revocable-bytes /
+    // close metrics) races in. Return 0 defensively; do NOT DCHECK(false) here -- that is a real,
+    // expected state on cancel and would abort debug/ASan builds (release already returns 0).
     if (_table_items == nullptr) {
-        LOG(WARNING) << "table_items is nullptr in mem_usage, stack:" << get_stack_trace();
-        DCHECK(false);
         return 0;
     }
 
