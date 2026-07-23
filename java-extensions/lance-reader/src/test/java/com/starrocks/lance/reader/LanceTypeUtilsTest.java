@@ -17,14 +17,17 @@ package com.starrocks.lance.reader;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class LanceTypeUtilsTest {
 
@@ -96,12 +99,8 @@ public class LanceTypeUtilsTest {
 
     @Test
     public void testFromArrowTypeList() {
-        assertEquals("array", LanceTypeUtils.fromArrowType(ArrowType.List.INSTANCE));
-    }
-
-    @Test
-    public void testFromArrowTypeStruct() {
-        assertEquals("struct", LanceTypeUtils.fromArrowType(ArrowType.Struct.INSTANCE));
+        assertThrows(IllegalArgumentException.class,
+                () -> LanceTypeUtils.fromArrowType(ArrowType.List.INSTANCE));
     }
 
     @Test
@@ -110,17 +109,24 @@ public class LanceTypeUtilsTest {
                 Field.nullable("id", new ArrowType.Int(32, true)),
                 Field.nullable("name", ArrowType.Utf8.INSTANCE),
                 Field.nullable("score", new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)),
-                Field.nullable("active", ArrowType.Bool.INSTANCE)
+                Field.nullable("active", ArrowType.Bool.INSTANCE),
+                new Field("tags", FieldType.nullable(ArrowType.List.INSTANCE),
+                        Collections.singletonList(Field.nullable("item", ArrowType.Utf8.INSTANCE))),
+                new Field("vector", FieldType.nullable(new ArrowType.FixedSizeList(3)),
+                        Collections.singletonList(Field.nullable(
+                                "item", new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE))))
         ));
 
         Map<String, String> typeMap = LanceTypeUtils.buildTypeMapping(schema);
 
         assertNotNull(typeMap);
-        assertEquals(4, typeMap.size());
+        assertEquals(6, typeMap.size());
         assertEquals("int", typeMap.get("id"));
         assertEquals("string", typeMap.get("name"));
         assertEquals("double", typeMap.get("score"));
         assertEquals("boolean", typeMap.get("active"));
+        assertEquals("array<string>", typeMap.get("tags"));
+        assertEquals("array<float>", typeMap.get("vector"));
     }
 
     @Test
