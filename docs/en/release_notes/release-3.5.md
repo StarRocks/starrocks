@@ -36,8 +36,6 @@ Release date: July 23, 2026
 - `CREATE DATABASE IF NOT EXISTS` on Iceberg REST catalogs now succeeds silently when the database already exists, instead of raising an error. [#75017](https://github.com/StarRocks/starrocks/pull/75017)
 - Iceberg REST catalogs with vended credentials now cache `Table` objects and keep their credentials refreshed on access, instead of bypassing the cache and re-fetching from the REST catalog/Lake Formation on every `getTable()` call, which could trigger AWS `Rate exceeded` errors. [#75431](https://github.com/StarRocks/starrocks/pull/75431)
 - GIN inverted-index-accelerated `NOT MATCH` predicates no longer return rows with a `NULL` value, matching SQL three-valued-logic semantics. [#75578](https://github.com/StarRocks/starrocks/pull/75578)
-- Fixed a null-padding size mismatch for missing columns in `ParquetScanner` so padded rows match the actual per-batch chunk size instead of the whole Parquet/Arrow batch size. [#75981](https://github.com/StarRocks/starrocks/pull/75981)
-- Removed vulnerable, stale transitive dependencies (old BouncyCastle, OkHttp 2.x, Tomcat, and others) that previously shipped alongside their fixed counterparts, and added dependency-ban enforcement to keep them out. [#76097](https://github.com/StarRocks/starrocks/pull/76097)
 
 ### Improvements
 
@@ -67,7 +65,8 @@ The following issues have been fixed:
 - Batched `TabletInvertedIndex` write-lock acquisition in `markTabletsForceDelete`, reducing lock churn when force-deleting many tablets at once. [#75616](https://github.com/StarRocks/starrocks/pull/75616)
 - Batched tablet inverted-index writes in the insert-overwrite path. [#75923](https://github.com/StarRocks/starrocks/pull/75923)
 - Skipped an unnecessary remote `clear_parent_path` call when a load spill never used remote storage. [#76224](https://github.com/StarRocks/starrocks/pull/76224)
-
+- A null-padding size mismatch for missing columns in `ParquetScanner` so padded rows match the actual per-batch chunk size instead of the whole Parquet/Arrow batch size. [#75981](https://github.com/StarRocks/starrocks/pull/75981)
+- Vulnerable, stale transitive dependencies (old BouncyCastle, OkHttp 2.x, Tomcat, and others) that previously shipped alongside their fixed counterparts. [#76097](https://github.com/StarRocks/starrocks/pull/76097)
 
 ## 3.5.19
 
