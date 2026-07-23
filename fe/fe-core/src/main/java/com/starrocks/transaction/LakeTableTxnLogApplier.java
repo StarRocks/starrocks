@@ -105,6 +105,9 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
+            if (txnState.isUserWriteSource()) {
+                partition.updateLastUpdateTime(versionTime);
+            }
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 partition.setDataVersion(partitionCommitInfo.getDataVersion());
                 if (partitionCommitInfo.getVersionEpoch() > 0) {

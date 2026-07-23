@@ -68,6 +68,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
@@ -405,6 +406,8 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
+
+    private final PartitionAccessTimeMgr partitionAccessTimeMgr;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -752,6 +755,7 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+        this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -1052,6 +1056,10 @@ public class GlobalStateMgr {
 
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
+    }
+
+    public PartitionAccessTimeMgr getPartitionAccessTimeMgr() {
+        return partitionAccessTimeMgr;
     }
 
     // Only used in UT

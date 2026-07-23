@@ -42,3 +42,5 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
 | TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |
+| LAST_UPDATE_TIME              | The last time the partition was modified by a user write (load / INSERT / DELETE / UPDATE). |
+| LAST_ACCESS_TIME              | The last time the partition was scanned by a query. Currently kept in FE memory only (not persisted); aggregated across FEs at query time. |

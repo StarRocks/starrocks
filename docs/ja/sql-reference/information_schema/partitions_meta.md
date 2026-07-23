@@ -42,3 +42,5 @@ description: "partitions_metaはテーブルのパーティションに関する
 | STORAGE_SIZE                  | パーティションのストレージサイズ。               |
 | METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
 | TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |
+| LAST_UPDATE_TIME              | パーティションが最後にユーザー書き込み（ロード / INSERT / DELETE / UPDATE）で変更された時刻。 |
+| LAST_ACCESS_TIME              | パーティションが最後にクエリでスキャンされた時刻。現在は FE メモリのみに保持され（永続化されない）、クエリ時に FE 間で集約されます。 |

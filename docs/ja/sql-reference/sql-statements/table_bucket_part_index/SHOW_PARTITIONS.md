@@ -62,6 +62,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | ロードトランザクションのバージョン番号。Compaction 操作は含まれない。 |
 | VersionEpoch             | パーティションのエポック。システムはパーティションが作成されたときにバージョンエポックを割り当て、パーティションがスワップされたときに変更します。 |
 | VersionTxnType           | 現在のデータバージョンを生成するトランザクションのタイプ。有効な値：`NORMAL` （通常のトランザクション）と `REPLICATION` （データ複製）。 |
+| LastUpdateTime           | パーティションが最後にユーザー書き込み（ロード / INSERT / DELETE / UPDATE）で変更された時刻。 |
+| LastAccessTime           | パーティションが最後にクエリでスキャンされた時刻。現在は FE メモリのみに保持され（永続化されない）、クエリ時に FE 間で集約されます。 |
 
 ## 例
 
@@ -87,6 +89,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

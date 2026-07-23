@@ -116,6 +116,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "nextVersion")
     private long nextVersion;
 
+    // Last time this physical partition was modified by a USER write (load/DML)0 = unknown.
+    @SerializedName(value = "lastUpdateTime")
+    private volatile long lastUpdateTime = 0;
+
+    // Last time this physical partition was scanned by a query (ms epoch). 0 = never/unknown.
+    // In-memory only (NO @SerializedName): resets to 0 on restart/failover. Monotonic (max-merge).
+    private volatile long lastAccessTime = 0;
+
     @SerializedName(value = "dataVersion")
     private long dataVersion;
     @SerializedName(value = "nextDataVersion")
@@ -350,6 +358,26 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getVisibleVersionTime() {
         return visibleVersionTime;
+    }
+
+    public long getLastUpdateTime() {
+        return lastUpdateTime;
+    }
+
+    public void updateLastUpdateTime(long newTime) {
+        if (newTime > lastUpdateTime) {
+            lastUpdateTime = newTime;
+        }
+    }
+
+    public long getLastAccessTime() {
+        return lastAccessTime;
+    }
+
+    public void updateLastAccessTime(long newTime) {
+        if (newTime > lastAccessTime) {
+            lastAccessTime = newTime;
+        }
     }
 
     public void setVisibleVersion(long visibleVersion, long visibleVersionTime) {

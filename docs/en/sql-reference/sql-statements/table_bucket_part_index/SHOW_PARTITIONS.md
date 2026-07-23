@@ -62,6 +62,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | The version number of loading transactions. Compaction operations are not included. |
 | VersionEpoch             | The epoch of partition. The system assigns the version epoch when the partition was created, and changes it when the partition was swapped. |
 | VersionTxnType           | The type of the transaction that generates the current data version. Valid values: `NORMAL` (normal transaction) and `REPLICATION` (data replication). |
+| LastUpdateTime           | The last time the partition was modified by a user write (load / INSERT / DELETE / UPDATE). |
+| LastAccessTime           | The last time the partition was scanned by a query. Currently kept in FE memory only (not persisted); aggregated across FEs at query time. |
 
 ## Examples
 
@@ -87,6 +89,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

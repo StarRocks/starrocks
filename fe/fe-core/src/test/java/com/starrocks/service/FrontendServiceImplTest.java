@@ -77,6 +77,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetPartitionAccessTimesRequest;
+import com.starrocks.thrift.TGetPartitionAccessTimesResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetTableSchemaRequest;
@@ -106,6 +108,7 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
@@ -2411,5 +2414,52 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
         // partitions should be empty since the created partition was "dropped" by TTL
         Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
+    }
+
+    @Test
+    public void testGetPartitionAccessTimes() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+
+        // Record a query access on every partition of the table on this (local) FE.
+        List<Long> partitionIds = table.getPartitions().stream()
+                .map(Partition::getId).collect(Collectors.toList());
+        GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr().recordAccess(table, partitionIds);
+
+        List<Long> expectedPhysicalIds = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition pp : partition.getSubPartitions()) {
+                expectedPhysicalIds.add(pp.getId());
+            }
+        }
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // Batch request carrying this table; the handler locks per table and returns physId -> ms.
+        TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
+        TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
+        ref.setDb_id(db.getId());
+        ref.setTable_id(table.getId());
+        request.setTables(Lists.newArrayList(ref));
+
+        TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
+        Assertions.assertNotNull(accessTimes);
+        Assertions.assertEquals(expectedPhysicalIds.size(), accessTimes.size());
+        for (Long pid : expectedPhysicalIds) {
+            Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+        }
+
+        // A table absent on this FE (bogus id) must not fail: locking is by id and the walk returns empty.
+        TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
+        TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
+        missingRef.setDb_id(db.getId());
+        missingRef.setTable_id(-1L);
+        missingReq.setTables(Lists.newArrayList(missingRef));
+        TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
+        Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
+        Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
     }
 }

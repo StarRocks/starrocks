@@ -55,6 +55,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
@@ -1991,6 +1992,14 @@ public class StmtExecutor {
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
+
+        PartitionAccessTimeMgr accessTimeMgr = GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+        for (ScanNode scanNode : scanNodes) {
+            if (scanNode instanceof OlapScanNode) {
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                accessTimeMgr.recordAccess(olapScanNode.getOlapTable(), olapScanNode.getSelectedPartitionIds());
+            }
+        }
 
         if (executeInFe) {
             coord = new FeExecuteCoordinator(context, execPlan);
