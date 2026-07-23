@@ -207,3 +207,128 @@ class TestAlterMaterializedView(TestAutogenerateBase):
                     api.produce_migrations(mc, target_metadata)
             finally:
                 conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
+    @staticmethod
+    def _refresh_alter_ops(migration_script):
+        """Return the AlterMaterializedViewOps that carry a REFRESH change."""
+        return [
+            op
+            for op in migration_script.upgrade_ops.ops
+            if isinstance(op, AlterMaterializedViewOp) and op.refresh is not None
+        ]
+
+    def test_no_refresh_diff_for_periodic_async(self) -> None:
+        """No change: a periodic ASYNC refresh must not produce a spurious REFRESH diff.
+
+        Regression test for the repeated refresh-interval diff. StarRocks 4.1+ renders
+        ``REFRESH ASYNC EVERY(...)`` back as ``REFRESH SCHEDULE EVERY(...)`` in SHOW CREATE,
+        which must be treated as equivalent to the ``ASYNC EVERY(...)`` metadata declaration.
+        (On 3.5.x the reflected form is already ``ASYNC EVERY(...)``, so this also asserts no
+        regression there.)
+        """
+        engine = self.engine
+        mv_name = "test_mv_refresh_periodic_async"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            conn.execute(text(
+                f"CREATE MATERIALIZED VIEW {mv_name} "
+                "REFRESH ASYNC EVERY(INTERVAL 10 MINUTE) "
+                "PROPERTIES ('replication_num' = '1') "
+                "AS SELECT val FROM t_autogen"
+            ))
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition="SELECT val FROM t_autogen",
+                    starrocks_refresh="ASYNC EVERY(INTERVAL 10 MINUTE)",
+                    starrocks_properties={"replication_num": "1"},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                refresh_ops = self._refresh_alter_ops(migration_script)
+                assert refresh_ops == [], (
+                    f"Unexpected REFRESH diff for equivalent periodic async refresh: "
+                    f"{[(op.refresh, op.existing_refresh) for op in refresh_ops]}"
+                )
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
+    def test_no_refresh_diff_for_deferred_periodic_async(self) -> None:
+        """No change: a DEFERRED periodic async refresh must not produce a spurious REFRESH diff.
+
+        StarRocks 4.1+ emits ``REFRESH DEFERRED SCHEDULE EVERY(...)`` in SHOW CREATE for a
+        deferred scheduled MV (the moment prefix is only rendered for DEFERRED). Reflection
+        canonicalizes this to ``DEFERRED ASYNC EVERY(...)``, and metadata written with the 4.1
+        SCHEDULE spelling must still be treated as equivalent — the SCHEDULE keyword can follow
+        an IMMEDIATE/DEFERRED prefix, not only appear at the start.
+        """
+        engine = self.engine
+        mv_name = "test_mv_refresh_deferred_periodic"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            conn.execute(text(
+                f"CREATE MATERIALIZED VIEW {mv_name} "
+                "REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 HOUR) "
+                "PROPERTIES ('replication_num' = '1') "
+                "AS SELECT val FROM t_autogen"
+            ))
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition="SELECT val FROM t_autogen",
+                    # Metadata uses the 4.1 SHOW CREATE spelling with a moment prefix.
+                    starrocks_refresh="DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)",
+                    starrocks_properties={"replication_num": "1"},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                refresh_ops = self._refresh_alter_ops(migration_script)
+                assert refresh_ops == [], (
+                    f"Unexpected REFRESH diff for equivalent deferred periodic async refresh: "
+                    f"{[(op.refresh, op.existing_refresh) for op in refresh_ops]}"
+                )
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
+    def test_refresh_interval_change_detected(self) -> None:
+        """ALTER: a genuine change to the refresh interval is still detected.
+
+        Guards against the SCHEDULE/ASYNC normalization being over-eager and masking a real
+        interval change (10 MINUTE -> 20 MINUTE).
+        """
+        engine = self.engine
+        mv_name = "test_mv_refresh_interval_change"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            conn.execute(text(
+                f"CREATE MATERIALIZED VIEW {mv_name} "
+                "REFRESH ASYNC EVERY(INTERVAL 10 MINUTE) "
+                "PROPERTIES ('replication_num' = '1') "
+                "AS SELECT val FROM t_autogen"
+            ))
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition="SELECT val FROM t_autogen",
+                    starrocks_refresh="ASYNC EVERY(INTERVAL 20 MINUTE)",
+                    starrocks_properties={"replication_num": "1"},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                refresh_ops = self._refresh_alter_ops(migration_script)
+                assert len(refresh_ops) == 1, (
+                    f"Expected exactly one REFRESH alter op, got: "
+                    f"{[(op.refresh, op.existing_refresh) for op in refresh_ops]}"
+                )
+                assert "20 MINUTE" in refresh_ops[0].refresh.upper()
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))

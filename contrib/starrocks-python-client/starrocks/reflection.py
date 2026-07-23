@@ -188,13 +188,15 @@ class StarRocksTableDefinitionParser(object):
     _TABLE_KEY_PATTERN = re.compile(r'\s*(\w+\s+KEY)\s*\((.*)\)\s*', re.IGNORECASE)
     _BUCKETS_PATTERN = re.compile(r'\sBUCKETS\s+(\d+)', re.IGNORECASE)
     _BUCKETS_REPLACE_PATTERN = re.compile(r'\s+BUCKETS\s+\d+', re.IGNORECASE)
-    _PARTITION_BY_PATTERN = re.compile(r"PARTITION BY\s*(.+?)(?=\s*(?:DISTRIBUTED BY|ORDER BY|REFRESH|PROPERTIES|AS|\Z))", re.IGNORECASE | re.DOTALL)
+    _PARTITION_BY_PATTERN = re.compile(r"PARTITION BY\s*(.+?)(?=\s*(?:DISTRIBUTED BY|ORDER BY|REFRESH|PROPERTIES|AS\b|\Z))", re.IGNORECASE | re.DOTALL)
 
     _VIEW_SECURITY_PATTERN = re.compile(r'\s+SECURITY\s+(INVOKER|DEFINER|NONE)\b', re.IGNORECASE)
 
     # Patterns to parse CREATE MATERIALIZED VIEW statement
-    _MV_REFRESH_PATTERN = re.compile(r"\s*REFRESH\s+(.+?)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|PROPERTIES|AS|\Z))", re.IGNORECASE | re.DOTALL)
-    _MV_PROPERTIES_PATTERN = re.compile(r"\s*PROPERTIES\s*\((.+?)\)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|REFRESH|AS|\Z))", re.IGNORECASE | re.DOTALL)
+    # "AS\b" (word boundary) prevents matching the "AS" inside a following ASYNC keyword, which
+    # would otherwise truncate "REFRESH DEFERRED ASYNC EVERY(...)" down to "REFRESH DEFERRED".
+    _MV_REFRESH_PATTERN = re.compile(r"\s*REFRESH\s+(.+?)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|PROPERTIES|AS\b|\Z))", re.IGNORECASE | re.DOTALL)
+    _MV_PROPERTIES_PATTERN = re.compile(r"\s*PROPERTIES\s*\((.+?)\)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|REFRESH|AS\b|\Z))", re.IGNORECASE | re.DOTALL)
     _MV_AS_DEFINITION_PATTERN = re.compile(r"\s*AS\s*((?:WITH|SELECT)\s*.+)", re.IGNORECASE | re.DOTALL)
 
     def __init__(self, dialect, preparer):
