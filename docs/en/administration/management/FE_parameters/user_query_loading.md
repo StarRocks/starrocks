@@ -1335,6 +1335,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in `job_properties`. This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
+### `routine_load_task_ignore_node_num`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to exclude the number of alive execution nodes when calculating the task concurrency of a Kafka Routine Load job. If this parameter is `false`, task concurrency is the minimum of the number of alive execution nodes, the number of Kafka partitions, `desired_concurrent_number`, and `max_routine_load_task_concurrent_num`. If this parameter is `true`, the number of alive execution nodes is excluded from the calculation. The number of tasks assigned to each node is still limited by `max_routine_load_task_num_per_be`. Enable this parameter only when the execution nodes have sufficient CPU and memory resources.
+- Introduced in: -
+
 ### `routine_load_task_timeout_second`
 
 - Default: 60

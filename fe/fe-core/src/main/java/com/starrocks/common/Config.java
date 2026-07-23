@@ -2185,6 +2185,13 @@ public class Config extends ConfigBase {
     public static long routine_load_task_timeout_second = 60;
 
     /**
+     * Whether to ignore the number of alive nodes when calculating Kafka Routine Load task concurrency.
+     */
+    @ConfField(mutable = true, comment = "Whether to ignore the number of alive nodes when calculating "
+            + "Kafka Routine Load task concurrency")
+    public static boolean routine_load_task_ignore_node_num = false;
+
+    /**
      * kafka util request timeout
      */
     @ConfField(mutable = true)

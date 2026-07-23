@@ -1307,6 +1307,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クラスター内の各ルーチンロードタスクがデータを消費する最大時間。v3.1.0 以降、ルーチンロードジョブは `job_properties` に新しいパラメーター `task_consume_second` をサポートしています。このパラメーターはルーチンロードジョブ内の個々のロードタスクに適用され、より柔軟です。
 - 導入時期：-
 
+### `routine_load_task_ignore_node_num`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Kafka Routine Load ジョブのタスク同時実行数を計算するときに、稼働中の実行ノード数を除外するかどうかを指定します。このパラメーターが `false` の場合、タスク同時実行数は、稼働中の実行ノード数、Kafka パーティション数、`desired_concurrent_number`、および `max_routine_load_task_concurrent_num` の最小値になります。`true` の場合、稼働中の実行ノード数は計算から除外されます。ただし、各ノードに割り当てられるタスク数は引き続き `max_routine_load_task_num_per_be` によって制限されます。実行ノードに十分な CPU とメモリリソースがある場合にのみ、このパラメーターを有効にしてください。
+- 導入時期：-
+
 ### `routine_load_task_timeout_second`
 
 - デフォルト：60
