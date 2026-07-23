@@ -79,7 +79,11 @@ _SKIP_RULES: list[tuple[str, re.Pattern]] = [
         r"IMPERSONATE|SECURITY\s+INTEGRATION)\b", re.I)),
     # Not runnable scripts: MySQL-client transcripts (prompt lines) and result
     # tables (ASCII borders) that were fenced as ```sql.
-    ("cli-transcript", re.compile(r"(?m)^\s*(mysql\s*>|MySQL\s*(\[[^\]]*\])?\s*>)")),
+    # Client-prompt transcripts (not runnable scripts): a line starting with an
+    # identifier + optional [context] + '>' + space, e.g. `mysql> `, `MySQL [db]> `,
+    # `hive> `, `spark-sql> `. Requires no space before '>' so a SQL comparison
+    # ("col > 5") is not mistaken for a prompt.
+    ("cli-transcript", re.compile(r"(?m)^\s*[A-Za-z][\w.\-]*(\s*\[[^\]]*\])?>\s")),
     ("output-sample",  re.compile(r"(?m)^\s*\+[-+]{3,}\+\s*$")),
     ("cli-terminator", re.compile(r"\\G")),   # MySQL client \G vertical-output terminator
     # UDFs need a jar + FE/BE config the bare cluster doesn't have.
@@ -267,13 +271,21 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
                     else:
                         status = "FAIL"
                     failed = (stmt, msg, status)
-                    # keep the worker usable for the rest of the file
+                    # keep the worker usable for the rest of the file: if the
+                    # session died, open a fresh one and re-select the scratch DB.
                     try:
-                        worker.ping(reconnect=True)
-                        with worker.cursor() as cur:
-                            cur.execute(f"USE {scratch}")
+                        worker.ping(reconnect=False)
                     except Exception:                # noqa: BLE001
-                        pass
+                        try:
+                            worker.close()
+                        except Exception:            # noqa: BLE001
+                            pass
+                        try:
+                            worker = connect()
+                            with worker.cursor() as cur:
+                                cur.execute(f"USE {scratch}")
+                        except Exception:            # noqa: BLE001
+                            pass
                     break
             results.append(Result(s, failed[2], failed[1], statement=failed[0])
                            if failed else Result(s, "PASS"))
@@ -415,7 +427,10 @@ def build_meta(cluster_v: str, docs_v: str, profile: str, docs_root) -> dict:
                             f"cluster {cluster_v}. Point --docs-root at a release branch "
                             f"(branch-X.Y).", False)
     else:
-        verdict, aligned = f"OK: docs {docs_v} aligned with cluster {cluster_v}", True
+        verdict, aligned = (f"OK: docs {docs_v} major.minor-aligned with cluster {cluster_v}. "
+                            f"Note: a release branch can be ahead of the released image, so some "
+                            f"failures may be features not yet in this build (verify before treating "
+                            f"as rot).", True)
     return {"cluster": cluster_v or "n/a (dry-run)", "docs": docs_v,
             "docs_root": str(docs_root), "profile": profile,
             "verdict": verdict, "aligned": aligned}
