@@ -26,7 +26,7 @@ AS
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 
 INSERT INTO t1 VALUES 
@@ -34,12 +34,12 @@ INSERT INTO t1 VALUES
     ('2024-05-01','2024-05-02', 2),
     ('2024-06-01','2024-06-02', 3);
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 drop materialized view mv1;
 -------- TEST ONE TO ONE REMAPPING-----
@@ -54,7 +54,7 @@ AS
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 
 INSERT INTO t1 VALUES 
@@ -62,12 +62,12 @@ INSERT INTO t1 VALUES
     ('2024-05-01','2024-05-02', 2),
     ('2024-06-01','2024-06-02', 3);
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 select * from mv1 order by 1, 2;
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 drop materialized view mv1;
 

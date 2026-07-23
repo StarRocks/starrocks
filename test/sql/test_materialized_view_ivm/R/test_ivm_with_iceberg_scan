@@ -54,9 +54,9 @@ AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -74,9 +74,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
   ('a', 10, '2023-12-01');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -91,9 +91,9 @@ None	None	2023-12-04
 None	5	2023-12-03
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -115,9 +115,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
   (NULL, 30, '2023-12-01');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -157,9 +157,9 @@ AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int > 3;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -177,9 +177,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
   ('a', 10, '2023-12-01');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -194,9 +194,9 @@ None	6	2023-12-03
 None	30	2023-12-01
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -218,9 +218,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
   (NULL, 30, '2023-12-01');
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
@@ -235,9 +235,9 @@ None	6	2023-12-03
 None	30	2023-12-01
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
+function: check_no_hit_materialized_view("SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;", "test_mv1")
 -- result:
-False
+None
 -- !result
 SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY col_str, col_int, dt limit 3;
 -- result:
