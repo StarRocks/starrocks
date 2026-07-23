@@ -90,6 +90,7 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void toThrift(Map<String, String> properties) {
+        // Pass through generic hadoop configuration overrides from the catalog (from main).
         if (hadoopConfiguration != null) {
             for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
                 if (!isReservedHadoopExtProperty(entry.getKey())) {
@@ -97,6 +98,20 @@ public class HDFSCloudCredential implements CloudCredential {
                 }
             }
         }
+        // Per-catalog keytab isolation: kerberos credentials are stripped from
+        // hadoopConfiguration by HDFSCloudConfigurationProvider.preprocessProperties and the
+        // BE libhdfs FS hook is never declared in catalog PROPERTIES, so both must be put
+        // here explicitly. Backward compatible: non-kerberos catalogs early-return.
+        if (!KERBEROS_AUTH.equals(authentication)
+                || krbPrincipal == null || krbPrincipal.isEmpty()
+                || krbKeyTabFile == null || krbKeyTabFile.isEmpty()) {
+            return;
+        }
+        properties.put(CloudConfigurationConstants.HDFS_AUTHENTICATION, authentication);
+        properties.put(CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL, krbPrincipal);
+        properties.put(CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB, krbKeyTabFile);
+        properties.put("fs.hdfs.impl", "com.starrocks.connector.hadoop.CatalogUgiDistributedFileSystem");
+        properties.put("fs.hdfs.impl.disable.cache", "true");
     }
 
     @Override
