@@ -25,6 +25,7 @@
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
+#include "exprs/agg/bitmap_intersect_count.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
 #include "exprs/agg/bitmap_union_int.h"
@@ -47,6 +48,8 @@
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/minmax_n.h"
 #include "exprs/agg/nullable_aggregate.h"
+#include "exprs/agg/orthogonal_bitmap_difference.h"
+#include "exprs/agg/orthogonal_bitmap_intersect.h"
 #include "exprs/agg/percentile_approx.h"
 #include "exprs/agg/percentile_cont.h"
 #include "exprs/agg/percentile_union.h"
@@ -95,6 +98,18 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeIntersectCountAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeOrthogonalBitmapIntersectAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeOrthogonalBitmapDifferenceAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeBitmapIntersectCountEachColumnAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeBitmapDifferenceCountEachColumnAggregateFunction();
 
     template <bool IsWindowFunc>
     static AggregateFunctionPtr MakeCountAggregateFunction();
@@ -287,6 +302,26 @@ public:
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
     return new IntersectCountAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeOrthogonalBitmapIntersectAggregateFunction() {
+    return new OrthogonalBitmapIntersectAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeOrthogonalBitmapDifferenceAggregateFunction() {
+    return new OrthogonalBitmapDifferenceAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapIntersectCountEachColumnAggregateFunction() {
+    return new BitmapIntersectCountEachColumnAggregateFunction<LT>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapDifferenceCountEachColumnAggregateFunction() {
+    return new BitmapDifferenceCountEachColumnAggregateFunction<LT>();
 }
 
 template <bool IsWindowFunc>
