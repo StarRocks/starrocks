@@ -36,6 +36,10 @@ EncryptionKey::EncryptionKey() = default;
 EncryptionKey::EncryptionKey(EncryptionKeyPB pb) : _pb(std::move(pb)) {}
 EncryptionKey::~EncryptionKey() = default;
 
+static bool is_downstream_placeholder_type(EncryptionKeyTypePB type) {
+    return type == PLACEHOLDER_21 || type == PLACEHOLDER_22 || type == PLACEHOLDER_23;
+}
+
 static const std::string& get_identifier_from_pb(const EncryptionKeyPB& pb) {
     switch (pb.type()) {
     case NORMAL_KEY:
@@ -160,6 +164,15 @@ Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::v
                                           std::vector<std::unique_ptr<EncryptionKey>>& owned_keys,
                                           bool cache_last_key) {
     int nkey = metaPb.key_hierarchy_size();
+    // Downstream-occupied placeholder key types may appear in metadata written by
+    // downstream distributions; reject them up front instead of crashing later in
+    // the identifier/cache path.
+    for (int k = 0; k < nkey; k++) {
+        if (is_downstream_placeholder_type(metaPb.key_hierarchy(k).type())) {
+            return Status::NotSupported(
+                    fmt::format("encryption key type not supported:{}", metaPb.key_hierarchy(k).type()));
+        }
+    }
     int i = nkey - 1;
     for (; i >= 0; i--) {
         bool use_cache = (i != nkey - 1) || cache_last_key;
