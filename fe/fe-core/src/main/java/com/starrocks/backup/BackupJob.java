@@ -892,6 +892,9 @@ public class BackupJob extends AbstractJob {
         }
 
         releaseSnapshots();
+        snapshotInfos.clear();
+        backupMeta = null;
+        jobInfo = null;
 
         BackupJobState curState = state;
         finishedTime = System.currentTimeMillis();
