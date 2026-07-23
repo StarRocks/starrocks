@@ -248,7 +248,7 @@ static void BM_PrefetchProbe(benchmark::State& state) {
 
     // Knob under test: the function in agg_hash_set.h reads this at chunk
     // start, captures into __prefetch_dist for the loop body.
-    config::agg_hash_map_prefetch_dist = distance;
+    config::hash_map_prefetch_dist = distance;
 
     BenchSuite suite;
     suite.SetUp();
@@ -323,7 +323,7 @@ static void BM_PrefetchProbeSet(benchmark::State& state) {
     const int64_t target_size = state.range(1);
     const Pattern pattern = static_cast<Pattern>(state.range(2));
 
-    config::agg_hash_map_prefetch_dist = distance;
+    config::hash_map_prefetch_dist = distance;
 
     BenchSuite suite;
     suite.SetUp();
