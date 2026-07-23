@@ -286,11 +286,6 @@ public class HistogramStatisticsTest {
 
     @Test
     public void testStringPlaceholderBucketJoinFallsBackToNdv() {
-        // Char-family columns store a single +Infinity placeholder bucket (see HistogramStatisticsCollectJob).
-        // A bucket with non-finite bounds carries a count but no usable range, so it must NOT be intersected as a
-        // real bucket: doing so yields a degenerate zero-count bucket whose getTotalRows()==1, collapsing a string
-        // join estimate to ~1/(L*R). The estimator drops non-finite buckets and falls back to the NDV-based
-        // selectivity, identical to histogram estimation being off.
         ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, VarcharType.VARCHAR, "s1", true);
         List<Bucket> leftBucketList = new ArrayList<>();
         leftBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 153L, 0L));
@@ -303,8 +298,6 @@ public class HistogramStatisticsTest {
         List<Bucket> rightBucketList = new ArrayList<>();
         rightBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 200L, 0L));
         HashMap<String, Long> rightMcv = new HashMap<>();
-        // Non-overlapping MCVs, so the MCV-to-MCV intersection is empty and the estimator would otherwise
-        // depend entirely on the (meaningless) placeholder bucket intersection.
         rightMcv.put("x", 80L);
         rightMcv.put("y", 40L);
         Histogram rightHistogram = new Histogram(rightBucketList, rightMcv);
@@ -327,7 +320,6 @@ public class HistogramStatisticsTest {
         BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.EQ,
                 leftColumnRefOperator, rightColumnRefOperator);
 
-        // NDV-based fallback: outputRows / max(leftNdv, rightNdv) = 4_000_000 / 20 = 200_000.
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
         Statistics off = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
@@ -335,7 +327,6 @@ public class HistogramStatisticsTest {
 
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         Statistics on = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        // Must match the NDV fallback, not collapse to ~1/(153*200) of the input rows.
         Assertions.assertEquals(200000, on.getOutputRowCount(), 0.1);
 
         // The bucket-based join estimator must decline for char-family placeholders.
@@ -347,11 +338,6 @@ public class HistogramStatisticsTest {
 
     @Test
     public void testStringPlaceholderBucketJoinWithOverlappingMcvFallsBackToNdv() {
-        // Same placeholder-only setup, but the two columns now SHARE an MCV ("a"). The MCV*MCV intersection is
-        // non-empty, so before the fix updateHistWithJoin returned an MCV-only histogram (empty buckets), and
-        // estimateColumnEqualToColumn divided only the MCV*MCV rows by the full placeholder-inclusive totals -
-        // dropping every non-MCV match. With large placeholder counts that collapses the estimate to ~0 rows. The
-        // estimator must instead decline (no usable finite buckets) and fall back to NDV, even though MCVs overlap.
         ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, VarcharType.VARCHAR, "s1", true);
         List<Bucket> leftBucketList = new ArrayList<>();
         leftBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 1_000_000L, 0L));
@@ -389,12 +375,8 @@ public class HistogramStatisticsTest {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
         Statistics on = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
-        // NDV fallback: outputRows / max(leftNdv, rightNdv) = 4_000_000 / 20 = 200_000, NOT the MCV-only collapse
-        // (8000 / (1_000_150 * 1_000_120) * 4_000_000 ~= 0 rows).
         Assertions.assertEquals(200000, on.getOutputRowCount(), 0.1);
 
-        // Placeholder-only histograms provide no usable range, so the bucket-based join estimator declines even
-        // though the MCV intersection is non-empty.
         Optional<Histogram> joined = BinaryPredicateStatisticCalculator.updateHistWithJoin(
                 builder.build().getColumnStatistic(leftColumnRefOperator), VarcharType.VARCHAR,
                 builder.build().getColumnStatistic(rightColumnRefOperator), VarcharType.VARCHAR);

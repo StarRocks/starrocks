@@ -515,11 +515,9 @@ public class BinaryPredicateStatisticCalculator {
             return null;
         }
 
-        // Range-based bucket intersection requires ordered, finite bounds. A bucket with a non-finite bound carries
-        // a row count but no positional extent - e.g. the synthetic +Infinity placeholder stored for columns whose
-        // real bounds cannot be represented as doubles (string columns). Intersecting two such placeholders yields a
-        // degenerate zero-count bucket that collapses the estimate to ~1/(L*R), so drop them here. If either side is
-        // left without a usable bucket, decline and let the caller fall back to MCV/NDV-based estimation.
+        // Intersecting two such placeholders bucket degenerate zero-count bucket that collapses the estimate to ~1/(L*R),
+        // so drop them here. If either side is left without a usable bucket, decline and let the caller fall back
+        // to MCV/NDV-based estimation.
         List<Bucket> leftBuckets = withFiniteBounds(leftHistogram.getBuckets());
         List<Bucket> rightBuckets = withFiniteBounds(rightHistogram.getBuckets());
         if (leftBuckets.isEmpty() || rightBuckets.isEmpty()) {

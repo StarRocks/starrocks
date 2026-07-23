@@ -305,10 +305,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
     }
 
-    // Build the skip-path INSERT that stores a single placeholder bucket instead of running histogram().
-    // The bucket's count is the non-null, non-MCV row count: we count all non-null rows in-query (scaled to
-    // full-table when sampling) and subtract the already-scaled MCV counts, rather than filtering the scan
-    // with a NOT IN (mcvs) predicate. getTotalRows() = (total - Σ MCV) + Σ MCV then reflects the true cardinality.
+    // In case we skip histogram collection, we simply add one tail bucket that contains all values - sum(MCVs)
     private String buildCollectDefaultBucket(Database database, Table table, double sampleRatio,
                                              Map<String, String> mostCommonValues, String columnName) {
         VelocityContext context = buildBaseContext(database, table, columnName);
@@ -331,11 +328,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             context.put("randFilter", "");
             countExpr = "count(" + quoteColumName + ")";
         }
-        // Non-MCV rows = total non-null rows - Σ MCV. Clamp at 0: the count and the MCV totals come from
-        // independent samples, so the subtraction can go slightly negative under sampling noise.
+
         long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
         String nonMcvExpr = "greatest(0, " + countExpr + " - " + mcvSum + ")";
-        // Bucket JSON is [["Infinity","Infinity", <non-MCV count>, 0]], built via concat over the clamped count.
+
         context.put("bucketExpr",
                 "concat('[[\"Infinity\",\"Infinity\",', cast(cast(" + nonMcvExpr + " as bigint) as varchar), ',0]]')");
 
