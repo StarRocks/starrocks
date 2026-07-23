@@ -14,7 +14,8 @@
 
 #include "util/brpc_stub_cache.h"
 
-#include "base/time/time.h"
+#include <butil/time.h>
+
 #include "common/config.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/lake_service.pb.h"
