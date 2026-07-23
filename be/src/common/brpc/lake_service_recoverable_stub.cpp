@@ -45,8 +45,7 @@ Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group)
         // The seed keeps sibling stubs on distinct connection_groups (distinct TCP connections under
         // connection_type=single); the epoch suffix lets a single stub obtain a fresh connection when recovering from
         // EHOSTDOWN.
-        options.connection_group =
-                std::to_string(_connection_group_seed) + "_" + std::to_string(next_connection_group);
+        options.connection_group = std::to_string(_connection_group_seed) + "_" + std::to_string(next_connection_group);
     }
     options.max_retry = 3;
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
