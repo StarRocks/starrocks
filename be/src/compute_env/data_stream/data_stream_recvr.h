@@ -129,6 +129,10 @@ public:
 
     void short_circuit_for_pipeline(const int32_t driver_sequence);
 
+    // Register (unregister=false) or unregister (unregister=true) a dynamically added sender.
+    // Only supported on non-merging pipeline receivers; idempotent per be_number.
+    Status update_senders(int be_number, bool unregister);
+
     bool has_output_for_pipeline(const int32_t driver_sequence) const;
 
     bool is_finished() const;

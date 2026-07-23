@@ -271,6 +271,17 @@ void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
     _sender_queues[use_sender_id]->decrement_senders(be_number);
 }
 
+Status DataStreamRecvr::update_senders(int be_number, bool unregister) {
+    if (_is_merging) {
+        // A merging receiver owns one queue per sender fixed at construction;
+        // growing the sender set would require allocating new queues.
+        return Status::NotSupported("dynamic senders are not supported on a merging exchange");
+    }
+    // An unregister may complete the stream; wake the exchange source to re-evaluate.
+    auto notify = this->defer_notify();
+    return _sender_queues[0]->try_update_senders(be_number, unregister);
+}
+
 void DataStreamRecvr::cancel_stream() {
     auto notify = this->defer_notify();
     for (auto& _sender_queue : _sender_queues) {
