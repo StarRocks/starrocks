@@ -65,7 +65,6 @@ import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -296,29 +295,39 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         final DecodeInfo finalInfo = info;
         encodedUnionColumns.union(unionOp.getOutputColumnRefOp().stream().filter(
                 c -> finalInfo.outputStringColumns.contains(c) || finalInfo.usedStringColumns.contains(c)).toList());
-        List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
+        List<Map<Integer, ConstantOperator>> constantMappings =
                 context.unionDictionaryManager.generateConstantEncodingMap(
                         unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), encodedUnionColumns);
         List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
         for (int i = 0; i < optExpression.arity(); ++i) {
-            Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
-            HashMap<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
-            constantMapping.forEach((key, value) ->
-                    columnMapping.put(key, factory.create(value, value.getType(), value.isNullable())));
-            unionOp.getChildOutputColumns().get(i).forEach(c -> columnMapping.putIfAbsent(c,
-                    finalInfo.inputStringColumns.contains(c.getId()) ?
-                            context.stringRefToDictRefMap.getOrDefault(c, c) : c)
-            );
-            newChildOutputColumns.add(unionOp.getChildOutputColumns().get(i).stream().map(columnMapping::get).toList());
-            if (constantMapping.isEmpty()) {
+            Map<Integer, ConstantOperator> constantMapping = constantMappings.get(i);
+            List<ColumnRefOperator> children = unionOp.getChildOutputColumns().get(i);
+            List<ColumnRefOperator> newChildren = Lists.newArrayList();
+            boolean needsProjection = false;
+            Map<ColumnRefOperator, ScalarOperator> projectionColumnMapping = Maps.newHashMap();
+            for (int j = 0; j < children.size(); ++j) {
+                final ColumnRefOperator child = children.get(j);
+                final ColumnRefOperator newChild;
+                final ScalarOperator projection;
+                if (constantMapping.containsKey(j)) {
+                    projection = constantMapping.get(j);
+                    newChild = factory.create(projection, projection.getType(), projection.isNullable());
+                    needsProjection = true;
+                } else if (finalInfo.inputStringColumns.contains(child.getId())) {
+                    newChild = context.stringRefToDictRefMap.getOrDefault(child, child);
+                    projection = newChild;
+                } else {
+                    newChild = child;
+                    projection = newChild;
+                }
+                newChildren.add(newChild);
+                projectionColumnMapping.put(newChild, projection);
+            }
+            newChildOutputColumns.add(newChildren);
+            if (!needsProjection) {
                 continue;
             }
-            PhysicalProjectOperator projectOp = new PhysicalProjectOperator(
-                    unionOp.getChildOutputColumns().get(i).stream().distinct().collect(Collectors.toMap(
-                            columnMapping::get,
-                            c -> constantMapping.containsKey(c) ? constantMapping.get(c) : columnMapping.get(c))),
-                    Map.of()
-            );
+            PhysicalProjectOperator projectOp = new PhysicalProjectOperator(projectionColumnMapping, Map.of());
             LogicalProperty property = new LogicalProperty(optExpression.getInputs().get(i).getLogicalProperty());
             property.setOutputColumns(new ColumnRefSet(projectOp.getOutputColumns()));
             OptExpression newChild = OptExpression.builder().with(optExpression.getInputs().get(i)).setOp(projectOp)
