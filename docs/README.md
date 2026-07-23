@@ -89,14 +89,15 @@ newer features look "broken" when the release simply doesn't have them yet.
 - [Docker](https://docs.docker.com/get-docker/) (includes Compose).
 - Python 3.
 - [`uv`](https://docs.astral.sh/uv/) — only for the optional fix step (step 4).
-- A checkout of this repo on the branch whose docs you're verifying: a release
-  branch such as `branch-4.1` for the 4.1 docs, or `main` for the current
-  (unreleased) docs.
+- A checkout of this repo containing this tooling (i.e. `main`). You run the
+  checker from here — you do **not** switch it to the release branch you're
+  verifying. To verify a released version's docs, you add a separate worktree for
+  that branch in Step 2; the checker reads docs from any path via `--docs-root`.
 
 ### 1. Start a matching StarRocks cluster
 
-Set `SR_VERSION` to the release you're verifying (it must match the branch you
-checked out), then start the shared-nothing (FE + BE) cluster:
+Set `SR_VERSION` to the release you're verifying (it must match the docs version
+you check in Step 2), then start the shared-nothing (FE + BE) cluster:
 
 ```bash
 export SR_VERSION=4.1   # e.g. 4.1 when verifying branch-4.1 docs
@@ -109,12 +110,30 @@ details, teardown, or the shared-data (cloud-native) cluster, see
 
 ### 2. Detect broken examples
 
+Point the checker at the docs for the version you're verifying with `--docs-root`
+— those docs do not have to live in this checkout.
+
+**Current (`main`) docs** — use this checkout directly:
+
 ```bash
 python3 docs/scripts/run_sql_samples.py \
     --docs-root docs/en/sql-reference \
     --host 127.0.0.1 --port 9030 --user root \
     --format md > /tmp/sql-report.md
 ```
+
+**A released version (e.g. 4.1)** — add a second working tree for that release
+branch once (so this checkout keeps the tooling), then point `--docs-root` at it:
+
+```bash
+git worktree add ../starrocks-4.1 branch-4.1    # one-time; a branch-4.1 docs checkout
+python3 docs/scripts/run_sql_samples.py \
+    --docs-root ../starrocks-4.1/docs/en/sql-reference \
+    --host 127.0.0.1 --port 9030 --user root \
+    --format md > /tmp/sql-report.md
+```
+
+(A second full clone works too, but a worktree shares the repo and is lighter.)
 
 Open `/tmp/sql-report.md`. Its header confirms the docs and cluster versions are
 aligned — if it warns they aren't, fix that before trusting the results. Every
