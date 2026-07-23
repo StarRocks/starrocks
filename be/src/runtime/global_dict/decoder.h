@@ -16,6 +16,12 @@
 
 #include "column/column.h"
 #include "common/status.h"
+<<<<<<< HEAD:be/src/runtime/global_dict/decoder.h
+=======
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
+#include "gen_cpp/Types_types.h"
+>>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/src/orchestration/query_orchestrator.h
 
 namespace starrocks {
 
@@ -25,7 +31,16 @@ public:
 
     virtual Status decode_string(const Column* in, Column* out) = 0;
 
+<<<<<<< HEAD:be/src/runtime/global_dict/decoder.h
     virtual Status decode_array(const Column* in, Column* out) = 0;
+=======
+    // Build the TQueryOptions used to execute an external scan plan fragment (open_scanner).
+    // Exposed as a static helper so tests can assert the fabricated options.
+    static TQueryOptions build_external_query_options(const TScanOpenParams& params);
+
+private:
+    ExecEnv* _exec_env;
+>>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/src/orchestration/query_orchestrator.h
 };
 
 using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
