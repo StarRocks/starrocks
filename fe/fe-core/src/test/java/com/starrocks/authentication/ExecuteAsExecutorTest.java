@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
@@ -295,5 +296,82 @@ public class ExecuteAsExecutorTest {
 
         // Execute as target user should fail
         Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+    }
+
+    /**
+     * Verifies that EXECUTE AS EXTERNAL with a security integration loads the external user's groups
+     * from the SI's dedicated group provider into the context. Those groups are exactly what
+     * RangerStarRocksAccessController passes to Ranger via RangerStarRocksAccessRequest.setUserGroups(),
+     * enabling group-based Ranger policies to apply to the impersonated external user.
+     */
+    @Test
+    public void testExecuteAsExternalWithSecurityIntegrationForRanger() throws Exception {
+        // Create a dedicated group provider for the security integration (separate from Config.group_provider)
+        Map<String, String> siProviderProps = new HashMap<>();
+        siProviderProps.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+        siProviderProps.put(LDAPGroupProvider.LDAP_USER_SEARCH_ATTR, "uid");
+        String siGroupProviderName = "si_group_provider";
+        authenticationMgr.replayCreateGroupProvider(siGroupProviderName, siProviderProps);
+
+        // Map the external user to Ranger groups via that group provider
+        LDAPGroupProvider siGroupProvider = (LDAPGroupProvider) authenticationMgr.getGroupProvider(siGroupProviderName);
+        Map<String, Set<String>> extGroupMap = new HashMap<>();
+        extGroupMap.put("ext_user", Set.of("ranger_group1", "ranger_group2"));
+        siGroupProvider.setUserToGroupCache(extGroupMap);
+
+        // Create a security integration that references the dedicated group provider
+        Map<String, String> siProps = new HashMap<>();
+        siProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
+        siProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, siGroupProviderName);
+        authenticationMgr.replayCreateSecurityIntegration("ldap_si", siProps);
+
+        // Create roles and bind them to the Ranger groups so we can verify role resolution too
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("ranger_role1"), true, ""));
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("ranger_role2"), true, ""));
+        authorizationMgr.grantRole(
+                new GrantRoleStmt(List.of("ranger_role1"), "ranger_group1", GrantType.GROUP, NodePosition.ZERO));
+        authorizationMgr.grantRole(
+                new GrantRoleStmt(List.of("ranger_role2"), "ranger_group2", GrantType.GROUP, NodePosition.ZERO));
+
+        // Create the internal service account that performs the impersonation
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("svc_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Authenticate as svc_user; then set the security integration to simulate a session that
+        // was originally established via the LDAP security integration
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "svc_user", "%", MysqlPassword.EMPTY_PASSWORD);
+        context.setSecurityIntegration("ldap_si");
+
+        // Execute EXECUTE AS EXTERNAL 'ext_user'@'%' WITH NO REVERT
+        ExecuteAsStmt stmt = new ExecuteAsStmt(
+                new UserRef("ext_user", "%", false, true, NodePosition.ZERO), false);
+        ExecuteAsExecutor.execute(stmt, context);
+
+        // The external user's groups are loaded from the SI's group provider.
+        // RangerStarRocksAccessController.check*() passes context.getGroups() directly into
+        // RangerStarRocksAccessRequest.setUserGroups(), so Ranger evaluates group-based policies
+        // using exactly the set asserted here.
+        Assertions.assertEquals(Set.of("ranger_group1", "ranger_group2"), context.getGroups());
+
+        // Roles derived from those groups are also active — the native access controller
+        // (and any Ranger fallback) both honour them
+        long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("ranger_role1");
+        long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("ranger_role2");
+        Assertions.assertEquals(Set.of(roleId1, roleId2), context.getCurrentRoleIds());
+
+        // The identity is ephemeral — the external user has no entry in the internal user table
+        Assertions.assertTrue(context.getCurrentUserIdentity().isEphemeral());
+        Assertions.assertEquals("ext_user", context.getCurrentUserIdentity().getUser());
+
+        // Verify groups come from the SI's own group provider, not from Config.group_provider.
+        // The global ldap_group_provider in setUp has no entry for "ext_user", so if the SI
+        // group provider were ignored, context.getGroups() would be empty.
+        LDAPGroupProvider globalProvider =
+                (LDAPGroupProvider) authenticationMgr.getGroupProvider("ldap_group_provider");
+        Assertions.assertTrue(
+                globalProvider.getGroup(context.getCurrentUserIdentity(), "ext_user").isEmpty(),
+                "ext_user must NOT exist in the global group provider — confirms SI provider was used");
     }
 }

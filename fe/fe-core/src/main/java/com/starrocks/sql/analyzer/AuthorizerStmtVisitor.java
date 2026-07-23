@@ -1501,7 +1501,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
         try {
             UserRef user = statement.getToUser();
-            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            UserIdentity userIdentity = user.isExternal()
+                    ? UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost())
+                    : new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
             Authorizer.checkUserAction(context, userIdentity, PrivilegeType.IMPERSONATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
