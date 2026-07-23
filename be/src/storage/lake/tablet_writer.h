@@ -24,6 +24,7 @@
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
@@ -39,6 +40,25 @@ struct OlapWriterStatistics;
 namespace lake {
 
 class TabletManager;
+
+// Whether eager PK-index SST build is supported for `schema`. Encapsulates the primary-key-encoding (and
+// separate-sort-key opt-in) preconditions shared by eager build enablement
+// (TabletWriter::try_enable_pk_index_eager_build) and separate-sort-key load spill
+// (DeltaWriterImpl::should_enable_load_spill), which is only correct when the unsort SST writer runs to
+// resolve duplicate primary keys. Needs no tablet metadata: shared-data PK tables are always cloud-native
+// (the only index eager build supports), so the decision is a pure function of the schema. Eager build is
+// always enabled for a supported schema -- there is no config gate (it must stay on for correctness on the
+// separate-sort-key path, which resolves non-adjacent duplicate primary keys only via the unsort writer).
+bool pk_index_eager_build_supported(const TabletSchema& schema);
+
+// Whether a load into `schema` must preserve in-transaction upsert/delete order. True when the mutable
+// config lake_enable_pk_preserve_txn_delete_order is on, OR when the separate-sort-key load-spill
+// optimization is enabled for a separate-sort-key table: that path's unsort SST writer resolves
+// duplicate primary keys by flush order (last-op-wins), so it ALWAYS needs the op-aware merge and the
+// serialized del_op_offsets, regardless of the preserve config -- otherwise a DELETE and a later re-UPSERT
+// of the same key that split across parallel merge tasks would resolve inconsistently. Snapshot the
+// result once per load (both configs are mutable).
+bool pk_preserve_txn_delete_order_enabled(const TabletSchema& schema);
 
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 
@@ -84,6 +104,11 @@ public:
 
     const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
 
+    // Parallel to ssts(): per-segment rowids that lost primary-key dedup inside the unsort SST
+    // writer and must be masked by a delete vector at publish. Empty vectors for segments/paths
+    // that produced no such losers (e.g. the sort-key==PK eager path). PK table only.
+    const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -107,6 +132,32 @@ public:
     // For horizontal writer.
     virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
                          SegmentPB* segment = nullptr) = 0;
+
+    // Single-flush direct-write fast path (no __op column). The whole load is a single flush, which a
+    // lake PK memtable already deduplicated by primary key, so no cross-flush merge/dedup is needed. For
+    // a PK writer this writes a plain (sort-key-ordered) segment and SKIPS the eager PK-index SST, so
+    // publish rebuilds the index lazily via the order-independent parallel_upsert -- avoiding the
+    // spill+merge round trip and, for separate-sort-key eager writers, the unsort SST writer's per-row
+    // order-key requirement. Default (non-PK, or writers with no eager SST): same as write().
+    virtual Status write_single_flush(const Chunk& data, SegmentPB* segment, bool eos) {
+        return write(data, segment, eos);
+    }
+
+    // Same single-flush fast path for a load whose chunk still carries the trailing __op column (the
+    // op-aware path). Splits __op: upserts go through write_single_flush() (plain segment, eager SST
+    // skipped), deletes are encoded to a del file. A single flush is unique-by-PK, so each key has
+    // exactly one op and the split is unambiguous. Only the horizontal PK writer implements it.
+    virtual Status write_single_flush_with_op(const Chunk& chunk_with_op, SegmentPB* segment, bool eos) {
+        return Status::NotSupported("write_single_flush_with_op not implemented");
+    }
+
+    // Feeds the batch's DELETE rows (with their per-row ordering key) to the eager PK-index SST
+    // writer so it can resolve the latest op per primary key (op-aware separate-sort-key spill path).
+    // Unlike write(), these rows are NOT written to a segment. Default no-op: only the PK writer with
+    // the unsort SST writer consumes them; other writers receive deletes via the caller's del file.
+    virtual Status append_pk_index_deletes(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) {
+        return Status::OK();
+    }
 
     // Writes partial columns data to this rowset.
     //
@@ -211,6 +262,8 @@ protected:
     std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
+    // Parallel to _ssts: dedup-loser rowids per segment (see seg_delvecs()).
+    std::vector<std::vector<uint32_t>> _seg_delvecs;
     // lake compaction row mapper file
     FileInfo _lcrm_file;
     int64_t _num_rows = 0;

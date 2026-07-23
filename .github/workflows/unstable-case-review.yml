@@ -92,6 +92,12 @@ jobs:
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      # elastic-ut-review.sh clones the repo inside the ECI via
+      # https://$GITHUB_ACCESS_TOKEN@github.com/... . On forks/CelerData the
+      # [ubuntu, ai] runner's init.sh does not inject GITHUB_ACCESS_TOKEN. The
+      # run token must use the x-access-token: form (a bare GITHUB_TOKEN as the
+      # userinfo is rejected). No-op for the public StarRocks/starrocks clone.
+      GITHUB_ACCESS_TOKEN: "x-access-token:${{ github.token }}"
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
@@ -128,6 +134,9 @@ jobs:
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
+      # See FE-UT REVIEW: pass the run token so the in-ECI git clone in
+      # elastic-ut-review.sh has credentials on the [ubuntu, ai] runner.
+      GITHUB_ACCESS_TOKEN: "x-access-token:${{ github.token }}"
     outputs:
       oss_path: ${{ steps.run_ut.outputs.oss_path }}
     steps:
@@ -260,7 +269,7 @@ jobs:
       BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
       # AI analysis is fully decoupled into a separate workflow
-      # (unstable-case-ai-analysis.yml); this job no longer needs
+      # (ai-unstable-case-analysis.yml); this job no longer needs
       # ANTHROPIC_API_KEY.
     steps:
       - name: Generate report & update unstable_case.json
@@ -306,13 +315,24 @@ jobs:
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
           REPORT_OSS="oss://${bucket}/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
-          /var/local/env/ossutil64 --config-file /root/.ossutilconfig \
-            cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
+          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
+          ${_oss} cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
+          # failing.json carries the per-case failure message (extracted from the
+          # review XML). Publish it so the decoupled AI-analysis workflow can
+          # classify from real failure text, not just history metadata. Mirror to
+          # latest/ for a SHA-free lookup by the analyzer.
+          # review-unstable-cases.py always writes failing.json (empty [] when
+          # nothing is failing), so latest/ always reflects THIS run and is never
+          # left stale. Guard only the abnormal case (file missing, e.g. an
+          # aborted gen) by publishing [] so the analyzer sees no failures.
+          FJ="${WORK_DIR}/failing.json"; [ -f "${FJ}" ] || echo "[]" > "${FJ}"
+          ${_oss} cp "${FJ}" "${REPORT_OSS}failing.json" -f
+          ${_oss} cp "${FJ}" "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" -f
 
       - name: Upload report artifact (fallback, always)
         # So an OSS outage doesn't lose the report — same fallback as
-        # unstable-case-ai-analysis.yml.
+        # ai-unstable-case-analysis.yml.
         if: always()
         uses: actions/upload-artifact@v4
         with:

@@ -34,8 +34,9 @@ class TabletWriter;
 // The slot_idx parameter is used to track the original flush order for correct merging.
 class SpillMemTableSink : public MemTableSink {
 public:
-    // @param keep_op_column: snapshot of config::lake_enable_pk_preserve_txn_delete_order taken once by
-    // the DeltaWriter for the whole load, so the __op-keeping decision cannot change mid-load (see below).
+    // @param keep_op_column: the EFFECTIVE preserve-order snapshot (pk_preserve_txn_delete_order_enabled)
+    // taken once by the DeltaWriter for the whole load, so the __op-keeping decision cannot change
+    // mid-load (see keep_op_column()).
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile,
                       bool keep_op_column);
     ~SpillMemTableSink() override;
@@ -51,14 +52,15 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
-    // The spill sink keeps the __op column so the merge resolves upsert/delete order by slot.
-    // Keep the __op column (drive the op-aware merge) only when the in-transaction upsert/delete order
-    // feature is enabled. When it is off (the default), return false so the memtable takes the legacy
-    // _split_upserts_deletes path (deletes split into a del file, applied after all segments) -- keeping
-    // the spill path's behavior, del-file layout, and delete-with-merge-condition rejection identical to
-    // before this feature. Backed by _keep_op_column, a per-load snapshot of
-    // config::lake_enable_pk_preserve_txn_delete_order taken by the DeltaWriter, so the decision is
-    // stable for the whole load even if the mutable config is flipped mid-load.
+    // Whether the spill sink keeps the __op column (drives the op-aware merge that resolves upsert/delete
+    // order by slot). Returns the EFFECTIVE preserve-order snapshot (_keep_op_column): the config, OR the
+    // separate-sort-key load-spill path, which MUST use the op-aware path -- its unsort SST writer
+    // resolves a delete-then-reinsert of the same key by flush order, whereas the legacy
+    // _split_upserts_deletes path would drop the re-inserted row. When false (the common sort-key==PK
+    // path with preserve off), the memtable takes the legacy path (deletes split into a del file applied
+    // after all segments), keeping behavior/del-file layout/merge-condition rejection identical to before
+    // this feature. The snapshot is taken once by the DeltaWriter so the decision is stable for the whole
+    // load even if the mutable configs are flipped mid-load.
     bool keep_op_column() const override;
 
     // Spill a chunk that still carries the trailing __op column (see keep_op_column()).
@@ -79,7 +81,7 @@ private:
 
     TabletWriter* _writer;
 
-    // Per-load snapshot of config::lake_enable_pk_preserve_txn_delete_order (see keep_op_column()).
+    // Per-load snapshot of the effective preserve-order decision (see keep_op_column()).
     const bool _keep_op_column;
 
     // Set once when flush_chunk_with_op() is first called, i.e. the memtable actually kept a hidden __op

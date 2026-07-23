@@ -14,10 +14,15 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
+#include <algorithm>
+#include <numeric>
+#include <unordered_set>
+
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -75,6 +80,13 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     std::vector<std::vector<uint32_t>> column_groups;
     CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),
                                               config::vertical_compaction_max_columns_per_group, &column_groups);
+    // Separate-sort-key PK tables with eager index build: the PK columns are non-sort columns and
+    // would otherwise land in value groups where the eager SST writer (which only sees the key group)
+    // cannot reach them. Move them into the key group so compaction builds the PK-index SST eagerly.
+    const bool pk_in_key_group = writer->enable_pk_index_eager_build() && _tablet_schema->has_separate_sort_key();
+    if (pk_in_key_group) {
+        move_pk_columns_into_key_group(&column_groups);
+    }
     auto column_group_size = column_groups.size();
 
     VLOG(3) << "Start vertical compaction. tablet: " << _tablet.id()
@@ -91,7 +103,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
-                                             source_masks.get(), cancel_func));
+                                             source_masks.get(), cancel_func, pk_in_key_group));
     }
 
     RETURN_IF_ERROR(writer->finish());
@@ -189,13 +201,25 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     std::unique_ptr<TabletWriter>& writer,
                                                     RowSourceMaskBuffer* mask_buffer,
                                                     std::vector<RowSourceMask>* source_masks,
-                                                    const CancelFunc& cancel_func) {
+                                                    const CancelFunc& cancel_func, bool pk_in_key_group) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
-    Schema schema = column_group_index == 0 ? (_tablet_schema->sort_key_idxes().empty()
-                                                       ? ChunkHelper::convert_schema(_tablet_schema, column_group)
-                                                       : ChunkHelper::get_sort_key_schema(_tablet_schema))
-                                            : ChunkHelper::convert_schema(_tablet_schema, column_group);
+    Schema schema;
+    if (column_group_index != 0) {
+        schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
+    } else if (_tablet_schema->sort_key_idxes().empty()) {
+        schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
+    } else if (pk_in_key_group) {
+        // Key group has been widened to [sort-key columns, then PK columns]. Select those columns
+        // (in `column_group` order) and mark only the leading sort-key columns as the sort keys, so
+        // the merge still orders rows by the sort key -- the appended PK columns are carried along
+        // for the eager SST writer but do not affect ordering.
+        std::vector<ColumnId> sort_key_positions(_tablet_schema->sort_key_idxes().size());
+        std::iota(sort_key_positions.begin(), sort_key_positions.end(), 0);
+        schema = Schema(_tablet_schema->schema(), column_group, sort_key_positions);
+    } else {
+        schema = ChunkHelper::get_sort_key_schema(_tablet_schema);
+    }
     TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer,
                         _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
@@ -305,6 +329,39 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         RETURN_IF_ERROR(mask_buffer->flush());
     }
     return Status::OK();
+}
+
+void VerticalCompactionTask::move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const {
+    DCHECK(!column_groups->empty());
+    const auto& sort_key_idxes = _tablet_schema->sort_key_idxes();
+    std::unordered_set<uint32_t> sort_key_set(sort_key_idxes.begin(), sort_key_idxes.end());
+    // PK columns are tablet column ids [0, num_key); collect the ones not already in the sort key
+    // (those are already in the key group).
+    std::vector<uint32_t> pk_to_move;
+    for (uint32_t i = 0; i < _tablet_schema->num_key_columns(); ++i) {
+        if (sort_key_set.find(i) == sort_key_set.end()) {
+            pk_to_move.push_back(i);
+        }
+    }
+    if (pk_to_move.empty()) {
+        return;
+    }
+    std::unordered_set<uint32_t> pk_set(pk_to_move.begin(), pk_to_move.end());
+    // Remove the moved PK columns from the value groups so each column is written exactly once.
+    for (size_t g = 1; g < column_groups->size(); ++g) {
+        auto& group = (*column_groups)[g];
+        group.erase(
+                std::remove_if(group.begin(), group.end(), [&](uint32_t c) { return pk_set.find(c) != pk_set.end(); }),
+                group.end());
+    }
+    // Drop any value group emptied by the move.
+    column_groups->erase(std::remove_if(column_groups->begin() + 1, column_groups->end(),
+                                        [](const std::vector<uint32_t>& g) { return g.empty(); }),
+                         column_groups->end());
+    // Append the PK columns to the key group, after the sort-key columns (which stay first so the
+    // merge order remains sort-key-first).
+    auto& key_group = (*column_groups)[0];
+    key_group.insert(key_group.end(), pk_to_move.begin(), pk_to_move.end());
 }
 
 } // namespace starrocks::lake

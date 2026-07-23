@@ -326,22 +326,27 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    to the front of the per-segment `entries` list so readers see the
     //    newest first (mirrors DCG reverse-by-version ordering). Multiple
     //    entries may coexist on the same segment from successive alters.
-    auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
-    for (const auto& se : op.segment_entries()) {
-        // Defense-in-depth: an entry missing segment_id would index the map at
-        // default 0 and corrupt segment 0's IDG. FE always sets both fields.
-        if (!se.has_entry() || !se.has_segment_id()) {
-            LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
-            continue;
+    //    Guarded so the empty no-op shape (a materialized index whose schema
+    //    lacks the indexed columns — the op carries only alter_version) does
+    //    not materialize an empty idg_meta submessage into the metadata.
+    if (!op.segment_entries().empty()) {
+        auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+        for (const auto& se : op.segment_entries()) {
+            // Defense-in-depth: an entry missing segment_id would index the map at
+            // default 0 and corrupt segment 0's IDG. FE always sets both fields.
+            if (!se.has_entry() || !se.has_segment_id()) {
+                LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
+                continue;
+            }
+            IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
+            // Build new entries list: [new_entry, old_entries...]
+            IndexDeltaGroupVerPB merged;
+            merged.add_entries()->CopyFrom(se.entry());
+            for (const auto& old_e : ver.entries()) {
+                merged.add_entries()->CopyFrom(old_e);
+            }
+            ver.Swap(&merged);
         }
-        IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
-        // Build new entries list: [new_entry, old_entries...]
-        IndexDeltaGroupVerPB merged;
-        merged.add_entries()->CopyFrom(se.entry());
-        for (const auto& old_e : ver.entries()) {
-            merged.add_entries()->CopyFrom(old_e);
-        }
-        ver.Swap(&merged);
     }
 
     // 2. Reconcile table_indices: add any new index not already present.
@@ -393,6 +398,65 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         if (new_ix.has_index_type()) {
             for (int col_uid : new_ix.col_unique_id()) {
                 bump_flag(col_uid, new_ix.index_type());
+            }
+        }
+    }
+
+    // 4. Stamp the FE-allocated new schema id/version onto the tablet metadata
+    //    schema. The fast path changed the schema content above (table_indices +
+    //    per-column flags) but reused the old schema_id; every lake by-id schema
+    //    cache (GS{id} metacache, GlobalTabletSchemaMap dedup, SCHEMA_{id} file)
+    //    keys on id and would keep returning the stale pre-index schema — so data
+    //    loaded after the index, and compaction output, would build no index.
+    //    A new id forces every cache to miss and pick up this indexed schema.
+    if (op.has_new_schema_id() && op.new_schema_id() > 0) {
+        const int64_t new_schema_id = op.new_schema_id();
+        const int64_t old_schema_id = schema->id();
+        schema->set_id(new_schema_id);
+        if (op.has_new_schema_version()) {
+            schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
+        }
+        // Durability across the two schema-resolution regimes:
+        //  - Empty rowset_to_schema (fresh table / never fast-evolved): every
+        //    existing rowset and compaction resolve via metadata->schema(), whose
+        //    id/content we just bumped; their segments' missing footer index is
+        //    served by the .idx sidecar until compaction rebuilds it inline. No
+        //    map maintenance needed.
+        //  - Non-empty rowset_to_schema (table already fast-evolved): existing
+        //    rowsets are PINNED to a historical schema, and BOTH the read path
+        //    (rowset.cpp) and compaction's get_output_rowset_schema resolve through
+        //    historical_schemas — bumping metadata->schema() alone is bypassed, so
+        //    those rowsets (and compaction output) would never pick up the index.
+        //    Register the indexed schema under new_schema_id and repoint the pins
+        //    that referenced the pre-index current schema (old_schema_id, identical
+        //    columns) to it, so those rowsets read via the .idx sidecar and
+        //    compaction rebuilds the index inline. Rowsets pinned to OLDER
+        //    (fewer-column) historical schemas keep their pin. rowset.cpp CHECKs
+        //    that a pinned schema_id exists in historical_schemas, so the archive
+        //    and the repoint must happen together. Guarded on historical_schemas so
+        //    replay is idempotent (on replay schema()->id() already == new id).
+        //    If every pin moved off old_schema_id, its historical_schemas entry is
+        //    left unreferenced here; the next compaction's historical_schemas GC
+        //    (see apply_opcompaction below) reclaims such entries.
+        if (!_tablet_meta->rowset_to_schema().empty() && _tablet_meta->historical_schemas().count(new_schema_id) <= 0) {
+            (*_tablet_meta->mutable_historical_schemas())[new_schema_id].CopyFrom(*schema);
+            for (auto& entry : *_tablet_meta->mutable_rowset_to_schema()) {
+                if (entry.second == old_schema_id) {
+                    entry.second = new_schema_id;
+                }
+            }
+        }
+        // Best-effort persist the new schema as a standalone SCHEMA_{id} file so
+        // any by-id cold reader (get_tablet_schema_by_id) resolves the indexed
+        // schema. Non-fatal on failure: loads/compaction resolve via
+        // metadata->schema() whose id now equals new_schema_id. Gated on the id
+        // actually changing in THIS apply so re-applying the same op (metadata
+        // replay on restart) does not repeat the remote object-store write.
+        if (old_schema_id != new_schema_id) {
+            if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
+                auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
+                LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet "
+                                          << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
             }
         }
     }
@@ -1048,7 +1112,10 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
     auto version = _tablet_meta->version();
 
     // Finalize delete vectors by updating their metadata and writing them to disk
-    RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("finalize_delvec_write_us");
+        RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
+    }
 
     // Clean up SSTable metadata after an alter operation that changes the persistent index type
     _sstable_meta_clean_after_alter_type();
@@ -1058,6 +1125,7 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         (void)_tablet.tablet_mgr()->cache_tablet_metadata(_tablet_meta);
     } else {
         // Persist the updated tablet metadata
+        TRACE_COUNTER_SCOPE_LATENCY_US("put_tablet_metadata_us");
         RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     }
 

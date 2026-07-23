@@ -943,7 +943,9 @@ public class PlanFragmentBuilder {
             if (connectContext != null
                     && connectContext.getSessionVariable().isEnableLakePreparedPhysicalSplitScan()
                     && !connectContext.getSessionVariable().isEnableQueryCache()
-                    && referenceTable.isCloudNativeTableOrMaterializedView()) {
+                    && referenceTable.isCloudNativeTableOrMaterializedView()
+                    && (connectContext.getSessionVariable().isEnableLakePreparedSplitOnDupTableScan()
+                            || !context.getDuplicatedLakeScanTableIds().contains(referenceTable.getId()))) {
                 scanNode.setUsePreparedPhysicalSplitScan(true);
             }
 

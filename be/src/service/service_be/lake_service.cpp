@@ -523,7 +523,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         res.status().to_protobuf(response->mutable_status());
                     }
                     TRACE("finished");
-                    g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
+                    auto tablet_publish_cost = butil::gettimeofday_us() - run_ts;
+                    // Emit the per-tablet total into the child trace so the sub-latencies can be
+                    // reconciled against the whole: total - sum(sub-counters) is the still-untraced
+                    // residual, which makes an uncovered slow step obvious at a glance.
+                    TRACE_COUNTER_INCREMENT("publish_tablet_total_us", tablet_publish_cost);
+                    g_publish_tablet_version_latency << tablet_publish_cost;
                 },
                 [&, tablet_info] {
                     g_publish_version_failed_tasks << 1;

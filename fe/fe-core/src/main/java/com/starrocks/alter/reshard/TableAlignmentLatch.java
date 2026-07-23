@@ -20,10 +20,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Edge-triggered, per-table latch that stops {@link ColocateChecker}'s self-sustaining alignment-job
- * storm. Split/merge is deterministic, so re-issuing identical alignment work on an unchanged table
- * layout makes no progress — it just churns tablets. This latch remembers the last alignment attempt
- * per table and suppresses that re-issue until the table's layout/data changes.
+ * Edge-triggered, per-table latch that suppresses re-issuing a deterministic reshard split on an
+ * unchanged table layout, which makes no progress and just churns tablets. Used by
+ * {@link ColocateChecker} to stop its self-sustaining alignment-job storm and by
+ * {@link TabletReshardJobMgr} to stop the size-based auto-split trigger from re-firing on an
+ * un-splittable (single-key) tablet. Each consumer holds its own instance and supplies its own
+ * convergence signature; this class only remembers the last attempt per table and decides whether to
+ * re-fire.
  *
  * <p>The latch is keyed per TABLE (not per colocate group) because alignment jobs are per-table:
  * keying by group would let one table's attempt suppress a peer that had never been attempted, or miss

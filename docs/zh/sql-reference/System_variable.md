@@ -652,6 +652,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：Double
 * 引入版本：v4.2
 
+### enable_lake_prepared_split_on_dup_table_scan
+
+* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 prepared physical split scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.

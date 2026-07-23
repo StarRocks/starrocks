@@ -1954,6 +1954,29 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
     }
 
+    /**
+     * The rewrite SELECT must read the BASE index deterministically. Both the async MV rewrite AND the
+     * synchronous-MV/rollup rewrite (on by default) must be disabled in the rewrite context; otherwise,
+     * once a table carries sibling rollups, the optimizer could substitute a sibling rollup as the scan
+     * source (for AGG/UNIQUE it is pre-aggregated to a different grain), building the shadow from wrong
+     * data. Captured from the rewrite context via the executor seam.
+     */
+    @Test
+    public void testRewriteContextDisablesMaterializedViewRewrite() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        AtomicReference<Boolean> asyncRewrite = new AtomicReference<>();
+        AtomicReference<Boolean> syncRewrite = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) -> {
+            asyncRewrite.set(context.getSessionVariable().isEnableMaterializedViewRewrite());
+            syncRewrite.set(context.getSessionVariable().isEnableSyncMaterializedViewRewrite());
+        });
+        job.runRunningJob();
+        Assertions.assertEquals(Boolean.FALSE, asyncRewrite.get(),
+                "rewrite context must disable async MV rewrite");
+        Assertions.assertEquals(Boolean.FALSE, syncRewrite.get(),
+                "rewrite context must disable sync MV/rollup rewrite so the SELECT reads the base index");
+    }
+
     // ---- empty-partition characterization (NOTE in the brief) --------------------------
 
     @Test
