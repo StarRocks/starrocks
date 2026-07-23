@@ -76,10 +76,16 @@ public class ReplayIcebergResourceMetadata implements ConnectorMetadata {
             throws IOException {
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
-        File baseDir = Files.createTempDirectory("replay_iceberg_").toFile();
-        TestTables.TestTable nativeTable = TestTables.create(
-                new File(baseDir, dbName + "_" + tableName), tableName, schema, spec, 1);
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
+        File baseDir = Files.createTempDirectory("replay_iceberg_").toFile();
+        // TestTables keeps a process-global registry keyed by the native table name, so two dumps that scan
+        // a same-named table (replayed back-to-back in one JVM, or two same-named tables in different dbs)
+        // would collide with AlreadyExistsException. Give the backing native table a unique name; the
+        // StarRocks-facing db/table names passed to MockIcebergTable stay as declared, so planning and the
+        // rowCounts lookup are unaffected.
+        String nativeName = tableName + "_" + tableId;
+        TestTables.TestTable nativeTable = TestTables.create(
+                new File(baseDir, dbName + "_" + nativeName), nativeName, schema, spec, 1);
         MockIcebergTable table = new MockIcebergTable(tableId, tableName, catalogName, resourceName,
                 dbName, tableName, columns, nativeTable, Maps.newHashMap(), "");
         tables.computeIfAbsent(dbName, k -> new CaseInsensitiveMap<>()).put(tableName, table);
