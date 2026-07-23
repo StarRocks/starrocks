@@ -147,7 +147,6 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
     public boolean checkCastTypeReduceAble(Type parent, Type child, Type grandChild) {
         int parentSlotSize = parent.getTypeSize();
         int childSlotSize = child.getTypeSize();
-        int grandChildSlotSize = grandChild.getTypeSize();
 
         if (parent.isDecimalOfAnyVersion() || child.isDecimalOfAnyVersion() || grandChild.isDecimalOfAnyVersion()) {
             return false;
@@ -159,15 +158,44 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return false;
         }
 
-        // cascaded cast cannot be reduced if middle type's size is smaller than two sides
-        // e.g. cast(cast(smallint as tinyint) as int)
-        if (parentSlotSize > childSlotSize && childSlotSize < grandChildSlotSize) {
-            return false;
+        // The reduction drops the intermediate cast grandChild -> child, so it is only safe when
+        // that conversion is lossless. Otherwise the outer cast would observe grandChild's full
+        // value instead of the value narrowed by the intermediate cast, producing a wrong result.
+        // Comparing slot sizes is not enough, e.g. double, bigint and float all collapse to the
+        // same size, so a lossy double -> float or double -> bigint middle cast would slip through.
+        // e.g. cast(cast((9-1)/3+1 as bigint) as string) must stay "3", not "3.6666666666666665"
+        if (!isLosslessNumericCast(grandChild, child)) {
+            // Exception: when a floating-point value is truncated to an integer and the outer type
+            // is an integer no wider than the intermediate one, the outer cast re-applies the same
+            // truncation, so the chain is still safe to reduce (e.g. cast(cast(<double> as bigint) as int)).
+            boolean truncationReappliedByOuter = grandChild.isFloatingPointType()
+                    && child.isFixedPointType() && parent.isFixedPointType()
+                    && parentSlotSize <= childSlotSize;
+            if (!truncationReappliedByOuter) {
+                return false;
+            }
         }
 
         Type childCompatibleType = TypeManager.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = TypeManager.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != InvalidType.INVALID && parentCompatibleType != InvalidType.INVALID;
+    }
+
+    // Whether casting `from` to `to` preserves every value exactly. This refines
+    // TypeManager.isImplicitlyCastable, whose type compatibility matrix widens an integer/floating
+    // pair to the floating type and therefore reports e.g. BIGINT -> DOUBLE as lossless, even though
+    // integers beyond the floating significand are rounded (2^24 for FLOAT, 2^53 for DOUBLE).
+    private static boolean isLosslessNumericCast(Type from, Type to) {
+        if (!TypeManager.isImplicitlyCastable(from, to, true)) {
+            return false;
+        }
+        if (from.isFixedPointType() && to.isFloatingPointType()) {
+            // An n-byte integer spans roughly 2^(8n-1); it is represented exactly only when that does
+            // not exceed the floating significand: 24 bits for FLOAT, 53 bits for DOUBLE.
+            int significandBits = to.isFloat() ? 24 : 53;
+            return from.getTypeSize() * 8 - 1 <= significandBits;
+        }
+        return true;
     }
 
     private ScalarOperator inheritVarcharLengthAfterReduceCast(CastOperator operator) {
