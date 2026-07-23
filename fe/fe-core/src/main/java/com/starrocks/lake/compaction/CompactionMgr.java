@@ -255,6 +255,11 @@ public class CompactionMgr implements MemoryTrackable {
         compactionScheduler.cancelCompaction(txnId);
     }
 
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds) {
+        return compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
+    }
+
     public boolean existCompaction(long txnId) {
         return compactionScheduler.existCompaction(txnId);
     }
