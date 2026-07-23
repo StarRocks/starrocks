@@ -60,6 +60,11 @@ public class ExecArithmetic extends ExecExpr {
 
     @Override
     public boolean isSelfMonotonic() {
+        if ((op == ArithmeticExpr.Operator.DIVIDE || op == ArithmeticExpr.Operator.INT_DIVIDE)
+                && !children.get(1).isConstant()) {
+            return false;
+        }
+
         return op.isMonotonic();
     }
 
