@@ -681,15 +681,15 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMin = -100;                // min(leftMin, rightMin)
         final double expectedMax = 200.5;
 
-        final ColumnRefOperator leftInput = new ColumnRefOperator(2, FloatType.DOUBLE, "left", true);
-        final ColumnRefOperator rightInput = new ColumnRefOperator(3, FloatType.DOUBLE, "right", true);
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, Type.DOUBLE, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, Type.DOUBLE, "right", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(leftInput, new ColumnStatistic(leftMin, leftMax, leftNullFraction, 0, leftDistinctValues))
                 .addColumnStatistic(rightInput,
                         new ColumnStatistic(rightMin, rightMax, rightNullFraction, 0, rightDistinctValues))
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, FloatType.DOUBLE,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.DOUBLE,
                 Lists.newArrayList(leftInput, rightInput));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -707,14 +707,14 @@ public class ExpressionStatisticsCalculatorTest {
         // CASE WHEN an input has unknown stats THEN output stats are also unknown END
 
         final int rowCount = 100;
-        final ColumnRefOperator leftInput = new ColumnRefOperator(2, IntegerType.INT, "left", true);
-        final ColumnRefOperator rightInput = new ColumnRefOperator(3, IntegerType.INT, "right", true);
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, Type.INT, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, Type.INT, "right", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(leftInput, new ColumnStatistic(-100, 100, 0.2, 0, 70))
                 .addColumnStatistic(rightInput, ColumnStatistic.unknown())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(leftInput, rightInput));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -746,9 +746,9 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMin = -100;
         final double expectedMax = 200;
 
-        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
-        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
-        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, Type.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, Type.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, Type.INT, "input3", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(input1,
@@ -758,7 +758,7 @@ public class ExpressionStatisticsCalculatorTest {
                 .addColumnStatistic(input3,
                         new ColumnStatistic(input3Min, input3Max, input3NullFraction, 0, input3DistinctValues))
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(input1, input2, input3));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -787,8 +787,8 @@ public class ExpressionStatisticsCalculatorTest {
                 "B", 200L,
                 "X", 90L);
 
-        final ColumnRefOperator mcvLeft = new ColumnRefOperator(4, IntegerType.INT, "mcvLeft", true);
-        final ColumnRefOperator mcvRight = new ColumnRefOperator(5, IntegerType.INT, "mcvRight", true);
+        final ColumnRefOperator mcvLeft = new ColumnRefOperator(4, Type.INT, "mcvLeft", true);
+        final ColumnRefOperator mcvRight = new ColumnRefOperator(5, Type.INT, "mcvRight", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(mcvLeft, ColumnStatistic.builder()
@@ -803,7 +803,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
         final CallOperator coalesce =
-                new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT, Lists.newArrayList(mcvLeft, mcvRight));
+                new CallOperator(FunctionSet.COALESCE, Type.BIGINT, Lists.newArrayList(mcvLeft, mcvRight));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
 
@@ -830,9 +830,9 @@ public class ExpressionStatisticsCalculatorTest {
                 "B", 200L,
                 "Y", 8L);
 
-        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
-        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
-        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, Type.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, Type.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, Type.INT, "input3", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(input1, ColumnStatistic.builder()
@@ -850,7 +850,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
                         .build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(input1, input2, input3));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -876,8 +876,8 @@ public class ExpressionStatisticsCalculatorTest {
                 "c", 25L,
                 "d", 75L);
 
-        final ColumnRefOperator colA = new ColumnRefOperator(0, IntegerType.INT, "colA", true);
-        final ColumnRefOperator colB = new ColumnRefOperator(1, IntegerType.INT, "colB", true);
+        final ColumnRefOperator colA = new ColumnRefOperator(0, Type.INT, "colA", true);
+        final ColumnRefOperator colB = new ColumnRefOperator(1, Type.INT, "colB", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(colA, ColumnStatistic.builder()
@@ -891,7 +891,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(new Histogram(Collections.emptyList(), colBMcv))
                         .build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(colA, colB));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -919,9 +919,9 @@ public class ExpressionStatisticsCalculatorTest {
                 "C", 30L,
                 "D", 10L);
 
-        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
-        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
-        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, Type.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, Type.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, Type.INT, "input3", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(input1, ColumnStatistic.builder()
@@ -940,7 +940,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
                         .build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(input1, input2, input3));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -964,8 +964,8 @@ public class ExpressionStatisticsCalculatorTest {
                 "A", 75L,
                 "B", 25L);
 
-        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
-        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, Type.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, Type.INT, "input2", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(input1, ColumnStatistic.builder()
@@ -979,7 +979,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setHistogram(new Histogram(Collections.emptyList(), input2Mcv))
                         .build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(input1, input2));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -994,8 +994,8 @@ public class ExpressionStatisticsCalculatorTest {
         // CASE WHEN no input contributes any MCV THEN the histogram is left unset (not empty) END
 
         final int rowCount = 100;
-        final ColumnRefOperator left = new ColumnRefOperator(0, IntegerType.INT, "left", true);
-        final ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
+        final ColumnRefOperator left = new ColumnRefOperator(0, Type.INT, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(left, ColumnStatistic.builder()
@@ -1005,7 +1005,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setMinValue(0).setMaxValue(200).setNullsFraction(0.5)
                         .setAverageRowSize(4).setDistinctValuesCount(20).build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.BIGINT,
                 Lists.newArrayList(left, right));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -1030,8 +1030,8 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMax = 15;
         final double expectedNullFraction = 0.0;
 
-        final ColumnRefOperator nonNullCol = new ColumnRefOperator(0, IntegerType.INT, "nonNullCol", true);
-        final ColumnRefOperator highNdvCol = new ColumnRefOperator(1, IntegerType.INT, "highNdvCol", true);
+        final ColumnRefOperator nonNullCol = new ColumnRefOperator(0, Type.INT, "nonNullCol", true);
+        final ColumnRefOperator highNdvCol = new ColumnRefOperator(1, Type.INT, "highNdvCol", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(nonNullCol, ColumnStatistic.builder()
@@ -1041,7 +1041,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setMinValue(-100).setMaxValue(100000)
                         .setNullsFraction(highNdvNullFraction).setAverageRowSize(4).setDistinctValuesCount(1000).build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.INT,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.INT,
                 Lists.newArrayList(nonNullCol, highNdvCol));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -1069,8 +1069,8 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMin = dateColMin;
         final double expectedMax = dateColMax;
 
-        final ColumnRefOperator fullyNullDate = new ColumnRefOperator(0, DateType.DATETIME, "fullyNullDate", true);
-        final ColumnRefOperator dateCol = new ColumnRefOperator(1, DateType.DATETIME, "dateCol", true);
+        final ColumnRefOperator fullyNullDate = new ColumnRefOperator(0, Type.DATETIME, "fullyNullDate", true);
+        final ColumnRefOperator dateCol = new ColumnRefOperator(1, Type.DATETIME, "dateCol", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(fullyNullDate, ColumnStatistic.builder()
@@ -1080,7 +1080,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setMinValue(dateColMin).setMaxValue(dateColMax)
                         .setNullsFraction(dateColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.DATETIME,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.DATETIME,
                 Lists.newArrayList(fullyNullDate, dateCol));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -1105,8 +1105,8 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedMin = timeColMin;
         final double expectedMax = timeColMax;
 
-        final ColumnRefOperator fullyNullTime = new ColumnRefOperator(0, DateType.TIME, "fullyNullTime", true);
-        final ColumnRefOperator timeCol = new ColumnRefOperator(1, DateType.TIME, "timeCol", true);
+        final ColumnRefOperator fullyNullTime = new ColumnRefOperator(0, Type.TIME, "fullyNullTime", true);
+        final ColumnRefOperator timeCol = new ColumnRefOperator(1, Type.TIME, "timeCol", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(fullyNullTime, ColumnStatistic.builder()
@@ -1116,7 +1116,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setMinValue(timeColMin).setMaxValue(timeColMax)
                         .setNullsFraction(timeColNullFraction).setAverageRowSize(8).setDistinctValuesCount(50).build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, DateType.TIME,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.TIME,
                 Lists.newArrayList(fullyNullTime, timeCol));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
@@ -1133,8 +1133,8 @@ public class ExpressionStatisticsCalculatorTest {
         // CASE WHEN the result type has no meaningful numeric range THEN min/max stay [-inf, +inf] END
 
         final int rowCount = 100;
-        final ColumnRefOperator left = new ColumnRefOperator(0, VarcharType.VARCHAR, "left", true);
-        final ColumnRefOperator right = new ColumnRefOperator(1, VarcharType.VARCHAR, "right", true);
+        final ColumnRefOperator left = new ColumnRefOperator(0, Type.VARCHAR, "left", true);
+        final ColumnRefOperator right = new ColumnRefOperator(1, Type.VARCHAR, "right", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(left, ColumnStatistic.builder()
@@ -1144,7 +1144,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setMinValue(30).setMaxValue(40).setNullsFraction(0.5)
                         .setAverageRowSize(16).setDistinctValuesCount(20).build())
                 .build();
-        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, VarcharType.VARCHAR,
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, Type.VARCHAR,
                 Lists.newArrayList(left, right));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
