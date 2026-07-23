@@ -251,6 +251,20 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testValidConnectorOutputRowCount() {
+        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(null));
+        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(Statistics.builder().build()));
+        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(Double.POSITIVE_INFINITY).build()));
+        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(-1).build()));
+        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(0).build()));
+        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(100).build()));
+    }
+
+    @Test
     public void testLogicalOlapTableScan() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
