@@ -122,6 +122,19 @@ public class DefaultExtensionContextTest {
     }
 
     @Test
+    public void testHasComponent() {
+        context = new DefaultExtensionContext();
+        Assertions.assertFalse(context.hasComponent(SimpleService.class));
+
+        context.register(SimpleService.class, new SimpleService());
+        Assertions.assertTrue(context.hasComponent(SimpleService.class));
+
+        Assertions.assertFalse(context.hasComponent(ServiceWithDependency.class));
+        context.registerConstructor(ServiceWithDependency.class, ServiceWithDependency.class);
+        Assertions.assertTrue(context.hasComponent(ServiceWithDependency.class));
+    }
+
+    @Test
     public void testGetWithNoArgConstructor() {
         context = new DefaultExtensionContext();
         SimpleService service = context.get(SimpleService.class);

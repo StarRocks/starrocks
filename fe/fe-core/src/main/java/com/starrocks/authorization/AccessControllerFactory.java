@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.extension;
+package com.starrocks.authorization;
 
-public interface ExtensionContext {
-    <T> T get(Class<T> capability);
-    boolean hasComponent(Class<?> capability);
-    <T> void register(Class<T> capability, T instance);
-    
-    /**
-     * Register and resolve which constructor to use for dependency injection.
-     * @param keyClass the interface or abstract class to register for
-     * @param valueClass the concrete class to resolve constructor for
-     * @return constructor metadata containing the resolved constructor
-     */
-    <T> ConstructorMetadata registerConstructor(Class<T> keyClass, Class<? extends T> valueClass);
+import com.starrocks.connector.ConnectorContext;
+
+/**
+ * Factory capability for static FE extensions that provide external catalog access control.
+ */
+@FunctionalInterface
+public interface AccessControllerFactory {
+    AccessController createAccessController(ConnectorContext context);
 }
