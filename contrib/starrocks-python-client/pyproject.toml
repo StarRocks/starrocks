@@ -67,8 +67,9 @@ test = [
     "pytest-xdist",
     "mock",
 ]
-alembic = [
-    "alembic>=1.14.0"
+dev = [
+    "pytest>=8.0",
+    "sqlacodegen>=3.0",
 ]
 
 [project.urls]
