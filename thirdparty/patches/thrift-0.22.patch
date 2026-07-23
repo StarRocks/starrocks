@@ -1,0 +1,6 @@
+--- a/src/thrift/concurrency/Mutex.h	2019-01-01 00:00:00.000000000 +0800
++++ b/src/thrift/concurrency/Mutex.h	2025-01-01 00:00:00.000000000 +0800
+@@ -22,6 +22,7 @@
+ 
+ #include <thrift/TNonCopyable.h>
++#include <cstdint>
