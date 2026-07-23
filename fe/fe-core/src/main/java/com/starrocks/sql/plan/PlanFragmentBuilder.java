@@ -1048,7 +1048,12 @@ public class PlanFragmentBuilder {
                         }
                         selectedNonEmptyPartitionIds.add(partitionId);
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+                        // Capture the selected index and the visible version together and thread the captured
+                        // version through to addScanRangeLocations (see OlapScanNode for the full rationale).
+                        // Read the index first, then the version: index-then-version bounds a concurrent
+                        // split's torn window to the safe (commitVersion, split parent) pairing.
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                        final long partitionVisibleVersion = physicalPartition.getVisibleVersion();
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         OlapScanNode.fillTabletId2BucketSeq(
@@ -1056,7 +1061,7 @@ public class PlanFragmentBuilder {
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
-                                localBeId);
+                                localBeId, partitionVisibleVersion);
                     }
                 }
                 scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
