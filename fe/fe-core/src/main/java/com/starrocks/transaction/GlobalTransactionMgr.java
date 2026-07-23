@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -963,6 +964,21 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         });
 
         putTransactionStats(transactionStates);
+
+        // Optional trailing section: terminal-state cache records (see saveTransactionStateV2). Older
+        // images predate it, so an EOF here just means "no cached outcomes to restore".
+        try {
+            reader.readCollection(TerminalStateImageRecord.class, record -> {
+                try {
+                    getDatabaseTransactionMgr(record.dbId).restoreTerminalStateCacheRecord(
+                            record.txnId, record.label, record.status, record.reason, record.finishTime);
+                } catch (AnalysisException e) {
+                    LOG.warn("skip terminal-state cache record for missing db {}: {}", record.dbId, e.getMessage());
+                }
+            });
+        } catch (SRMetaBlockEOFException e) {
+            LOG.info("No terminal-state cache in image (older format), skip");
+        }
     }
 
     private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {
@@ -1015,14 +1031,60 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    // Flat, GSON-serializable image record for a terminal-state cache entry. Carries dbId so load can
+    // route it back to the owning DatabaseTransactionMgr, mirroring how TransactionState carries dbId.
+    static class TerminalStateImageRecord {
+        @SerializedName("dbId")
+        long dbId;
+        @SerializedName("txnId")
+        long txnId;
+        @SerializedName("label")
+        String label;
+        @SerializedName("status")
+        TransactionStatus status;
+        @SerializedName("reason")
+        String reason;
+        @SerializedName("finishTime")
+        long finishTime;
+
+        TerminalStateImageRecord() {
+        }
+
+        TerminalStateImageRecord(long dbId, long txnId, String label, TransactionStatus status, String reason,
+                                 long finishTime) {
+            this.dbId = dbId;
+            this.txnId = txnId;
+            this.label = label;
+            this.status = status;
+            this.reason = reason;
+            this.finishTime = finishTime;
+        }
+    }
+
     public void saveTransactionStateV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
-        final int cnt = 2 + txnNum;
+        // The checkpoint worker count-evicts finished transactions (clearExpiredJobs) BEFORE saveImage,
+        // so the terminal outcomes of just-evicted transactions live only in the in-memory
+        // terminal-state cache. Serialize them too, otherwise a restart/failover that loads this image
+        // would answer a recommit with "transaction not found" (the loop this feature prevents).
+        List<TerminalStateImageRecord> terminalRecords = new ArrayList<>();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            long dbId = dbTransactionMgr.getDbId();
+            for (TxnTerminalStateCache.Record r : dbTransactionMgr.getTerminalStateCacheSnapshot()) {
+                terminalRecords.add(
+                        new TerminalStateImageRecord(dbId, r.txnId, r.label, r.status, r.reason, r.finishTime));
+            }
+        }
+        final int cnt = 2 + txnNum + 1 + terminalRecords.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
         writer.writeInt(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
+        }
+        writer.writeInt(terminalRecords.size());
+        for (TerminalStateImageRecord record : terminalRecords) {
+            writer.writeJson(record);
         }
         writer.close();
     }

@@ -815,6 +815,20 @@ public class DatabaseTransactionMgr {
         return terminalStateCache.size();
     }
 
+    // Snapshot of the terminal-state cache for FE image serialization. The checkpoint worker runs
+    // clearExpiredJobs() (which count-evicts and populates this cache) before saveImage(), so the
+    // image must carry these outcomes or a post-checkpoint restart/failover would lose them and a
+    // recommit would wrongly get "transaction not found".
+    List<TxnTerminalStateCache.Record> getTerminalStateCacheSnapshot() {
+        return terminalStateCache.snapshot();
+    }
+
+    // Repopulate one cached terminal outcome from the FE image (same admission rules as a live put).
+    void restoreTerminalStateCacheRecord(long txnId, String label, TransactionStatus status, String reason,
+                                         long finishTime) {
+        terminalStateCache.restore(txnId, label, status, reason, finishTime);
+    }
+
     @VisibleForTesting
     @Nullable
     protected Set<Long> unprotectedGetTxnIdsByLabel(String label) {
