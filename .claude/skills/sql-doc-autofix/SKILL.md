@@ -1,7 +1,7 @@
 ---
 name: sql-doc-autofix
 description: Propose verified fixes for documentation SQL examples that fail the doc-rot checker (docs/scripts/run_sql_samples.py). Classifies each FAILing example, and only for genuinely fixable ones proposes a corrected statement, verifies it against a live cluster via the StarRocks MCP server, and opens a DRAFT [Doc] PR. Use after run_sql_samples.py produces a FAIL list. Never auto-merges.
-argument-hint: "[path to candidates.json, or blank to build one]"
+argument-hint: "[version, e.g. 4.1 — defaults to the $SR_VERSION env var]"
 allowed-tools: Read, Edit, Grep, Glob, Bash, Agent, mcp__starrocks__read_query, mcp__starrocks__write_query, mcp__starrocks__table_overview, mcp__starrocks__db_overview
 ---
 
@@ -21,12 +21,18 @@ genuinely fixable; flag the rest. English docs only — never edit `docs/zh/**` 
   `SR_VERSION=<v> docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait`.
 - A checkout of the docs at the matching release branch (e.g. `branch-4.1`).
 
-## Step 0 — Build the candidate list
-```
-python3 docs/scripts/run_sql_samples.py --docs-root <release-checkout>/docs/en/sql-reference \
+## Step 0 — Resolve the version and build the candidate list
+Determine the version being verified: use the skill's argument if one was given,
+otherwise the `$SR_VERSION` env var (exported in the runbook's Step 1). Its docs
+live in the release-branch worktree created in the runbook, at
+`../sr-branch-$SR_VERSION/docs/en/sql-reference`. Run from the repo root:
+```bash
+: "${SR_VERSION:?set SR_VERSION (or pass a version, e.g. 4.1)}"
+DOCS=../sr-branch-$SR_VERSION/docs/en/sql-reference
+python3 docs/scripts/run_sql_samples.py --docs-root "$DOCS" \
     --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run.json
 python3 docs/scripts/autofix_candidates.py --run-json /tmp/run.json \
-    --repo <release-checkout> --limit 20 > /tmp/candidates.json
+    --repo ../sr-branch-$SR_VERSION --limit 20 > /tmp/candidates.json
 ```
 Check the `meta` block: if docs and cluster versions are **not aligned**, stop —
 misaligned failures are not doc rot.

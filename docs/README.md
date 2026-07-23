@@ -92,7 +92,7 @@ newer features look "broken" when the release simply doesn't have them yet.
   normal clone has this tooling and knows every release branch via `origin/*`, so
   you never switch its branch.
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) with the `starrocks`
-  MCP server (from the repo's `.mcp.json`) — used in step 4.
+  MCP server (from the repo's `.mcp.json`) — used in step 5.
 
 ### 0. Overview
 
@@ -102,11 +102,18 @@ set; every step below uses it:
 1. **Set `SR_VERSION`** to the release you're verifying.
 2. **Create a worktree** of that release branch — its docs are what you check.
 3. **Start a StarRocks cluster** on that version — the examples run there.
-4. **Run the `sql-doc-autofix` skill** — it checks the docs' SQL on the cluster and
-   opens a draft PR with suggested fixes.
-5. **Tear down.**
+4. **Check the cluster is healthy.**
+5. **Run the `sql-doc-autofix` skill** — it checks the docs' SQL on the cluster.
+6. **Open the draft PR** of suggested fixes (and pick the branches to backport to).
+7. **Tear down.**
 
 ### 1. Set the version
+
+> Important:
+>
+> All commands are run from the root of the StarRocks/starrocks repo:
+>
+> `cd <wherever you have the repo checked out>`
 
 ```bash
 export SR_VERSION=4.1   # the release you're verifying; every step below uses this
@@ -134,11 +141,29 @@ The FE is on `127.0.0.1:9030` (user `root`, no password). For the shared-data
 (cloud-native) cluster or teardown details, see
 [docs/docker/doc-verification/README.md](docker/doc-verification/README.md).
 
-### 4. Check the examples and draft fixes
+### 4. Check the status of the cluster
+
+```bash
+docker compose \
+-f docs/docker/doc-verification/docker-compose-shared-nothing.yml \
+ps -a --format "table {{.Service}}\t{{.Status}}"
+```
+
+Look for both services to be healthy:
+
+```bash
+SERVICE        STATUS
+starrocks-be   Up 3 minutes (healthy)
+starrocks-fe   Up 3 minutes (healthy)
+```
+
+### 5. Check the examples and draft fixes
 
 In Claude Code (with the `starrocks` MCP server attached), run the
 **`sql-doc-autofix`** skill and have it verify `$SR_VERSION`, whose docs are at
-`../sr-branch-$SR_VERSION/docs/en/sql-reference`. The skill:
+`../sr-branch-$SR_VERSION/docs/en/sql-reference`.
+
+The skill:
 
 - runs the checker against those docs on your cluster and sorts every example into
   **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not self-contained),
@@ -148,10 +173,44 @@ In Claude Code (with the `starrocks` MCP server attached), run the
 - flags version-gated or illustrative examples instead of "fixing" them, because
   *runs on the cluster* is not the same as *correct documentation*.
 
+```bash
+claude
+```
+
+If you see that a new MCP server is found for StarRocks enable it:
+
+```bash
+New MCP server found in this project: starrocks
+```
+
+After the StarRocks MCP server is allowed for use you can use the `sql-doc-autofix` skill:
+
+```bash
+/sql-doc-autofix
+```
+
+### 6. Open a PR
+
+Claude will ask how you want to proceed. If you choose to open a `draft PR off main` a PR will be opened.
+
+```bash
+How should I deliver the 2 verified fixes?
+
+❯ 1. Open draft PR off main
+     Create a worktree off origin/main, apply both edits, open a draft [Doc] PR with Fixes + Not-fixed sections. You review and un-draft.
+  2. Apply edits locally only
+     Make the two edits in a main-based worktree/branch but do not push or open a PR. You handle the PR.
+  3. Just the report
+     Stop here with the triage above; make no code changes.
+  4. Type something.
+```
+
+Check the edits, and if you are happy with them check the box to backport to the appropriate branch(es).
+
 Review the draft PR and merge what's right. Full behavior and the report format:
 [.claude/skills/sql-doc-autofix/README.md](../.claude/skills/sql-doc-autofix/README.md).
 
-### 5. Tear down
+### 7. Tear down
 
 ```bash
 docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml down
