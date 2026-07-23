@@ -66,6 +66,9 @@ public:
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
     int64_t total_bytes() const;
+    // Mark the shared channel cancelled so the sink stops appending; called by the receiver.
+    void set_cancelled();
+    bool is_cancelled() const;
 
 private:
     // hold this chunk buffer to avoid early deallocation.
