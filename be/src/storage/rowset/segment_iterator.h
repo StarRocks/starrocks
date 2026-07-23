@@ -30,6 +30,7 @@ class SeekRange;
 
 class ColumnIterator;
 class ColumnPredicate;
+class DisjunctivePredicates;
 class PredicateTree;
 class Schema;
 class SegmentReadOptions;
@@ -95,5 +96,13 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
         std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
         const std::vector<uint8_t>* dict_code_candidates_by_cid = nullptr);
+
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// A caller that truncates candidates by rank (ANN top-k, BM25 WAND) must pre-apply deletes here; the read
+// loop otherwise applies them only per-chunk afterwards, letting a deleted row steal a top-k slot so the
+// LIMIT under-returns. Declared here for direct unit testing. An unreadable delete column is an error.
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid, const roaring::Roaring& candidate);
 
 } // namespace starrocks

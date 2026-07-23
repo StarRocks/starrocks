@@ -47,6 +47,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -150,6 +151,24 @@ public class LakeRangeRollupJobTest {
             pp.createRollupIndex(idx);
         }
         return table;
+    }
+
+    /**
+     * Inject a NORMAL sibling rollup {@code name} into {@link #table}: register its meta + a NORMAL
+     * {@link MaterializedIndex} in every physical partition (mirrors a rollup already promoted by a
+     * prior finished job). Returns the sibling's meta id.
+     */
+    private long injectNormalSiblingRollup(String name) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> schema = new ArrayList<>(table.getSchemaByIndexMetaId(baseIndexMetaId).subList(0, 2));
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
     }
 
     // ---- Step 1 / Step 4: construction test ---------------------------------
@@ -601,6 +620,11 @@ public class LakeRangeRollupJobTest {
         Column colK1 = baseSchema.get(0);
         Column colK2 = baseSchema.get(1);
 
+        // Pre-existing NORMAL sibling rollup r1 — must survive the additive flip/replay of r2.
+        long r1MetaId = injectNormalSiblingRollup("r1");
+        MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
+        assertNotNull(r1MetaBefore, "sibling r1 meta must exist before replay");
+
         // Build a rollup job with the shadow in SHADOW state and a reserved commitVersion.
         LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(List.of(colK2, colK1));
 
@@ -633,10 +657,69 @@ public class LakeRangeRollupJobTest {
         assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
                 "first replay must advance visibleVersion by one");
 
+        // Sibling r1 untouched by the first replay's flip.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
+                "sibling r1 meta must be untouched (identity) after the first replay");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must remain after first replay");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
+                    "sibling r1 physical index must stay NORMAL after first replay");
+        }
+
         // Second replay: flipNotYetApplied is false -> the flip is skipped, no version double-bump.
         assertDoesNotThrow(() -> inMemory.replay(replayed), "second replay must not throw");
         assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
                 "second replay must not advance visibleVersion again");
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        // Sibling r1 still intact after the idempotent second replay.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
+                "sibling r1 meta must still be intact after the second replay");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must remain after second replay");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
+                    "sibling r1 physical index must stay NORMAL after second replay");
+        }
+    }
+
+    /**
+     * Cancelling a rollup whose SHADOW index is actually installed removes ONLY that rollup's shadow
+     * (meta + per-partition indexes) and leaves a pre-existing NORMAL sibling rollup r1 and the base
+     * untouched. Exercises removeShadowIndexOnCancel's per-meta-id cleanup with a sibling present.
+     */
+    @Test
+    public void testCancelRemovesShadowKeepsSiblingRollup() {
+        // Inject NORMAL sibling r1.
+        long r1MetaId = injectNormalSiblingRollup("r1");
+        MaterializedIndexMeta r1MetaBefore = table.getIndexMetaByMetaId(r1MetaId);
+
+        // Build r2 with its SHADOW index actually installed (meta + per-partition SHADOW indexes).
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(
+                List.of(baseSchema.get(1), baseSchema.get(0)));
+        long r2MetaId = job.getShadowIndexMetaId();
+        assertNotNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be installed before cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            assertNotNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be installed before cancel");
+        }
+
+        // Cancel r2 (drives removeShadowIndexOnCancel under the edit-log applier).
+        assertTrue(job.cancelImpl("test cancel"), "cancel must succeed for an installed SHADOW rollup job");
+
+        // r2 shadow fully removed.
+        assertNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be removed after cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            assertNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be removed after cancel");
+        }
+        // Sibling r1 + base intact.
+        assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId), "sibling r1 meta must survive r2 cancel");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            assertNotNull(r1Idx, "sibling r1 physical index must survive r2 cancel");
+            assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(), "sibling r1 must stay NORMAL");
+        }
+        assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must survive r2 cancel");
     }
 }

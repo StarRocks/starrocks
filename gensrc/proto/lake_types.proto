@@ -126,10 +126,6 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
-message CdcMetadataPB {
-    // no implementation, only used for placeholder in TabletMetadataPB
-}
-
 // An Index Delta Group (IDG) entry describes a standalone .idx file
 // produced by an ADD INDEX schema change. The file stores index blobs
 // for one or more (column, index_type) pairs for a single segment,
@@ -358,10 +354,6 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
-
-    // These are just placeholders
-    repeated int64 metadata_ancestors = 50;
-    optional CdcMetadataPB cdc_metadata = 51;
 }
 
 message MetadataUpdateInfoPB {
@@ -372,6 +364,7 @@ message MetadataUpdateInfoPB {
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
+    optional TabletRangePB tablet_range = 7;
 }
 
 message BundleTabletMetadataPB {
@@ -542,6 +535,14 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
+        // New schema id/version allocated by FE for this fast-path ADD INDEX.
+        // apply_add_index stamps these onto the tablet metadata schema so every
+        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
+        // an id change, data loaded after the index — and compaction output —
+        // would keep reusing the cached pre-index schema and build no index.
+        optional int64 new_schema_id = 4;
+        optional int64 new_schema_version = 5;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

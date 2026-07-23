@@ -2559,6 +2559,10 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_dict_columns = 100000;
 
+    // Max total bytes of the global dict cache (CacheDictManager).
+    @ConfField(mutable = true)
+    public static long low_cardinality_dict_cache_max_bytes = 1024L * 1024 * 1024;
+
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
 
@@ -2585,6 +2589,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_statistic_cache_refresh_after_write = false;
+
+    @ConfField
+    public static boolean enable_statistic_cache_metrics = false;
 
     @ConfField(mutable = true, comment = "When replaying external-table statistics journals on followers " +
             "(and during restart recovery), invalidate the connector statistics cache by the table UUID " +
@@ -2714,6 +2721,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Timeout to synchronously wait for stats " +
             "(when `enable_sync_statistics_load` is enabled)")
     public static int sync_statistics_load_timeout_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Total timeout budget per query to synchronously wait for stats " +
+            "(when `enable_sync_statistics_load` is enabled). A negative value uses `sync_statistics_load_timeout_ms`.")
+    public static int sync_statistics_load_per_query_budget_ms = -1;
 
     /**
      * default bucket size of histogram statistics
@@ -4756,6 +4767,14 @@ public class Config extends ConfigBase {
             + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
             + "order so meta tier falls back to data tier (row sampling).")
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
+
+    @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
+            + "Pre-Split meta tier reads concurrently from a FILES() source. Footer reads are "
+            + "independent per file and the sampler sorts the aggregated stats, so concurrency only "
+            + "cuts the wall time of the pre-split hook (each footer is a remote round-trip; a "
+            + "many-file source otherwise serializes hundreds of round-trips). 1 disables "
+            + "concurrency.")
+    public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
 
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
             + "Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions "

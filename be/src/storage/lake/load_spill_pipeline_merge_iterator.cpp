@@ -40,6 +40,14 @@ LoadSpillPipelineMergeIterator::LoadSpillPipelineMergeIterator(LoadChunkSpiller*
     // to maintain correctness (combine duplicate keys, apply aggregate functions).
     if (schema->keys_type() == KeysType::DUP_KEYS) {
         _do_agg = false;
+    } else if (schema->keys_type() == KeysType::PRIMARY_KEYS &&
+               _parent_writer->tablet_schema()->has_separate_sort_key()) {
+        // Separate sort key: the merge orders output by the sort key, so primary keys are NOT
+        // adjacent and the aggregate iterator cannot collapse duplicate PKs on the right axis.
+        // Disable aggregation and instead carry a per-row ordering key (rssid_rowids) so the unsort
+        // SST writer resolves duplicate PKs by last-flushed-wins and records losers into a delvec.
+        _do_agg = false;
+        _need_rssid_rowids = true;
     } else {
         _do_agg = true;
     }
@@ -59,9 +67,9 @@ Status LoadSpillPipelineMergeIterator::_generate_next_task() {
     // - true (sort): Whether to sort during merge (always true for correctness)
     // - _do_agg: Whether to perform aggregation (depends on table keys type)
     // - _final_round: Whether this merges to final tablet vs intermediate blocks
-    ASSIGN_OR_RETURN(auto batch, _spiller->generate_merge_input_batch(config::load_spill_max_merge_bytes,
-                                                                      config::load_spill_memory_usage_per_merge,
-                                                                      true /*sort*/, _do_agg, _final_round));
+    ASSIGN_OR_RETURN(auto batch, _spiller->generate_merge_input_batch(
+                                         config::load_spill_max_merge_bytes, config::load_spill_memory_usage_per_merge,
+                                         true /*sort*/, _do_agg, _final_round, _need_rssid_rowids));
 
     // nullptr merge_itr indicates no more block groups available - iteration complete
     if (batch.merge_itr != nullptr) {
@@ -84,7 +92,7 @@ Status LoadSpillPipelineMergeIterator::_generate_next_task() {
         auto task = std::make_unique<LoadSpillMergeInputBatch>(std::move(batch));
         _current_task = std::make_shared<lake::TabletInternalParallelMergeTask>(
                 std::move(writer), std::move(task), _spiller->schema().get(), _quit_flag,
-                _spiller->spiller()->metrics().write_io_timer, _op_aware);
+                _spiller->spiller()->metrics().write_io_timer, _op_aware, _need_rssid_rowids);
     } else {
         // No more data to merge - signal iteration completion by returning nullptr.
         // Pipeline operators check has_more() which tests for nullptr to know when to stop.

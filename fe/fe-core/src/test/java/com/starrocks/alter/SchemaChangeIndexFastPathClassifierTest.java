@@ -124,10 +124,14 @@ public class SchemaChangeIndexFastPathClassifierTest {
     }
 
     @Test
-    public void testAddIndexFastPath_NgrambfAccepted() {
+    public void testAddIndexFastPath_NgrambfRejected() {
+        // NGRAMBF is routed to the legacy path: the fast-path .idx ngram bloom is
+        // not consulted at query time (LIKE queries would never prune), so it
+        // stays on the legacy schema-change job which rewrites a correct footer
+        // ngram. BITMAP is the only type on the add-index fast path.
         OlapTable t = lakeTable();
         List<AlterClause> clauses = Collections.singletonList(createIndex(IndexDef.IndexType.NGRAMBF));
-        assertTrue(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, clauses));
+        assertFalse(SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(t, clauses));
     }
 
     @Test
@@ -202,8 +206,9 @@ public class SchemaChangeIndexFastPathClassifierTest {
     @Test
     public void testIsSupportedIndexType() {
         assertTrue(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.BITMAP));
-        assertTrue(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.NGRAMBF));
-        // GIN and VECTOR are unsupported on the BE side; route them to legacy.
+        // Only BITMAP takes the fast path. NGRAMBF (fast-path ngram is not read
+        // at query time), GIN and VECTOR are all routed to the legacy path.
+        assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.NGRAMBF));
         assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.GIN));
         assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(IndexDef.IndexType.VECTOR));
         assertFalse(SchemaChangeIndexFastPathClassifier.isSupportedIndexType(null));

@@ -744,6 +744,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data type**: Double
 * **Introduced in**: v4.2
 
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **Description**: Whether to allow the prepared-physical-split scan on a Cloud-native (lake) table that is scanned by two or more scan operators in the same query (for example, a self-join, or a table referenced multiple times). When `false` (default), such duplicated scans fall back to the regular scan, because the prepared read state that the optimization reuses per scan is unsafe to share across sibling scans of the same table. Set it to `true` to opt those scans back into the optimization. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
 ### enable_lake_tablet_internal_parallel
 
 * **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.

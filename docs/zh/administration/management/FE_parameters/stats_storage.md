@@ -79,6 +79,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `low_cardinality_dict_cache_max_bytes`
+
+- 默认值: 1073741824
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
+- 引入版本: v4.1.0
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -669,6 +677,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 基于采样的 Tablet 预分裂 meta tier（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，meta tier 会回退到 data tier（行采样）。
+- 引入版本: v4.1.0
+
+### `tablet_pre_split_meta_tier_footer_read_parallelism`
+
+- 默认值: 16
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂 meta tier 从 `FILES()` 数据源并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`

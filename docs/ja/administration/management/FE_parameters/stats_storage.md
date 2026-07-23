@@ -79,6 +79,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `low_cardinality_dict_cache_max_bytes`
+
+- デフォルト：1073741824
+- タイプ：Long
+- 単位：バイト
+- 変更可能：Yes
+- 説明：低基数グローバル辞書キャッシュ（`CacheDictManager`）の最大合計サイズ（バイト単位）。このキャッシュはエントリ数ではなくキャッシュされた辞書の合計バイトサイズで上限が設定されるため、メモリ使用量が直接制限されます（各辞書は最大約 1 MB）。上限に達すると、価値の低い辞書が退避され、影響を受ける列は再収集されるまで非辞書クエリプランにフォールバックします。変更は 1 回の設定リフレッシュサイクル内でライブキャッシュに適用されます。現在追跡されているサイズは `low_cardinality_dict_cache_bytes` メトリクスとしてエクスポートされます。
+- 導入時期：v4.1.0
 ### `enable_external_predicate_columns_collection`
 
 - デフォルト：true
@@ -669,6 +677,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：サンプリングベースのタブレット事前分割の meta tier（Parquet/ORC の row-group メタデータ）が境界を計算する際に許容される重なり率の最大値。この閾値を超えると、最小値でソートした累積行数が単調でなくなるため、meta tier は data tier（行サンプリング）にフォールバックします。
+- 導入時期：v4.1.0
+
+### `tablet_pre_split_meta_tier_footer_read_parallelism`
+
+- デフォルト：16
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：サンプリングベースのタブレット事前分割の meta tier が `FILES()` ソースから並行して読み取る Parquet/ORC フッターの数。フッターの読み取りはファイルごとに独立しており、サンプラーは集約した統計情報をソートするため、並行化は事前分割フックの実時間を短縮するだけです（各フッターはリモートへの 1 往復であり、ファイル数の多いソースではこれを直列に数百回繰り返すことになります）。`1` に設定すると並行化を無効化します。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`

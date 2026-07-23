@@ -1,4 +1,4 @@
-name: UNSTABLE CASE AI ANALYSIS
+name: AI UNSTABLE CASE ANALYSIS
 
 # Standalone, history-aware AI analysis of unstable cases. FULLY DECOUPLED from
 # the review workflow: separate file, its own manual trigger, no job dependency.
@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 jobs:
-  analyze:
+  ai-analyze:
     name: AI ANALYSIS
     runs-on: [self-hosted, ubuntu, ai]
     env:
@@ -63,13 +63,33 @@ jobs:
             echo "::warning::No case_history downloaded from ${CH}/{inspection,pr}/${ch_branch}/ — analysis will have NO history (OSS empty or unreachable)."
           fi
 
-          # Analyze the currently-blacklisted cases (those with failure history)
-          # for the branch — no dependency on any review run.
+          # Prefer the latest review run's failing.json — it carries the actual
+          # per-case failure message (from the review XML), which lets the
+          # classifier reason over real failure text instead of history metadata
+          # alone. Fall back to the blacklist (history-only) when no review has
+          # published one yet. Still fully decoupled: this is a best-effort OSS
+          # read, no job dependency on the review workflow.
+          FAILING="${WORK}/failing.json"
+          ${_oss} cp "oss://${bucket}/unstable-case-review/${BRANCH}/latest/failing.json" "${FAILING}" >/dev/null 2>&1 || true
+          # Honor the case_types input on the failing.json path too: keep only
+          # entries whose type is requested (no-op when case_types=all), so e.g.
+          # a case_types=BE-UT dispatch never analyzes FE-UT/SQL-Tester entries
+          # that happened to be in the latest review run. Env-passed (not shell-
+          # interpolated) into a single-line -c to stay valid inside run: |.
+          if [ -s "${FAILING}" ]; then
+            FAILING="${FAILING}" CASE_TYPES="${CASE_TYPES}" python3 -c "import json,os; p=os.environ['FAILING']; ct=os.environ.get('CASE_TYPES','all'); d=json.load(open(p)); w={t.strip() for t in ct.split(',') if t.strip()}; json.dump([x for x in d if ct=='all' or x.get('type') in w], open(p,'w'))" || true
+          fi
+          if [ -s "${FAILING}" ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('${FAILING}')) else 1)" 2>/dev/null; then
+            echo "Analyzing from review failing.json (real per-case failure text); case_types=${CASE_TYPES}."
+            SRC=(--failing "${FAILING}")
+          else
+            echo "No matching review failing.json — analyzing the blacklist (history metadata only)."
+            SRC=(--from-blacklist files/unstable_case.json --types "${CASE_TYPES}")
+          fi
           python3 bin/analyze_unstable_cases.py \
-            --from-blacklist files/unstable_case.json \
+            "${SRC[@]}" \
             --repo "${{ github.repository }}" \
             --branch "${BRANCH}" \
-            --types "${CASE_TYPES}" \
             --history-dir "${HIST}" \
             --limit "${{ inputs.limit || '10' }}" \
             --out "${WORK}/out"

@@ -750,9 +750,9 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
 `ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
 
-- 表必须为明细表（Duplicate Key）或聚合表（Aggregate），不支持主键表（Primary Key）。
+- 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
 - 表不能为 Colocate 表，且不能包含 AUTO_INCREMENT 列。
-- 仅当表尚无其他 Rollup 或同步物化视图时，才能添加该 Rollup。
+- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
 
 示例：
 

@@ -1199,16 +1199,22 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Columns are split into groups of max(2, parallelism), each group a self-contained single-scan CTE
+        // query, per partition. 4 columns / 2-per-scan = 2 groups x 3 partitions = 6 queries.
         List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(12, collectSqlList.size());
-
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "c1", "c2", "c3", "par_col");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
-
-        collectSqlList = collectJob.buildCollectSQLList(3);
-        Assertions.assertEquals(4, collectSqlList.size());
+        Assertions.assertEquals(6, collectSqlList.size());
+        // A large parallelism puts all 4 columns in one scan -> 1 group x 3 partitions = 3 queries.
+        Assertions.assertEquals(3, collectJob.buildCollectSQLList(128).size());
+        // parallelism 3 -> ceil(4/3)=2 groups x 3 partitions = 6 queries.
+        Assertions.assertEquals(6, collectJob.buildCollectSQLList(3).size());
+        for (List<String> group : collectSqlList) {
+            Assertions.assertEquals(1, group.size());
+            assertContains(group.get(0), "WITH base_cte_table AS");
+            assertContains(group.get(0), "FROM base_cte_table");
+        }
+        // All columns and all three partition predicates appear across the query list.
+        assertContains(collectSqlList.toString(), "c1", "c2", "c3", "par_col");
+        assertContains(collectSqlList.toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
 
         database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
@@ -1220,13 +1226,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Unpartitioned table (1=1 predicate): 3 columns / 2-per-scan = 2 CTE queries.
         collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(3, collectSqlList.size());
-
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
-        assertContains(collectSqlList.get(0).toString(), "1=1");
+        Assertions.assertEquals(2, collectSqlList.size());
+        // All 3 columns in one scan with a large parallelism.
+        Assertions.assertEquals(1, collectJob.buildCollectSQLList(128).size());
+        assertContains(collectSqlList.toString(), "r_regionkey", "r_name", "r_comment");
+        assertContains(collectSqlList.toString(), "1=1");
+        assertContains(collectSqlList.toString(), "WITH base_cte_table AS");
 
         database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "partitioned_db");
         table = connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -1239,14 +1246,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // 5 columns / 2-per-scan = ceil(5/2)=3 groups x 6 partitions = 18 queries; all columns in one scan -> 6.
         collectSqlList = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(30, collectSqlList.size());
-        collectSqlList = collectJob.buildCollectSQLList(128);
-        Assertions.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0).toString(), "par_col=1/par_date=NULL");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` = '1' AND `par_date` IS NULL");
-        assertContains(collectSqlList.get(0).toString(), "par_col=NULL/par_date=2020-01-03");
-        assertContains(collectSqlList.get(0).toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
+        Assertions.assertEquals(18, collectSqlList.size());
+        Assertions.assertEquals(6, collectJob.buildCollectSQLList(128).size());
+        assertContains(collectSqlList.toString(), "par_col=1/par_date=NULL");
+        assertContains(collectSqlList.toString(), "`par_col` = '1' AND `par_date` IS NULL");
+        assertContains(collectSqlList.toString(), "par_col=NULL/par_date=2020-01-03");
+        assertContains(collectSqlList.toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
     }
 
     @Test
@@ -1537,8 +1544,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Columns split into groups of max(2, parallelism) per partition: 3 cols / 2-per-scan = 2 groups
+        // x 10 partitions = 20 queries.
         List<List<String>> lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(30, lists.size());
+        Assertions.assertEquals(20, lists.size());
 
         //test partition is null
         collectJob = (ExternalFullStatisticsCollectJob)
@@ -1549,8 +1558,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Single partition, 3 cols / 2-per-scan = 2 groups.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(3, lists.size());
+        Assertions.assertEquals(2, lists.size());
 
         //test unpartitioned table
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "paimon0", "pmn_db1",
@@ -1564,8 +1574,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
+        // Unpartitioned, 2 cols / 2-per-scan = 1 group.
         lists = collectJob.buildCollectSQLList(1);
-        Assertions.assertEquals(2, lists.size());
+        Assertions.assertEquals(1, lists.size());
     }
 
     @Test

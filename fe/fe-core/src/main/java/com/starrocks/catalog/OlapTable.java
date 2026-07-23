@@ -1619,6 +1619,21 @@ public class OlapTable extends Table {
         this.colocateGroup = colocateGroup;
     }
 
+    // Whether this table declares a colocate group. For a real catalog OlapTable this matches
+    // ColocateTableIndex.isColocateTable(getId()): the group name and the index's table2Group membership
+    // are set together on create/ALTER-set and cleared together on ALTER-unset. It is NOT a drop-in
+    // replacement for the index everywhere -- two boundaries make them diverge:
+    //   - a query-time copy is not valid input: OlapTable.copyOnlyForQuery() does not carry colocateGroup;
+    //   - a crash between the OP_CREATE_TABLE and OP_COLOCATE_ADD_TABLE_V2 journal records can replay a
+    //     table with the property set but no index membership (the index is the durable source of truth).
+    // So this is used only by fail-closed ALTER-time guards that hold the table write lock on the real
+    // catalog object, where the declared property is authoritative (and in the crash-orphan corner makes
+    // the guard strictly more conservative). Named hasColocateGroup, not isColocateTable, since it is a
+    // pure property read with no GroupId/stability/range semantics -- use ColocateTableIndex when needed.
+    public boolean hasColocateGroup() {
+        return !Strings.isNullOrEmpty(colocateGroup);
+    }
+
     public boolean isEnableColocateMVIndex() {
         if (!isOlapTableOrMaterializedView()) {
             return false;

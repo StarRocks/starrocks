@@ -20,35 +20,43 @@
 
 namespace starrocks::lake {
 
+bool pk_index_eager_build_supported(const TabletSchema& schema) {
+    if (schema.keys_type() != KeysType::PRIMARY_KEYS) {
+        return false;
+    }
+    // Eager PK index build only supports the cloud-native persistent index, and shared-data primary-key
+    // tables always use it (enforced since #75940/#76260). So there is no need to read tablet metadata to
+    // confirm the index type -- and the eager decision no longer depends on the metadata cache being warm.
+    // V2 encoding guarantees correct ordering for all column types after encoding,
+    // so eager PK index build is always safe.
+    if (schema.has_valid_primary_key_encoding_type() &&
+        schema.primary_key_encoding_type() == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        return true;
+    }
+    // For V1 encoding, a single non-VARCHAR/CHAR key column does not use big-endian encoding, which
+    // may result in incorrect ordering between the sst and segment files, so eager build is unsafe.
+    return schema.num_key_columns() > 1 || schema.column(0).type() == LogicalType::TYPE_VARCHAR ||
+           schema.column(0).type() == LogicalType::TYPE_CHAR;
+}
+
+bool pk_preserve_txn_delete_order_enabled(const TabletSchema& schema) {
+    // A separate-sort-key load's op-aware merge resolves duplicate primary keys by flush order and can
+    // split a key's DELETE and later re-UPSERT across parallel merge tasks, so it MUST preserve
+    // in-transaction op order (and serialize del_op_offsets) regardless of the general config -- otherwise
+    // the earlier del file would erase the later re-insert.
+    return config::lake_enable_pk_preserve_txn_delete_order || schema.has_separate_sort_key();
+}
+
 void TabletWriter::try_enable_pk_index_eager_build() {
     // Guard against multiple calls when writers are reused or merged in different pipeline phases
     // (e.g., eager merge and final merge); this method is intentionally idempotent.
     if (_enable_pk_index_eager_build) {
         return;
     }
-    if (!config::enable_pk_index_eager_build || _schema->keys_type() != KeysType::PRIMARY_KEYS ||
-        _schema->has_separate_sort_key()) {
-        return;
-    }
-    auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-    if (metadata != nullptr) {
-        // Eager PK index build only supports cloud native pk index.
-        if (!metadata->enable_persistent_index() ||
-            metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
-            return;
-        }
-    }
-    // V2 encoding guarantees correct ordering for all column types after encoding,
-    // so eager PK index build is always safe.
-    if (_schema->has_valid_primary_key_encoding_type() &&
-        _schema->primary_key_encoding_type() == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        _enable_pk_index_eager_build = true;
-        return;
-    }
-    // For V1 encoding, single-key column of non-VARCHAR/CHAR type does not use big-endian encoding,
-    // which may result in incorrect ordering between sst and segment files.
-    if (_schema->num_key_columns() > 1 || _schema->column(0).type() == LogicalType::TYPE_VARCHAR ||
-        _schema->column(0).type() == LogicalType::TYPE_CHAR) {
+    // NOTE: separate sort key is now supported via PkTabletUnsortSSTWriter, which buffers+sorts the
+    // primary keys (they arrive in sort-key, not PK, order) before building the SST. It is selected
+    // in the PK writer's reset path when eager build is enabled and the schema has a separate sort key.
+    if (pk_index_eager_build_supported(*_schema)) {
         _enable_pk_index_eager_build = true;
     }
 }
@@ -92,6 +100,7 @@ Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
     }
     _ssts.insert(_ssts.end(), other_writer->_ssts.begin(), other_writer->_ssts.end());
     _sst_ranges.insert(_sst_ranges.end(), other_writer->_sst_ranges.begin(), other_writer->_sst_ranges.end());
+    _seg_delvecs.insert(_seg_delvecs.end(), other_writer->_seg_delvecs.begin(), other_writer->_seg_delvecs.end());
     _num_rows += other_writer->_num_rows;
     _data_size += other_writer->_data_size;
     // _global_dict_columns_valid_info
