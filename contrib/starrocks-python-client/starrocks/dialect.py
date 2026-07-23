@@ -256,6 +256,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
     def visit_BLOB(self, type_, **kw):
         return "BINARY"
 
+    def visit_PERCENTILE(self, type_, **kw):
+        return "PERCENTILE"
+
 
 class StarRocksSQLCompiler(MySQLCompiler):
     def visit_delete(self, delete_stmt: Delete, **kw: Any) -> str:

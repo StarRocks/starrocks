@@ -107,6 +107,7 @@ _grammar_text = None
 # For singleton pattern
 _data_type_parser = None
 _TYPE_COMMENT_PATTERN = re.compile(r"\s+COMMENT\s+'(?:''|[^'])*'", flags=re.IGNORECASE)
+_TYPE_BACKTICK_PATTERN = re.compile(r"`([^`]+)`")
 
 
 def _get_grammar_text() -> str:
@@ -142,6 +143,7 @@ def parse_data_type(type_str: str) -> Any:
     # (e.g. `... value varchar COMMENT '' ...`), which are not part of the
     # datatype grammar and would otherwise break parsing.
     normalized_type_str = _TYPE_COMMENT_PATTERN.sub("", type_str)
+    normalized_type_str = _TYPE_BACKTICK_PATTERN.sub(r"\1", normalized_type_str)
     return get_data_type_parser().parse(normalized_type_str)
 
 

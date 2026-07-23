@@ -36,6 +36,7 @@ from starrocks.datatype import (
     JSON,
     LARGEINT,
     MAP,
+    PERCENTILE,
     SMALLINT,
     STRING,
     STRUCT,
@@ -72,7 +73,7 @@ BASIC_TYPE_TEST_CASES = [
     (DATETIME(), "col DATETIME"),
     (HLL(), "col HLL"),
     (BITMAP(), "col BITMAP"),
-    # (PERCENTILE(), "col PERCENTILE"),  # PERCENTILE type compiler not implemented yet
+    (PERCENTILE(), "col PERCENTILE"),
     (JSON(), "col JSON"),
 ]
 
