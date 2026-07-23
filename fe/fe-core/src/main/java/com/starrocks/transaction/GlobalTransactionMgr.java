@@ -729,9 +729,20 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      */
     public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList)
             throws AnalysisException {
+        return isPreviousTransactionsFinished(endTransactionId, dbId, tableIdList, Collections.emptySet());
+    }
+
+    /**
+     * Like {@link #isPreviousTransactionsFinished(long, long, List)} but ignores the transactions in
+     * {@code excludeTransactionIds} when checking. Used by tablet-reshard cleaning to skip waiting for
+     * compaction transactions on partitions the reshard job does not touch.
+     */
+    public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList,
+                                                  Set<Long> excludeTransactionIds)
+            throws AnalysisException {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList);
+            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList, excludeTransactionIds);
         } catch (AnalysisException e) {
             // NOTICE: At present, this situation will only happen when the database no longer exists.
             // In fact, getDatabaseTransactionMgr() should explicitly throw a MetaNotFoundException,

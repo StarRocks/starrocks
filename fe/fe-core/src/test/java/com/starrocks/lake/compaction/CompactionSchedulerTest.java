@@ -53,6 +53,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +66,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionSchedulerTest {
@@ -1057,5 +1059,122 @@ public class CompactionSchedulerTest {
 
         Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING.getValueLeader());
         Assertions.assertEquals(6L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
+    }
+
+    @Test
+    public void testCancelPreviousCompactions() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        long dbId = 100L;
+        long tableId = 200L;
+        long otherTableId = 999L;
+        long endTransactionId = 2000L;
+        // Partitions 1, 2 and 5 are being resharded; 3 and 4 are not.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L);
+
+        // Included partition, uncommitted, <= watermark -> abort the task (the scheduler thread aborts the
+        // transaction later).
+        CompactionJob prepared = Mockito.mock(CompactionJob.class);
+        Mockito.when(prepared.getTxnId()).thenReturn(101L);
+        Mockito.when(prepared.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 1), prepared);
+
+        // Included partition, committed -> keep (drained by the previous-transactions wait).
+        CompactionJob committed = Mockito.mock(CompactionJob.class);
+        Mockito.when(committed.getTxnId()).thenReturn(102L);
+        Mockito.when(committed.transactionHasCommitted()).thenReturn(true);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 2), committed);
+
+        // Included partition, uncommitted, > watermark -> keep (not a previous transaction).
+        CompactionJob late = Mockito.mock(CompactionJob.class);
+        Mockito.when(late.getTxnId()).thenReturn(3000L);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 5), late);
+
+        // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
+        CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
+        Mockito.when(otherPartitionPrepared.getTxnId()).thenReturn(103L);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 3), otherPartitionPrepared);
+
+        // Not-included partition, committed, <= watermark -> not cancelled, txn id returned.
+        CompactionJob otherPartitionCommitted = Mockito.mock(CompactionJob.class);
+        Mockito.when(otherPartitionCommitted.getTxnId()).thenReturn(104L);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 4), otherPartitionCommitted);
+
+        // Different table -> ignored entirely (neither cancelled nor returned).
+        CompactionJob otherTable = Mockito.mock(CompactionJob.class);
+        Mockito.when(otherTable.getTxnId()).thenReturn(105L);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, otherTableId, 6), otherTable);
+
+        Set<Long> ignoredTxnIds =
+                compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
+
+        // Only the uncommitted compaction on an included, pre-watermark partition is aborted.
+        Mockito.verify(prepared).abort();
+        Mockito.verify(committed, Mockito.never()).abort();
+        Mockito.verify(late, Mockito.never()).abort();
+        Mockito.verify(otherPartitionPrepared, Mockito.never()).abort();
+        Mockito.verify(otherPartitionCommitted, Mockito.never()).abort();
+        Mockito.verify(otherTable, Mockito.never()).abort();
+
+        // Compactions on not-included partitions (of this table, <= watermark) are returned so the caller
+        // can skip waiting for them; the different-table and > watermark ones are not.
+        Assertions.assertEquals(Sets.newHashSet(103L, 104L), ignoredTxnIds);
+    }
+
+    @Test
+    public void testScheduleNewCompactionAbortsCancelledRunningJob() throws Exception {
+        // An empty CompactionMgr so scheduleNewCompaction starts no new compactions and only processes the
+        // running one below.
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        mockedWarehouseManager.initDefaultWarehouse();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        Database db = new Database();
+        Table table = new LakeTable();
+        PhysicalPartition partition = new PhysicalPartition(3, 3, new MaterializedIndex());
+        PartitionIdentifier partitionId = new PartitionIdentifier(1, 2, 3);
+        CompactionJob job = new CompactionJob(db, table, partition, 100, false, WarehouseManager.DEFAULT_RESOURCE, "wh", null);
+        // Mark the job aborted (as tablet-reshard cleaning does via job.abort()) while its task is still
+        // NOT_FINISHED, so the scheduler proactively aborts the transaction instead of waiting.
+        job.abort();
+        new MockUp<CompactionJob>() {
+            @Mock
+            public CompactionTask.TaskResult getResult() {
+                return CompactionTask.TaskResult.NOT_FINISHED;
+            }
+        };
+        compactionScheduler.getRunningCompactions().put(partitionId, job);
+
+        compactionScheduler.runOneCycle();
+
+        // The cancelled but still-running compaction is removed and its transaction aborted on the
+        // scheduler thread.
+        Assertions.assertFalse(compactionScheduler.getRunningCompactions().containsKey(partitionId));
+        new Verifications() {
+            {
+                globalTransactionMgr.abortTransaction(anyLong, 100L, anyString, (List) any, (List) any, null);
+                times = 1;
+            }
+        };
     }
 }
