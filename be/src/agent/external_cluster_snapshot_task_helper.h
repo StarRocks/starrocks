@@ -40,6 +40,10 @@ struct TabletFileCollections {
     FileSet new_delvec_files;
     FileSet pre_del_files;
     FileSet new_del_files;
+    // Segment index sidecars: vector index (.vi) + inverted/IDG index (.idx). Merged into one class
+    // because both are flat files in the same data dir and are uploaded/deleted identically.
+    FileSet pre_index_files;
+    FileSet new_index_files;
 
     TabletFileCollections() = default;
 
@@ -52,7 +56,20 @@ FileSet collect_sstable_files(const TabletMetadataPtr& metadata);
 FileSet collect_dcg_files(const TabletMetadataPtr& metadata);
 FileSet collect_delvec_files(const TabletMetadataPtr& metadata);
 FileSet collect_del_files(const TabletMetadataPtr& metadata);
-// All current live data filenames from |collections.new_*| (segments + del + sstable + dcg + delvec).
+// Per-segment vector index (.vi) sidecars, one per (segment, vector index id) recorded in
+// SegmentMetadataPB.vector_index_ids. Enumerated with no async-build-watermark gate; a .vi that is
+// referenced but not yet built (async deferred build) is tolerated at upload time via
+// skip_if_not_exists rather than filtered here (the watermark is not a reliable "file exists" signal).
+FileSet collect_vector_index_files(const TabletMetadataPtr& metadata);
+// Inverted / Index-Delta-Group index files: the flat .idx file named by each IndexDeltaGroupEntryPB.
+// A GIN entry is skipped -- GIN is stored as a directory the file-based syncer cannot transport (and
+// lake does not produce GIN on shared-data today); every other, flat, index type is collected.
+FileSet collect_inverted_index_files(const TabletMetadataPtr& metadata);
+// Union of the vector (.vi) and inverted/IDG (.idx) index sidecars for a tablet -- the merged
+// index_files class the enumerator tracks.
+FileSet collect_index_files(const TabletMetadataPtr& metadata);
+// All current live data filenames from |collections.new_*| (segments + del + sstable + dcg + delvec
+// + index).
 // Used to build the partition-wide live set that guards deletion: a data file is deleted from external
 // only when no current tablet in the partition references it. Derives from the already-built
 // collections to avoid re-walking the metadata.

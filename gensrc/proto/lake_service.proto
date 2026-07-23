@@ -341,6 +341,11 @@ message TabletDataSnapshotPB {
     repeated string new_data_files = 2;
     repeated string new_metadata_files = 3;
     repeated string new_schema_files = 4;
+    // Segment index sidecars (vector .vi / inverted-IDG .idx). Separate from new_data_files because
+    // they are copied tolerantly (skip_if_not_exists): an async-built .vi can be referenced by tablet
+    // metadata before its file exists (deferred build; or a reshard-merge that inherits an inflated
+    // build watermark), so a not-yet-built .vi is skipped rather than failing the whole snapshot.
+    repeated string new_index_data_files = 5;
 }
 
 message UploadSnapshotFilesRequestPB {

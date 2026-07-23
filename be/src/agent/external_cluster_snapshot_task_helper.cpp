@@ -91,6 +91,86 @@ FileSet collect_del_files(const TabletMetadataPtr& metadata) {
     return files;
 }
 
+FileSet collect_vector_index_files(const TabletMetadataPtr& metadata) {
+    FileSet files;
+    if (metadata == nullptr) {
+        return files;
+    }
+    // Every .vi referenced by a current segment, with NO async-build watermark gate. The watermark
+    // (vector_index_built_version) is not a reliable "the file exists" oracle -- a .vi can exist above
+    // it (compaction can carry a built .vi into a higher-versioned rowset) and can be missing below it
+    // (a reshard merge inherits only the first source tablet's watermark, so a lagging source's
+    // not-yet-built rowset can sit under an inflated watermark). So enumeration stays complete
+    // (upload every referenced .vi) and the upload path tolerates a not-yet-built file via
+    // skip_if_not_exists (see populate_tablet_snapshot / SnapshotFileSyncer).
+    for (const auto& rowset : metadata->rowsets()) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            if (segment_meta.vector_index_ids().empty()) {
+                continue;
+            }
+            // segment_vector_index_uid (the id embedded in the .vi name) was added ~3 months after
+            // vector_index_ids, so a segment written in that window and not since rewritten carries
+            // vector_index_ids but no uid. gen_vector_index_filename_for_segment DCHECKs the uid, and
+            // a release build would otherwise name the file by uid 0 -- a name that never existed on
+            // disk. The read path (Rowset::read -> _init_ann_reader) can't resolve such a legacy
+            // segment's .vi either, so the DR copy loses nothing the source could use. Skip it rather
+            // than crash a debug build or enumerate a bogus name.
+            if (!segment_meta.has_segment_vector_index_uid()) {
+                VLOG(3) << "external snapshot: skip legacy vector-indexed segment without a recorded "
+                           "vector index uid: "
+                        << segment_meta.filename();
+                continue;
+            }
+            for (int64_t index_id : segment_meta.vector_index_ids()) {
+                files.emplace(gen_vector_index_filename_for_segment(segment_meta, index_id));
+            }
+        }
+    }
+    return files;
+}
+
+FileSet collect_inverted_index_files(const TabletMetadataPtr& metadata) {
+    FileSet files;
+    if (metadata == nullptr || !metadata->has_idg_meta()) {
+        return files;
+    }
+    // Each IndexDeltaGroupEntryPB references one index artifact added by ADD INDEX (bitmap / ngram
+    // bloom / bloom filter today -- all flat .idx files). Skip a GIN entry: GIN is stored as a
+    // directory the file-based syncer cannot transport. Lake does not produce GIN on shared-data
+    // today (AddIndexSchemaChange returns NotSupported), so this is a defensive skip keyed on the
+    // entry's own index_type rather than a filename suffix -- so a future flat index type is
+    // collected, never silently dropped.
+    for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
+        for (const auto& entry : idg_ver.entries()) {
+            if (!entry.has_index_file() || entry.index_file().empty()) {
+                continue;
+            }
+            bool is_gin = false;
+            for (const auto& key : entry.keys()) {
+                if (key.index_type() == IndexType::GIN) {
+                    is_gin = true;
+                    break;
+                }
+            }
+            if (is_gin) {
+                VLOG(3) << "external snapshot: skip GIN index artifact (directory not transportable by "
+                           "the file syncer): "
+                        << entry.index_file();
+                continue;
+            }
+            files.emplace(entry.index_file());
+        }
+    }
+    return files;
+}
+
+FileSet collect_index_files(const TabletMetadataPtr& metadata) {
+    FileSet files = collect_vector_index_files(metadata);
+    auto inverted = collect_inverted_index_files(metadata);
+    files.insert(inverted.begin(), inverted.end());
+    return files;
+}
+
 FileSet collect_live_data_files(const TabletFileCollections& collections) {
     FileSet files;
     // Segments live only in the rowsets; the other classes are already materialized as new_* sets by
@@ -103,7 +183,7 @@ FileSet collect_live_data_files(const TabletFileCollections& collections) {
         }
     }
     for (const auto* set : {&collections.new_sstable_files, &collections.new_dcg_files, &collections.new_delvec_files,
-                            &collections.new_del_files}) {
+                            &collections.new_del_files, &collections.new_index_files}) {
         files.insert(set->begin(), set->end());
     }
     return files;
@@ -135,6 +215,7 @@ TabletFileCollections TabletFileCollections::collect(const TabletMetadataPtr& pr
         collections.pre_dcg_files = collect_dcg_files(pre_metadata);
         collections.pre_delvec_files = collect_delvec_files(pre_metadata);
         collections.pre_del_files = collect_del_files(pre_metadata);
+        collections.pre_index_files = collect_index_files(pre_metadata);
     }
 
     collections.new_rowsets = build_rowset_index(new_metadata);
@@ -142,6 +223,7 @@ TabletFileCollections TabletFileCollections::collect(const TabletMetadataPtr& pr
     collections.new_dcg_files = collect_dcg_files(new_metadata);
     collections.new_delvec_files = collect_delvec_files(new_metadata);
     collections.new_del_files = collect_del_files(new_metadata);
+    collections.new_index_files = collect_index_files(new_metadata);
 
     return collections;
 }
@@ -177,6 +259,14 @@ void collect_unused_files(const TabletFileCollections& collections, FileSet& unu
         }
     }
 
+    // Collect unused index files (.vi / .idx). Also kept safe by the partition-wide live-file
+    // subtraction, so an index file still referenced by a split/merge sibling is not deleted.
+    for (const auto& index_file : collections.pre_index_files) {
+        if (!collections.new_index_files.contains(index_file)) {
+            unused_data_files.emplace(index_file);
+        }
+    }
+
     // Process rowsets for bundle/non-bundle files
     for (const auto& [rowset_id, rowset] : collections.pre_rowsets) {
         if (collections.new_rowsets.contains(rowset_id)) {
@@ -208,6 +298,15 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
             tablet_pb->add_new_data_files(name);
         }
     };
+    // Index sidecars go to a separate list the receiver copies tolerantly (skip_if_not_exists): an
+    // async-built .vi may be referenced by metadata before its file exists. Shares the same dedup set
+    // so a file is emitted to exactly one list per partition cycle (names never collide across
+    // classes -- .vi/.idx suffixes differ from segments).
+    auto add_index_file = [&](const std::string& name) {
+        if (globally_bound_files.emplace(name).second) {
+            tablet_pb->add_new_index_data_files(name);
+        }
+    };
 
     // New SSTable / DCG / delvec files: incremental (not already on external from the previous
     // snapshot), then partition-wide dedup.
@@ -233,6 +332,16 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
     // receiver makes re-requesting already-uploaded files cheap.
     for (const auto& file : collections.new_del_files) {
         add_data_file(file);
+    }
+
+    // Index files (.vi / .idx): uploaded in FULL (all current), for the same reason as .del files --
+    // index sidecars were previously untracked by external snapshot, so an incremental new-minus-pre
+    // diff would never backfill an index file present in both pre and new, leaving existing snapshots
+    // permanently incomplete. skip_if_exists on the receiver makes re-requesting already-uploaded
+    // files cheap. Emitted to the tolerant list: a not-yet-built async .vi is skipped rather than
+    // failing the snapshot (an .idx is always present when referenced, so tolerance is a no-op for it).
+    for (const auto& file : collections.new_index_files) {
+        add_index_file(file);
     }
 
     // Process new rowsets for segments

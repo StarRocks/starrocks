@@ -78,6 +78,20 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
             },
             true, false));
 
+    // Index sidecars (.vi / .idx) live in the same per-partition data directory as segments, so they
+    // use the same src/dst path builders as new_data_files. They are copied with skip_if_not_exists so
+    // a .vi that tablet metadata references but whose async build has not produced the file yet (or a
+    // reshard-merge inherited an inflated build watermark) is skipped instead of failing the snapshot;
+    // a later snapshot copies it once built.
+    RETURN_IF_ERROR(copy_files(
+            snapshot_info.tablet_snapshot->new_index_data_files(),
+            [&](const auto& name) { return join_path(location_provider->segment_root_location(src_tablet_id), name); },
+            [&](const auto& name) {
+                return remote_starlet_location_provider->data_file_location(dst_tablet_id, db_id, table_id,
+                                                                            physical_partition_id, name);
+            },
+            true, true));
+
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_metadata_files(),
             [&](const auto& name) { return join_path(location_provider->metadata_root_location(src_tablet_id), name); },

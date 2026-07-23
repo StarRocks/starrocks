@@ -1324,4 +1324,284 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_process_tablet_pre_not_found_full_r
     EXPECT_TRUE(partition_live_files.contains("seg_new.dat")); // recorded for deletion safety
 }
 
+// ==================== Index sidecar (.vi / .idx) collection ====================
+
+// collect_vector_index_files: every recorded .vi, with NO async-build watermark gate -- a .vi whose
+// rowset version is above vector_index_built_version is still collected (completeness); a not-yet-
+// built .vi is tolerated at upload time, not filtered here. Filename matches
+// gen_vector_index_filename_for_segment.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_vector_index_files) {
+    int64_t tablet_id = next_id();
+    auto md = create_tablet_metadata(tablet_id, 10, 1, {"s1.dat", "s2.dat"});
+    md->mutable_rowsets(0)->set_version(2);
+    md->mutable_rowsets(1)->set_version(10);
+    for (int i = 0; i < 2; ++i) {
+        auto* seg = md->mutable_rowsets(i)->mutable_segment_metas(0);
+        seg->set_segment_vector_index_uid(9);
+        seg->add_vector_index_ids(7);
+    }
+    md->set_vector_index_built_version(3); // below rowset v10 -- must NOT filter s2's .vi out
+
+    auto files = collect_vector_index_files(md);
+    EXPECT_EQ(2, files.size());
+    EXPECT_TRUE(files.contains("s1_9_7.vi"));
+    EXPECT_TRUE(files.contains("s2_9_7.vi")); // above the watermark, still collected (no gate)
+
+    EXPECT_TRUE(collect_vector_index_files(nullptr).empty());
+    // A segment without vector_index_ids contributes nothing.
+    EXPECT_TRUE(collect_vector_index_files(create_tablet_metadata(next_id(), 5, 1, {"seg.dat"})).empty());
+}
+
+// A legacy segment written before segment_vector_index_uid existed carries vector_index_ids but no
+// uid. gen_vector_index_filename_for_segment DCHECKs the uid, so such a segment must be skipped (its
+// .vi is unresolvable by the read path too) rather than crash a debug build or emit a uid-0 name.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_vector_index_files_skips_legacy_segment_without_uid) {
+    auto md = create_tablet_metadata(next_id(), 10, 1, {"legacy.dat", "modern.dat"});
+    // rowset 0: vector_index_ids but NO segment_vector_index_uid (pre-uid segment).
+    md->mutable_rowsets(0)->mutable_segment_metas(0)->add_vector_index_ids(7);
+    // rowset 1: a normal post-uid segment.
+    auto* modern = md->mutable_rowsets(1)->mutable_segment_metas(0);
+    modern->set_segment_vector_index_uid(9);
+    modern->add_vector_index_ids(7);
+
+    auto files = collect_vector_index_files(md);
+    EXPECT_EQ(1, files.size());
+    EXPECT_TRUE(files.contains("modern_9_7.vi"));
+    EXPECT_FALSE(files.contains("legacy_0_7.vi")); // legacy segment skipped, not named by uid 0
+}
+
+// collect_inverted_index_files: each flat .idx from idg_meta; a GIN entry (directory artifact) is
+// skipped (the file-based syncer cannot transport a directory).
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_inverted_index_files) {
+    int64_t tablet_id = next_id();
+    auto md = create_tablet_metadata(tablet_id, 2, 1, {"seg1.dat"});
+    auto& idg0 = (*md->mutable_idg_meta()->mutable_idgs())[0]; // key = segment global rssid
+    idg0.add_entries()->set_index_file("0000000000000001_uuid.idx");
+    // A GIN entry names a directory artifact the file syncer cannot transport -> skipped.
+    auto* gin = idg0.add_entries();
+    gin->set_index_file("gin_artifact_dir");
+    gin->add_keys()->set_index_type(IndexType::GIN);
+    (*md->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("0000000000000002_uuid.idx");
+
+    auto files = collect_inverted_index_files(md);
+    EXPECT_EQ(2, files.size());
+    EXPECT_TRUE(files.contains("0000000000000001_uuid.idx"));
+    EXPECT_TRUE(files.contains("0000000000000002_uuid.idx"));
+    EXPECT_FALSE(files.contains("gin_artifact_dir"));
+
+    EXPECT_TRUE(collect_inverted_index_files(nullptr).empty());
+    EXPECT_TRUE(collect_inverted_index_files(create_tablet_metadata(next_id(), 2, 1, {"s.dat"})).empty());
+}
+
+// A flat index artifact whose name is not ".idx" (a hypothetical future flat index type) is still
+// collected -- the skip is keyed on the GIN index_type, not a filename suffix, so a transportable
+// flat file is never silently dropped.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_inverted_index_files_keeps_non_idx_flat) {
+    int64_t tablet_id = next_id();
+    auto md = create_tablet_metadata(tablet_id, 2, 1, {"seg1.dat"});
+    auto* e = (*md->mutable_idg_meta()->mutable_idgs())[0].add_entries();
+    e->set_index_file("future_flat_index.bin");
+    e->add_keys()->set_index_type(IndexType::BITMAP);
+    EXPECT_TRUE(collect_inverted_index_files(md).contains("future_flat_index.bin"));
+}
+
+// TabletFileCollections::collect merges .vi and .idx into pre_/new_index_files; null pre -> empty pre.
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_populates_index_files) {
+    int64_t tablet_id = next_id();
+    auto mk = [&](int64_t version) {
+        auto md = create_tablet_metadata(tablet_id, version, 1, {"seg1.dat"});
+        auto* seg = md->mutable_rowsets(0)->mutable_segment_metas(0);
+        seg->set_segment_vector_index_uid(9);
+        seg->add_vector_index_ids(7);
+        (*md->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("aa.idx");
+        return md;
+    };
+    auto collections = TabletFileCollections::collect(mk(1), mk(2));
+    EXPECT_TRUE(collections.pre_index_files.contains("seg1_9_7.vi"));
+    EXPECT_TRUE(collections.pre_index_files.contains("aa.idx"));
+    EXPECT_TRUE(collections.new_index_files.contains("seg1_9_7.vi"));
+    EXPECT_TRUE(collections.new_index_files.contains("aa.idx"));
+
+    auto c2 = TabletFileCollections::collect(nullptr, mk(2));
+    EXPECT_TRUE(c2.pre_index_files.empty());
+    EXPECT_EQ(2, c2.new_index_files.size());
+}
+
+// Index files upload in FULL: a file present in BOTH pre and new is still uploaded (backfill).
+TEST_F(ExternalClusterSnapshotTaskTest, test_populate_uploads_index_files_full) {
+    int64_t tablet_id = next_id();
+    auto mk = [&](int64_t v) {
+        auto md = create_tablet_metadata(tablet_id, v, 1, {"seg1.dat"});
+        auto* seg = md->mutable_rowsets(0)->mutable_segment_metas(0);
+        seg->set_segment_vector_index_uid(9);
+        seg->add_vector_index_ids(7);
+        (*md->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("shared.idx");
+        return md;
+    };
+    auto collections = TabletFileCollections::collect(mk(1), mk(2));
+    FileSet globally_bound_files, pre_bundle_data_files;
+    UploadSnapshotFilesRequestPB node_req;
+    auto* pb = populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_files, node_req);
+    // Index files go to the tolerant new_index_data_files list, not new_data_files.
+    std::set<std::string> uploaded(pb->new_index_data_files().begin(), pb->new_index_data_files().end());
+    EXPECT_TRUE(uploaded.contains("seg1_9_7.vi")); // present in both pre and new, still uploaded (full)
+    EXPECT_TRUE(uploaded.contains("shared.idx"));
+    // ...and not in the intolerant data-file list.
+    std::set<std::string> data(pb->new_data_files().begin(), pb->new_data_files().end());
+    EXPECT_FALSE(data.contains("seg1_9_7.vi"));
+    EXPECT_FALSE(data.contains("shared.idx"));
+}
+
+// A shared index file referenced by two split children is uploaded at most once per partition cycle.
+TEST_F(ExternalClusterSnapshotTaskTest, test_populate_dedups_shared_index_across_tablets) {
+    int64_t t1 = next_id(), t2 = next_id();
+    auto mk = [&](int64_t tid) {
+        auto md = create_tablet_metadata(tid, 2, 1, {"S.dat"});
+        auto* seg = md->mutable_rowsets(0)->mutable_segment_metas(0);
+        seg->set_segment_vector_index_uid(9); // shared writer uid -> both children resolve the same .vi
+        seg->add_vector_index_ids(7);
+        (*md->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("shared.idx");
+        return md;
+    };
+    FileSet globally_bound_files, pre_bundle_data_files;
+    UploadSnapshotFilesRequestPB node_req;
+    auto* pb1 = populate_tablet_snapshot(t1, TabletFileCollections::collect(nullptr, mk(t1)), pre_bundle_data_files,
+                                         globally_bound_files, node_req);
+    auto* pb2 = populate_tablet_snapshot(t2, TabletFileCollections::collect(nullptr, mk(t2)), pre_bundle_data_files,
+                                         globally_bound_files, node_req);
+    int vi = 0, idx = 0;
+    for (const auto& f : pb1->new_index_data_files()) {
+        vi += (f == "S_9_7.vi");
+        idx += (f == "shared.idx");
+    }
+    for (const auto& f : pb2->new_index_data_files()) {
+        vi += (f == "S_9_7.vi");
+        idx += (f == "shared.idx");
+    }
+    EXPECT_EQ(1, vi);
+    EXPECT_EQ(1, idx);
+}
+
+// A pre-only (dropped) index file is a deletion candidate; collect_live_data_files includes index files.
+TEST_F(ExternalClusterSnapshotTaskTest, test_index_files_unused_and_live) {
+    int64_t tablet_id = next_id();
+    auto pre = create_tablet_metadata(tablet_id, 1, 1, {"seg1.dat"});
+    auto* pre_seg = pre->mutable_rowsets(0)->mutable_segment_metas(0);
+    pre_seg->set_segment_vector_index_uid(9);
+    pre_seg->add_vector_index_ids(7);
+    (*pre->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("a.idx");
+    // new drops the vector-indexed segment (different rowset) and the idg entry.
+    auto nw = create_tablet_metadata(tablet_id, 2, 2, {"seg2.dat"});
+
+    auto collections = TabletFileCollections::collect(pre, nw);
+    FileSet unused_data_files, pre_bundle_data_files;
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+    EXPECT_TRUE(unused_data_files.contains("seg1_9_7.vi"));
+    EXPECT_TRUE(unused_data_files.contains("a.idx"));
+
+    auto live = collect_live_data_files(collections);
+    EXPECT_FALSE(live.contains("seg1_9_7.vi")); // no longer live in new
+    EXPECT_FALSE(live.contains("a.idx"));
+    // A tablet that still references index files reports them live.
+    auto nlive = create_tablet_metadata(next_id(), 2, 1, {"segN.dat"});
+    auto* nseg = nlive->mutable_rowsets(0)->mutable_segment_metas(0);
+    nseg->set_segment_vector_index_uid(3);
+    nseg->add_vector_index_ids(5);
+    (*nlive->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("live.idx");
+    auto live2 = collect_live_data_files(TabletFileCollections::collect(nullptr, nlive));
+    EXPECT_TRUE(live2.contains("segN_3_5.vi"));
+    EXPECT_TRUE(live2.contains("live.idx"));
+}
+
+// A shared index file one child drops is NOT deleted while a sibling still references it (partition-
+// wide live subtraction), covering both a shared .vi (same recorded uid) and a shared .idx.
+TEST_F(ExternalClusterSnapshotTaskTest, test_shared_index_file_not_deleted_when_sibling_references) {
+    int64_t ta = next_id();
+    auto a_pre = create_tablet_metadata(ta, 1, 1, {"S.dat"});
+    auto* a_seg = a_pre->mutable_rowsets(0)->mutable_segment_metas(0);
+    a_seg->set_segment_vector_index_uid(9);
+    a_seg->add_vector_index_ids(7);
+    (*a_pre->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("shared.idx");
+    auto a_new = create_tablet_metadata(ta, 2, 2, {"A_own.dat"}); // child A drops both
+    auto a_coll = TabletFileCollections::collect(a_pre, a_new);
+
+    FileSet unused_data_files, pre_bundle_data_files;
+    collect_unused_files(a_coll, unused_data_files, pre_bundle_data_files);
+    EXPECT_TRUE(unused_data_files.contains("S_9_7.vi"));
+    EXPECT_TRUE(unused_data_files.contains("shared.idx"));
+
+    // Sibling B still references the same shared .vi (same segment + uid) and shared.idx.
+    int64_t tb = next_id();
+    auto b_new = create_tablet_metadata(tb, 2, 1, {"S.dat"});
+    auto* b_seg = b_new->mutable_rowsets(0)->mutable_segment_metas(0);
+    b_seg->set_segment_vector_index_uid(9);
+    b_seg->add_vector_index_ids(7);
+    (*b_new->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("shared.idx");
+    FileSet partition_live_files = collect_live_data_files(a_coll);
+    for (const auto& f : collect_live_data_files(TabletFileCollections::collect(nullptr, b_new))) {
+        partition_live_files.emplace(f);
+    }
+
+    FileSet unused_meta_files, unused_schema_files;
+    phmap::flat_hash_set<int64_t> pre_schema_ids, new_schema_ids;
+    prepare_unused_files_for_log(/*pre_version=*/1, pre_bundle_data_files, unused_data_files, unused_meta_files,
+                                 pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
+    EXPECT_FALSE(unused_data_files.contains("S_9_7.vi"));   // kept: sibling B references it
+    EXPECT_FALSE(unused_data_files.contains("shared.idx")); // kept: sibling B references it
+}
+
+// A fully-removed pre-only IDG entry becomes a deletion candidate; an entry with empty index_file
+// (fully tombstoned) is not collected.
+TEST_F(ExternalClusterSnapshotTaskTest, test_dropped_and_empty_idg_entries) {
+    int64_t tablet_id = next_id();
+    auto pre = create_tablet_metadata(tablet_id, 1, 1, {"seg1.dat"});
+    (*pre->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("dropped.idx");
+    auto nw = create_tablet_metadata(tablet_id, 2, 1, {"seg1.dat"});
+    (*nw->mutable_idg_meta()->mutable_idgs())[0].add_entries(); // entry with no index_file -> skipped
+
+    EXPECT_TRUE(collect_inverted_index_files(nw).empty());
+
+    auto collections = TabletFileCollections::collect(pre, nw);
+    FileSet unused_data_files, pre_bundle_data_files;
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+    EXPECT_TRUE(unused_data_files.contains("dropped.idx"));
+}
+
+// Reshard boundary: a child with no pre metadata does a full re-sync that includes its .vi and .idx,
+// queues neither for deletion, and records both as partition-live.
+TEST_F(ExternalClusterSnapshotTaskTest, test_process_tablet_pre_not_found_full_resync_index) {
+    int64_t tablet_id = next_id();
+    int64_t pre_version = 3; // below the child's earliest metadata version
+    int64_t new_version = 6; // reshard publish version
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"seg_new.dat"});
+    auto* seg = new_metadata->mutable_rowsets(0)->mutable_segment_metas(0);
+    seg->set_segment_vector_index_uid(9);
+    seg->add_vector_index_ids(7);
+    (*new_metadata->mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file("n.idx");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata)); // pre_version 3 intentionally absent
+
+    FileSet globally_bound_files, pre_bundle_data_files, unused_data_files, unused_meta_files, partition_live_files;
+    phmap::flat_hash_set<int64_t> pre_schema_ids, new_schema_ids;
+    UploadSnapshotFilesRequestPB node_req;
+
+    auto st = process_tablet_for_snapshot(_tablet_mgr.get(), tablet_id, pre_version, new_version,
+                                          /*is_filebundling=*/false, /*meta_added=*/false, pre_bundle_data_files,
+                                          unused_data_files, unused_meta_files, pre_schema_ids, new_schema_ids,
+                                          globally_bound_files, partition_live_files, node_req);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(1, node_req.tablet_snapshots_size());
+
+    FileSet uploaded;
+    for (const auto& f : node_req.tablet_snapshots(0).new_index_data_files()) {
+        uploaded.emplace(f);
+    }
+    EXPECT_TRUE(uploaded.contains("seg_new_9_7.vi")); // full re-sync uploads the .vi
+    EXPECT_TRUE(uploaded.contains("n.idx"));          // and the .idx
+    // The child never had a pre-version metadata, so its index files must not be queued for deletion.
+    EXPECT_FALSE(unused_data_files.contains("seg_new_9_7.vi"));
+    EXPECT_FALSE(unused_data_files.contains("n.idx"));
+    EXPECT_TRUE(partition_live_files.contains("seg_new_9_7.vi")); // recorded for deletion safety
+    EXPECT_TRUE(partition_live_files.contains("n.idx"));
+}
+
 } // namespace starrocks::lake
