@@ -408,6 +408,11 @@ static std::unordered_set<int32_t> collect_broadcast_join_right_offsprings(
             join_node->can_generate_global_runtime_filter()) {
             broadcast_join_right_offsprings.insert(offsprings_per_child[1].begin(), offsprings_per_child[1].end());
         }
+    } else if (node->type() == TPlanNodeType::NESTLOOP_JOIN_NODE) {
+        const auto* join_node = down_cast<const CrossJoinNode*>(node);
+        if (join_node->can_generate_global_runtime_filter()) {
+            broadcast_join_right_offsprings.insert(offsprings_per_child[1].begin(), offsprings_per_child[1].end());
+        }
     }
     return offsprings;
 }

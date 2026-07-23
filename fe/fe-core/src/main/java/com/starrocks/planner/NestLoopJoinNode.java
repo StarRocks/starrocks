@@ -52,7 +52,8 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
     }
 
     /**
-     * Build the filter if inner table contains only one row, which is a common case for scalar subquery
+     * Builds local and global runtime filter descriptions for NLJoin, supporting both single-row and multi-row
+     * build inputs.
      */
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
@@ -76,8 +77,14 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setExprOrder(i);
                 rf.setJoinMode(DistributionMode.BROADCAST);
                 rf.setBuildCardinality(buildStageNode.getCardinality());
-                rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
+
+                if (!(expr instanceof BinaryPredicate) || !BinaryPredicate.IS_RANGE_PREDICATE.apply((BinaryPredicate) expr)) {
+                    rf.setOnlyLocal(true);
+                }
+                if (!left.getType().isNumericType() && !left.getType().isDateType()) {
+                    rf.setOnlyLocal(true);
+                }
 
                 RuntimeFilterPushDownContext rfPushDownCtx =
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);

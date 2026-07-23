@@ -23,13 +23,98 @@
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/cross_join_node.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 #include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
+#include "gen_cpp/Opcodes_types.h"
 #include "runtime/chunk_accumulator.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
+#include "types/logical_type_infra.h"
 
 namespace starrocks::pipeline {
+
+static bool is_range_predicate(TExprOpcode::type op) {
+    return op == TExprOpcode::GT || op == TExprOpcode::GE || op == TExprOpcode::LT || op == TExprOpcode::LE;
+}
+
+static bool is_greater_predicate(TExprOpcode::type op) {
+    return op == TExprOpcode::GT || op == TExprOpcode::GE;
+}
+
+static StatusOr<Columns> compute_nljoin_range_boundaries(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
+                                                         const std::vector<ChunkPtr>& build_chunks,
+                                                         const std::vector<ExprContext*>& conjunct_ctxs,
+                                                         size_t num_rows, bool& is_build_chunk_invalid) {
+    Columns boundaries(rf_descs.size());
+    for (size_t i = 0; i < rf_descs.size(); i++) {
+        auto* rf_desc = rf_descs[i];
+        DCHECK_LT(rf_desc->build_expr_order(), conjunct_ctxs.size());
+        auto* conjunct = conjunct_ctxs[rf_desc->build_expr_order()];
+        auto* root = conjunct->root();
+        if (!is_range_predicate(root->op())) {
+            continue;
+        }
+        if (num_rows == 1 && (!rf_desc->has_consumer() || !rf_desc->has_remote_targets())) {
+            continue;
+        }
+
+        auto* build_expr = root->get_child(1);
+        if (!type_dispatch_filter(build_expr->type().type, false,
+                                  []<LogicalType LT>() { return !lt_is_json<LT> && !lt_is_variant<LT>; })) {
+            continue;
+        }
+
+        for (const auto& chunk : build_chunks) {
+            if (chunk == nullptr || chunk->is_empty()) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(auto column, conjunct->evaluate(build_expr, chunk.get()));
+            Columns values{std::move(column)};
+            if (boundaries[i] != nullptr) {
+                values.emplace_back(boundaries[i]);
+            }
+            boundaries[i] = RuntimeFilterBuilder::compute_min_max_boundary(build_expr->type().type,
+                                                                           is_greater_predicate(root->op()), values);
+        }
+        is_build_chunk_invalid |= boundaries[i] == nullptr;
+    }
+    return boundaries;
+}
+
+static Status publish_nljoin_range_runtime_filters(RuntimeState* state,
+                                                   const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
+                                                   const Columns& boundaries,
+                                                   const std::vector<ExprContext*>& conjunct_ctxs) {
+    DCHECK_EQ(rf_descs.size(), boundaries.size());
+    std::list<RuntimeFilterBuildDescriptor*> publish_filters;
+    for (size_t i = 0; i < rf_descs.size(); i++) {
+        auto* rf_desc = rf_descs[i];
+        rf_desc->set_is_pipeline(true);
+        if (boundaries[i] == nullptr || !rf_desc->has_consumer() || !rf_desc->has_remote_targets()) {
+            continue;
+        }
+        DCHECK_LT(rf_desc->build_expr_order(), conjunct_ctxs.size());
+
+        auto* root = conjunct_ctxs[rf_desc->build_expr_order()]->root();
+        auto* build_expr = root->get_child(1);
+        auto* filter = RuntimeFilterFactory::create_min_max_filter(state->obj_pool(), build_expr->type().type,
+                                                                   is_greater_predicate(root->op()), true,
+                                                                   boundaries[i], rf_desc->join_mode());
+        DCHECK(filter != nullptr);
+        rf_desc->set_runtime_filter(filter);
+        publish_filters.push_back(rf_desc);
+    }
+
+    if (!publish_filters.empty()) {
+        state->runtime_filter_port()->publish_runtime_filters(publish_filters);
+    }
+    return Status::OK();
+}
 
 Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
@@ -167,7 +252,10 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
             num_rows += chunk_ptr->num_rows();
         }
     }
-    // build runtime filter for cross join
+
+    ASSIGN_OR_RETURN(auto boundaries, compute_nljoin_range_boundaries(_rf_descs, _build_chunks, _rf_conjuncts_ctx,
+                                                                      num_rows, _is_build_chunk_invalid));
+
     if (num_rows == 1) {
         DCHECK(one_row_chunk != nullptr);
         auto* pool = state->obj_pool();
@@ -177,10 +265,13 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         _rf_hub->set_collector(_plan_node_id,
                                std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
     } else {
-        // notify cross join left child
-        _rf_hub->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{},
-                                                                                       RuntimeMembershipFilterList{}));
+        ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(state->obj_pool(), _rf_descs, boundaries,
+                                                                         _rf_conjuncts_ctx));
+        RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
+        _rf_hub->set_collector(_plan_node_id,
+                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
     }
+    RETURN_IF_ERROR(publish_nljoin_range_runtime_filters(state, _rf_descs, boundaries, _rf_conjuncts_ctx));
     return Status::OK();
 }
 

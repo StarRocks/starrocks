@@ -1,0 +1,298 @@
+-- name: test_nljoin_global_runtime_filter
+set enable_global_runtime_filter = true;
+-- result:
+-- !result
+set global_runtime_filter_probe_min_size = 0;
+-- result:
+-- !result
+create table nl_grf_probe (
+    c_int int null,
+    c_bigint bigint null,
+    c_float float null,
+    c_double double null,
+    c_decimal decimal(18, 2) null,
+    c_date date null,
+    c_datetime datetime null,
+    c_varchar varchar(20) null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_dim (
+    c_int int null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_build_multi (
+    c_int int null,
+    c_bigint bigint null,
+    c_float float null,
+    c_double double null,
+    c_decimal decimal(18, 2) null,
+    c_date date null,
+    c_datetime datetime null,
+    c_varchar varchar(20) null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_build_one (
+    c_int int null,
+    c_bigint bigint null,
+    c_float float null,
+    c_double double null,
+    c_decimal decimal(18, 2) null,
+    c_date date null,
+    c_datetime datetime null,
+    c_varchar varchar(20) null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_build_null_mixed (
+    c_int int null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_build_all_null (
+    c_int int null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table nl_grf_build_empty (
+    c_int int null
+)
+duplicate key(c_int)
+distributed by hash(c_int) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into nl_grf_probe
+select g, cast(g as bigint), cast(g as float), cast(g as double), cast(g as decimal(18, 2)),
+       date_add('2024-01-01', interval g day),
+       date_add('2024-01-01 00:00:00', interval g hour), concat('s', lpad(cast(g as varchar), 2, '0'))
+from table(generate_series(1, 20)) t(g);
+-- result:
+-- !result
+insert into nl_grf_probe values
+    (null, null, null, null, null, null, null, null),
+    (null, null, null, null, null, null, null, null);
+-- result:
+-- !result
+insert into nl_grf_dim select g from table(generate_series(1, 20)) t(g);
+-- result:
+-- !result
+insert into nl_grf_build_multi values
+    (5, 5, 5, 5, 5, '2024-01-06', '2024-01-01 05:00:00', 's05'),
+    (10, 10, 10, 10, 10, '2024-01-11', '2024-01-01 10:00:00', 's10'),
+    (15, 15, 15, 15, 15, '2024-01-16', '2024-01-01 15:00:00', 's15');
+-- result:
+-- !result
+insert into nl_grf_build_one values
+    (10, 10, 10, 10, 10, '2024-01-11', '2024-01-01 10:00:00', 's10');
+-- result:
+-- !result
+insert into nl_grf_build_null_mixed values
+    (null),
+    (10),
+    (null);
+-- result:
+-- !result
+insert into nl_grf_build_all_null values
+    (null),
+    (null);
+-- result:
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int > b.c_int;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int >= b.c_int;
+-- result:
+33
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int < b.c_int;
+-- result:
+27
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int <= b.c_int;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_one b on p.c_int > b.c_int;
+-- result:
+10
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_one b on p.c_int >= b.c_int;
+-- result:
+11
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_one b on p.c_int < b.c_int;
+-- result:
+9
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_one b on p.c_int <= b.c_int;
+-- result:
+10
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_bigint > b.c_bigint;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_float > b.c_float;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_double > b.c_double;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_decimal > b.c_decimal;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_date > b.c_date;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_datetime > b.c_datetime;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_varchar > b.c_varchar;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p left join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int > b.c_int;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_null_mixed b on p.c_int > b.c_int;
+-- result:
+10
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_all_null b on p.c_int > b.c_int;
+-- result:
+0
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p left semi join nl_grf_build_all_null b on p.c_int > b.c_int;
+-- result:
+0
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p right outer join [shuffle] nl_grf_build_all_null b on p.c_int > b.c_int;
+-- result:
+2
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p right semi join [shuffle] nl_grf_build_all_null b on p.c_int > b.c_int;
+-- result:
+0
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_empty b on p.c_int > b.c_int;
+-- result:
+0
+-- !result
+set enable_global_runtime_filter = false;
+-- result:
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_multi b on p.c_int > b.c_int;
+-- result:
+30
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_null_mixed b on p.c_int > b.c_int;
+-- result:
+10
+-- !result
+with probe as (
+    select p.* from nl_grf_probe p join [shuffle] nl_grf_dim d on p.c_int = d.c_int
+)
+select count(*) from probe p join nl_grf_build_all_null b on p.c_int > b.c_int;
+-- result:
+0
+-- !result

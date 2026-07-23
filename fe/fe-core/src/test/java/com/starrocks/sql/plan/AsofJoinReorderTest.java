@@ -70,7 +70,7 @@ public class AsofJoinReorderTest extends PlanTestBase {
         assertContains(plan, "9:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 1: v1 < 7: v7\n" +
+                "  |  other join predicates: 7: v7 > 1: v1\n" +
                 "  |  \n" +
                 "  |----8:EXCHANGE\n" +
                 "  |    \n" +
