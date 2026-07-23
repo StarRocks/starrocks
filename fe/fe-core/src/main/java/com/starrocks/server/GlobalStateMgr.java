@@ -2905,7 +2905,8 @@ public class GlobalStateMgr {
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable() || table.isOdpsTable();
+                || table.isIcebergView() || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable()
+                || table.isOdpsTable();
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
