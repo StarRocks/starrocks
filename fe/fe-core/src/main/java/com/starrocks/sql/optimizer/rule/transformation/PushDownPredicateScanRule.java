@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -75,8 +74,19 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
+        ScalarOperator predicateForMvRewrite = null;
+        if (logicalScanOperator.hasPredicateForMvRewrite()) {
+            predicateForMvRewrite = Utils.compoundAnd(
+                    lfo.getPredicate(), logicalScanOperator.getPredicateForMvRewrite()).clone();
+        } else if (!context.getCandidateMvs().isEmpty()) {
+            predicateForMvRewrite = predicates.clone();
+        }
 
         predicates = ScalarOperatorRewriter.simplifyCaseWhen(predicates, true);
+        if (predicateForMvRewrite != null &&
+                (predicates.isConstant() || predicates.equals(predicateForMvRewrite))) {
+            predicateForMvRewrite = null;
+        }
 
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
@@ -91,10 +101,12 @@ public class PushDownPredicateScanRule extends TransformationRule {
                 logicalScanOperator.getColumnNameToColRefMap());
 
         // clone a new scan operator and rewrite predicate.
-        Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);
-        LogicalScanOperator newScanOperator = (LogicalScanOperator) builder.withOperator(logicalScanOperator)
-                .setPredicate(predicates)
-                .build();
+        LogicalScanOperator.Builder builder = (LogicalScanOperator.Builder)
+                OperatorBuilderFactory.build(logicalScanOperator);
+        builder.withOperator(logicalScanOperator);
+        builder.setPredicate(predicates);
+        builder.setPredicateForMvRewrite(predicateForMvRewrite);
+        LogicalScanOperator newScanOperator = (LogicalScanOperator) builder.build();
         newScanOperator.buildColumnFilters(predicates);
         Map<ColumnRefOperator, ScalarOperator> projectMap =
                 newScanOperator.getOutputColumns().stream()
