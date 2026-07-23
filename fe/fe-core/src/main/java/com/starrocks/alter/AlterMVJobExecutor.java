@@ -1212,7 +1212,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // not clear version map for user manual inactive by default since mv's refreshed data has not been
                 // broken from the current base tables.
                 // this method will write edit log in it.
-                doInactiveMaterializedViewRecursive(materializedView, MANUAL_INACTIVE_MV_REASON, false, visited);
+                doInactiveMaterializedViewRecursive(materializedView, MANUAL_INACTIVE_MV_REASON, false, visited, null);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
@@ -1230,9 +1230,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
+    /**
+     * @param changedTable the base table/view that actually triggered this inactive (nullable). When non-null and the
+     *                     MV excludes it from refresh (via its {@code excluded_refresh_tables} property), the visible
+     *                     version map is kept so that rebuilding the excluded table/view does not force a refresh.
+     */
     private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
                                                             boolean isClearVersionMap,
-                                                            Set<MvId> visited) {
+                                                            Set<MvId> visited, TableName changedTable) {
         // Only check this in leader and not replay to avoid duplicate inactive
         if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
@@ -1240,8 +1245,23 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (visited.contains(mv.getMvId())) {
             return;
         }
+        // Decide whether to clear the MV's visible version map before inactivating it.
+        // The version map is normally cleared so the MV is force-refreshed, but if the changed base
+        // table/view is excluded from refresh by the MV's excluded_refresh_tables property, the map is
+        // kept so that rebuilding the excluded table/view does not trigger a force refresh of the MV.
+        boolean clearVersionMap;
+        if (!isClearVersionMap) {
+            // Caller already requested not to clear (e.g. manual inactive).
+            clearVersionMap = false;
+        } else if (changedTable != null && !mv.shouldRefreshTable(changedTable.getDb(), changedTable.getTbl())) {
+            // The changed base table/view is excluded from refresh, so keep the version map.
+            clearVersionMap = false;
+        } else {
+            // Normal case: clear the version map to force a refresh of the MV.
+            clearVersionMap = true;
+        }
         // inactive this mv first
-        doInactiveMaterializedViewOnly(mv, reason, isClearVersionMap);
+        doInactiveMaterializedViewOnly(mv, reason, clearVersionMap);
         // add it into visited
         visited.add(mv.getMvId());
 
@@ -1264,7 +1284,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 continue;
             }
             // do inactive this mvs
-            doInactiveMaterializedViewRecursive(relatedMV, reason, isClearVersionMap, visited);
+            doInactiveMaterializedViewRecursive(relatedMV, reason, isClearVersionMap, visited, changedTable);
         }
     }
 
@@ -1300,6 +1320,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // clear version map to make sure the MV will be refreshed
         if (isClearVersionMap) {
             mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+        } else {
+            LOG.info("Skip clearing visible version map of MV {}/{} because it should not be refreshed by the " +
+                    "changed base table/view", mv.getName(), mv.getId());
         }
     }
 
@@ -1310,6 +1333,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      *  has broken from mv existed refreshed data.
      */
     public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason) {
+        inactiveRelatedMaterializedViewsRecursive(olapTable, reason, null);
+    }
+
+    /**
+     * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
+     * The {@code changedTable} is the table/view that actually triggered the change and is used to honor the MV's
+     * excluded_refresh_tables property so that rebuilding an excluded table/view does not force a refresh.
+     * </p>
+     * NOTE: This method will clear the related mvs' version map by default since the base table
+     *  has broken from mv existed refreshed data.
+     */
+    public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason,
+                                                                  TableName changedTable) {
         if (olapTable == null) {
             return;
         }
@@ -1331,7 +1367,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
                 continue;
             }
-            doInactiveMaterializedViewRecursive(mv, reason, true, inactiveMVIds);
+            doInactiveMaterializedViewRecursive(mv, reason, true, inactiveMVIds, changedTable);
         }
     }
 
@@ -1386,7 +1422,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 .map(x -> x.getName())
                                 .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
                         if (modifiedColumns.stream().anyMatch(usedColNames::contains)) {
-                            doInactiveMaterializedViewRecursive(mv, reason, true, visited);
+                            doInactiveMaterializedViewRecursive(mv, reason, true, visited, null);
                         }
                     }
                 }
@@ -1395,12 +1431,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
-                doInactiveMaterializedViewRecursive(mv, reason, true, visited);
+                doInactiveMaterializedViewRecursive(mv, reason, true, visited, null);
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
-                    doInactiveMaterializedViewRecursive(mv, reason, true, visited);
+                    doInactiveMaterializedViewRecursive(mv, reason, true, visited, null);
                 }
             }
         }

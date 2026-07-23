@@ -1814,4 +1814,283 @@ public class MaterializedViewTest extends StarRocksTestBase {
         };
         Assertions.assertTrue(mv.isStalenessSatisfied());
     }
+
+    /**
+     * When an excluded base view is rebuilt via CREATE OR REPLACE VIEW, the dependent MV should still
+     * go inactive, but its visible version map must be kept so it is not force-refreshed.
+     */
+    @Test
+    public void testMvNotForceRefreshedWhenExcludedBaseViewRebuilt() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.ods_company (id BIGINT NOT NULL, name VARCHAR(100)) " +
+                        "PRIMARY KEY (id) DISTRIBUTED BY HASH(id);")
+                .withTable("CREATE TABLE test.ods_shop (shop_id BIGINT NOT NULL, " +
+                        "organization_code VARCHAR(50), company_id BIGINT) " +
+                        "PRIMARY KEY (shop_id) DISTRIBUTED BY HASH(shop_id);")
+                .withView("CREATE VIEW test.dim_place AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop a " +
+                        "LEFT JOIN test.ods_company b ON a.company_id = b.id;")
+                .withTable("CREATE TABLE test.fact_bill (create_date DATE, organization_code VARCHAR(50), " +
+                        "amount DOUBLE) PARTITION BY date_trunc('day', create_date) " +
+                        "DISTRIBUTED BY HASH(organization_code);")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.mv_excluded_view_rebuild " +
+                        "PARTITION BY create_date DISTRIBUTED BY HASH(place_id) REFRESH ASYNC " +
+                        "PROPERTIES (\"excluded_refresh_tables\" = \"test.dim_place\") " +
+                        "AS SELECT a.create_date, b.shop_id AS place_id, sum(a.amount) AS amt " +
+                        "FROM test.fact_bill a JOIN test.dim_place b ON a.organization_code = b.organization_code " +
+                        "GROUP BY a.create_date, b.shop_id;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_excluded_view_rebuild");
+
+        // seed the mv partition->base partition map with a sentinel
+        mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // rebuild the excluded base view via CREATE OR REPLACE VIEW
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "CREATE OR REPLACE VIEW test.dim_place AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop a " +
+                        "LEFT JOIN test.ods_company b ON a.company_id = b.id;",
+                connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, stmt).execute();
+
+        // the rebuilt base view is excluded, so the visible version map must NOT be cleared
+        Assertions.assertFalse(mv.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
+
+    /**
+     * When a NON-excluded base view is rebuilt, the dependent MV's visible version map must be cleared
+     * so it is force-refreshed.
+     */
+    @Test
+    public void testMvForceRefreshedWhenNonExcludedBaseViewRebuilt() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.ods_company2 (id BIGINT NOT NULL, name VARCHAR(100)) " +
+                        "PRIMARY KEY (id) DISTRIBUTED BY HASH(id);")
+                .withTable("CREATE TABLE test.ods_shop2 (shop_id BIGINT NOT NULL, " +
+                        "organization_code VARCHAR(50), company_id BIGINT) " +
+                        "PRIMARY KEY (shop_id) DISTRIBUTED BY HASH(shop_id);")
+                .withView("CREATE VIEW test.dim_place2 AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop2 a " +
+                        "LEFT JOIN test.ods_company2 b ON a.company_id = b.id;")
+                .withTable("CREATE TABLE test.fact_bill2 (create_date DATE, organization_code VARCHAR(50), " +
+                        "amount DOUBLE) PARTITION BY date_trunc('day', create_date) " +
+                        "DISTRIBUTED BY HASH(organization_code);")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.mv_nonexcluded_view_rebuild " +
+                        "PARTITION BY create_date DISTRIBUTED BY HASH(place_id) REFRESH ASYNC " +
+                        "AS SELECT a.create_date, b.shop_id AS place_id, sum(a.amount) AS amt " +
+                        "FROM test.fact_bill2 a JOIN test.dim_place2 b ON a.organization_code = b.organization_code " +
+                        "GROUP BY a.create_date, b.shop_id;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_nonexcluded_view_rebuild");
+
+        // seed the mv partition->base partition map with a sentinel
+        mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // rebuild a NON-excluded base view via CREATE OR REPLACE VIEW
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "CREATE OR REPLACE VIEW test.dim_place2 AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop2 a " +
+                        "LEFT JOIN test.ods_company2 b ON a.company_id = b.id;",
+                connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, stmt).execute();
+
+        // the rebuilt base view is not excluded, so the visible version map must be cleared
+        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
+
+    /**
+     * When an excluded base view is dropped and recreated, the dependent MV's visible version map must
+     * be kept so it is not force-refreshed.
+     */
+    @Test
+    public void testMvNotForceRefreshedWhenExcludedBaseViewDropped() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.ods_company3 (id BIGINT NOT NULL, name VARCHAR(100)) " +
+                        "PRIMARY KEY (id) DISTRIBUTED BY HASH(id);")
+                .withTable("CREATE TABLE test.ods_shop3 (shop_id BIGINT NOT NULL, " +
+                        "organization_code VARCHAR(50), company_id BIGINT) " +
+                        "PRIMARY KEY (shop_id) DISTRIBUTED BY HASH(shop_id);")
+                .withView("CREATE VIEW test.dim_place3 AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop3 a " +
+                        "LEFT JOIN test.ods_company3 b ON a.company_id = b.id;")
+                .withTable("CREATE TABLE test.fact_bill3 (create_date DATE, organization_code VARCHAR(50), " +
+                        "amount DOUBLE) PARTITION BY date_trunc('day', create_date) " +
+                        "DISTRIBUTED BY HASH(organization_code);")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.mv_excluded_view_drop " +
+                        "PARTITION BY create_date DISTRIBUTED BY HASH(place_id) REFRESH ASYNC " +
+                        "PROPERTIES (\"excluded_refresh_tables\" = \"test.dim_place3\") " +
+                        "AS SELECT a.create_date, b.shop_id AS place_id, sum(a.amount) AS amt " +
+                        "FROM test.fact_bill3 a JOIN test.dim_place3 b ON a.organization_code = b.organization_code " +
+                        "GROUP BY a.create_date, b.shop_id;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_excluded_view_drop");
+
+        // seed the mv partition->base partition map with a sentinel
+        mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // drop the base view (it is in excluded_refresh_tables) then recreate it with the same definition
+        StatementBase dropStmt = SqlParser.parseSingleStatement("DROP VIEW test.dim_place3;",
+                connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, dropStmt).execute();
+        StatementBase createStmt = SqlParser.parseSingleStatement(
+                "CREATE VIEW test.dim_place3 AS " +
+                        "SELECT a.shop_id, a.organization_code, a.company_id FROM test.ods_shop3 a " +
+                        "LEFT JOIN test.ods_company3 b ON a.company_id = b.id;",
+                connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, createStmt).execute();
+
+        // the dropped/recreated base view is excluded, so the visible version map must NOT be cleared
+        Assertions.assertFalse(mv.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
+
+    /**
+     * When an excluded base table (a regular OlapTable, not a view) is dropped and recreated, the dependent MV's
+     * visible version map must be kept so it is not force-refreshed.
+     */
+    @Test
+    public void testMvNotForceRefreshedWhenExcludedBaseTableDropped() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.excluded_base_table (\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.fact_table (\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.mv_excluded_table_drop \n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1', \"excluded_refresh_tables\" = \"test.excluded_base_table\")\n" +
+                        "AS SELECT a.k1, a.k2, sum(a.v1) AS sum_v1 FROM test.fact_table a " +
+                        "JOIN test.excluded_base_table b ON a.k2 = b.k2 GROUP BY a.k1, a.k2;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_excluded_table_drop");
+
+        // seed the mv partition->base partition map with a sentinel
+        mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // drop the base table (it is in excluded_refresh_tables) then recreate it with the same definition
+        starRocksAssert.dropTable("test.excluded_base_table");
+        starRocksAssert.withTable("CREATE TABLE test.excluded_base_table (\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+
+        // the dropped/recreated base table is excluded, so the visible version map must NOT be cleared
+        Assertions.assertFalse(mv.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
+
+    /**
+     * Cascade scenario: base table t is rebuilt. mv_a excludes t from refresh (keeps its version map), but
+     * mv_b depends on t directly and does NOT exclude t. This verifies that mv_a's exclusion decision is NOT
+     * inherited by the downstream mv_b, which must still have its version map cleared (force refresh).
+     */
+    @Test
+    public void testMvCascadeExclusionNotInheritedByNonExcludedDescendant() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.cascade_base_t (\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                // mv_a excludes cascade_base_t from refresh
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.cascade_mv_a \n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1', \"excluded_refresh_tables\" = \"test.cascade_base_t\")\n" +
+                        "AS SELECT k1, k2, sum(v1) AS sum_v1 FROM test.cascade_base_t GROUP BY k1, k2;")
+                // mv_b depends on cascade_base_t directly (NOT excluded) and also on cascade_mv_a
+                .withMaterializedView("CREATE MATERIALIZED VIEW test.cascade_mv_b \n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
+                        "AS SELECT a.k1, a.k2, sum(a.v1 + b.sum_v1) AS sum_v1 " +
+                        "FROM test.cascade_base_t a JOIN test.cascade_mv_a b ON a.k2 = b.k2 " +
+                        "GROUP BY a.k1, a.k2;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mvA = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "cascade_mv_a");
+        MaterializedView mvB = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "cascade_mv_b");
+
+        // seed both MVs' partition->base partition maps with sentinels
+        mvA.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+        mvB.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap()
+                .put("p20250701", Sets.newHashSet("p20250701"));
+
+        // rebuild the base table t (it is in mv_a's excluded_refresh_tables)
+        starRocksAssert.dropTable("test.cascade_base_t");
+        starRocksAssert.withTable("CREATE TABLE test.cascade_base_t (\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+
+        // mv_a excludes t, so its version map must be kept
+        Assertions.assertFalse(mvA.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+        // mv_b depends on t directly and does NOT exclude it, so its version map must be cleared (force refresh)
+        Assertions.assertTrue(mvB.getRefreshScheme().getAsyncRefreshContext()
+                .getMvPartitionNameRefBaseTablePartitionMap().isEmpty());
+    }
 }

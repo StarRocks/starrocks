@@ -770,7 +770,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         // inactive relative materialized views if the base table/view/external table is dropped.
         if (!replay) {
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(this,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()),
+                    new TableName(db.getFullName(), getName()));
         }
     }
 
