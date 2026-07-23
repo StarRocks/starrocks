@@ -17,12 +17,6 @@
 #include <vector>
 
 #include "common/status.h"
-<<<<<<< HEAD:be/src/util/cpu_util.h
-=======
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/Types_types.h"
->>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/src/orchestration/query_orchestrator.h
 
 namespace starrocks {
 
@@ -35,16 +29,7 @@ public:
 
     static void bind_cpus(Thread* thread, const std::vector<size_t>& cpuids);
 
-<<<<<<< HEAD:be/src/util/cpu_util.h
     static std::string to_string(const CpuIds& cpuids);
-=======
-    // Build the TQueryOptions used to execute an external scan plan fragment (open_scanner).
-    // Exposed as a static helper so tests can assert the fabricated options.
-    static TQueryOptions build_external_query_options(const TScanOpenParams& params);
-
-private:
-    ExecEnv* _exec_env;
->>>>>>> 120992379a ([BugFix] Set query_delivery_timeout for external scan plans to bound the QueryContext second-chance tail (#76536)):be/src/orchestration/query_orchestrator.h
 };
 
 } // namespace starrocks
