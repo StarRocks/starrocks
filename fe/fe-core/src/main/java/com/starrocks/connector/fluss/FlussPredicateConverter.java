@@ -1,0 +1,395 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector.fluss;
+
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.PrimitiveType;
+import org.apache.fluss.predicate.Predicate;
+import org.apache.fluss.predicate.PredicateBuilder;
+import org.apache.fluss.row.BinaryString;
+import org.apache.fluss.row.Decimal;
+import org.apache.fluss.row.TimestampLtz;
+import org.apache.fluss.row.TimestampNtz;
+import org.apache.fluss.types.BigIntType;
+import org.apache.fluss.types.BinaryType;
+import org.apache.fluss.types.BooleanType;
+import org.apache.fluss.types.CharType;
+import org.apache.fluss.types.DataField;
+import org.apache.fluss.types.DataType;
+import org.apache.fluss.types.DateType;
+import org.apache.fluss.types.DecimalType;
+import org.apache.fluss.types.DoubleType;
+import org.apache.fluss.types.FloatType;
+import org.apache.fluss.types.IntType;
+import org.apache.fluss.types.LocalZonedTimestampType;
+import org.apache.fluss.types.RowType;
+import org.apache.fluss.types.SmallIntType;
+import org.apache.fluss.types.StringType;
+import org.apache.fluss.types.TimestampType;
+import org.apache.fluss.types.TinyIntType;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, FlussPredicateContext> {
+    private final PredicateBuilder builder;
+    private final List<String> fieldNames;
+    private final List<DataType> fieldTypes;
+    private final FlussPredicateContext predicateContext;
+
+    public FlussPredicateConverter(RowType rowType, ZoneId sessionZoneId) {
+        this.builder = new PredicateBuilder(rowType);
+        this.fieldTypes = rowType.getFields().stream().map(DataField::getType).collect(Collectors.toList());
+        this.fieldNames = rowType.getFields().stream().map(DataField::getName).collect(Collectors.toList());
+        this.predicateContext = new FlussPredicateContext(sessionZoneId);
+    }
+
+    public Predicate convert(ScalarOperator operator) {
+        if (operator == null) {
+            return null;
+        }
+        return operator.accept(this, predicateContext);
+    }
+
+    @Override
+    public Predicate visit(ScalarOperator scalarOperator, FlussPredicateContext context) {
+        return null;
+    }
+
+    @Override
+    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, FlussPredicateContext context) {
+        CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
+        if (op == CompoundPredicateOperator.CompoundType.NOT) {
+            if (operator.getChild(0) instanceof LikePredicateOperator) {
+                return null;
+            }
+            Predicate expression = operator.getChild(0).accept(this, context.withInsideNot());
+
+            if (expression != null) {
+                return expression.negate().orElse(null);
+            }
+        } else {
+            Predicate left = operator.getChild(0).accept(this, context);
+            Predicate right = operator.getChild(1).accept(this, context);
+            if (left != null && right != null) {
+                return (op == CompoundPredicateOperator.CompoundType.OR) ? PredicateBuilder.or(left, right) :
+                        PredicateBuilder.and(left, right);
+            } else if (!context.isInsideNot() && left != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                return left;
+            } else if (!context.isInsideNot() && right != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                return right;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, FlussPredicateContext context) {
+        String columnName = getColumnName(operator.getChild(0));
+        if (columnName == null) {
+            return null;
+        }
+        int idx = fieldNames.indexOf(columnName);
+        if (operator.isNotNull()) {
+            return builder.isNotNull(idx);
+        } else {
+            return builder.isNull(idx);
+        }
+    }
+
+    @Override
+    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, FlussPredicateContext context) {
+        String columnName = getColumnName(operator.getChild(0));
+        if (columnName == null) {
+            return null;
+        }
+        int idx = fieldNames.indexOf(columnName);
+        Object literal = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
+        if (literal == null) {
+            return null;
+        }
+        if (fieldTypes.get(idx) instanceof BooleanType) {
+            literal = convertBoolLiteralValue(literal);
+        }
+        switch (operator.getBinaryType()) {
+            case LT:
+                return builder.lessThan(idx, literal);
+            case LE:
+                return builder.lessOrEqual(idx, literal);
+            case GT:
+                return builder.greaterThan(idx, literal);
+            case GE:
+                return builder.greaterOrEqual(idx, literal);
+            case EQ:
+                return builder.equal(idx, literal);
+            case NE:
+                return builder.notEqual(idx, literal);
+            default:
+                return null;
+        }
+    }
+
+    @Override
+    public Predicate visitInPredicate(InPredicateOperator operator, FlussPredicateContext context) {
+        String columnName = getColumnName(operator.getChild(0));
+        if (columnName == null) {
+            return null;
+        }
+        int idx = fieldNames.indexOf(columnName);
+        List<ScalarOperator> valuesOperatorList = operator.getListChildren();
+        List<Object> literalValues = new ArrayList<>(valuesOperatorList.size());
+        for (ScalarOperator valueOperator : valuesOperatorList) {
+            Object value = getLiteral(valueOperator, fieldTypes.get(idx), context);
+            if (value == null) {
+                return null;
+            }
+            if (fieldTypes.get(idx) instanceof BooleanType) {
+                value = convertBoolLiteralValue(value);
+            }
+            literalValues.add(value);
+        }
+
+        if (operator.isNotIn()) {
+            return builder.notIn(idx, literalValues);
+        } else {
+            return builder.in(idx, literalValues);
+        }
+    }
+
+    @Override
+    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, FlussPredicateContext context) {
+        String columnName = getColumnName(operator.getChild(0));
+        if (columnName == null) {
+            return null;
+        }
+
+        int idx = fieldNames.indexOf(columnName);
+        if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+            if (operator.getChild(1).getType().isStringType()) {
+                Object objectLiteral = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
+                if (objectLiteral == null) {
+                    return null;
+                }
+                String literal = ((BinaryString) objectLiteral).toString();
+                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1
+                        && literal.charAt(0) != '%' && literal.indexOf('_') < 0 && literal.indexOf('\\') < 0) {
+                    return builder.startsWith(idx,
+                            BinaryString.fromString(literal.substring(0, literal.length() - 1)));
+                }
+            }
+        }
+        return null;
+    }
+
+    private Object getLiteral(ScalarOperator operator, DataType dataType, FlussPredicateContext context) {
+        if (operator == null) {
+            return null;
+        }
+        return operator.accept(new ExtractLiteralValue(context.getSessionZoneId()), dataType);
+    }
+
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
+        private final ZoneId sessionZoneId;
+
+        private ExtractLiteralValue(ZoneId sessionZoneId) {
+            this.sessionZoneId = sessionZoneId;
+        }
+
+        @Override
+        public Object visit(ScalarOperator scalarOperator, DataType dataType) {
+            return null;
+        }
+
+        @Override
+        public Object visitConstant(ConstantOperator operator, DataType dataType) {
+            if (needCast(operator.getType().getPrimitiveType(), dataType)) {
+                operator = tryCastToResultType(operator, dataType);
+            }
+            if (operator == null) {
+                return null;
+            }
+            switch (operator.getType().getPrimitiveType()) {
+                case BOOLEAN:
+                    return operator.getBoolean();
+                case TINYINT:
+                    return operator.getTinyInt();
+                case SMALLINT:
+                    return operator.getSmallint();
+                case INT:
+                    return operator.getInt();
+                case BIGINT:
+                    return operator.getBigint();
+                case FLOAT:
+                    return (float) operator.getFloat();
+                case DOUBLE:
+                    return operator.getDouble();
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    BigDecimal bigDecimal = operator.getDecimal();
+                    DecimalType decimalType = (DecimalType) dataType;
+                    return Decimal.fromBigDecimal(bigDecimal, decimalType.getPrecision(), decimalType.getScale());
+                case HLL:
+                case VARCHAR:
+                case CHAR:
+                    return BinaryString.fromString(operator.getVarchar());
+                case DATE:
+                    LocalDate localDate = operator.getDate().toLocalDate();
+                    LocalDate epochDay = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDate();
+                    return (int) ChronoUnit.DAYS.between(epochDay, localDate);
+                case DATETIME:
+                    LocalDateTime localDateTime = operator.getDatetime();
+                    if (dataType instanceof LocalZonedTimestampType) {
+                        Instant instant = localDateTime.atZone(sessionZoneId)
+                                .withZoneSameInstant(ZoneOffset.UTC)
+                                .toInstant();
+                        return TimestampLtz.fromInstant(instant);
+                    } else {
+                        return TimestampNtz.fromLocalDateTime(localDateTime);
+                    }
+                default:
+                    return null;
+            }
+        }
+
+        @Override
+        public Object visitCastOperator(CastOperator operator, DataType dataType) {
+            return operator.getChild(0).accept(this, dataType);
+        }
+
+        private boolean needCast(PrimitiveType sourceType, DataType dataType) {
+            switch (sourceType) {
+                case BOOLEAN:
+                    return !(dataType instanceof BooleanType);
+                case TINYINT:
+                    return !(dataType instanceof TinyIntType);
+                case SMALLINT:
+                    return !(dataType instanceof SmallIntType);
+                case INT:
+                    return !(dataType instanceof IntType);
+                case BIGINT:
+                    return !(dataType instanceof BigIntType);
+                case FLOAT:
+                    return !(dataType instanceof FloatType);
+                case DOUBLE:
+                    return !(dataType instanceof DoubleType);
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    return !(dataType instanceof DecimalType);
+                case HLL:
+                case VARCHAR:
+                    return !(dataType instanceof StringType);
+                case CHAR:
+                    return !(dataType instanceof CharType);
+                case DATE:
+                    return !(dataType instanceof DateType);
+                case DATETIME:
+                    return !(dataType instanceof TimestampType)
+                            && !(dataType instanceof LocalZonedTimestampType);
+                default:
+                    return true;
+            }
+        }
+
+        private ConstantOperator tryCastToResultType(ConstantOperator operator, DataType dataType) {
+            Optional<ConstantOperator> res = Optional.empty();
+            if (dataType instanceof BooleanType) {
+                res = operator.castTo(com.starrocks.type.BooleanType.BOOLEAN);
+            } else if (dataType instanceof DateType) {
+                res = operator.castTo(com.starrocks.type.DateType.DATE);
+            } else if (dataType instanceof TimestampType || dataType instanceof LocalZonedTimestampType) {
+                res = operator.castTo(com.starrocks.type.DateType.DATETIME);
+            } else if (dataType instanceof StringType) {
+                res = operator.castTo(com.starrocks.type.StringType.STRING);
+            } else if (dataType instanceof CharType) {
+                res = operator.castTo(com.starrocks.type.CharType.CHAR);
+            } else if (dataType instanceof BinaryType) {
+                res = operator.castTo(com.starrocks.type.VarbinaryType.VARBINARY);
+            } else if (dataType instanceof IntType) {
+                res = operator.castTo(com.starrocks.type.IntegerType.INT);
+            } else if (dataType instanceof BigIntType) {
+                res = operator.castTo(com.starrocks.type.IntegerType.BIGINT);
+            } else if (dataType instanceof TinyIntType) {
+                res = operator.castTo(com.starrocks.type.IntegerType.TINYINT);
+            } else if (dataType instanceof SmallIntType) {
+                res = operator.castTo(com.starrocks.type.IntegerType.SMALLINT);
+            } else if (dataType instanceof FloatType) {
+                res = operator.castTo(com.starrocks.type.FloatType.FLOAT);
+            } else if (dataType instanceof DoubleType) {
+                res = operator.castTo(com.starrocks.type.FloatType.DOUBLE);
+            } else if (dataType instanceof DecimalType) {
+                res = operator.castTo(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
+            }
+            return res.orElse(operator);
+        }
+    }
+
+    private Object convertBoolLiteralValue(Object literalValue) {
+        try {
+            return new BoolLiteral(String.valueOf(literalValue)).getValue();
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalValue);
+        }
+    }
+
+    private String getColumnName(ScalarOperator operator) {
+        if (operator == null) {
+            return null;
+        }
+        String columnName = operator.accept(new ExtractColumnName(), null);
+        if (columnName == null || columnName.isEmpty()) {
+            return null;
+        }
+        return columnName;
+    }
+
+    private static class ExtractColumnName extends ScalarOperatorVisitor<String, Void> {
+        @Override
+        public String visit(ScalarOperator scalarOperator, Void context) {
+            return null;
+        }
+
+        public String visitVariableReference(ColumnRefOperator operator, Void context) {
+            return operator.getName();
+        }
+
+        public String visitCastOperator(CastOperator operator, Void context) {
+            return operator.getChild(0).accept(this, context);
+        }
+    }
+}

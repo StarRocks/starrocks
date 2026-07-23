@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
@@ -122,6 +123,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
@@ -805,6 +807,34 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             LOG.warn("Failed to get Kudu table statistics for {}: {}", table.getName(), e.getMessage());
         }
         return computeNormalExternalTableScanNode(node, context, table, columnRefOperatorColumnMap, rowCount, source);
+    }
+
+    @Override
+    public Void visitLogicalFlussScan(LogicalFlussScanOperator node, ExpressionContext context) {
+        return computeFlussScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalFlussScan(PhysicalFlussScanOperator node, ExpressionContext context) {
+        return computeFlussScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeFlussScanNode(Operator node, ExpressionContext context, Table table,
+                                      Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
+            context.setStatistics(stats);
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalFlussScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
+        }
+
+        return visitOperator(node, context);
     }
 
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {

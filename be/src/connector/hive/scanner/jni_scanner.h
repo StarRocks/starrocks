@@ -99,8 +99,8 @@ private:
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
 
-    const std::set<std::string> _skipped_log_jni_scanner_params = {"native_table", "split_info", "predicate_info",
-                                                                   "access_id",    "access_key", "read_session"};
+    const std::set<std::string> _skipped_log_jni_scanner_params = {
+            "native_table", "split_info", "predicate_info", "access_id", "access_key", "read_session", "runtime_conf"};
 
 private:
     long* _chunk_meta_ptr;
@@ -115,6 +115,7 @@ private:
 };
 
 std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOptions& options);
+std::unique_ptr<JniScanner> create_fluss_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOptions& options);
 std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options);

@@ -420,8 +420,8 @@ struct THdfsScanRange {
     // paimon split info
     14: optional string paimon_split_info
 
-    // paimon predicate info
-    15: optional string paimon_predicate_info
+    // predicate info for JNI scanners
+    15: optional string jni_predicate_info
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
@@ -492,6 +492,12 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
+
+    // whether to use JNI scanner to read data of fluss table
+    41: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    42: optional string fluss_split_info
 }
 
 struct TBinlogScanRange {

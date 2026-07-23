@@ -16,6 +16,7 @@
         <module>udf-examples</module>
         <module>hudi-reader</module>
         <module>paimon-reader</module>
+        <module>fluss-reader</module>
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>

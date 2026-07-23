@@ -139,6 +139,34 @@ static void check_jni_scanner_params(const std::map<std::string, std::string>& p
     }
 }
 
+static TTableDescriptor create_fluss_table_desc() {
+    TFlussTable fluss_table;
+    fluss_table.__set_runtime_conf(
+            "bootstrap.servers=localhost:9123;table.datalake.paimon.warehouse=file:///tmp/fluss");
+    fluss_table.__set_time_zone("Asia/Shanghai");
+    fluss_table.__set_catalog_name("fluss0");
+
+    TTableDescriptor table_desc;
+    table_desc.__set_id(100000041);
+    table_desc.__set_tableType(TTableType::FLUSS_TABLE);
+    table_desc.__set_numCols(2);
+    table_desc.__set_numClusteringCols(0);
+    table_desc.__set_tableName("orders");
+    table_desc.__set_dbName("fluss_db");
+    table_desc.__set_flussTable(fluss_table);
+    return table_desc;
+}
+
+static THdfsScanRange create_fluss_scan_range() {
+    THdfsScanRange scan_range;
+    scan_range.__set_length(128);
+    scan_range.__set_file_length(128);
+    scan_range.__set_use_fluss_jni_reader(true);
+    scan_range.__set_jni_predicate_info("fluss-predicate-info");
+    scan_range.__set_fluss_split_info("fluss-split-info");
+    return scan_range;
+}
+
 TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
     // create jni scanner
     JniScanner::CreateOptions options;
@@ -181,6 +209,43 @@ TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
             {"time_zone", "Asia/Shanghai"},
     };
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
+}
+
+TEST_F(JniScannerTest, test_create_fluss_jni_scanner) {
+    // create jni scanner
+    JniScanner::CreateOptions options;
+
+    TTableDescriptor t_table_desc = create_fluss_table_desc();
+    FlussTableDescriptor flussTable(t_table_desc, &_pool);
+    options.hive_table = &flussTable;
+
+    THdfsScanRange t_hdfs_scan_range = create_fluss_scan_range();
+    options.scan_range = &t_hdfs_scan_range;
+
+    auto scanner = create_fluss_jni_scanner(options);
+
+    // update columns.
+    TupleDescriptor* tuple_desc = create_default_tuple_desc();
+    scanner->_scanner_ctx = &_scanner_ctx;
+    init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
+    scanner->update_jni_scanner_params();
+
+    // check parameters.
+    print_jni_scanner_params(scanner->_jni_scanner_params);
+
+    std::map<std::string, std::string> expected = {
+            {"catalog_name", "fluss0"},
+            {"db_name", "fluss_db"},
+            {"nested_fields", "c1.Cc1"},
+            {"predicate_info", "fluss-predicate-info"},
+            {"required_fields", "c0,c1"},
+            {"runtime_conf", "bootstrap.servers=localhost:9123;table.datalake.paimon.warehouse=file:///tmp/fluss"},
+            {"split_info", "fluss-split-info"},
+            {"table_name", "orders"},
+            {"time_zone", "Asia/Shanghai"},
+    };
+    check_jni_scanner_params(scanner->_jni_scanner_params, expected);
+    ASSERT_EQ(1, scanner->_skipped_log_jni_scanner_params.count("runtime_conf"));
 }
 
 TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
