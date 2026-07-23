@@ -10,9 +10,11 @@
 
 ```Haskell
 BIGINT ds_theta_count_distinct(expr)
+BIGINT ds_theta_count_distinct(expr, log_k)
 ```
 
 - `expr`: 要计算近似 COUNT DISTINCT 值的列。
+- `log_k`: 整数。范围 [5, 26]。默认值：12。控制草图的精度和内存使用量。
 
 ## 示例
 
