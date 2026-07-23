@@ -506,9 +506,60 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
-if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
-    patch < $TP_PATCH_DIR/brpc-1.9.0.patch
-    touch $PATCHED_MARK
+if [ "$BRPC_SOURCE" == "brpc-1.9.0" ]; then
+    brpc_patch_is_applied() {
+        local strip_level="$1"
+        local patch_file="$2"
+        patch "-p${strip_level}" --dry-run --force --reverse < "$patch_file" > /dev/null 2>&1
+    }
+    apply_brpc_patch() {
+        local strip_level="$1"
+        local patch_file="$2"
+        local patched_mark="$3"
+        if [ -f "$patched_mark" ]; then
+            return
+        fi
+        patch "-p${strip_level}" --dry-run --forward < "$patch_file" > /dev/null 2>&1 || exit 1
+        patch "-p${strip_level}" --forward < "$patch_file" || exit 1
+        touch "$patched_mark" || exit 1
+    }
+
+    if [ ! -f "$PATCHED_MARK" ]; then
+        if brpc_patch_is_applied 1 "$TP_PATCH_DIR/brpc-1.9.0.patch"; then
+            touch "$PATCHED_MARK" || exit 1
+        else
+            apply_brpc_patch 1 "$TP_PATCH_DIR/brpc-1.9.0.patch" "$PATCHED_MARK"
+        fi
+    fi
+
+    # Use per-patch markers so existing and partially patched workspaces can
+    # resume without reapplying an earlier AgentCombiner backport. Detect the
+    # newest applied patch first because follow-up patches can change the
+    # context needed to reverse-check an earlier patch.
+    BRPC_AGENT_COMBINER_2949_PATCHED_MARK="patched_mark_agent_combiner_2949"
+    BRPC_AGENT_COMBINER_3066_PATCHED_MARK="patched_mark_agent_combiner_3066"
+    BRPC_AGENT_COMBINER_3291_PATCHED_MARK="patched_mark_agent_combiner_3291"
+    if [ -f "$BRPC_AGENT_COMBINER_3291_PATCHED_MARK" ] || brpc_patch_is_applied \
+            1 "$TP_PATCH_DIR/brpc-1.9.0-3291.patch"; then
+        touch "$BRPC_AGENT_COMBINER_2949_PATCHED_MARK" \
+              "$BRPC_AGENT_COMBINER_3066_PATCHED_MARK" \
+              "$BRPC_AGENT_COMBINER_3291_PATCHED_MARK" || exit 1
+    elif [ -f "$BRPC_AGENT_COMBINER_3066_PATCHED_MARK" ] || brpc_patch_is_applied \
+            1 "$TP_PATCH_DIR/brpc-1.9.0-3066.patch"; then
+        touch "$BRPC_AGENT_COMBINER_2949_PATCHED_MARK" \
+              "$BRPC_AGENT_COMBINER_3066_PATCHED_MARK" || exit 1
+    elif [ -f "$BRPC_AGENT_COMBINER_2949_PATCHED_MARK" ] || brpc_patch_is_applied \
+            1 "$TP_PATCH_DIR/brpc-1.9.0-2949.patch"; then
+        touch "$BRPC_AGENT_COMBINER_2949_PATCHED_MARK" || exit 1
+    fi
+
+    apply_brpc_patch 1 \
+        "$TP_PATCH_DIR/brpc-1.9.0-2949.patch" "$BRPC_AGENT_COMBINER_2949_PATCHED_MARK"
+    apply_brpc_patch 1 \
+        "$TP_PATCH_DIR/brpc-1.9.0-3066.patch" "$BRPC_AGENT_COMBINER_3066_PATCHED_MARK"
+    apply_brpc_patch 1 \
+        "$TP_PATCH_DIR/brpc-1.9.0-3291.patch" "$BRPC_AGENT_COMBINER_3291_PATCHED_MARK"
+    unset -f brpc_patch_is_applied apply_brpc_patch
 fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
