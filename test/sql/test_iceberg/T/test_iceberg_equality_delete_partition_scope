@@ -1,0 +1,21 @@
+-- name: test_iceberg_equality_delete_partition_scope
+-- Iceberg applies a partitioned-spec equality delete only to data files of the same (specId, partition);
+-- only unpartitioned-spec deletes are global. A row with the same equality key in another partition must survive.
+create external catalog iceberg_eqpart_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}", "aws.s3.access_key"="${oss_ak}", "aws.s3.secret_key"="${oss_sk}", "aws.s3.endpoint"="${oss_endpoint}");
+create database iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0};
+call iceberg_eqpart_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_part", "oss://${oss_bucket}/iceberg_ci_db/eq_del_part/metadata/v3.metadata.json");
+call iceberg_eqpart_${uuid0}.system.register_table("eq_delete_db_${uuid0}", "eq_del_evolve", "oss://${oss_bucket}/iceberg_ci_db/eq_del_evolve/metadata/v6.metadata.json");
+
+set new_planner_optimize_timeout = 30000;
+
+-- partitioned-spec delete {1,3} in p=a: (1,a1) and (3,a3) go, (1,b1) in p=b survives
+select * from iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_part order by id, p;
+
+-- global delete (id=11) applies everywhere; after spec evolution the partitioned delete (id=20, p=a)
+-- removes (20,p1,a) only, (20,p3,b) survives
+select * from iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_evolve order by id, p;
+
+drop table iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_part;
+drop table iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0}.eq_del_evolve;
+drop database iceberg_eqpart_${uuid0}.eq_delete_db_${uuid0};
+drop catalog iceberg_eqpart_${uuid0};
