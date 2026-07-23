@@ -300,6 +300,10 @@ public final class MetricRepo {
             new LongCounterMetric("context_delete_total",
                     MetricUnit.REQUESTS, "total number of CONTEXT DELETE statements executed");
 
+    public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
+            new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
+                    "Times we have exhausted the budget");
+
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
      * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
@@ -1216,6 +1220,8 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER);
+
+        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL);
 
         // init system metrics
         initSystemMetrics();
