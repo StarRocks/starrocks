@@ -283,8 +283,6 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(2, constantEncodingMap.size());
         Assertions.assertEquals(Map.of(1, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
         Assertions.assertEquals(
-                Map.of(1, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
-        Assertions.assertEquals(
                 Map.of(0, ConstantOperator.createInt(2), 2, ConstantOperator.createInt(1)),
                 constantEncodingMap.get(1));
     }
