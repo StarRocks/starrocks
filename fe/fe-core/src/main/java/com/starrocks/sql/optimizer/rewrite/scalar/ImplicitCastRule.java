@@ -209,7 +209,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
         // we will try cast const operator to variable operator
         if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
-                (leftChild.isVariable() && rightChild.isConstantRef())) {
+                (leftChild.isVariable() && rightChild.isConstantRef()) ||
+                isDateVariableAndNumericCastConstantExpression(rightChild, leftChild) ||
+                isDateVariableAndNumericCastConstantExpression(leftChild, rightChild)) {
             int constant = leftChild.isVariable() ? 1 : 0;
             int variable = 1 - constant;
             Optional<BinaryPredicateOperator> optional = optimizeConstantAndVariable(predicate, constant, variable);
@@ -228,6 +230,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             addCastChild(compatibleType, predicate, 1);
         }
         return predicate;
+    }
+
+    private boolean isDateVariableAndNumericCastConstantExpression(ScalarOperator variable, ScalarOperator constant) {
+        return variable.isVariable() && variable.getType().isDateType() &&
+                constant instanceof CastOperator && constant.isConstant() && constant.getType().isNumericType();
     }
 
     private Optional<BinaryPredicateOperator> optimizeConstantAndVariable(BinaryPredicateOperator predicate,
