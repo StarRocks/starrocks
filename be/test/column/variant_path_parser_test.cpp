@@ -426,4 +426,76 @@ TEST_F(VariantPathTest, IsAncestorOrSame) {
     EXPECT_FALSE(xy->is_ancestor_or_same(*ab));
 }
 
+// Bracket/quoted notation accepts keys that dot-notation cannot express ('$', '.', '[', ...).
+// This is the escape hatch a correct path builder must use for arbitrary object keys; it is
+// exactly what dot-notation ("$.<name>") fails to handle for names like "$currency".
+TEST_F(VariantPathTest, ParseQuotedKeyWithSpecialChars) {
+    struct Case {
+        std::string path;
+        std::vector<std::string> keys; // expected object-segment keys, in order
+    };
+    const std::vector<Case> cases = {
+            {"$['$currency']", {"$currency"}}, {R"($["$amount"])", {"$amount"}},           {"$['a.b']", {"a.b"}},
+            {"$['a[0]b']", {"a[0]b"}},         {"$.outer['$inner']", {"outer", "$inner"}},
+    };
+    for (const auto& c : cases) {
+        auto result = VariantPathParser::parse(c.path);
+        ASSERT_TRUE(result.ok()) << "should parse: " << c.path;
+        const auto& segs = result.value().segments;
+        ASSERT_EQ(segs.size(), c.keys.size()) << "path: " << c.path;
+        for (size_t i = 0; i < segs.size(); ++i) {
+            EXPECT_TRUE(segs[i].is_object()) << "path: " << c.path << " seg " << i;
+            EXPECT_EQ(segs[i].get_key(), c.keys[i]) << "path: " << c.path << " seg " << i;
+        }
+    }
+}
+
+// Escape sequences inside quoted keys are unescaped by the parser (raw strings keep the
+// backslashes literal in the path under test).
+TEST_F(VariantPathTest, ParseQuotedKeyEscapeSequences) {
+    struct Case {
+        std::string path;
+        std::string key;
+    };
+    const std::vector<Case> cases = {
+            {R"($['a\'b'])", "a'b"},            // escaped single quote
+            {R"($['a\\b'])", "a\\b"},           // escaped backslash -> a<backslash>b
+            {R"($["a\"b"])", "a\"b"},           // escaped double quote
+            {R"($['tab\theld'])", "tab\theld"}, // \t -> tab character
+    };
+    for (const auto& c : cases) {
+        auto result = VariantPathParser::parse(c.path);
+        ASSERT_TRUE(result.ok()) << "should parse: " << c.path;
+        ASSERT_EQ(result.value().segments.size(), 1u) << "path: " << c.path;
+        EXPECT_TRUE(result.value().segments[0].is_object());
+        EXPECT_EQ(result.value().segments[0].get_key(), c.key) << "path: " << c.path;
+    }
+}
+
+// Multibyte (UTF-8) keys survive via quoted notation; dot-notation only allows ASCII [A-Za-z0-9_].
+TEST_F(VariantPathTest, ParseQuotedKeyUnicode) {
+    auto result = VariantPathParser::parse(std::string("$['naïve_名前']"));
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value().segments.size(), 1u);
+    EXPECT_TRUE(result.value().segments[0].is_object());
+    EXPECT_EQ(result.value().segments[0].get_key(), "naïve_名前");
+}
+
+// Paths the grammar must reject. Documents the limits of dot-notation, the numeric-only
+// array-index rule, index overflow, and that '$[*]' wildcard is intentionally unsupported
+// (unlike the JSON path grammar).
+TEST_F(VariantPathTest, RejectsMalformedPaths) {
+    const std::vector<std::string> invalid = {
+            "$.a.$b",                  // '$' after '.' is not a simple key
+            "$[*]",                    // wildcard not supported
+            "$[-1]",                   // negative array index
+            "$..a",                    // empty key between dots
+            "$.a.",                    // trailing dot
+            "$[99999999999999999999]", // array index overflow
+    };
+    for (const auto& p : invalid) {
+        EXPECT_FALSE(VariantPathParser::parse(p).ok()) << "should reject: " << p;
+    }
+}
+
 } // namespace starrocks
