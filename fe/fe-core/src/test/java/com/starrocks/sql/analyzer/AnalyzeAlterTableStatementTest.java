@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -273,6 +274,49 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess(sql);
         sql = "alter table tmcwr drop column name";
         analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testOptimizeRandomDistributionForAggTable() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.agg_rand_opt (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  v1 BIGINT SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.dup_rand_opt (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  v1 BIGINT\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.agg_rand_opt_repl (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  v1 BIGINT REPLACE\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        boolean original = Config.enable_random_distribution_for_agg_table;
+        try {
+            Config.enable_random_distribution_for_agg_table = false;
+            analyzeFail("alter table test.agg_rand_opt distributed by random buckets 10");
+            analyzeSuccess("alter table test.dup_rand_opt distributed by random buckets 10");
+
+            Config.enable_random_distribution_for_agg_table = true;
+            analyzeSuccess("alter table test.agg_rand_opt distributed by random buckets 10");
+            analyzeSuccess("alter table test.dup_rand_opt distributed by random buckets 10");
+            // REPLACE-family columns must stay rejected even with the flag on.
+            analyzeFail("alter table test.agg_rand_opt_repl distributed by random buckets 10");
+        } finally {
+            Config.enable_random_distribution_for_agg_table = original;
+            AnalyzeTestUtil.getStarRocksAssert().dropTable("test.agg_rand_opt");
+            AnalyzeTestUtil.getStarRocksAssert().dropTable("test.dup_rand_opt");
+            AnalyzeTestUtil.getStarRocksAssert().dropTable("test.agg_rand_opt_repl");
+        }
     }
 
 }
