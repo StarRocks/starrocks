@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -151,6 +152,55 @@ public class MVTaskRunProcessorTest extends MVTestBase {
         Assertions.assertFalse(infoStrings.isEmpty(), "Runtime profile should contain trace information");
 
         starRocksAssert.dropMaterializedView("test_mv_plan_builder");
+    }
+
+    /**
+     * Regression test: async MV refresh runs the INSERT OVERWRITE through
+     * StmtExecutor.handleDMLStmtWithProfile() directly and bypasses StmtExecutor.execute(), where
+     * recordExecStatsIntoContext() is invoked. Before the fix the execution statistics were never
+     * flushed into the audit event builder, so the audit log lost CpuCostNs/MemCostBytes/ScanRows
+     * for every MV refresh (regression of #56257). This verifies they are recorded again.
+     */
+    @Test
+    public void testMVRefreshRecordsAuditStats() throws Exception {
+        // Insert data so the refresh issues a real INSERT OVERWRITE that produces exec statistics.
+        executeInsertSql(connectContext, "insert into test.tbl1 partition(p1) values('2022-01-02', 1, 10)");
+
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test_mv_audit_stats` " +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"" +
+                        ")\n" +
+                        "AS SELECT k1, k2, v1 FROM test.tbl1;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_mv_audit_stats"));
+        Assertions.assertNotNull(mv);
+
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        task.getProperties().put(TaskRun.IS_TEST, "true");
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+
+        // The refresh uses its own ConnectContext; read the audit event built on that context.
+        ConnectContext runCtx = taskRun.getRunCtx();
+        Assertions.assertNotNull(runCtx, "MV refresh ConnectContext should be available");
+        AuditEvent auditEvent = runCtx.getAuditEventBuilder().build();
+
+        // Default value is -1 (dropped from the audit line by AuditLogBuilder). A non-default value
+        // proves the stats were flushed into the builder on the MV refresh path.
+        Assertions.assertNotEquals(-1L, auditEvent.cpuCostNs,
+                "MV refresh audit log should record CpuCostNs");
+        Assertions.assertNotEquals(-1L, auditEvent.memCostBytes,
+                "MV refresh audit log should record MemCostBytes");
+        Assertions.assertNotEquals(-1L, auditEvent.scanRows,
+                "MV refresh audit log should record ScanRows");
+
+        starRocksAssert.dropMaterializedView("test_mv_audit_stats");
     }
 
     /**
