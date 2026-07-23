@@ -2355,6 +2355,40 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
     }
 
+    // Regression test for: view-delta lossless-join must not treat a nullable FK column as non-null
+    // merely because an FK constraint is declared on the MV.  An INNER JOIN on a nullable FK column
+    // is NOT lossless (NULL rows would be silently dropped), so the rewrite must be rejected.
+    @Test
+    public void testViewDeltaJoinUKFKInMV8NullableFKShouldNotRewrite() {
+        // emps_null has deptno INT NULL; depts has deptno INT NOT NULL (unique).
+        // The MV joins them with INNER JOIN on deptno.
+        // Even though we declare foreign_key_constraints on the MV, the nullable deptno means
+        // the inner join is NOT lossless -- rows where deptno IS NULL would be dropped.
+        // Therefore the rewriter must refuse to rewrite the query via the MV.
+        String mv = "select emps_null.empid, emps_null.deptno, depts.name from emps_null\n"
+                + "inner join depts on emps_null.deptno = depts.deptno";
+        String query = "select empid, deptno from emps_null";
+        String constraint = "\"unique_constraints\" = \"depts.deptno\"," +
+                "\"foreign_key_constraints\" = \"emps_null(deptno) references depts(deptno)\" ";
+
+        // Use rewrite() directly and assert no exception, proving the MV was successfully created.
+        // nonMatch() requires exception == null (via Preconditions.checkState), so it will fail
+        // if MV creation itself threw — distinguishing "rewrite rejected at nullability check"
+        // from "MV could not be created at all".
+        MVRewriteChecker checker = new MVRewriteChecker(null, mv, query, constraint).rewrite();
+        Assertions.assertNull(checker.getException(),
+                "MV should be created successfully even though deptno is nullable");
+        checker.nonMatch();
+
+        // Also verify the query executes correctly via base-table scan when MV rewrite is disabled,
+        // confirming that all rows from emps_null are returned (no rows silently dropped).
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DISABLE.toString());
+        sql(query).nonMatch("TABLE: mv0").contains("TABLE: emps_null");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+    }
+
     @Test
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
