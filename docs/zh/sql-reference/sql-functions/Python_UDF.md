@@ -163,6 +163,80 @@ $$
 ;
 ```
 
+## 沙箱化 Python UDF 执行
+
+默认情况下,Python UDF Worker **没有任何运行时隔离**:它是 BE 拉起的一个 `python3` 进程,以 BE 所属的操作系统用户身份执行 UDF 代码,拥有完整的文件系统和网络访问权限。有效的安全边界就是"谁有权创建/运行函数",因此应把 `CREATE FUNCTION` / `CREATE GLOBAL FUNCTION` 权限视同"以 BE 操作系统用户身份运行任意代码"来授予。
+
+如需限制 UDF 代码的能力,可通过 BE 配置项 `python_udf_sandbox` 开启沙箱:
+
+| 取值 | 隔离能力 | 前提 |
+| --- | --- | --- |
+| `off`(默认) | 无 | — |
+| `seccomp` | 通过 nsjail 施加 seccomp 系统调用过滤(拦截 `ptrace`、`mount`、内核模块加载等),不使用 namespace | 无需额外权限,任意容器可用 |
+| `nsjail` | 完整的 Linux namespace 隔离(mount / network / PID / user namespace):最小只读文件系统视图、无外网、映射到非特权 UID | 宿主须允许所选的 namespace 模式(见下) |
+
+沙箱是**部署侧**的控制项,在 `be.conf` 中设置,UDF 作者或查询都无法更改。隔离策略本身位于运维可编辑的配置文件中(`conf/pyudf-nsjail.conf`、`conf/pyudf-nsjail-seccomp.conf`、`conf/pyudf.kafel`),BE 仅在启动时把部署路径渲染进去。
+
+### 示例:开启沙箱
+
+1. 在每个 BE 的 `be.conf` 中加入(需要一个装了 `pyarrow` 的 Python 环境,见[前提条件](#前提条件)):
+
+   ```Properties
+   # 一个 Python 环境(使用其 bin/python3),需已安装 pyarrow
+   python_envs = /usr
+
+   # 沙箱级别:off | seccomp | nsjail
+   python_udf_sandbox = nsjail
+   # nsjail 的 namespace 策略:auto | rootless | privileged
+   python_udf_sandbox_mode = auto
+   # 为 true 时,无法建立所请求的沙箱则拒绝运行 UDF
+   python_udf_sandbox_required = false
+   ```
+
+2. 重启 BE,然后照常创建并运行 UDF:
+
+   ```SQL
+   CREATE FUNCTION py_add(INT, INT)
+   RETURNS INT
+   type = 'Python'
+   symbol = 'add'
+   file = 'inline'
+   AS
+   $$
+   def add(a, b):
+       return a + b
+   $$
+   ;
+
+   SELECT py_add(1, 2);   -- 返回 3,在沙箱内计算
+   ```
+
+BE 会记录为 Worker 选定的沙箱级别;在 BE 日志中搜索 `python UDF nsjail sandbox` 即可看到。
+
+### namespace 模式与部署前提
+
+`python_udf_sandbox_mode` 仅在 `python_udf_sandbox = nsjail` 时生效:
+
+- `auto`(默认):宿主允许时使用免特权 user namespace;否则若 BE 拥有 `CAP_SYS_ADMIN` 则使用之;都不行则降级为仅 `seccomp`(除非 `python_udf_sandbox_required = true`)。
+- `rootless`:强制使用免特权 user namespace。要求宿主允许免特权 user namespace,**且** BE 容器的 seccomp/AppArmor 放行 `unshare`、`mount` 系统调用。
+- `privileged`:强制使用宿主 `CAP_SYS_ADMIN`(不建 user namespace)。
+
+在 Kubernetes 上,容器默认的 seccomp 与 AppArmor profile 会拦掉建 namespace / mount 的系统调用,因此 `nsjail` 模式需要放宽 BE Pod 的这两项。对于 rootless 路径,让 BE 容器以 unconfined 的 seccomp/AppArmor 运行,且节点允许免特权 user namespace:
+
+```yaml
+securityContext:
+  seccompProfile:
+    type: Unconfined
+  # 另需该容器 AppArmor 'unconfined',以及节点上
+  # kernel.unprivileged_userns_clone=1(且无 AppArmor 限制)
+```
+
+若环境无法允许 user namespace,请使用 `python_udf_sandbox = seccomp`(无需额外权限):它过滤系统调用,但**不**隔离文件系统和网络——这两者请依赖容器自身的手段(例如 Kubernetes `NetworkPolicy`)。
+
+:::note
+`nsjail`/`seccomp` 级别都需要 `python_udf_nsjail_path` 指向的 `nsjail` 二进制(默认 `${STARROCKS_HOME}/lib/nsjail`)。若缺失且 `python_udf_sandbox_required = false`,Worker 将在无沙箱下运行并记录一条告警。
+:::
+
 ## 附录
 
 ### SQL 数据类型与 Python 数据类型的映射

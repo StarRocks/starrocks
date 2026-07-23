@@ -163,6 +163,80 @@ $$
 ;
 ```
 
+## Sandbox Python UDF execution
+
+By default a Python UDF worker runs with **no runtime isolation**: it is a `python3` process the BE spawns that executes the UDF code as the same OS user as the BE, with full filesystem and network access. The effective security boundary is the privilege to create and run functions, so treat the `CREATE FUNCTION` / `CREATE GLOBAL FUNCTION` privilege as equivalent to running arbitrary code as the BE OS user.
+
+To constrain what UDF code can do, enable a sandbox with the BE configuration item `python_udf_sandbox`:
+
+| Value | Isolation | Requirements |
+| --- | --- | --- |
+| `off` (default) | none | — |
+| `seccomp` | a seccomp syscall filter (blocks `ptrace`, `mount`, module loading, etc.), applied via nsjail without namespaces | none — works in any container, no extra privileges |
+| `nsjail` | full Linux-namespace isolation (mount / network / PID / user namespaces): a minimal read-only filesystem view, no network egress, and a mapped unprivileged UID | the host must allow the chosen namespace mode (see below) |
+
+The sandbox is a deployment-side control set in `be.conf`; it cannot be changed by the UDF author or by a query. The isolation policy lives in operator-editable config files (`conf/pyudf-nsjail.conf`, `conf/pyudf-nsjail-seccomp.conf`, `conf/pyudf.kafel`); the BE renders the deployment paths into them at startup.
+
+### Example: enable the sandbox
+
+1. Add the following to `be.conf` on every BE (a Python environment with `pyarrow` installed is required — see [Prerequisites](#prerequisites)):
+
+   ```Properties
+   # a Python environment (its bin/python3 is used) that has pyarrow installed
+   python_envs = /usr
+
+   # sandbox level: off | seccomp | nsjail
+   python_udf_sandbox = nsjail
+   # nsjail namespace strategy: auto | rootless | privileged
+   python_udf_sandbox_mode = auto
+   # if true, refuse to run a UDF when the requested sandbox cannot be established
+   python_udf_sandbox_required = false
+   ```
+
+2. Restart the BE, then create and run a UDF as usual:
+
+   ```SQL
+   CREATE FUNCTION py_add(INT, INT)
+   RETURNS INT
+   type = 'Python'
+   symbol = 'add'
+   file = 'inline'
+   AS
+   $$
+   def add(a, b):
+       return a + b
+   $$
+   ;
+
+   SELECT py_add(1, 2);   -- returns 3, computed inside the sandbox
+   ```
+
+The BE logs the effective sandbox level chosen for the workers; search the BE log for `python UDF nsjail sandbox`.
+
+### Namespace modes and deployment requirements
+
+`python_udf_sandbox_mode` applies only when `python_udf_sandbox = nsjail`:
+
+- `auto` (default): use a rootless unprivileged user namespace when the host permits it; otherwise use `CAP_SYS_ADMIN` if the BE has it; otherwise fall back to `seccomp`-only (unless `python_udf_sandbox_required = true`).
+- `rootless`: force an unprivileged user namespace. Requires the host to allow unprivileged user namespaces **and** the BE container's seccomp/AppArmor to permit the `unshare` and `mount` system calls.
+- `privileged`: force host `CAP_SYS_ADMIN` (no user namespace).
+
+On Kubernetes, the default container seccomp and AppArmor profiles block the namespace/mount system calls, so the `nsjail` mode requires relaxing them on the BE pod. For the rootless path, run the BE container with an unconfined seccomp profile and AppArmor, on a node that allows unprivileged user namespaces:
+
+```yaml
+securityContext:
+  seccompProfile:
+    type: Unconfined
+  # plus AppArmor 'unconfined' for the container, and
+  # kernel.unprivileged_userns_clone=1 (no AppArmor restriction) on the node
+```
+
+If the environment cannot permit user namespaces, use `python_udf_sandbox = seccomp` (no extra privileges required), which filters system calls but does not isolate the filesystem or the network — rely on the container's own controls (for example, a Kubernetes `NetworkPolicy`) for those.
+
+:::note
+The `nsjail`/`seccomp` levels require the `nsjail` binary at `python_udf_nsjail_path` (default `${STARROCKS_HOME}/lib/nsjail`). If it is missing and `python_udf_sandbox_required = false`, the worker runs without a sandbox and a warning is logged.
+:::
+
 ## Appendix
 
 ### Mapping between SQL data types and Python data types
