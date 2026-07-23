@@ -419,6 +419,66 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
+    public void testSyncTableMetaIgnoresMissingShardGroupForRecycleBinPartition() throws Exception {
+        long dbId = 100;
+        long tableId = 1000;
+        long liveShardGroupId = 10000;
+        long recycledShardGroupId = 10001;
+
+        List<Column> baseSchema = new ArrayList<>();
+        KeysType keysType = KeysType.AGG_KEYS;
+        PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+        DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+        OlapTable table = new LakeTable(tableId, "lake_table", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+
+        MaterializedIndex liveIndex = new MaterializedIndex();
+        liveIndex.setShardGroupId(liveShardGroupId);
+        liveIndex.getTablets().add(new LakeTablet(10));
+        Partition livePartition = new Partition(101, 201, "p_live", liveIndex, defaultDistributionInfo);
+        table.addPartition(livePartition);
+
+        MaterializedIndex recycledIndex = new MaterializedIndex();
+        recycledIndex.setShardGroupId(recycledShardGroupId);
+        recycledIndex.getTablets().add(new LakeTablet(20));
+        Partition recycledPartition = new Partition(102, 202, "p_recycled", recycledIndex, defaultDistributionInfo);
+
+        Database db = new Database(dbId, "db");
+        Set<Long> deletedShardIds = new HashSet<>();
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getTable(dbId, tableId);
+                result = table;
+
+                localMetastore.getAllPartitionsIncludeRecycleBin(table);
+                result = Lists.newArrayList(livePartition, recycledPartition);
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) throws DdlException {
+                if (groupId == liveShardGroupId) {
+                    return Lists.newArrayList(10L, 11L);
+                }
+                if (groupId == recycledShardGroupId) {
+                    throw new DdlException("Failed to list shards in group " + recycledShardGroupId +
+                            ". error:NOT_EXIST:shard group " + recycledShardGroupId + " not exist.");
+                }
+                return Lists.newArrayList();
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) {
+                deletedShardIds.addAll(shardIds);
+            }
+        };
+
+        Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, table, false));
+        Assertions.assertEquals(new HashSet<>(Lists.newArrayList(11L)), deletedShardIds);
+    }
+
+    @Test
     @Disabled
     public void testSyncTableMeta() throws Exception {
         long dbId = 100;
