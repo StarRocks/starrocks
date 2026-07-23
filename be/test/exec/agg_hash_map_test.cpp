@@ -18,6 +18,7 @@
 
 #include <any>
 
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -327,6 +328,56 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16Sl
     using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
     using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
     TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
+}
+
+// A key column whose serialized size overflows uint32 (fake 5GB offset, no bytes allocated) must make
+// the serialized-key GROUP BY / DISTINCT build path fail fast (throw) instead of under-allocating.
+TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyAggHashMapOverflowGuardThrows) {
+    RuntimeProfile profile("guard");
+    AggStatistics statis(&profile);
+    SerializedKeyAggHashMap<PhmapSeed1> key(4, &statis);
+    Buffer<AggDataPtr> agg_states(4);
+    MemPool pool;
+
+    auto fake = LargeBinaryColumn::create();
+    auto* data_ptr = fake.get();
+    fake->get_offset().push_back(5ULL * 1024 * 1024 * 1024);
+    Columns key_columns;
+    key_columns.emplace_back(std::move(fake));
+
+    bool threw = false;
+    try {
+        key.build_hash_map(1, key_columns, &pool, TestAllocateState<SerializedKeyAggHashMap<PhmapSeed1>>(&pool),
+                           &agg_states);
+    } catch (const std::runtime_error& e) {
+        threw = true;
+        EXPECT_NE(std::string(e.what()).find("exceeds the 4GB"), std::string::npos);
+    }
+    EXPECT_TRUE(threw);
+    data_ptr->reset_column();
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyAggHashSetOverflowGuardThrows) {
+    RuntimeProfile profile("guard");
+    AggStatistics statis(&profile);
+    SerializedKeyAggHashSet<PhmapSeed1> set(4, &statis);
+    MemPool pool;
+
+    auto fake = LargeBinaryColumn::create();
+    auto* data_ptr = fake.get();
+    fake->get_offset().push_back(5ULL * 1024 * 1024 * 1024);
+    Columns key_columns;
+    key_columns.emplace_back(std::move(fake));
+
+    bool threw = false;
+    try {
+        set.build_set<true>(1, key_columns, &pool, nullptr);
+    } catch (const std::runtime_error& e) {
+        threw = true;
+        EXPECT_NE(std::string(e.what()).find("exceeds the 4GB"), std::string::npos);
+    }
+    EXPECT_TRUE(threw);
+    data_ptr->reset_column();
 }
 
 } // namespace starrocks

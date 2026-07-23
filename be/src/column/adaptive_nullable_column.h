@@ -319,7 +319,7 @@ public:
 
     uint32_t max_one_element_serialize_size() const override {
         materialized_nullable();
-        return sizeof(bool) + _data_column->max_one_element_serialize_size();
+        return saturate_serialize_size(sizeof(bool) + _data_column->max_one_element_serialize_size());
     }
 
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
@@ -338,7 +338,7 @@ public:
         if (_null_column->immutable_data()[idx]) {
             return sizeof(uint8_t);
         }
-        return sizeof(uint8_t) + _data_column->serialize_size(idx);
+        return saturate_serialize_size(sizeof(uint8_t) + _data_column->serialize_size(idx));
     }
 
     MutableColumnPtr clone_empty() const override {

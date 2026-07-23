@@ -334,12 +334,12 @@ uint32_t MapColumn::serialize_size(size_t idx) const {
     uint32_t offset = offsets_data[idx];
     uint32_t map_size = offsets_data[idx + 1] - offset;
 
-    uint32_t ser_size = sizeof(map_size);
+    size_t ser_size = sizeof(map_size);
     for (size_t i = 0; i < map_size; ++i) {
         ser_size += _keys->serialize_size(offset + i);
         ser_size += _values->serialize_size(offset + i);
     }
-    return ser_size;
+    return saturate_serialize_size(ser_size);
 }
 
 void MapColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,

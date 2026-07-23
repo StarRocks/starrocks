@@ -563,6 +563,9 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         }
 
         max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(serialize_size_overflow(max_one_row_size))) {
+            throw_serialize_key_size_overflow();
+        }
         size_t new_buffer_size = max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
         if (UNLIKELY(new_buffer_size > _mem_pool->total_allocated_bytes())) {
             _mem_pool->clear();
@@ -629,7 +632,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         for (const auto& key_column : key_columns) {
             max_size += key_column->max_one_element_serialize_size();
         }
-        return max_size;
+        return saturate_serialize_size(max_size);
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {

@@ -20,13 +20,104 @@
 
 #include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 
 namespace starrocks {
+
+// A nullable LargeBinaryColumn with one element claiming `claimed_size` bytes via its offset only
+// (bytes buffer stays empty). |*out_data| lets the caller reset_column() before scope end, since
+// ~BinaryColumnBase() DCHECKs bytes/offsets consistency.
+static NullableColumn::MutablePtr make_oversized_serialize_binary(uint64_t claimed_size, LargeBinaryColumn** out_data) {
+    auto data = LargeBinaryColumn::create();
+    *out_data = data.get();
+    data->get_offset().push_back(claimed_size);
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapColumnTest, test_serialize_size_saturates_on_overflow) {
+    LargeBinaryColumn* key_data = nullptr;
+    LargeBinaryColumn* value_data = nullptr;
+    auto keys = make_oversized_serialize_binary(2'500'000'000ULL, &key_data);
+    auto values = make_oversized_serialize_binary(2'500'000'000ULL, &value_data);
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_LT(column->keys_column()->serialize_size(0), Column::SERIALIZE_SIZE_LIMIT);
+    ASSERT_LT(column->values_column()->serialize_size(0), Column::SERIALIZE_SIZE_LIMIT);
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->max_one_element_serialize_size());
+    EXPECT_TRUE(serialize_size_overflow(column->serialize_size(0)));
+    key_data->reset_column();
+    value_data->reset_column();
+}
+
+// nullable(array<map<binary,binary>>): the saturated map size must propagate up through map -> array
+// -> nullable, covering deep nesting.
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapColumnTest, test_nested_serialize_size_saturates) {
+    LargeBinaryColumn* key_data = nullptr;
+    LargeBinaryColumn* value_data = nullptr;
+    auto keys = make_oversized_serialize_binary(2'500'000'000ULL, &key_data);
+    auto values = make_oversized_serialize_binary(2'500'000'000ULL, &value_data);
+    auto map_offsets = UInt32Column::create();
+    map_offsets->append(0);
+    map_offsets->append(1);
+    auto map = MapColumn::create(std::move(keys), std::move(values), std::move(map_offsets));
+
+    auto map_null = NullColumn::create();
+    map_null->append(0);
+    auto elements = NullableColumn::create(std::move(map), std::move(map_null));
+    auto array_offsets = UInt32Column::create();
+    array_offsets->append(0);
+    array_offsets->append(1);
+    auto array = ArrayColumn::create(std::move(elements), std::move(array_offsets));
+    auto arr_null = NullColumn::create();
+    arr_null->append(0);
+    auto nullable = NullableColumn::create(std::move(array), std::move(arr_null));
+
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, nullable->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, nullable->max_one_element_serialize_size());
+    key_data->reset_column();
+    value_data->reset_column();
+}
+
+// map<binary, struct<binary>>: the struct field claims ~5GB, so the value (and then the map) saturate.
+// NOLINTNEXTLINE
+PARALLEL_TEST(MapColumnTest, test_map_of_struct_serialize_size_saturates) {
+    auto keys = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    keys->append_datum("k");
+
+    auto field = LargeBinaryColumn::create();
+    auto* field_ptr = field.get();
+    field->get_offset().push_back(5'000'000'000ULL);
+    MutableColumns fields;
+    fields.emplace_back(std::move(field));
+    auto st = StructColumn::create(std::move(fields), std::vector<std::string>{"f"});
+    auto val_null = NullColumn::create();
+    val_null->append(0);
+    auto values = NullableColumn::create(std::move(st), std::move(val_null));
+
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->serialize_size(0));
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, column->max_one_element_serialize_size());
+    field_ptr->reset_column();
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(MapColumnTest, test_create) {

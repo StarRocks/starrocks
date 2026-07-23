@@ -121,7 +121,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming(co
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregation(const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
-    _aggregator->build_hash_set(chunk_size);
+    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk_size));
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 

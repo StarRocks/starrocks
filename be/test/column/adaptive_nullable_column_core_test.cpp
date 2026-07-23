@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "column/adaptive_nullable_column.h"
+#include "column/binary_column.h"
 
 namespace starrocks {
 
@@ -54,6 +55,27 @@ TEST(AdaptiveNullableColumnCoreTest, NotConstantPathAndDefaultNotNullValue) {
     EXPECT_EQ(AdaptiveNullableColumn::State::kMaterialized, col->state());
     EXPECT_TRUE(col->has_null());
     EXPECT_EQ(1, col->null_count());
+}
+
+TEST(AdaptiveNullableColumnCoreTest, SerializeSizeSaturatesOnHugeElement) {
+    // One non-null element whose serialized size exceeds the uint32 (4GB) limit. The offset is
+    // faked (no bytes allocated); serialize_size()/max_one_element_serialize_size() only read
+    // offsets. Without saturation, sizeof(null flag) + UINT32_MAX would wrap to a tiny value and
+    // the serialized-key overflow guard would be bypassed; expect the saturated sentinel instead.
+    auto data = LargeBinaryColumn::create();
+    auto* data_ptr = data.get();
+    data->get_offset().push_back(5ULL * 1024 * 1024 * 1024);
+    auto null = NullColumn::create();
+    null->append_datum(Datum(uint8_t(0)));
+
+    ColumnPtr col = AdaptiveNullableColumn::create(std::move(data), std::move(null));
+
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, col->max_one_element_serialize_size());
+    EXPECT_EQ(Column::SERIALIZE_SIZE_LIMIT, col->serialize_size(0));
+    EXPECT_TRUE(serialize_size_overflow(col->serialize_size(0)));
+
+    // ~BinaryColumnBase() DCHECKs bytes/offsets consistency; reset before the column is destroyed.
+    data_ptr->reset_column();
 }
 
 } // namespace starrocks

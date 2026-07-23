@@ -705,6 +705,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         slice_sizes.assign(_chunk_size, 0);
         size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(serialize_size_overflow(cur_max_one_row_size))) {
+            throw_serialize_key_size_overflow();
+        }
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             size_t batch_allocate_size = (size_t)cur_max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
             // too large, process by rows
@@ -885,11 +888,11 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     }
 
     uint32_t get_max_serialize_size(const Columns& key_columns) {
-        uint32_t max_size = 0;
+        size_t max_size = 0;
         for (const auto& key_column : key_columns) {
             max_size += key_column->max_one_element_serialize_size();
         }
-        return max_size;
+        return saturate_serialize_size(max_size);
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {

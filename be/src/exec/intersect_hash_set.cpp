@@ -36,6 +36,9 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
 
     _slice_sizes.assign(state->chunk_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
+    if (UNLIKELY(serialize_size_overflow(cur_max_one_row_size))) {
+        throw_serialize_key_size_overflow();
+    }
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
@@ -61,6 +64,9 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
     size_t chunk_size = chunkPtr->num_rows();
     _slice_sizes.assign(state->chunk_size(), 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
+    if (UNLIKELY(serialize_size_overflow(cur_max_one_row_size))) {
+        return Status::InternalError(serialize_key_size_overflow_message());
+    }
     if (UNLIKELY(cur_max_one_row_size > _max_one_row_size)) {
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
@@ -124,7 +130,7 @@ size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkP
             max_size += sizeof(bool);
         }
     }
-    return max_size;
+    return saturate_serialize_size(max_size);
 }
 
 template <typename HashSet>
