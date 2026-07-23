@@ -285,15 +285,30 @@ public class CreateTableLikeTest {
         Assertions.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
         Assertions.assertEquals("1", table.getProperties().get("replication_num"));
 
-        // 11. create table like with primary key and double quotation in column comment
-        String createTableSql11 = "create table test.testTbl11\n" + "(k1 int comment \"xx\\\"xx\", k2 int)\n"
+        // 11. create table like with multi-level expression partition
+        String multiExprPartitionSql = "CREATE TABLE test.`multi_level_expr_par_tbl` (\n" +
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` datetime NULL COMMENT \"\",\n" +
+                    "  `k3` char(20) NULL COMMENT \"\",\n" +
+                    "  `k4` varchar(20) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP \n" +
+                    "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY date_trunc('month', k1), substring(k4, 1, 5), k3\n" +
+                    "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 2 \n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+        String createTableLikeSql11 = "create table test.multi_level_expr_par_tbl_like like test.multi_level_expr_par_tbl;";
+        checkCreateOlapTableLike(multiExprPartitionSql, createTableLikeSql11, "test", "test",
+                    "multi_level_expr_par_tbl_like", "multi_level_expr_par_tbl");
+
+        // 12. create table like with primary key and double quotation in column comment
+        String createTableSql12 = "create table test.testTbl12\n" + "(k1 int comment \"xx\\\"xx\", k2 int)\n"
                 + "primary key(k1)\n" + "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1'); ";
-        String createTableLikeSql11 = "create table test.testTbl11_like like test.testTbl11";
-        String newDbName11 = "test";
-        String newTblName11 = "testTbl11_like";
-        String existedTblName11 = "testTbl11";
-        checkCreateOlapTableLike(createTableSql11, createTableLikeSql11, newDbName11, newDbName11, newTblName11,
-                existedTblName11);
+        String createTableLikeSql12 = "create table test.testTbl12_like like test.testTbl12";
+        checkCreateOlapTableLike(createTableSql12, createTableLikeSql12, "test", "test", "testTbl12_like",
+                "testTbl12");
     }
 
     @Test
