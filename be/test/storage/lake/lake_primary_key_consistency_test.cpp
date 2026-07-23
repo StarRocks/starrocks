@@ -855,13 +855,12 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{.persistent_index_type =
-                                                                   PersistentIndexTypePB::CLOUD_NATIVE},
-                                           // ORDER BY != PK: separate sort key (c1, c2) exercises the
-                                           // load-spill + unsort-SST-writer + op-aware merge path.
-                                           PrimaryKeyParam{.persistent_index_type =
-                                                                   PersistentIndexTypePB::CLOUD_NATIVE,
-                                                           .separate_sort_key = true}));
+INSTANTIATE_TEST_SUITE_P(
+        LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
+        ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE},
+                          // ORDER BY != PK: separate sort key (c1, c2) exercises the
+                          // load-spill + unsort-SST-writer + op-aware merge path.
+                          PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                          .separate_sort_key = true}));
 
 } // namespace starrocks::lake
