@@ -3241,6 +3241,28 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testGroupByCompressedKey_SingleIntRange() throws Exception {
+        // Single-INT GROUP BY with FE-supplied range that fits in ≤16
+        // bits: regression guard for the BE direct-array routing
+        // (AggHashMapWithCompressibleInt32Key, uint8/uint16 cells).  If
+        // ApplyMinMaxStatisticRule stops emitting min/max for plain INT
+        // GROUP BY columns, BE silently falls back to phmap<int32>.
+        final IMinMaxStatsMgr minMaxStatsMgr = IMinMaxStatsMgr.internalInstance();
+        new Expectations(minMaxStatsMgr) {
+            {
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "65535"));
+            }
+        };
+
+        String sql = "select v1, count(*) from t0 group by v1";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "group by min-max stats:");
+        plan = getThriftPlan(sql);
+        assertContains(plan, "group_by_min_max:[TExpr(");
+    }
+
+    @Test
     public void testAggregateFilterSyntax() throws Exception {
         // Test basic FILTER syntax with boolean expression
         String sql = "select count(*) filter (where v1 > 5) from t0";
