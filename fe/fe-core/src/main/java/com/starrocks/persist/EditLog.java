@@ -2085,6 +2085,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log, walApplier);
+    }
+
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log, walApplier);
     }
