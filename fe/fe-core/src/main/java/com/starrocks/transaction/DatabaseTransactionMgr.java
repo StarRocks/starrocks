@@ -1547,9 +1547,9 @@ public class DatabaseTransactionMgr {
                             .getTxnCommitAttachment()).getPartitionVersion());
                     // reset data version to visible version
                     partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
-                    if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
-                    }
+                    // Give this partition a new epoch. IVM uses epochs to spot changes, so every
+                    // real data change (like this overwrite) needs a fresh one.
+                    partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                 } else {
                     // double write logic partition
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
@@ -1571,8 +1571,9 @@ public class DatabaseTransactionMgr {
                     }
                     // update data version
                     partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
-                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
-                            partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
+                    // Give this partition a new epoch for every real load. Compaction only
+                    // rewrites files without changing data, so skip it.
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                         partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                     }
                     LOG.debug("set partition {} version to {} in transaction {}",
