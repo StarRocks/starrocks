@@ -298,6 +298,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_merged_del_op_offset_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
     ./storage/lake/tablet_merger_test.cpp
+    ./storage/lake/publish_mem_reservation_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
