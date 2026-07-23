@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/spillable_hash_join_build_operator.h"
 
+#include <unistd.h>
+
 #include <atomic>
 #include <memory>
 
@@ -38,6 +40,11 @@
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(spill_flush_set_invalid_status);
+// Test-only hook: widen the window of the set_finishing spill-start path (which flushes buffered
+// chunks into build_chunk) so a query cancelled while the build is spilling reliably interleaves
+// with the cancel handling. A sleep can never itself crash the BE, so it introduces no false
+// failures; with the early cancel guard in place this only runs on the non-cancelled finish path.
+DEFINE_FAIL_POINT(spill_hash_join_build_set_finishing_sleep);
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
@@ -54,8 +61,10 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
 
 void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
     HashJoinBuildOperator::close(state);
-    DCHECK(is_finished());
-    DCHECK(!need_input());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !need_input());
 }
 
 size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
@@ -76,6 +85,27 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
+
+    // On cancellation the query is tearing down: an in-flight spill task may be running the build
+    // hash map iterator (which calls hash_join_builder()->reset(), freeing build_chunk) on a spill
+    // executor thread. Running the spill-start path here (prepare_for_spill_start flushes buffered
+    // chunks into build_chunk, then _convert_hash_map_to_chunk / append_spill_task) would append
+    // into that same build_chunk concurrently, causing a heap-use-after-free during the column
+    // resize. Bail out early like HashJoinBuildOperator::set_finishing does; just cancel the spiller.
+    if (state->is_cancelled()) {
+        if (_join_builder->spiller() != nullptr) {
+            _join_builder->spiller()->cancel();
+        }
+        // Mark finished on the early-cancel return, matching HashJoinBuildOperator::set_finishing
+        // (which sets it via a DeferOp even on cancel) so is_finished() holds when PipelineDriver
+        // later closes this cancelled operator.
+        _is_finished = true;
+        return Status::Cancelled("runtime state is cancelled");
+    }
+
+    // Test hook (see failpoint definition): sleep to widen the spill-start window so a concurrent
+    // cancel reliably interleaves. Reached only on the non-cancelled finish path thanks to the guard.
+    FAIL_POINT_TRIGGER_EXECUTE(spill_hash_join_build_set_finishing_sleep, { sleep(3); });
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
         (!_join_builder->spiller()->spilled() && _join_builder->hash_join_builder()->hash_table_row_count() == 0)) {
@@ -244,25 +274,37 @@ spill::SpillStrategy SpillableHashJoinBuildOperator::spill_strategy() const {
 }
 
 StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_convert_hash_map_to_chunk() {
-    _hash_tables.clear();
+    _build_chunks.clear();
     _hash_table_iterate_idx = 0;
 
-    _join_builder->hash_join_builder()->visitHt([this](JoinHashTable* ht) { _hash_tables.push_back(ht); });
+    // Snapshot the build chunks up front as shared_ptr, so iteration below never touches the
+    // JoinHashTables again (which the join builder may free on cancel/close while this iterator runs
+    // asynchronously on the spill executor).
+    _join_builder->hash_join_builder()->visitHt(
+            [this](JoinHashTable* ht) { _build_chunks.push_back(ht->get_build_chunk()); });
 
-    for (auto* ht : _hash_tables) {
-        auto build_chunk = ht->get_build_chunk();
+    for (auto& build_chunk : _build_chunks) {
         DCHECK_GT(build_chunk->num_rows(), 0);
         RETURN_IF_ERROR(build_chunk->upgrade_if_overflow());
     }
 
-    _hash_table_build_chunk_slice.reset(_hash_tables[_hash_table_iterate_idx]->get_build_chunk());
+    // The build chunks are now snapshotted as shared_ptr, so neither the async spill iterator below
+    // nor any later push_chunk needs the JoinHashTables anymore. Reset the builder HERE --
+    // synchronously, on the driver thread (this runs inside set_finishing / push_chunk) -- instead of
+    // at the async iterator's EOF. This frees the hash-table memory sooner, and, crucially, means the
+    // reset (which frees & recreates the per-partition builders) can never run concurrently with the
+    // operator's close() on cancel, so close()'s ht_mem_usage() read can never see a freed builder.
+    // The snapshot keeps the build_chunk data alive across the reset via shared_ptr refcount.
+    _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
+
+    _hash_table_build_chunk_slice.reset(_build_chunks[_hash_table_iterate_idx]);
     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
 
     return [this]() -> StatusOr<ChunkPtr> {
         if (_hash_table_build_chunk_slice.empty()) {
             _hash_table_iterate_idx++;
-            for (; _hash_table_iterate_idx < _hash_tables.size(); _hash_table_iterate_idx++) {
-                auto build_chunk = _hash_tables[_hash_table_iterate_idx]->get_build_chunk();
+            for (; _hash_table_iterate_idx < _build_chunks.size(); _hash_table_iterate_idx++) {
+                const auto& build_chunk = _build_chunks[_hash_table_iterate_idx];
                 // Every build chunk has a dummy row at index 0. Skip partitions that have no real build rows.
                 if (build_chunk->num_rows() > kHashJoinKeyColumnOffset) {
                     _hash_table_build_chunk_slice.reset(build_chunk);
@@ -271,7 +313,9 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
                 }
             }
             if (_hash_table_build_chunk_slice.empty()) {
-                _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
+                // Done spilling: drop our snapshot so the chunks can be reclaimed. The builder was
+                // already reset synchronously in the prologue above (see _convert_hash_map_to_chunk).
+                _build_chunks.clear();
                 return Status::EndOfFile("eos");
             }
         }
@@ -330,6 +374,8 @@ OperatorPtr SpillableHashJoinBuildOperatorFactory::create(int32_t degree_of_para
 
     auto joiner = _hash_joiner_factory->create_builder(degree_of_parallelism, driver_sequence);
 
+    // Anchor the spill channel to the joiner's lifetime (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(joiner.get());
     joiner->set_spill_channel(spill_channel);
     joiner->set_spiller(spiller);
 

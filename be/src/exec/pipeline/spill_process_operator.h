@@ -35,7 +35,7 @@ public:
 
     ~SpillProcessOperator() override = default;
 
-    Status prepare(RuntimeState* state) override { return SourceOperator::prepare(state); }
+    Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
