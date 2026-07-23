@@ -74,7 +74,8 @@ static StatusOr<Roaring> load_delvec_page(lake::TabletManager* mgr, const Tablet
 // Planning layer: ChangesReadPlanner
 // =============================================================================
 
-StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan(TabletMetadataPtr before_meta, TabletMetadataPtr after_meta) {
+StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan_version_diff(TabletMetadataPtr before_meta,
+                                                                      TabletMetadataPtr after_meta) {
     VersionChangeReadPlan p;
     p.before_meta = before_meta;
     p.after_meta = after_meta;
@@ -85,6 +86,40 @@ StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan(TabletMetadataPtr befor
     RETURN_IF_ERROR(_plan_insert_change_read(p, added, carried, after_position, &p.insert_changes));
     if (_is_primary_keys) {
         RETURN_IF_ERROR(_plan_delete_change_read(p, added, carried, &p.delete_changes));
+    }
+    return p;
+}
+
+StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan_full_scan(TabletMetadataPtr head_meta) {
+    VersionChangeReadPlan p;
+    p.before_meta = nullptr; // no delete side in a FULL_SCAN read; inserts read from after_meta
+    p.after_meta = head_meta;
+    const auto& after = *head_meta;
+    for (int rs = 0; rs < after.rowsets_size(); ++rs) {
+        const auto& r = after.rowsets(rs);
+        // A delete-predicate rowset removes rows from other rowsets at read time; a full scan reads
+        // segments raw and cannot apply it, so those rows would surface as inserts. Reject it, as the
+        // version-diff path does, rather than emit deleted rows.
+        if (r.has_delete_predicate()) {
+            return Status::NotSupported(fmt::format(
+                    "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}", after.id()));
+        }
+        for (int seg = 0; seg < r.segment_metas_size(); ++seg) {
+            if (!_is_primary_keys) {
+                // DUP/AGG: no delete vector, so every row in the segment is an insert.
+                p.insert_changes.push_back({rs, seg, false, std::nullopt, false});
+                continue;
+            }
+            // Primary key: the segment's live rows are the whole segment minus its delete vector.
+            const uint32_t rssid = lake::get_rssid(r, seg);
+            ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
+            Roaring rows;
+            rows.addRange(0, static_cast<uint64_t>(r.segment_metas(seg).num_rows()));
+            rows -= delvec_after;
+            if (!rows.isEmpty()) {
+                p.insert_changes.push_back({rs, seg, false, std::move(rows), true});
+            }
+        }
     }
     return p;
 }
@@ -294,8 +329,12 @@ ChangesDataSource::ChangesDataSource(const ChangesDataSourceProvider* provider, 
         : _provider(provider) {
     const auto& range = scan_range.changes_scan_range;
     _tablet_id = range.tablet_id;
-    _base_version = range.base_version;
-    _head_version = range.head_version;
+    const auto& spec = range.scan_spec;
+    _derivation_mode = spec.derivation_mode;
+    _head_version = spec.head_version;
+    if (_derivation_mode != TChangeDerivationMode::FULL_SCAN) {
+        _base_version = spec.base_version;
+    }
 }
 
 Status ChangesDataSource::open(RuntimeState* state) {
@@ -337,7 +376,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_output_columns());
 
     // Initialize the changes read planner
-    if (_base_version > _head_version) {
+    if (_derivation_mode != TChangeDerivationMode::FULL_SCAN && _base_version > _head_version) {
         return Status::InvalidArgument(fmt::format("CHANGES version range invalid: base_version({}) > head_version({})",
                                                    _base_version, _head_version));
     }
@@ -698,6 +737,18 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
 }
 
 StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
+    if (_derivation_mode == TChangeDerivationMode::FULL_SCAN) {
+        // FULL_SCAN emits head once as all inserts, then stops. Only head's metadata is read; the
+        // ancestor chain is never walked, so a reclaimed sub-head version cannot fail the scan.
+        if (_full_scan_planned) return false;
+        ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _changes_read_planner->plan_full_scan(_head_metadata));
+        _current_plan = std::move(plan);
+        _current_change_type = ChangeType::INSERT;
+        _current_segment_index = 0;
+        _current_segment_iterator.reset();
+        _full_scan_planned = true;
+        return true;
+    }
     const int64_t current_version = _current_meta->version();
     if (current_version <= _base_version) return false;
     RETURN_IF_ERROR(_check_degradation(_current_meta));
@@ -715,7 +766,7 @@ StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
     }
     auto* tablet_mgr = lake_tablet_manager();
     ASSIGN_OR_RETURN(auto parent_meta, tablet_mgr->get_tablet_metadata(_tablet_id, parent_version));
-    ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _changes_read_planner->plan(parent_meta, _current_meta));
+    ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _changes_read_planner->plan_version_diff(parent_meta, _current_meta));
     _current_plan = std::move(plan);
     _current_change_type = ChangeType::INSERT;
     _current_segment_index = 0;

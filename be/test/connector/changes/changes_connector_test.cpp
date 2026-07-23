@@ -276,10 +276,26 @@ protected:
     }
 
     TScanRange make_scan_range(int64_t tablet_id, int64_t base_version, int64_t head_version) {
+        TChangeScanSpec spec;
+        spec.__set_derivation_mode(TChangeDerivationMode::VERSION_CHAIN_DIFF);
+        spec.__set_base_version(base_version);
+        spec.__set_head_version(head_version);
         TChangesScanRange r;
         r.__set_tablet_id(tablet_id);
-        r.__set_base_version(base_version);
-        r.__set_head_version(head_version);
+        r.__set_scan_spec(spec);
+        TScanRange sr;
+        sr.__set_changes_scan_range(r);
+        return sr;
+    }
+
+    // FULL_SCAN: read every row visible at head_version as an insert (no base, no ancestor walk).
+    TScanRange make_full_scan_range(int64_t tablet_id, int64_t head_version) {
+        TChangeScanSpec spec;
+        spec.__set_derivation_mode(TChangeDerivationMode::FULL_SCAN);
+        spec.__set_head_version(head_version);
+        TChangesScanRange r;
+        r.__set_tablet_id(tablet_id);
+        r.__set_scan_spec(spec);
         TScanRange sr;
         sr.__set_changes_scan_range(r);
         return sr;
@@ -1058,6 +1074,110 @@ TEST_F(ChangesConnectorTest, test_dup_multi_segment_new_rowset_surfaces_every_se
     int64_t total = drain(ds.get());
     ds->close(_runtime_state.get());
     EXPECT_EQ(5 + 7 + 4, total);
+}
+
+// FULL_SCAN surfaces every row visible at head as an insert -- including a compaction-output
+// rowset, which the VERSION_CHAIN_DIFF path deliberately skips because its bulk rows pre-existed.
+// This guards reading a newly-added / empty-base partition whose sub-head history vacuum may have
+// reclaimed: FULL_SCAN reads only head and must not inherit VERSION_CHAIN_DIFF's compaction-output skip.
+TEST_F(ChangesConnectorTest, test_full_scan_surfaces_all_head_rows_including_compaction_output) {
+    _keys_type = DUP_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // v2: a normal rowset (5 rows). v3: a compaction output (8 rows) that merged v2 away.
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 100, .num_rows = 5}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    std::vector<RowsetSpec> r3 = {{.version = 3, .id = 200, .num_rows = 8, .max_compact_input = true}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3);
+
+    auto provider = make_provider(tuple_id, schema_id);
+
+    // FULL_SCAN at head=3 surfaces the compaction output's 8 live rows.
+    {
+        auto ds = provider->create_data_source(make_full_scan_range(tablet_id, /*head=*/3));
+        CHECK_OK(ds->open(_runtime_state.get()));
+        int64_t total = drain(ds.get());
+        ds->close(_runtime_state.get());
+        EXPECT_EQ(8, total);
+    }
+
+    // Contrast: VERSION_CHAIN_DIFF (2,3] surfaces nothing -- the compaction output's rows pre-existed,
+    // so the version-chain-diff path skips it. FULL_SCAN must NOT inherit this skip.
+    {
+        auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/2, /*head=*/3));
+        CHECK_OK(ds->open(_runtime_state.get()));
+        int64_t total = drain(ds.get());
+        ds->close(_runtime_state.get());
+        EXPECT_EQ(0, total);
+    }
+}
+
+// FULL_SCAN must reject a delete-predicate rowset the same way VERSION_CHAIN_DIFF does. A full scan
+// reads segments raw and cannot apply a delete predicate, so surfacing its rows would emit rows the
+// DELETE removed. A DUP partition added after the base bookmark that gets inserts and then a
+// DELETE ... WHERE before head carries such a rowset; the read must fail, not return stale rows.
+TEST_F(ChangesConnectorTest, test_full_scan_rejects_delete_predicate) {
+    _keys_type = DUP_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // head=2: a data rowset (5 rows) plus a delete-predicate rowset (a DELETE ... WHERE).
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 100, .num_rows = 5},
+                                  {.version = 2, .id = 101, .num_rows = 0, .delete_predicate = true}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_full_scan_range(tablet_id, /*head=*/2));
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    Status st = drain_until_error(ds.get());
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_not_supported());
+    EXPECT_NE(std::string::npos, std::string(st.message()).find("DELETE_PREDICATE_FOUND"));
+    ds->close(_runtime_state.get());
+}
+
+TEST_F(ChangesConnectorTest, test_full_scan_pk_applies_delvec_and_dcg) {
+    _keys_type = PRIMARY_KEYS;
+    _with_c1 = true;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // v2: one segment (rssid=10), 4 rows: c0 in [100..103], c1 = [10,11,12,13].
+    std::vector<RowsetSpec> r2 = {
+            {.version = 2, .id = 10, .num_rows = 4, .start_value = 100, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+    // v3 (head): the same segment survives, but this publish both deletes rowid 0 (c0=100) via a
+    // live delete vector and column-updates rowid 1 (c0=101), overlaying c1 11 -> 100 via a delta
+    // column group.
+    std::vector<RowsetSpec> r3 = {
+            {.version = 2, .id = 10, .num_rows = 4, .segment_path = r2[0].segment_path, .c1_values = {10, 11, 12, 13}}};
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, &r3, Status::OK(),
+                     [&](TabletMetadata* meta) {
+                         attach_delvecs(meta, {{/*rssid=*/10, {0}}});
+                         attach_dcg(meta, /*segment_rssid=*/10, /*overlaid_c1=*/{10, 100, 12, 13});
+                     });
+
+    auto provider = make_provider(tuple_id, schema_id);
+    // FULL_SCAN at head=3 reads the head's live rows: rowid 0 is dropped by the delete vector, and the
+    // read applies the dcg overlay so rowid 1 surfaces its updated c1=100 rather than the stored 11.
+    auto ds = provider->create_data_source(make_full_scan_range(tablet_id, /*head=*/3));
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    auto rows = collect_change_rows_with_c1(ds.get(), tuple_id);
+    ds->close(_runtime_state.get());
+
+    std::vector<ChangeRowC1> expected = {
+            {/*c0=*/101, /*c1=*/100, /*INSERT*/ 0, /*ROW_VERSION=*/3},
+            {/*c0=*/102, /*c1=*/12, /*INSERT*/ 0, /*ROW_VERSION=*/3},
+            {/*c0=*/103, /*c1=*/13, /*INSERT*/ 0, /*ROW_VERSION=*/3},
+    };
+    EXPECT_EQ(expected, rows);
 }
 
 TEST_F(ChangesConnectorTest, test_metadata_traversal_edge_cases) {
@@ -2681,7 +2801,7 @@ TEST_F(ChangesConnectorTest, test_planner_load_insert_alive_rows) {
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
     const auto& s = plan.insert_changes[0];
@@ -2714,7 +2834,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_output_column_update_insert
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
     const auto& s = plan.insert_changes[0];
@@ -2748,7 +2868,7 @@ TEST_F(ChangesConnectorTest, test_planner_surviving_segment_column_update_insert
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
     const auto& s = plan.insert_changes[0];
@@ -2781,7 +2901,7 @@ TEST_F(ChangesConnectorTest, test_planner_whole_row_delete) {
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
     const auto& s = plan.delete_changes[0];
@@ -2814,7 +2934,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_input_delete) {
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
     const auto& s = plan.delete_changes[0];
@@ -2848,7 +2968,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_output_delete) {
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
     const auto& s = plan.delete_changes[0];
@@ -2885,7 +3005,7 @@ TEST_F(ChangesConnectorTest, test_planner_same_segment_delete_and_column_update_
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
     ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
-    ASSIGN_OR_ABORT(auto plan, planner.plan(before, after));
+    ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
     const auto& s = plan.delete_changes[0];

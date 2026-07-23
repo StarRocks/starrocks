@@ -127,7 +127,7 @@ struct SegmentChangeReadPlan {
 // One publish = the edge before_meta -> after_meta. Every surfaced row's ROW_VERSION is
 // after_meta->version(), so it is not stored per read.
 struct VersionChangeReadPlan {
-    TabletMetadataPtr before_meta;
+    TabletMetadataPtr before_meta; // the parent version in a VERSION_CHAIN_DIFF read; null in a FULL_SCAN read
     TabletMetadataPtr after_meta;
     std::vector<SegmentChangeReadPlan> insert_changes; // -> INSERT (after value)
     std::vector<SegmentChangeReadPlan> delete_changes; // -> DELETE (before value; some are read raw from after_meta)
@@ -140,11 +140,14 @@ public:
     ChangesReadPlanner(lake::TabletManager* tablet_mgr, bool is_primary_keys)
             : _tablet_mgr(tablet_mgr), _is_primary_keys(is_primary_keys) {}
 
-    // Locates this edge's changed rows and returns the reads for them: emit the
-    // after-value reads (-> INSERT); for primary-key tables also emit the
-    // before-value reads (-> DELETE). Duplicate- and aggregate-key tables surface
-    // only after values.
-    StatusOr<VersionChangeReadPlan> plan(TabletMetadataPtr before_meta, TabletMetadataPtr after_meta);
+    // Locates this edge's changed rows: after-value reads (-> INSERT) for every table, plus
+    // before-value reads (-> DELETE) for primary-key tables. Duplicate- and aggregate-key tables
+    // have only after values.
+    StatusOr<VersionChangeReadPlan> plan_version_diff(TabletMetadataPtr before_meta, TabletMetadataPtr after_meta);
+
+    // There is no data at the base, so every row visible at head_meta is an insert;
+    // no before_meta is read.
+    StatusOr<VersionChangeReadPlan> plan_full_scan(TabletMetadataPtr head_meta);
 
 private:
     // A segment present in after_meta but not before_meta — introduced by this publish.
@@ -300,7 +303,8 @@ private:
     // --- Inputs (immutable after open) ---
     const ChangesDataSourceProvider* _provider;
     int64_t _tablet_id = 0;
-    int64_t _base_version = 0; // left-open
+    TChangeDerivationMode::type _derivation_mode = TChangeDerivationMode::VERSION_CHAIN_DIFF;
+    int64_t _base_version;     // left-open; set only for VERSION_CHAIN_DIFF
     int64_t _head_version = 0; // right-closed
 
     // --- Runtime context ---
@@ -371,6 +375,7 @@ private:
     std::optional<ChangesReadPlanner> _changes_read_planner;
     TabletMetadataPtr _current_meta = nullptr;            // tablet metadata version the scan currently sits at
     std::optional<VersionChangeReadPlan> _current_plan;   // read plan of the publish currently being drained
+    bool _full_scan_planned = false;                      // FULL_SCAN only; set after the full scan has been planned
     ChangeType _current_change_type = ChangeType::INSERT; // side being emitted; INSERT drained before DELETE
     size_t _current_segment_index = 0;                    // index of the current segment read in the change list
     ChunkIteratorPtr _current_segment_iterator = nullptr; // iterator over the current segment read; null = none

@@ -528,14 +528,29 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+// How the BE derives one partition/tablet's changes for a CHANGES range.
+enum TChangeDerivationMode {
+    // Diff adjacent versions along the version chain over (base_version, head_version].
+    VERSION_CHAIN_DIFF = 0,
+    // Full scan of head_version; every row is an insert. Used when there is no earlier data to diff
+    // against -- e.g. a partition added after the base bookmark, or a base at the empty initial
+    // version -- so head's whole content is the change set.
+    FULL_SCAN = 1
+}
+
+struct TChangeScanSpec {
+    1: optional TChangeDerivationMode derivation_mode
+    2: optional i64 base_version            // VERSION_CHAIN_DIFF only; exclusive lower bound (the base version's rows are not emitted)
+    3: optional i64 head_version            // inclusive upper bound (rows visible at this version)
+}
+
 // CDC: per-tablet scan range for CHANGES query
 struct TChangesScanRange {
     1: optional i64 db_id
     2: optional i64 table_id
     3: optional i64 partition_id
     4: optional Types.TTabletId tablet_id
-    5: optional i64 base_version            // V_base (left-open): excludes this version
-    6: optional i64 head_version            // V_head (right-closed): includes this version
+    5: optional TChangeScanSpec scan_spec
 }
 
 // CDC: FE -> CN plan node parameters

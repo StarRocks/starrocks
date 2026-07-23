@@ -22,6 +22,9 @@ import com.starrocks.lake.bookmark.BookmarkChange.PartitionAdded;
 import com.starrocks.lake.bookmark.BookmarkChange.PartitionDropped;
 import com.starrocks.lake.bookmark.BookmarkChange.PhysicalPartitionChange;
 import com.starrocks.lake.bookmark.BookmarkChange.TabletReshard;
+import com.starrocks.sql.optimizer.transformer.ChangesScanBuilder;
+import com.starrocks.thrift.TChangeDerivationMode;
+import com.starrocks.thrift.TChangeScanSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -207,29 +210,43 @@ public class BookmarkChangeTest {
     }
 
     @Test
-    public void testVersionRange() {
+    public void testBuildPartitionScanSpec() {
         Bookmark base = meta(1L, 10L, 100L, 1L, 1L, 5L);
-
-        // DataChanged: (baseVersion, headVersion].
         Bookmark dcHead = meta(2L, 10L, 100L, 1L, 1L, 7L);
+
+        // DataChanged with a non-empty base: VERSION_CHAIN_DIFF over (baseVersion, headVersion], regardless of netChange.
         DataChanged dc = assertInstanceOf(DataChanged.class,
                 flatten(BookmarkChange.computeChanges(Optional.of(base), dcHead)).get(0));
-        assertTrue(dc.versionRange().isPresent());
-        assertEquals(5L, dc.versionRange().orElseThrow().first.longValue());
-        assertEquals(7L, dc.versionRange().orElseThrow().second.longValue());
+        for (boolean netChange : new boolean[] {false, true}) {
+            TChangeScanSpec spec = ChangesScanBuilder.buildPartitionScanSpec(dc, netChange).orElseThrow();
+            assertEquals(TChangeDerivationMode.VERSION_CHAIN_DIFF, spec.getDerivation_mode());
+            assertEquals(5L, spec.getBase_version());
+            assertEquals(7L, spec.getHead_version());
+        }
 
-        // PartitionAdded: base is the tablet's initial empty version (PARTITION_INIT_VERSION).
+        // DataChanged whose base sits at the empty initial version: FULL_SCAN only when the change is
+        // net-folded (nothing to diff), else VERSION_CHAIN_DIFF preserves the per-version event stream.
+        Bookmark initBase = meta(1L, 10L, 100L, 1L, 1L, PhysicalPartition.PARTITION_INIT_VERSION);
+        DataChanged dcFromInit = assertInstanceOf(DataChanged.class,
+                flatten(BookmarkChange.computeChanges(Optional.of(initBase), dcHead)).get(0));
+        assertEquals(TChangeDerivationMode.FULL_SCAN,
+                ChangesScanBuilder.buildPartitionScanSpec(dcFromInit, true).orElseThrow().getDerivation_mode());
+        assertEquals(TChangeDerivationMode.VERSION_CHAIN_DIFF,
+                ChangesScanBuilder.buildPartitionScanSpec(dcFromInit, false).orElseThrow().getDerivation_mode());
+
+        // PartitionAdded: always FULL_SCAN (no base to diff), carrying only head_version.
         PartitionAdded added = assertInstanceOf(PartitionAdded.class,
                 flatten(BookmarkChange.computeChanges(Optional.empty(), dcHead)).get(0));
-        assertTrue(added.versionRange().isPresent());
-        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION,
-                added.versionRange().orElseThrow().first.longValue());
-        assertEquals(7L, added.versionRange().orElseThrow().second.longValue());
+        for (boolean netChange : new boolean[] {false, true}) {
+            TChangeScanSpec spec = ChangesScanBuilder.buildPartitionScanSpec(added, netChange).orElseThrow();
+            assertEquals(TChangeDerivationMode.FULL_SCAN, spec.getDerivation_mode());
+            assertEquals(7L, spec.getHead_version());
+        }
 
-        // Non-trackable (IndexReplaced): no readable version range.
+        // Non-trackable (IndexReplaced): no scan spec.
         Bookmark irHead = meta(2L, 10L, 100L, 1L, 5L, 5L);
         IndexReplaced ir = assertInstanceOf(IndexReplaced.class,
                 flatten(BookmarkChange.computeChanges(Optional.of(base), irHead)).get(0));
-        assertTrue(ir.versionRange().isEmpty());
+        assertTrue(ChangesScanBuilder.buildPartitionScanSpec(ir, true).isEmpty());
     }
 }

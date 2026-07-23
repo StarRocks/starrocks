@@ -119,3 +119,115 @@ CLEANUP {
 -- compaction has finished by the time the head bookmark is captured.
 SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_] ORDER BY k;
 SELECT count(*) FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_];
+
+
+-- name: test_cdc_dup_added_partition @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- A detail (DUPLICATE KEY) table gains a brand-new partition mid-stream. A CHANGES range that
+-- spans the add reads the new partition in FULL mode -- the whole head, every row as an INSERT --
+-- rather than walking a version chain the new partition never had. This is the added-partition
+-- path for a non-primary-key table (the primary-key case lives in test_pk_net_change_partitioned).
+CREATE TABLE dup_ap (dt date, k int, v int)
+DUPLICATE KEY(dt, k) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_ap VALUES ('2024-01-10', 1, 10);
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_ap", "ap", "1800000");
+
+-- p2 is new since bk0; it takes three loads, then a compaction folds them into one output. FULL
+-- must surface that compaction output (its rows never appeared as an incremental insert).
+ALTER TABLE dup_ap ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO dup_ap VALUES ('2024-02-05', 2, 20);
+INSERT INTO dup_ap VALUES ('2024-02-06', 3, 30);
+INSERT INTO dup_ap VALUES ('2024-02-07', 4, 40);
+[UC]ALTER TABLE dup_ap COMPACT;
+SELECT sleep(15);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_ap", "ap", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_ap", "${bk0}", "ap");
+    SELECT bookmark_release("${db[0]}", "dup_ap", "${bk1}", "ap");
+} END CLEANUP
+
+-- bk0->bk1: p1 is unchanged, p2 is a PartitionAdded change. Every p2 row (2,3,4) surfaces exactly
+-- once as an INSERT, whether or not the compaction had finished when bk1 was captured.
+SELECT dt, k, v, __CHANGE_TYPE__ FROM dup_ap [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+SELECT count(*) FROM dup_ap [_CHANGES_${bk0}_${bk1}_];
+
+
+-- name: test_cdc_dup_net_change_from_empty_base @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- With net-change on, a range whose base is the empty initial version reads in FULL mode -- it
+-- reads the head directly instead of walking the version chain. A detail table has no per-key fold,
+-- so the FULL result must equal the default (net-change off) read of the same range.
+CREATE TABLE dup_nc (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_nc", "nc", "1800000");
+
+-- Three loads then a compaction, then one more load: the head carries a compaction output whose
+-- rows the incremental walk treats as pre-existing. FULL must still surface all four rows.
+INSERT INTO dup_nc VALUES (1, 10);
+INSERT INTO dup_nc VALUES (2, 20);
+INSERT INTO dup_nc VALUES (3, 30);
+[UC]ALTER TABLE dup_nc COMPACT;
+SELECT sleep(15);
+INSERT INTO dup_nc VALUES (4, 40);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_nc", "nc", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_nc", "${bk0}", "nc");
+    SELECT bookmark_release("${db[0]}", "dup_nc", "${bk1}", "nc");
+} END CLEANUP
+
+SET enable_cdc_net_change = true;
+-- bk0 is the empty initial version, so this reads bk0->bk1 in FULL mode: all four rows as INSERTs.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_nc [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+SELECT count(*) FROM dup_nc [_CHANGES_${bk0}_${bk1}_];
+
+-- Same range with net-change off (a DELTA walk from the empty base). A detail table's net change
+-- equals its raw change, so the rows are identical to the FULL read above.
+SET enable_cdc_net_change = false;
+SELECT k, v, __CHANGE_TYPE__ FROM dup_nc [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+
+-- name: test_cdc_dup_added_partition_delete_predicate @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- A new partition read in FULL mode that received a DELETE ... WHERE before the head bookmark carries
+-- a delete-predicate rowset. A full scan reads segments raw and cannot apply that predicate, so rather
+-- than silently surfacing the deleted rows the read must fail -- CHANGES does not support DELETE on
+-- detail tables (the version-chain path rejects it the same way).
+CREATE TABLE dup_dp (dt date, k int, v int)
+DUPLICATE KEY(dt, k) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_dp VALUES ('2024-01-10', 1, 10);
+
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_dp", "dp", "1800000");
+
+-- p2 is new since bk0; insert two rows then delete one of them via a predicate.
+ALTER TABLE dup_dp ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO dup_dp VALUES ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
+DELETE FROM dup_dp WHERE dt = '2024-02-06';
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_dp", "dp", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_dp", "${bk0}", "dp");
+    SELECT bookmark_release("${db[0]}", "dup_dp", "${bk1}", "dp");
+} END CLEANUP
+
+-- bk0->bk1 routes the added p2 to FULL mode; its delete-predicate rowset makes the read fail with
+-- DELETE_PREDICATE_FOUND (the tablet id in the message is dynamic).
+SELECT count(*) FROM dup_dp [_CHANGES_${bk0}_${bk1}_];

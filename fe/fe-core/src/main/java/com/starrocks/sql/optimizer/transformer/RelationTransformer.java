@@ -688,7 +688,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                         + "not resolved on " + node.getName())),
                         node.getPartitionNames(),
                         node.getTabletIds(),
-                        distributionSpec);
+                        distributionSpec,
+                        session.getSessionVariable().isEnableCdcNetChange());
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {
@@ -811,7 +812,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
         if (scanOperator instanceof LogicalChangesScanOperator
-                && session.getSessionVariable().isEnableCdcNetChange()) {
+                && ((LogicalChangesScanOperator) scanOperator).isNetChange()) {
             scanBuilder = ChangesScanBuilder.applyNetChange(
                     scanBuilder, columnRefFactory, session.getSessionVariable().getWindowPartitionMode());
         }

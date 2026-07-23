@@ -49,6 +49,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TChangeDerivationMode;
+import com.starrocks.thrift.TChangeScanSpec;
 import com.starrocks.thrift.TChangesMetaKind;
 import com.starrocks.thrift.TOpType;
 import com.starrocks.type.Type;
@@ -86,7 +88,8 @@ public final class ChangesScanBuilder {
             List<ChangesMetaDescriptor> metaDescriptors,
             PartitionRef partitionNameHint,
             List<Long> tabletIdHint,
-            DistributionSpec distributionSpec) {
+            DistributionSpec distributionSpec,
+            boolean netChange) {
         long dbId = table.mayGetDatabaseId().orElseThrow(() ->
                 new IllegalStateException(
                         String.format("dbId missing on %s", table.getName())));
@@ -107,7 +110,7 @@ public final class ChangesScanBuilder {
 
         LogicalChangesScanOperator op = new LogicalChangesScanOperator(
                 scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
-                base, head, delta, Operator.DEFAULT_LIMIT, metaDescriptors);
+                base, head, delta, Operator.DEFAULT_LIMIT, metaDescriptors, netChange);
         PartitionNames partitionNames = partitionNameHint == null ? null
                 : new PartitionNames(partitionNameHint.isTemp(),
                         partitionNameHint.getPartitionNames(), partitionNameHint.getPos());
@@ -117,6 +120,45 @@ public final class ChangesScanBuilder {
                 .setTabletIdHints(tabletIdHint)
                 .setDistributionSpec(distributionSpec)
                 .build();
+    }
+
+    /**
+     * The scan spec for one physical-partition change, or empty for a non-trackable change.
+     */
+    public static Optional<TChangeScanSpec> buildPartitionScanSpec(
+            BookmarkChange.PhysicalPartitionChange change, boolean netChange) {
+        if (change instanceof BookmarkChange.PartitionAdded added) {
+            // The base bookmark predates this partition, so its pre-head versions were never fenced --
+            // vacuum may have reclaimed them and the chain cannot be walked. Read head only; absent at
+            // base, head's live rows are the whole change set.
+            return Optional.of(fullScanSpec(added.getHeadPartition().getVisibleVersion()));
+        }
+        if (change instanceof BookmarkChange.DataChanged dataChanged) {
+            long baseVersion = dataChanged.getBasePartition().getVisibleVersion();
+            long headVersion = dataChanged.getHeadPartition().getVisibleVersion();
+            if (netChange && baseVersion == PhysicalPartition.PARTITION_INIT_VERSION) {
+                // Empty at base under net-fold: the net result equals reading head directly, so read head
+                // rather than diffing the version chain.
+                return Optional.of(fullScanSpec(headVersion));
+            }
+            return Optional.of(versionChainDiffSpec(baseVersion, headVersion));
+        }
+        return Optional.empty();
+    }
+
+    private static TChangeScanSpec fullScanSpec(long headVersion) {
+        TChangeScanSpec spec = new TChangeScanSpec();
+        spec.setDerivation_mode(TChangeDerivationMode.FULL_SCAN);
+        spec.setHead_version(headVersion);
+        return spec;
+    }
+
+    private static TChangeScanSpec versionChainDiffSpec(long baseVersion, long headVersion) {
+        TChangeScanSpec spec = new TChangeScanSpec();
+        spec.setDerivation_mode(TChangeDerivationMode.VERSION_CHAIN_DIFF);
+        spec.setBase_version(baseVersion);
+        spec.setHead_version(headVersion);
+        return spec;
     }
 
     private static void validatePartitionHint(OlapTable scopedTable, PartitionRef partitionNameHint,
@@ -260,16 +302,20 @@ public final class ChangesScanBuilder {
             return List.of();
         }
 
-        // Skip the fold when every changed partition spans a single version
-        // (headVersion - baseVersion <= 1): each key then appears at exactly one
-        // __ROW_VERSION__, so MIN == MAX and the Filter keeps every row -- the
-        // Window+Filter would be an identity transform at full analytic cost. A
-        // non-trackable change (empty range) is not provably single-version, so it
-        // keeps the fold; buildScanOperator already rejects such changes upstream.
-        boolean allSingleVersion = scan.getDelta().getChanges().values().stream()
+        // Skip the fold when it is a no-op for every changed partition:
+        //   - FULL_SCAN: only head's rows surface, each key once (one __ROW_VERSION__, all
+        //     INSERT), so there is nothing to net.
+        //   - VERSION_CHAIN_DIFF spanning a single version (headVersion - baseVersion <= 1): each key appears
+        //     at exactly one __ROW_VERSION__, so MIN == MAX and the Filter keeps every row.
+        // In both cases the Window+Filter would be an identity transform at full analytic cost. A
+        // non-trackable change carries no scan spec and is treated as not foldable, keeping the
+        // fold; in practice such changes are rejected before planning reaches this point.
+        boolean skipFold = scan.getDelta().getChanges().values().stream()
                 .flatMap(List::stream)
-                .allMatch(c -> c.versionRange().map(p -> p.second - p.first <= 1).orElse(false));
-        if (allSingleVersion) {
+                .allMatch(c -> buildPartitionScanSpec(c, scan.isNetChange()).map(s ->
+                        s.getDerivation_mode() == TChangeDerivationMode.FULL_SCAN
+                                || s.getHead_version() - s.getBase_version() <= 1).orElse(false));
+        if (skipFold) {
             return List.of();
         }
 

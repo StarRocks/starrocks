@@ -29,6 +29,8 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TChangeDerivationMode;
+import com.starrocks.thrift.TChangeScanSpec;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -420,9 +422,10 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             var ranges = scan.getScanRangeLocations(0);
             assertFalse(ranges.isEmpty(), "added partition should emit a scan range");
             for (var loc : ranges) {
-                assertEquals(PhysicalPartition.PARTITION_INIT_VERSION,
-                        loc.getScan_range().getChanges_scan_range().getBase_version(),
-                        "added-partition scan range must base at PARTITION_INIT_VERSION, not 0");
+                TChangeScanSpec spec = loc.getScan_range().getChanges_scan_range().getScan_spec();
+                assertEquals(TChangeDerivationMode.FULL_SCAN, spec.getDerivation_mode(),
+                        "added-partition scan range must use FULL_SCAN (reads head only, no base)");
+                assertFalse(spec.isSetBase_version(), "FULL_SCAN range must not carry a base_version");
             }
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());

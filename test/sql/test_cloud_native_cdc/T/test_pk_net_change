@@ -109,6 +109,12 @@ PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) (
     PARTITION p2 VALUES LESS THAN ('2024-03-01')
 ) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 
+-- Seed both partitions so bm0 sits past the empty initial version. A DataChanged range
+-- whose base is the empty initial version reads FULL (the window is folded away), so bm0 must
+-- carry data for bm0->bm1 to stay a genuine incremental range where the multi-version partition
+-- still gets a window.
+INSERT INTO pk_mp VALUES (100, '2024-01-01', 1), (200, '2024-02-01', 2);
+
 [UC]bm0=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
 
 -- bm0->bm1: p1 advances one version, p2 advances two (insert + update). Mixed range.

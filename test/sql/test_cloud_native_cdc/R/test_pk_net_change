@@ -134,6 +134,9 @@ PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) (
 ) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
+INSERT INTO pk_mp VALUES (100, '2024-01-01', 1), (200, '2024-02-01', 2);
+-- result:
+-- !result
 [UC]bm0=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
 INSERT INTO pk_mp VALUES (1, '2024-01-15', 10);
 -- result:

@@ -23,7 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.lake.bookmark.Bookmark;
@@ -32,7 +31,9 @@ import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.transformer.ChangesScanBuilder;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TChangeScanSpec;
 import com.starrocks.thrift.TChangesScanNode;
 import com.starrocks.thrift.TChangesScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -76,6 +77,8 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     private final Set<Long> selectedLogicalPartitionIds;
     // Tablet ids surviving tablet pruning; null means scan every tablet in the selected partitions.
     private final Set<Long> selectedTabletIds;
+    // Whether the changes are consumed as a net change.
+    private final boolean netChange;
     private final List<TScanRangeLocations> result = new ArrayList<>();
     // Tablet id -> bucket sequence, numbered over each physical partition's full base-index tablet
     // order (getTabletIdsInOrder(), before the selectedTabletIds filter) and accumulated into one
@@ -88,7 +91,8 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     public ChangesScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable table,
                            BookmarkChange delta, Bookmark base, Bookmark head,
                            List<ChangesMetaDescriptor> changesMetaDescriptors,
-                           List<Long> selectedLogicalPartitionId, List<Long> selectedTabletId) {
+                           List<Long> selectedLogicalPartitionId, List<Long> selectedTabletId,
+                           boolean netChange) {
         super(id, desc, "ChangesScanNode", table, table.getBaseIndexMetaId());
         this.delta = delta;
         this.base = base;
@@ -98,6 +102,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 ? null : new HashSet<>(selectedLogicalPartitionId);
         this.selectedTabletIds = selectedTabletId == null
                 ? null : new HashSet<>(selectedTabletId);
+        this.netChange = netChange;
     }
 
     public void computeScanRanges(ComputeResource computeResource) {
@@ -111,12 +116,10 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             PhysicalPartition partition = selected.getPartition();
             BookmarkChange.PhysicalPartitionChange change = selected.getChange();
             long ppId = change.getPhysicalPartitionId();
-            Pair<Long, Long> versions = change.versionRange().orElseThrow(() ->
+            TChangeScanSpec scanSpec = ChangesScanBuilder.buildPartitionScanSpec(change, netChange).orElseThrow(() ->
                     new IllegalStateException(String.format(
                             "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
                             olapTable.getName(), ppId, change.getChangeType())));
-            long baseVersion = versions.first;
-            long headVersion = versions.second;
 
             MaterializedIndex index = partition.getLatestBaseIndex();
             // Number buckets over the FULL tablet order (before the selectedTabletIds filter) so a
@@ -137,8 +140,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 changesScanRange.setTable_id(tableId);
                 changesScanRange.setPartition_id(ppId);
                 changesScanRange.setTablet_id(tablet.getId());
-                changesScanRange.setBase_version(baseVersion);
-                changesScanRange.setHead_version(headVersion);
+                changesScanRange.setScan_spec(scanSpec);
 
                 TScanRange scanRange = new TScanRange();
                 scanRange.setChanges_scan_range(changesScanRange);
@@ -146,7 +148,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
 
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                        headVersion, -1, -1, computeResource, null);
+                        scanSpec.getHead_version(), -1, -1, computeResource, null);
                 if (allQueryableReplicas.isEmpty()) {
                     throw new StarRocksPlannerException(
                             "No queryable replica found for CDC scan on tablet " + tablet.getId() +

@@ -46,6 +46,8 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
     // The table's distribution. The optimizer reads it to advertise this scan's output distribution
     // property, so a co-distributed aggregation or join above the scan needs no shuffle.
     private final DistributionSpec distributionSpec;
+    // True when this scan's changes are consumed net-folded.
+    private final boolean netChange;
 
     public PhysicalChangesScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -58,7 +60,8 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
                                        List<ChangesMetaDescriptor> changesMetaDescriptors,
                                        List<Long> selectedLogicalPartitionId,
                                        List<Long> selectedTabletId,
-                                       DistributionSpec distributionSpec) {
+                                       DistributionSpec distributionSpec,
+                                       boolean netChange) {
         super(OperatorType.PHYSICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, limit, predicate, projection);
         this.base = base;
@@ -68,6 +71,7 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
         this.selectedLogicalPartitionId = selectedLogicalPartitionId;
         this.selectedTabletId = selectedTabletId;
         this.distributionSpec = distributionSpec;
+        this.netChange = netChange;
     }
 
     public Bookmark getBase() {
@@ -98,6 +102,10 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
         return distributionSpec;
     }
 
+    public boolean isNetChange() {
+        return netChange;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -109,6 +117,7 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
         PhysicalChangesScanOperator that = (PhysicalChangesScanOperator) o;
         return base.getBookmarkId() == that.base.getBookmarkId()
                 && head.getBookmarkId() == that.head.getBookmarkId()
+                && netChange == that.netChange
                 && Objects.equals(changesMetaDescriptors, that.changesMetaDescriptors)
                 && Objects.equals(selectedLogicalPartitionId, that.selectedLogicalPartitionId)
                 && Objects.equals(selectedTabletId, that.selectedTabletId)
@@ -117,7 +126,7 @@ public class PhysicalChangesScanOperator extends PhysicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
+        return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(), netChange,
                 changesMetaDescriptors, selectedLogicalPartitionId, selectedTabletId, distributionSpec);
     }
 

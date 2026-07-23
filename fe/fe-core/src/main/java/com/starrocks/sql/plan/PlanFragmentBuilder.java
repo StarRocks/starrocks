@@ -4574,7 +4574,8 @@ public class PlanFragmentBuilder {
                     scan.getHead(),
                     scan.getChangesMetaDescriptors(),
                     scan.getSelectedLogicalPartitionId(),
-                    scan.getSelectedTabletId());
+                    scan.getSelectedTabletId(),
+                    scan.isNetChange());
 
             ComputeResource computeResource = ConnectContext.get() != null
                     ? ConnectContext.get().getCurrentComputeResource()

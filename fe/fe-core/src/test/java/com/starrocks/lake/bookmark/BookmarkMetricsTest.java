@@ -23,6 +23,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class BookmarkMetricsTest extends BookmarkTestBase {
 
@@ -122,19 +123,22 @@ public class BookmarkMetricsTest extends BookmarkTestBase {
         m.onBookmarkCreated(1, 3L, 4L);
         m.setMaxActiveAges(123L, 45L);
 
-        assertEquals(1L, latestMetricValue("bookmark_count"));
-        assertEquals(1L, latestMetricValue("bookmark_reference_count"));
-        assertEquals(3L, latestMetricValue("bookmark_logical_partition_count"));
-        assertEquals(4L, latestMetricValue("bookmark_physical_partition_count"));
-        assertEquals(123L, latestMetricValue("bookmark_max_active_age_ms"));
-        assertEquals(45L, latestMetricValue("bookmark_reference_max_active_age_ms"));
+        assertMetricPublished("bookmark_count", 1L);
+        assertMetricPublished("bookmark_reference_count", 1L);
+        assertMetricPublished("bookmark_logical_partition_count", 3L);
+        assertMetricPublished("bookmark_physical_partition_count", 4L);
+        assertMetricPublished("bookmark_max_active_age_ms", 123L);
+        assertMetricPublished("bookmark_reference_max_active_age_ms", 45L);
     }
 
+    // MetricRepo is process-global: every BookmarkMetrics instance any test registers adds
+    // another same-named metric bound to its own source, so a positional pick can land on a
+    // different instance. Match by value to target the instance driven by this test.
     @SuppressWarnings("unchecked")
-    private static long latestMetricValue(String name) {
+    private static void assertMetricPublished(String name, long expected) {
         List<Metric> ms = MetricRepo.getMetricsByName(name);
         assertFalse(ms.isEmpty(), "metric not registered: " + name);
-        Metric<Long> g = (Metric<Long>) ms.get(ms.size() - 1);
-        return g.getValue();
+        assertTrue(ms.stream().anyMatch(g -> ((Metric<Long>) g).getValue().longValue() == expected),
+                "no published '" + name + "' metric reports " + expected);
     }
 }

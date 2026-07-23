@@ -47,6 +47,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Owns every bookmark for one OlapTable and the references that reach each
  * bookmark. Mutating calls go through the same path on leader and follower:
  * the change is journalled first, then applied in memory.
+ *
+ * <p>These bookmarks fence data against vacuum: for each partition a bookmark
+ * captured, vacuum keeps versions back to the oldest any tracked bookmark
+ * holds. A bookmark captures only the partitions present when it was created,
+ * so a partition added afterward stays unfenced -- its pre-head versions
+ * remain vacuum-eligible -- until a later bookmark captures it.
  */
 public class TableBookmarkTracker {
     private static final Logger LOG = LogManager.getLogger(TableBookmarkTracker.class);

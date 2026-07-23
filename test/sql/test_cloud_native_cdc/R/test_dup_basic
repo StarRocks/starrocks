@@ -170,3 +170,133 @@ SELECT count(*) FROM dup_t [_CHANGES_${bk_pre}_${bk_after}_];
 -- result:
 5
 -- !result
+-- name: test_cdc_dup_added_partition @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE dup_ap (dt date, k int, v int)
+DUPLICATE KEY(dt, k) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_ap VALUES ('2024-01-10', 1, 10);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_ap", "ap", "1800000");
+ALTER TABLE dup_ap ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+-- result:
+-- !result
+INSERT INTO dup_ap VALUES ('2024-02-05', 2, 20);
+-- result:
+-- !result
+INSERT INTO dup_ap VALUES ('2024-02-06', 3, 30);
+-- result:
+-- !result
+INSERT INTO dup_ap VALUES ('2024-02-07', 4, 40);
+-- result:
+-- !result
+[UC]ALTER TABLE dup_ap COMPACT;
+SELECT sleep(15);
+-- result:
+1
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_ap", "ap", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_ap", "${bk0}", "ap");
+    SELECT bookmark_release("${db[0]}", "dup_ap", "${bk1}", "ap");
+} END CLEANUP
+
+SELECT dt, k, v, __CHANGE_TYPE__ FROM dup_ap [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+-- result:
+2024-02-05	2	20	0
+2024-02-06	3	30	0
+2024-02-07	4	40	0
+-- !result
+SELECT count(*) FROM dup_ap [_CHANGES_${bk0}_${bk1}_];
+-- result:
+3
+-- !result
+-- name: test_cdc_dup_net_change_from_empty_base @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE dup_nc (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_nc", "nc", "1800000");
+INSERT INTO dup_nc VALUES (1, 10);
+-- result:
+-- !result
+INSERT INTO dup_nc VALUES (2, 20);
+-- result:
+-- !result
+INSERT INTO dup_nc VALUES (3, 30);
+-- result:
+-- !result
+[UC]ALTER TABLE dup_nc COMPACT;
+SELECT sleep(15);
+-- result:
+1
+-- !result
+INSERT INTO dup_nc VALUES (4, 40);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_nc", "nc", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_nc", "${bk0}", "nc");
+    SELECT bookmark_release("${db[0]}", "dup_nc", "${bk1}", "nc");
+} END CLEANUP
+
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, v, __CHANGE_TYPE__ FROM dup_nc [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+-- result:
+1	10	0
+2	20	0
+3	30	0
+4	40	0
+-- !result
+SELECT count(*) FROM dup_nc [_CHANGES_${bk0}_${bk1}_];
+-- result:
+4
+-- !result
+SET enable_cdc_net_change = false;
+-- result:
+-- !result
+SELECT k, v, __CHANGE_TYPE__ FROM dup_nc [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+-- result:
+1	10	0
+2	20	0
+3	30	0
+4	40	0
+-- !result
+-- name: test_cdc_dup_added_partition_delete_predicate @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE dup_dp (dt date, k int, v int)
+DUPLICATE KEY(dt, k) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_dp VALUES ('2024-01-10', 1, 10);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_dp", "dp", "1800000");
+ALTER TABLE dup_dp ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+-- result:
+-- !result
+INSERT INTO dup_dp VALUES ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
+-- result:
+-- !result
+DELETE FROM dup_dp WHERE dt = '2024-02-06';
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_dp", "dp", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_dp", "${bk0}", "dp");
+    SELECT bookmark_release("${db[0]}", "dup_dp", "${bk1}", "dp");
+} END CLEANUP
+
+SELECT count(*) FROM dup_dp [_CHANGES_${bk0}_${bk1}_];
+-- result:
+[REGEX]E:.*DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet [0-9]+.*
+-- !result

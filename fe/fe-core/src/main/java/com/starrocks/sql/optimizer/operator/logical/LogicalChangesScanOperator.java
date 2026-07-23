@@ -54,6 +54,9 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     // Selected tablet ids after tablet pruning; null means all tablets in the selected partitions.
     private List<Long> selectedTabletId;
 
+    // True when this scan's changes are consumed net-folded.
+    private boolean netChange = false;
+
     public LogicalChangesScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -61,13 +64,15 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
                                       Bookmark head,
                                       BookmarkChange delta,
                                       long limit,
-                                      List<ChangesMetaDescriptor> changesMetaDescriptors) {
+                                      List<ChangesMetaDescriptor> changesMetaDescriptors,
+                                      boolean netChange) {
         super(OperatorType.LOGICAL_CHANGES_SCAN, table,
                 colRefToColumnMetaMap, columnMetaToColRefMap, limit, null, null);
         this.base = base;
         this.head = head;
         this.delta = delta;
         this.changesMetaDescriptors = changesMetaDescriptors;
+        this.netChange = netChange;
     }
 
     private LogicalChangesScanOperator() {
@@ -98,6 +103,10 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+    public boolean isNetChange() {
+        return netChange;
+    }
+
     public Optional<PartitionNames> getPartitionNameHints() {
         return partitionNameHints;
     }
@@ -121,6 +130,7 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         LogicalChangesScanOperator that = (LogicalChangesScanOperator) o;
         return base.getBookmarkId() == that.base.getBookmarkId()
                 && head.getBookmarkId() == that.head.getBookmarkId()
+                && netChange == that.netChange
                 && Objects.equals(changesMetaDescriptors, that.changesMetaDescriptors)
                 && Objects.equals(partitionNameHints, that.partitionNameHints)
                 && Objects.equals(tabletIdHints, that.tabletIdHints)
@@ -131,7 +141,7 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
+        return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(), netChange,
                 changesMetaDescriptors, partitionNameHints, tabletIdHints,
                 selectedLogicalPartitionId, selectedTabletId, distributionSpec);
     }
@@ -160,6 +170,7 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.base = operator.base;
             builder.head = operator.head;
             builder.delta = operator.delta;
+            builder.netChange = operator.netChange;
             builder.changesMetaDescriptors = operator.changesMetaDescriptors;
             builder.partitionNameHints = operator.partitionNameHints;
             builder.tabletIdHints = operator.tabletIdHints;

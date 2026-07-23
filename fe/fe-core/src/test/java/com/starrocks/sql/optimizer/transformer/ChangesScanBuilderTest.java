@@ -186,7 +186,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null, null));
+                        List.of(), null, null, null, false));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d dropped",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, phantomPhysicalId);
@@ -213,7 +213,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null, null));
+                        List.of(), null, null, null, false));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d rewritten",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -240,7 +240,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null, null));
+                        List.of(), null, null, null, false));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d resharded",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -277,7 +277,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), keyPartitionHint, null, null));
+                            List.of(), keyPartitionHint, null, null, false));
             assertTrue(ex.getMessage().contains("does not support a PARTITION hint by column value"),
                     "got: " + ex.getMessage());
         } finally {
@@ -307,7 +307,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
                     new HashMap<>(),
-                    List.of(), null, null, null);
+                    List.of(), null, null, null, false);
             assertNotNull(op);
             assertEquals(base.getBookmarkId(), op.getBase().getBookmarkId());
             assertEquals(head.getBookmarkId(), op.getHead().getBookmarkId());
@@ -350,7 +350,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     colRefToColumnMetaMap,
                     columnMetaToColRefMap,
-                    List.of(), null, null, hashLocal);
+                    List.of(), null, null, hashLocal, false);
             assertSame(hashLocal, op.getDistributionSpec());
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
@@ -383,7 +383,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
                     new HashMap<>(),
-                    List.of(), null, null, null);
+                    List.of(), null, null, null, false);
             // Both partitions must show up in the delta so one can be fully tablet-pruned.
             assertTrue(op.getDelta().getChanges().size() >= 2,
                     "delta must span both partitions, got: " + op.getDelta().getChanges().keySet());
@@ -403,7 +403,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor("changes_scan");
             ChangesScanNode prunedNode = new ChangesScanNode(
                     new PlanNodeId(1), tuple, table, op.getDelta(), op.getBase(), op.getHead(),
-                    op.getChangesMetaDescriptors(), logicalPartitionIds, keptTabletIds);
+                    op.getChangesMetaDescriptors(), logicalPartitionIds, keptTabletIds, false);
             // >= 2 selected logical partitions on a HASH table report the table's bucket count (BUCKETS 3),
             // reached only after the empty tablet-pruned partition is skipped.
             assertEquals(3, prunedNode.getBucketNums());
@@ -413,7 +413,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // the bucket count is unchanged.
             ChangesScanNode unprunedNode = new ChangesScanNode(
                     new PlanNodeId(2), tuple, table, op.getDelta(), op.getBase(), op.getHead(),
-                    op.getChangesMetaDescriptors(), logicalPartitionIds, null);
+                    op.getChangesMetaDescriptors(), logicalPartitionIds, null, false);
             assertEquals(3, unprunedNode.getBucketNums());
             assertFalse(unprunedNode.getBucketProperties().isPresent());
         } finally {
@@ -448,9 +448,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         try {
             BookmarkRange range = new BookmarkRange(b1.getBookmarkId(), b2.getBookmarkId());
             LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null, false);
             LogicalChangesScanOperator same = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null, null, false);
 
             // Reflexive, and two unpruned scans over the same (table, base, head)
             // are equal with matching hashCode — the equality the Cascades memo
@@ -467,10 +467,10 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // only thing distinguishing these from op at the operator level.
             LogicalChangesScanOperator baseDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b0.getBookmarkId(), b2.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null, false);
             LogicalChangesScanOperator headDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b1.getBookmarkId(), b3.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null);
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null, null, false);
             assertNotEquals(op, baseDiff);
             assertNotEquals(op, headDiff);
 
@@ -478,7 +478,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // are part of the scan's output identity.
             LogicalChangesScanOperator metaDiff = ChangesScanBuilder.buildScanOperator(
                     table, range, new HashMap<>(), new HashMap<>(),
-                    ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null);
+                    ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null, false);
             assertNotEquals(op, metaDiff);
 
             // The selected ids are what make a pruned scan a distinct memo
@@ -542,10 +542,10 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // base/head), so it is passed as null throughout.
             PhysicalChangesScanOperator op = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, null, null);
+                    b1, b2, null, List.of(), null, null, null, false);
             PhysicalChangesScanOperator same = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, null, null);
+                    b1, b2, null, List.of(), null, null, null, false);
 
             // Reflexive, and two unpruned scans over the same (table, base, head) are
             // equal with matching hashCode — the equality the Cascades memo relies on
@@ -560,29 +560,35 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // A different bookmark window is a different scan.
             PhysicalChangesScanOperator baseDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b0, b2, null, List.of(), null, null, null);
+                    b0, b2, null, List.of(), null, null, null, false);
             PhysicalChangesScanOperator headDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b3, null, List.of(), null, null, null);
+                    b1, b3, null, List.of(), null, null, null, false);
             assertNotEquals(op, baseDiff);
             assertNotEquals(op, headDiff);
 
             // Different CHANGES metadata columns are part of the scan's output identity.
             PhysicalChangesScanOperator metaDiff = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null);
+                    b1, b2, null, ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null, null, false);
             assertNotEquals(op, metaDiff);
 
             // The selected ids are what make a pruned physical scan a distinct memo
             // alternative from the unpruned op — exactly the dedup bug this guards against.
             PhysicalChangesScanOperator partitionPruned = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), List.of(1L, 2L), null, null);
+                    b1, b2, null, List.of(), List.of(1L, 2L), null, null, false);
             PhysicalChangesScanOperator tabletPruned = new PhysicalChangesScanOperator(
                     table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
-                    b1, b2, null, List.of(), null, List.of(10L), null);
+                    b1, b2, null, List.of(), null, List.of(10L), null, false);
             assertNotEquals(op, partitionPruned);
             assertNotEquals(op, tabletPruned);
+
+            // netChange is part of the scan's identity: an empty-base partition reads FULL_SCAN vs VERSION_CHAIN_DIFF.
+            PhysicalChangesScanOperator netChangeDiff = new PhysicalChangesScanOperator(
+                    table, new HashMap<>(), Operator.DEFAULT_LIMIT, null, null,
+                    b1, b2, null, List.of(), null, null, null, true);
+            assertNotEquals(op, netChangeDiff);
         } finally {
             bm.releaseReference(dbId, tableId, b0.getBookmarkId(), h0.getHolderId());
             bm.releaseReference(dbId, tableId, b1.getBookmarkId(), h1.getHolderId());
@@ -610,7 +616,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(99999L, real.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), null, null, null));
+                            List.of(), null, null, null, false));
             assertTrue(baseEx.getMessage().contains("bookmark 99999 not found"),
                     "actual: " + baseEx.getMessage());
 
@@ -620,7 +626,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(real.getBookmarkId(), 99998L),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of(), null, null, null));
+                            List.of(), null, null, null, false));
             assertTrue(headEx.getMessage().contains("bookmark 99998 not found"),
                     "actual: " + headEx.getMessage());
         } finally {
@@ -645,7 +651,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(1L, 2L),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of(), null, null, null));
+                        List.of(), null, null, null, false));
         assertTrue(ex.getMessage().contains("dbId missing on " + tableName),
                 "actual: " + ex.getMessage());
     }
@@ -661,6 +667,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
         BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_on_base");
         BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_on_head");
+        // Take base off the empty initial version so the range is a genuine multi-version VERSION_CHAIN_DIFF;
+        // a base at PARTITION_INIT_VERSION reads as FULL_SCAN, which needs no net-change fold.
+        bumpVisibleVersion(table, 2L);
         Bookmark base = bm.create(dbId, tableId, hBase);
         bumpVisibleVersion(table, 5L);
         Bookmark head = bm.create(dbId, tableId, hHead);
@@ -695,6 +704,45 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
     }
 
     @Test
+    public void testNetChangeSkippedWhenBaseAtInitVersion() throws Exception {
+        // A base at the empty initial version reads as FULL_SCAN: head's live PK rows already appear
+        // once per key as inserts, so the net-change fold is unnecessary and must be skipped even
+        // with the flag on (the Window+Filter would be an identity transform at full analytic cost).
+        String name = "pk_nc_init_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_init_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_init_head");
+        // base captured at the fresh table's empty initial version (PARTITION_INIT_VERSION).
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(analyticNodes.isEmpty(),
+                    "FULL_SCAN (base at the initial version) must skip the net-change window:\n" + plan);
+            assertTrue(plan.contains("ChangesScanNode"),
+                    "plan must include ChangesScanNode:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
     public void testNetChangeUsesHashPartitionWhenModeHash() throws Exception {
         String name = "pk_nc_hash_" + TABLE_COUNTER.getAndIncrement();
         long tableId = createPkTable(name);
@@ -705,6 +753,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
         BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_hash_base");
         BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_hash_head");
+        // Take base off the empty initial version so the range is a genuine multi-version VERSION_CHAIN_DIFF;
+        // a base at PARTITION_INIT_VERSION reads as FULL_SCAN, which needs no net-change fold.
+        bumpVisibleVersion(table, 2L);
         Bookmark base = bm.create(dbId, tableId, hBase);
         bumpVisibleVersion(table, 5L);
         Bookmark head = bm.create(dbId, tableId, hHead);
@@ -817,6 +868,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
         BookmarkHolder pkB = BookmarkHolder.forEmptyInfo("ovl_pk_base");
         BookmarkHolder pkH = BookmarkHolder.forEmptyInfo("ovl_pk_head");
+        // Take base off the empty initial version so the PK range is a genuine multi-version
+        // VERSION_CHAIN_DIFF (base at PARTITION_INIT_VERSION reads as FULL_SCAN, which needs no net-change fold).
+        bumpVisibleVersion(pk, 2L);
         Bookmark pkBase = bm.create(dbId, pkId, pkB);
         bumpVisibleVersion(pk, 5L);
         Bookmark pkHead = bm.create(dbId, pkId, pkH);
