@@ -508,6 +508,8 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
     patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+    # PR apache/brpc#3384: reclaim unscheduled timer tasks (heap sweep + capped wakeup)
+    patch -p1 < $TP_PATCH_DIR/brpc-1.9.0-timer-reclaim.patch
     touch $PATCHED_MARK
 fi
 cd -

@@ -303,6 +303,24 @@ This topic introduces the following types of BE configurations:
 - Description: The expire time of bRPC stub cache. The default value is 60 minutes.
 - Introduced in: -
 
+
+### brpc_timer_heap_sweep_min_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The bRPC `TimerThread` recycles a timer task's pooled slot only when the task is popped at its run time, so a task unscheduled after being pulled into the thread's internal min-heap lingers there until then. Once the heap holds at least this many tasks, the timer thread sweeps unscheduled tasks out of it to bound the memory they occupy (which otherwise grows to roughly QPS x timeout). Heaps smaller than this never pay the sweep cost. (apache/brpc#3384)
+- Introduced in: -
+
+### brpc_timer_max_wakeup_interval_ms
+
+- Default: 0
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The maximum interval at which the bRPC `TimerThread` wakes up to drain its buckets and sweep unscheduled tasks, even when every pending task has a far-future run time. `0` (default) disables the periodic wakeup and keeps the legacy behavior of sleeping until the nearest task's run time. Set a positive value to bound reclaim latency when timers may have far-future deadlines. (apache/brpc#3384)
+- Introduced in: -
 ### compress_rowbatches
 
 - Default: true

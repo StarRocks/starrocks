@@ -287,6 +287,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BRPC stub 缓存的过期时间，默认 60 minutes。
 - 引入版本：-
 
+
+### brpc_timer_heap_sweep_min_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：bRPC `TimerThread` 仅在定时任务到达运行时间被弹出时才回收其对象池槽位，因此被拉入内部最小堆后又被取消调度的任务会一直驻留到运行时间。当堆中任务数达到该值后，定时线程会清扫堆中已取消调度的任务，以限制其占用的内存（否则内存约增长到 QPS × 超时时间）。小于该值的堆不会承担清扫开销。（apache/brpc#3384）
+- 引入版本：-
+
+### brpc_timer_max_wakeup_interval_ms
+
+- 默认值：0
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：bRPC `TimerThread` 至少以该间隔唤醒一次以消费桶并清扫已取消调度的任务，即使所有待处理任务的运行时间都在很久之后。`0`（默认）禁用周期性唤醒，保持睡眠至最近任务运行时间的旧有行为。当定时器可能存在很久之后才到期的任务时，可设置正值以限制回收延迟。（apache/brpc#3384）
+- 引入版本：-
 ### compress_rowbatches
 
 - 默认值：true

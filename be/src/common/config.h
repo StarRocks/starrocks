@@ -1019,6 +1019,14 @@ CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+// brpc TimerThread reclaims unscheduled tasks from its internal min-heap once the
+// heap grows to at least this many tasks (apache/brpc#3384). Larger values keep the
+// sweep rarer at the cost of more transient memory; 0 keeps brpc's built-in default.
+CONF_Int32(brpc_timer_heap_sweep_min_size, "4096");
+// brpc TimerThread wakes up at least this often (in milliseconds) to drain its buckets
+// and sweep unscheduled tasks even when every pending task is far in the future.
+// 0 (default) disables the periodic wakeup and keeps the legacy sleep-until-run_time.
+CONF_Int32(brpc_timer_max_wakeup_interval_ms, "0");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
