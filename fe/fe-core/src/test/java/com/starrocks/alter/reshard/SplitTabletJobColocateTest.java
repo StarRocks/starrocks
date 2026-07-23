@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.collect.Multimap;
 import com.staros.client.StarClientException;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.PlacementPolicy;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -53,6 +55,8 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -141,14 +145,27 @@ public class SplitTabletJobColocateTest {
         }
     }
 
+    /**
+     * A within-prefix (Level 2) pre-split adds no ColocateRange boundary, but because pre-split creates
+     * its new shards in the SPREAD group ONLY (root fix so they spread across CNs at creation), the
+     * post-publish path must still get each child into the existing owning PACK group — otherwise a
+     * boundary-less split would strand them SPREAD-only and lose colocation permanently. The fix does
+     * both: (1) an immediate reconcile places each child into the existing PACK group, and (2) the group
+     * is marked unstable to arm the periodic ColocateChecker backstop as a safety net (a boundary-less
+     * split would otherwise leave the group stable and never revisited).
+     */
     @Test
-    public void testLevelTwoSplitDoesNotChangeColocateRangeMgr() throws Exception {
-        ColocateRangeMgr rangeMgr = GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRangeMgr();
+    public void testLevelTwoPreSplitReconcilesChildIntoExistingPackGroup() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long existingPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size());
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             // Two new tablets, both with WITHIN-PREFIX (non-canonical) lower bounds —
-            // a Level 2 split that does NOT cross any colocate boundary.
+            // a Level 2 split that does NOT cross any colocate boundary (both stay in the one range).
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
                     new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
@@ -156,11 +173,23 @@ public class SplitTabletJobColocateTest {
                     new TabletRange(Range.ge(makeTwoColTuple(100, 50))).toProto());
             return result;
         });
-        boolean[] reassignCalled = {false};
+        // Pre-split created the children in the SPREAD group ONLY (no PACK group).
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        Map<Long, List<Long>> reassignedRemove = new HashMap<>();
         new MockUp<StarOSAgent>() {
             @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(spreadGroup).build());
+                }
+                return infos;
+            }
+
+            @Mock
             public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
-                reassignCalled[0] = true;
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+                reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
             }
         };
 
@@ -168,10 +197,17 @@ public class SplitTabletJobColocateTest {
 
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size(),
                 "Level 2 split must not add a ColocateRange entry");
-        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
-                "Level 2 split must leave the group stable");
-        Assertions.assertFalse(reassignCalled[0],
-                "no boundary spliced -> no immediate PACK reassignment");
+        Assertions.assertTrue(idx.isGroupUnstable(groupId),
+                "Level 2 pre-split must arm the backstop: mark the group unstable so the periodic checker "
+                        + "converges the SPREAD-only children even if the immediate reconcile fails");
+        Assertions.assertFalse(reassignedAdd.isEmpty(),
+                "SPREAD-only pre-split children must be reconciled into the existing PACK group");
+        for (Map.Entry<Long, List<Long>> e : reassignedAdd.entrySet()) {
+            Assertions.assertEquals(List.of(existingPackGroup), e.getValue(),
+                    "child " + e.getKey() + " must be added to the existing owning PACK group");
+            Assertions.assertEquals(List.of(), reassignedRemove.get(e.getKey()),
+                    "child " + e.getKey() + " had no PACK group, so nothing is removed");
+        }
     }
 
     @Test
@@ -422,6 +458,148 @@ public class SplitTabletJobColocateTest {
                 "boundary child must be removed from the old PACK group at split time");
         Assertions.assertFalse(reassignedAdd.containsKey(belowChild),
                 "the below-boundary child stays in the old PACK group; no reassignment");
+    }
+
+    /**
+     * Root fix for the pre-split single-CN clustering (StarOS #1275): a pre-split (empty source,
+     * rowCount == 0 -> spreadNewShards) must create its new shards with ONLY the SPREAD group, NOT the
+     * parent PACK colocate group. Creating a whole batch into one PACK group makes StarOS herd them
+     * onto a single CN (PACK +10000 dwarfs SPREAD -100), which funnels the following load into
+     * ChannelNum=1. The correct per-bucket PACK groups are established afterwards by the post-publish
+     * reconcile (the Level-1 tests above), so colocation still converges.
+     */
+    @Test
+    public void testPreSplitCreatesShardsWithoutPackGroup() throws Exception {
+        // The freshly created table has an empty source tablet (rowCount == 0), so this is a pre-split
+        // and spreadNewShards is true. Capture the parent PACK group that the old (unsplit) code would
+        // have (wrongly) placed every new shard into.
+        long parentPackGroup = GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                .getColocateRangeMgr().getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+
+        Map<Long, List<Long>> createdGroupsByShard = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Invocation inv,
+                                             Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+                Assertions.assertTrue(spreadNewShards, "empty-source split must request spread");
+                for (Map.Entry<Long, List<Long>> e : newShardIdToGroupIds.entrySet()) {
+                    createdGroupsByShard.put(e.getKey(), new ArrayList<>(e.getValue()));
+                }
+                inv.proceed();  // run the real creation so the rest of the split proceeds
+            }
+        };
+
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+
+        runSplitJob();
+
+        Assertions.assertFalse(createdGroupsByShard.isEmpty(), "createShardsForSplit must have run");
+        for (Map.Entry<Long, List<Long>> e : createdGroupsByShard.entrySet()) {
+            List<Long> groups = e.getValue();
+            Assertions.assertEquals(1, groups.size(),
+                    "pre-split shard " + e.getKey() + " must be created with a single (SPREAD) group, "
+                            + "not two (SPREAD + PACK); got " + groups);
+            Assertions.assertFalse(groups.contains(parentPackGroup),
+                    "pre-split shard " + e.getKey() + " must NOT be created in the parent PACK group "
+                            + parentPackGroup + "; got " + groups);
+        }
+    }
+
+    /**
+     * BE fallback-to-identical (BE returns only the first child range -> fallbackToIdenticalTablet):
+     * because a pre-split created the identical replacement in the SPREAD group only, the post-publish
+     * walk must STILL collect it and reconcile it into its owning PACK group (and arm the backstop),
+     * even though no boundary was spliced — otherwise the replacement is stranded SPREAD-only and its
+     * colocate placement is silently lost.
+     */
+    @Test
+    public void testPreSplitFallbackToIdenticalReconcilesIntoPackGroup() throws Exception {
+        ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
+        long existingPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
+        long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
+                .getLatestBaseIndex().getShardGroupId();
+
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            // Return ONLY the first child's range → the missing second range triggers BE identical
+            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). The concrete range
+            // is contained in the single owning ColocateRange so the reconcile can place it; the
+            // identical flag itself is size-based (newTabletIds.size() == 1), not range-based.
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0),
+                    new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
+            return result;
+        });
+        Map<Long, List<Long>> reassignedAdd = new HashMap<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
+                List<ShardInfo> infos = new ArrayList<>();
+                for (long id : shardIds) {
+                    infos.add(ShardInfo.newBuilder().setShardId(id).addGroupIds(spreadGroup).build());
+                }
+                return infos;
+            }
+
+            @Mock
+            public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds) {
+                reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
+            }
+        };
+
+        runSplitJob();
+
+        Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size(),
+                "identical fallback adds no ColocateRange boundary");
+        Assertions.assertFalse(reassignedAdd.isEmpty(),
+                "the SPREAD-only identical replacement must be reconciled into the existing PACK group");
+        for (Map.Entry<Long, List<Long>> e : reassignedAdd.entrySet()) {
+            Assertions.assertEquals(List.of(existingPackGroup), e.getValue(),
+                    "identical replacement " + e.getKey() + " must be added to the existing owning PACK group");
+        }
+    }
+
+    /**
+     * A failure to create the new PACK shard group during the boundary splice (StarOSAgent.createShardGroup
+     * throws) must abort the split rather than silently proceed — the splice wraps the DdlException as a
+     * TabletReshardException, which run() turns into an abort.
+     */
+    @Test
+    public void testCreateShardGroupFailureDuringSpliceAbortsSplit() throws Exception {
+        installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
+            // Level-1 canonical boundary → applyRangeSplitResult runs → its supplier createShardGroup throws.
+            Map<Long, TabletRangePB> result = new HashMap<>();
+            result.put(newTabletIds.get(0), new TabletRange(Range.lt(makeCanonicalTuple(100))).toProto());
+            result.put(newTabletIds.get(1), new TabletRange(Range.ge(makeCanonicalTuple(100))).toProto());
+            return result;
+        });
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId, long indexId,
+                                         PlacementPolicy placementPolicy) throws DdlException {
+                throw new DdlException("mocked createShardGroup failure");
+            }
+        };
+
+        TabletReshardJob job = createTabletReshardJob();
+        job.init();
+        for (int i = 0; i < 8 && job.getJobState() != TabletReshardJob.JobState.FINISHED
+                && job.getJobState() != TabletReshardJob.JobState.ABORTED; i++) {
+            job.run();
+        }
+        Assertions.assertNotEquals(TabletReshardJob.JobState.FINISHED, job.getJobState(),
+                "createShardGroup failure during the boundary splice must NOT let the split finish");
     }
 
     /**
