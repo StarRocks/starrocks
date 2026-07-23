@@ -2503,6 +2503,7 @@ limitElement
 querySpecification
     : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
+      arrayJoinClause?
       ((WHERE where=expression)? (GROUP BY (groupByAll=ALL | groupingElement))? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
     ;
@@ -2510,6 +2511,18 @@ querySpecification
 fromClause
     : (FROM relations pivotClause?)?                                                    #from
     | FROM DUAL                                                                         #dual
+    ;
+
+arrayJoinClause
+    : (LEFT? ARRAY) JOIN arrayJoinList
+    ;
+
+arrayJoinList
+    : arrayJoinExpr (',' arrayJoinExpr)*
+    ;
+
+arrayJoinExpr
+    :expression (AS? identifier)?
     ;
 
 groupingElement
