@@ -113,6 +113,9 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -124,6 +127,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.exception.TvrAncestryBrokenException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
@@ -5928,5 +5932,54 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 info, wal -> addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue));
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
+    }
+
+    @Override
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        if (!(table instanceof OlapTable)) {
+            return TvrTableSnapshot.empty();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        // Watermark = highest version epoch across partitions. Each commit stamps a new,
+        // always-bigger epoch, so this number only goes up when data changes. We use max
+        // (not sum) so it never overflows and never repeats a past value.
+        // If every partition is dropped, this returns empty; listTableDeltaTraits below
+        // turns that into a clear "data was dropped" error.
+        long watermark = olapTable.getPhysicalPartitions().stream()
+                .mapToLong(PhysicalPartition::getVersionEpoch)
+                .max()
+                .orElse(0L);
+        return watermark > 0 ? TvrTableSnapshot.of(watermark) : TvrTableSnapshot.empty();
+    }
+
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        if (fromSnapshotExclusive.equals(toSnapshotInclusive)) {
+            return Collections.emptyList();
+        }
+        if (!(table instanceof OlapTable)) {
+            return Collections.emptyList();
+        }
+        long toVersion = toSnapshotInclusive.end()
+                .orElseThrow(() -> new TvrAncestryBrokenException(
+                        "table has no partitions now, so its history is broken"));
+        // end() gives the version number, or nothing if the snapshot is empty.
+        Optional<Long> fromOpt = fromSnapshotExclusive.end();
+        if (fromOpt.isPresent() && fromOpt.get() > toVersion) {
+            throw new TvrAncestryBrokenException(
+                    "from snapshot %s is not a parent ancestor of end snapshot %s",
+                    fromOpt.get(), toVersion);
+        }
+        TvrTableDelta delta = TvrTableDelta.of(fromOpt, Optional.of(toVersion));
+        return Collections.singletonList(classifyNativeDelta(delta));
+    }
+
+    // Native tables can always have deletes, so treat every change as "retractable"
+    // (not append-only). Safe, but slower than needed for append-only loads.
+    // TODO(IVM Phase 3, #73115): mark append-only loads as monotonic once we can detect them.
+    private static TvrTableDeltaTrait classifyNativeDelta(TvrTableDelta delta) {
+        return TvrTableDeltaTrait.ofRetractable(delta);
     }
 }

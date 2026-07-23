@@ -37,6 +37,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.exception.TvrAncestryBrokenException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -334,6 +335,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     }
 
     private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
+        if (e instanceof TvrAncestryBrokenException) {
+            return true;
+        }
+        // Older connectors (like Iceberg) send this as plain text, not the typed error above.
+        // TODO(IVM): move them to TvrAncestryBrokenException, then delete this text check.
         String message = e.getMessage();
         return message != null && message.contains("is not a parent ancestor");
     }
