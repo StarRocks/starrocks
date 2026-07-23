@@ -27,6 +27,48 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 
 :::
 
+## 3.5.20
+
+リリース日: 2026年7月23日
+
+### 動作変更
+
+- Iceberg REST カタログに対する `CREATE DATABASE IF NOT EXISTS` は、データベースが既に存在する場合でもエラーを返さず、正常に成功するようになりました。 [#75017](https://github.com/StarRocks/starrocks/pull/75017)
+- vended credentials を使用する Iceberg REST カタログでは、`Table` オブジェクトをキャッシュし、アクセス時に認証情報を更新するようになりました。これにより、従来のようにキャッシュをバイパスして `getTable()` 呼び出しごとに REST カタログまたは Lake Formation から再取得することがなくなり、AWS の `Rate exceeded` エラーが発生する可能性を低減します。 [#75431](https://github.com/StarRocks/starrocks/pull/75431)
+- GIN 転置インデックスで高速化された `NOT MATCH` 条件は、`NULL` 値を持つ行を返さないようになり、SQL の三値論理（three-valued logic）のセマンティクスに準拠しました。 [#75578](https://github.com/StarRocks/starrocks/pull/75578)
+
+### 改善点
+
+- FE メトリクス `txn_max_committed_pending_publish_ms` を追加しました。このデータベース単位のゲージメトリクスは、コミット済みトランザクションが公開待ちとなっている最長時間を報告し、バージョン公開の停滞や遅延の診断に役立ちます。 [#75025](https://github.com/StarRocks/starrocks/pull/75025)
+- `Analytor` において、ウィンドウ関数集約中に列が拡張（widen）される場合でもクエリメモリ制限を適用し、メモリ使用量が無制限に増加しないようにしました。 [#75821](https://github.com/StarRocks/starrocks/pull/75821)
+- `array_length()` および `cardinality()` が使用する配列列のオフセットのみを読み取るパスから不要な rowid 単位のシークを削除しました。 [#75861](https://github.com/StarRocks/starrocks/pull/75861)
+
+### バグ修正
+
+以下の問題を修正しました。
+
+- 複数の誤った結果を返す問題を修正しました。`EliminateSortColumnWithEqualityPredicateRule` が並行実行時にグローバル `LIMIT` を削除してしまう問題、`SplitJoinORToUnionRule` が null-safe-equal（`<=>`）を使用した `JOIN ON p1 OR p2` で重複行を生成する問題、JIT コード生成で `2^64` 以上の `LARGEINT` リテラルが 64 ビットに切り詰められる問題、すべての非 NULL 入力配列が空の場合に `array_map` / `transform` が `NULL` 行を静かに破棄する問題、Exchange フラグメント間でネストされた辞書式が一貫して再構築されず dict デコードに失敗する問題、および `_` ワイルドカードを含む `LIKE` パターンが GIN 転置インデックスで誤った行を返す問題。 [#74983](https://github.com/StarRocks/starrocks/pull/74983) [#75038](https://github.com/StarRocks/starrocks/pull/75038) [#75137](https://github.com/StarRocks/starrocks/pull/75137) [#75141](https://github.com/StarRocks/starrocks/pull/75141) [#75246](https://github.com/StarRocks/starrocks/pull/75246) [#75551](https://github.com/StarRocks/starrocks/pull/75551)
+- Join の並べ替え時の列プルーニングで、述語から参照されている列が削除され `missing statistic of col` のプランニングエラーが発生する問題、および `JoinTuningGuide` が Join の再構築時に `predicateCommonOperators` を失い、プラン検証に失敗する問題を修正しました。 [#74791](https://github.com/StarRocks/starrocks/pull/74791) [#75773](https://github.com/StarRocks/starrocks/pull/75773)
+- 同期マテリアライズドビュー／Rollup リライトで、クエリが同じベース列を複数回集約（例: `min(c)` と `max(c)`）した場合に Rollup 列が失われる問題、および非同期マテリアライズドビューリライトで Iceberg ベーステーブルの `rollback_to_snapshot` 後に古い結果が返される問題を修正しました。 [#75528](https://github.com/StarRocks/starrocks/pull/75528) [#75924](https://github.com/StarRocks/starrocks/pull/75924)
+- `PARTITION-TOP-N` が partition-by 列を存在しない辞書スロットへ書き換え、`slot_id not found` エラーで失敗する問題を修正しました。 [#75956](https://github.com/StarRocks/starrocks/pull/75956)
+- `SECURITY INVOKER` ビューの保存済み定義に CTE が含まれる場合、ビューのテーブル収集時に NPE が発生する問題を修正しました。 [#74813](https://github.com/StarRocks/starrocks/pull/74813)
+- `DROP PERSISTENT INDEX`、`RestoreJob` のリストア後処理、および関連するロックなし経路における FE メタデータロックの競合を 3 件修正しました。 [#74968](https://github.com/StarRocks/starrocks/pull/74968)
+- FE の EOS キャンセルと BE のステージ 2 デプロイの競合により、正常終了したクエリがキャンセル済みとして扱われる問題を修正しました。 [#75009](https://github.com/StarRocks/starrocks/pull/75009)
+- `ApplyTuningGuideRule` が、以前のリライトで不変の入力リストを持つ `OptExpression` が生成された場合に `UnsupportedOperationException` をスローする問題を修正しました。 [#70785](https://github.com/StarRocks/starrocks/pull/70785)
+- BE/CN のクラッシュに関する複数の問題を修正しました。パイプライン開始前にキャンセル RPC が到着した場合の `driver_executor` の NULL、spill partition-sort-sink のキャンセル処理における use-after-free、DOP>1 のスキュー指定ウィンドウ関数で `OrderedPartitionExchanger` に発生する heap-use-after-free、ビルド側列の NULL 属性不一致による `NLJoin` のクラッシュ、`UNNEST` 出力における `StructColumn` のフィールド数不一致、コンパクション中に flat-JSON 列が `NOT NULL` から nullable に変更された際のクラッシュループ、`NLJoinProbeOperator` におけるメモリ割り当て例外の未処理、主キー自動インクリメントの部分更新適用時のクラッシュ、およびスキャン述語プッシュダウン中に `array_map` ラムダ内の述語を書き換える際のクラッシュ。 [#75030](https://github.com/StarRocks/starrocks/pull/75030) [#75140](https://github.com/StarRocks/starrocks/pull/75140) [#75279](https://github.com/StarRocks/starrocks/pull/75279) [#75343](https://github.com/StarRocks/starrocks/pull/75343) [#75445](https://github.com/StarRocks/starrocks/pull/75445) [#75680](https://github.com/StarRocks/starrocks/pull/75680) [#75788](https://github.com/StarRocks/starrocks/pull/75788) [#76119](https://github.com/StarRocks/starrocks/pull/76119) [#76380](https://github.com/StarRocks/starrocks/pull/76380)
+- `histogram()` が `bucket_num` に 0 以下の値を指定した場合に明確なエラーを返さずクラッシュ（または誤ってバケット化）する問題、および `bar()` が負または非常に大きな `width` 引数によって文字列を無制限に拡張し、BE メモリを使い果たす問題を修正しました。 [#75041](https://github.com/StarRocks/starrocks/pull/75041) [#75143](https://github.com/StarRocks/starrocks/pull/75143)
+- 配列列に対して `unnest` を使用するクエリが `query_mem_limit` を超えた際、該当クエリのみ失敗するのではなく BE 全体が OOM により終了する問題を修正しました。 [#75179](https://github.com/StarRocks/starrocks/pull/75179)
+- `information_schema.task_runs` の `TASK_NAME` / `QUERY_ID` 述語検索における二次 SQL インジェクションの脆弱性を修正しました。 [#75520](https://github.com/StarRocks/starrocks/pull/75520)
+- `SHOW CREATE ROUTINE LOAD` が最初の load-desc 句の前に不要なカンマを出力する問題、および `jsonpaths` の値がエスケープされず、生成された DDL を実行できない問題を修正しました。 [#75522](https://github.com/StarRocks/starrocks/pull/75522) [#75755](https://github.com/StarRocks/starrocks/pull/75755)
+- Shared-data（Lake）環境において、`SHOW PARTITIONS` および `information_schema.partitions_meta` が各物理パーティション固有のバケット数ではなく、テーブルレベルのデフォルト値を報告する問題を修正しました。 [#75734](https://github.com/StarRocks/starrocks/pull/75734)
+- `jackson-databind` および Netty をアップグレードし、複数の依存ライブラリに存在する CVE を修正しました。 [#75373](https://github.com/StarRocks/starrocks/pull/75373) [#76555](https://github.com/StarRocks/starrocks/pull/76555)
+- `markTabletsForceDelete` における `TabletInvertedIndex` の書き込みロック取得をバッチ化し、多数の Tablet を一括強制削除する際のロック競合を削減しました。 [#75616](https://github.com/StarRocks/starrocks/pull/75616)
+- insert-overwrite パスにおける tablet inverted index の書き込みをバッチ化しました。 [#75923](https://github.com/StarRocks/starrocks/pull/75923)
+- ロード時の spill がリモートストレージを使用しなかった場合、不要なリモート `clear_parent_path` 呼び出しをスキップするようにしました。 [#76224](https://github.com/StarRocks/starrocks/pull/76224)
+- `ParquetScanner` において欠落列の NULL パディングサイズが一致しない問題を修正し、パディングされた行数が Parquet/Arrow バッチ全体ではなく、実際のバッチチャンクサイズと一致するようにしました。 [#75981](https://github.com/StarRocks/starrocks/pull/75981)
+- 修正済みバージョンと併せて同梱されていた古い BouncyCastle、OkHttp 2.x、Tomcat などの脆弱で古い推移的依存ライブラリを削除しました。 [#76097](https://github.com/StarRocks/starrocks/pull/76097)
+
+
 ## 3.5.19
 
 リリース日：2026 年 6 月 26 日
