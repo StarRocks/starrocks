@@ -572,6 +572,16 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
+### `vended_credential_refresh_window_sec`
+
+- Default: 3000
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: For connector scans that read data files with catalog-vended cloud credentials (for example, GCS access tokens vended by an Iceberg REST catalog), the coordinator re-vends the credential when it expires within this window and pushes the fresh credential to the BEs, so a scan that runs longer than the credential's lifetime does not fail with a null- or expired-token error. Because credential delivery to the BEs typically happens early in the query while the scan itself can run much longer, this window must cover the expected scan duration, not just clock skew.
+- Introduced in: -
+
+
 ### `files_enable_insert_push_down_column_type`
 
 - Default: true

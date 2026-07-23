@@ -1823,6 +1823,15 @@ public class Config extends ConfigBase {
     public static int max_query_retry_time = 2;
 
     /**
+     * Re-vend a connector scan's cloud credential when it expires within this window, so a scan
+     * that outlives its vended token keeps opening files. Credentials reach the BE early in the
+     * query while the scan can run much longer, so cover the expected scan duration.
+     */
+    @ConfField(mutable = true, comment = "Re-vend a connector scan's cloud credential when it " +
+            "expires within this many seconds.")
+    public static long vended_credential_refresh_window_sec = 3000;
+
+    /**
      * In order not to wait too long for create table(index), set a max timeout.
      */
     @ConfField(mutable = true)

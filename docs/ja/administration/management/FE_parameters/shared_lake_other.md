@@ -572,6 +572,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
+### `vended_credential_refresh_window_sec`
+
+- デフォルト：3000
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：Catalog が下発（vend）するクラウド認証情報を使用してデータファイルを読み取る Connector スキャン（例：Iceberg REST Catalog が下発する GCS アクセストークン）において、認証情報がこのウィンドウ内に期限切れになる場合、コーディネーターは認証情報を再取得して BE にプッシュします。これにより、認証情報の有効期間より長く実行されるスキャンがトークンの欠落や期限切れで失敗しなくなります。認証情報は通常クエリの早い段階で BE に配信され、スキャン自体はより長く実行される可能性があるため、このウィンドウはクロックスキューだけでなく、想定されるスキャン時間をカバーする必要があります。
+- 導入時期：-
+
+
 ### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true

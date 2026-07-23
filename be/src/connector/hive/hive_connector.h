@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <unordered_map>
 
 #include "column/column_access_path.h"
@@ -56,6 +57,13 @@ public:
     void prepare_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
 
+    // Thread-safe: the RPC thread writes, scan threads read via effective_cloud_configuration().
+    void set_refreshed_cloud_configuration(const TCloudConfiguration& cloud_configuration) override;
+
+    // Returns the refreshed cloud configuration (copied into `holder`) when one has arrived,
+    // otherwise the plan-time configuration, or nullptr if neither is set.
+    const TCloudConfiguration* effective_cloud_configuration(TCloudConfiguration* holder) const;
+
     friend class HiveDataSource;
 
 protected:
@@ -63,6 +71,10 @@ protected:
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+
+    mutable std::mutex _refreshed_cloud_config_mutex;
+    TCloudConfiguration _refreshed_cloud_configuration;
+    bool _has_refreshed_cloud_configuration = false;
 };
 
 class HiveDataSource final : public DataSource {
