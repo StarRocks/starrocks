@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,8 @@ public class Histogram {
     private final Map<String, Long> mcv;
 
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
-        this.buckets = buckets;
-        this.mcv = mcv;
-
+        this.buckets = buckets == null ? Collections.emptyList() : buckets;
+        this.mcv = mcv == null ? Collections.emptyMap() : mcv;
     }
 
     public long getTotalRows() {
