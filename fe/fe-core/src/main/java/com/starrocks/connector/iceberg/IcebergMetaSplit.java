@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.ManifestFileBean;
+import com.starrocks.connector.share.iceberg.PartitionStatsSplitBean;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.util.SerializationUtil;
 
@@ -42,6 +43,11 @@ public class IcebergMetaSplit implements RemoteMetaSplit {
         ManifestFileBean bean = ManifestFileBean.fromManifest(file);
         String serializedFile = SerializationUtil.serializeToBase64(bean);
         return new IcebergMetaSplit(serializedFile, file.length(), file.path());
+    }
+
+    public static IcebergMetaSplit fromPartitionStatsSplit(PartitionStatsSplitBean bean) {
+        String serializedFile = SerializationUtil.serializeToBase64(bean);
+        return new IcebergMetaSplit(serializedFile, PLACEHOLDER_FILE_LENGTH, bean.getStatsFilePath());
     }
 
     // A placeholder split for some lightweight metadata table query
