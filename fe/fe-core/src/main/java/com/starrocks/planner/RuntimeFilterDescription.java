@@ -84,6 +84,8 @@ public class RuntimeFilterDescription {
     private boolean equalForNull;
 
     private long buildCardinality;
+    // NDV of the build key (distinct keys held by the filter); -1 when unknown.
+    private long buildNdv = -1;
     private SessionVariable sessionVariable;
 
     // TODO: remove me
@@ -154,6 +156,10 @@ public class RuntimeFilterDescription {
 
     public void setBuildCardinality(long value) {
         buildCardinality = value;
+    }
+
+    public void setBuildNdv(long value) {
+        buildNdv = value;
     }
 
     public RuntimeFilterType runtimeFilterType() {
@@ -230,7 +236,7 @@ public class RuntimeFilterDescription {
         return false;
     }
 
-    public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+    public boolean canProbeUse(PlanNode node, Expr probeExpr, RuntimeFilterPushDownContext rfPushCtx) {
         if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
         }
@@ -262,8 +268,20 @@ public class RuntimeFilterDescription {
         if (card < probeMin) {
             return false;
         }
-        long buildCard = Math.max(0, buildCardinality);
-        float evaluatedFilterRatio = (buildCard * 1.0f / card);
+        // Estimate the fraction of probe rows the filter lets through. The filter holds the distinct build
+        // keys, so a probe row passes iff its key is one of them. Under a containment assumption (the build
+        // keys are a subset of the probe domain) min(buildNdv, probeNdv) of the probeNdv distinct probe
+        // values match; assuming probe rows are spread uniformly over those values, the same fraction
+        // min(buildNdv, probeNdv)/probeNdv of probe rows passes. Fall back to the build/probe row-count
+        // ratio when either NDV is unknown.
+        long probeNdv = node.getColumnNdv(probeExpr);
+        float evaluatedFilterRatio;
+        if (buildNdv > 0 && probeNdv > 0) {
+            evaluatedFilterRatio = Math.min(buildNdv, probeNdv) * 1.0f / probeNdv;
+        } else {
+            long buildCard = Math.max(0, buildCardinality);
+            evaluatedFilterRatio = (buildCard * 1.0f / card);
+        }
         float acceptedFilterRatioLB = 1.0f - sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
         return evaluatedFilterRatio <= acceptedFilterRatioLB;
     }

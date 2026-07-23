@@ -3389,4 +3389,163 @@ TEST_F(JoinHashMapTest, TestProbeKeyConstructorForSerializedNullable) {
     }
 }
 
+// ====================================================================================================
+// JoinHashTableItems::estimate_ndv() — distinct-key estimate that sizes/gates runtime filters.
+// ====================================================================================================
+
+// Exercises every estimate_ndv() branch directly on a hand-populated JoinHashTableItems, without a real
+// build, so the formula (Linear Counting, bitset popcount, PK/empty/Unknown fallbacks) is tested in
+// isolation.
+TEST_F(JoinHashMapTest, EstimateNdvFormula) {
+    // ExactBuckets: occupied-bucket count is the exact distinct count.
+    {
+        JoinHashTableItems items;
+        items.row_count = 1000;
+        items.used_buckets = 137;
+        items.ndv_kind = JoinHashTableItems::NdvKind::ExactBuckets;
+        ASSERT_EQ(137u, items.estimate_ndv());
+    }
+    // PK / collision-free: returns row_count regardless of kind.
+    {
+        JoinHashTableItems items;
+        items.row_count = 500;
+        items.used_buckets = 500;
+        items.is_collision_free_and_unique = true;
+        items.ndv_kind = JoinHashTableItems::NdvKind::HashedLC;
+        ASSERT_EQ(500u, items.estimate_ndv());
+    }
+    // Empty hash table.
+    {
+        JoinHashTableItems items;
+        items.row_count = 0;
+        items.ndv_kind = JoinHashTableItems::NdvKind::ExactBuckets;
+        ASSERT_EQ(0u, items.estimate_ndv());
+    }
+    // Unknown (e.g. ASOF) falls back to row_count.
+    {
+        JoinHashTableItems items;
+        items.row_count = 777;
+        items.ndv_kind = JoinHashTableItems::NdvKind::Unknown;
+        ASSERT_EQ(777u, items.estimate_ndv());
+    }
+    // HashedLC, low load: Linear Counting recovers ~occupied buckets, far below row_count.
+    {
+        JoinHashTableItems items;
+        items.row_count = 1000000;
+        items.bucket_size = 1u << 20; // 1048576 buckets
+        items.used_buckets = 50;      // only 50 distinct keys observed
+        items.ndv_kind = JoinHashTableItems::NdvKind::HashedLC;
+        const size_t ndv = items.estimate_ndv();
+        ASSERT_GE(ndv, 50u);
+        ASSERT_LE(ndv, 60u); // LC correction is tiny at this load
+    }
+    // HashedLC saturated (used == bucket_size): fall back to row_count.
+    {
+        JoinHashTableItems items;
+        items.row_count = 4096;
+        items.bucket_size = 1024;
+        items.used_buckets = 1024;
+        items.ndv_kind = JoinHashTableItems::NdvKind::HashedLC;
+        ASSERT_EQ(4096u, items.estimate_ndv());
+    }
+    // ExactBitset: estimate is the popcount of set bits, NOT the non-zero-byte count (used_buckets).
+    {
+        JoinHashTableItems items;
+        items.row_count = 100;
+        items.ndv_kind = JoinHashTableItems::NdvKind::ExactBitset;
+        items.key_bitset.resize(8, 0);
+        items.key_bitset[0] = 0x07; // 3 distinct values packed in one byte
+        items.key_bitset[5] = 0x03; // 2 more in another byte
+        // non-zero bytes = 2, but the distinct count is popcount = 5
+        ASSERT_EQ(5u, items.estimate_ndv());
+    }
+}
+
+// BucketChained is hash-bucket chained, so it is tagged HashedLC and estimate_ndv() applies Linear
+// Counting. A high-rows/low-NDV build must estimate ~distinct, not ~rows.
+TEST_F(JoinHashMapTest, EstimateNdvBucketChainedLowNdv) {
+    JoinHashTableItems table_items;
+    const uint32_t num_rows = 4096;
+    const uint32_t distinct = 64;
+
+    auto build_column = ColumnHelper::create_column(_int_type, false);
+    build_column->append_default(); // index 0 is reserved by the 1-indexed hash table
+    auto* build_data = down_cast<Int32Column*>(build_column.get());
+    for (uint32_t i = 0; i < num_rows; i++) {
+        build_data->get_data().push_back(static_cast<int32_t>(i % distinct));
+    }
+    table_items.key_columns.emplace_back(std::move(build_column));
+    table_items.row_count = num_rows;
+
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+    table_items.calculate_ht_info(BuildKeyConstructor::get_key_column_bytes(table_items));
+
+    ASSERT_EQ(JoinHashTableItems::NdvKind::HashedLC, table_items.ndv_kind);
+    const size_t ndv = table_items.estimate_ndv();
+    ASSERT_GE(ndv, static_cast<size_t>(distinct * 0.8));
+    ASSERT_LE(ndv, static_cast<size_t>(distinct * 1.3));
+}
+
+// DirectMapping is value-indexed, so it is tagged ExactBuckets and estimate_ndv() returns the exact
+// distinct count even when rows >> distinct.
+TEST_F(JoinHashMapTest, EstimateNdvDirectMappingExact) {
+    JoinHashTableItems table_items;
+    const uint32_t num_rows = 200;
+    const int distinct = 50; // values 0..49, each repeated 4x
+
+    auto build_column = ColumnHelper::create_column(_tinyint_type, false);
+    build_column->append_default();
+    auto* build_data = down_cast<Int8Column*>(build_column.get());
+    for (uint32_t i = 0; i < num_rows; i++) {
+        build_data->get_data().push_back(static_cast<int8_t>(i % distinct));
+    }
+    table_items.key_columns.emplace_back(std::move(build_column));
+    table_items.row_count = num_rows;
+
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_TINYINT>;
+    using JoinHashMapMethod = DirectMappingJoinHashMap<LogicalType::TYPE_TINYINT>;
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+    table_items.calculate_ht_info(BuildKeyConstructor::get_key_column_bytes(table_items));
+
+    ASSERT_EQ(JoinHashTableItems::NdvKind::ExactBuckets, table_items.ndv_kind);
+    ASSERT_EQ(static_cast<size_t>(distinct), table_items.estimate_ndv());
+}
+
+// All-distinct keys (a PK-like build) trip the collision-free fast path: estimate == row_count.
+TEST_F(JoinHashMapTest, EstimateNdvDirectMappingUnique) {
+    JoinHashTableItems table_items;
+    const uint32_t num_rows = 50; // values 0..49, each once
+
+    auto build_column = ColumnHelper::create_column(_tinyint_type, false);
+    build_column->append_default();
+    auto* build_data = down_cast<Int8Column*>(build_column.get());
+    for (uint32_t i = 0; i < num_rows; i++) {
+        build_data->get_data().push_back(static_cast<int8_t>(i));
+    }
+    table_items.key_columns.emplace_back(std::move(build_column));
+    table_items.row_count = num_rows;
+
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_TINYINT>;
+    using JoinHashMapMethod = DirectMappingJoinHashMap<LogicalType::TYPE_TINYINT>;
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor::get_key_data(table_items),
+                                            BuildKeyConstructor::get_is_nulls(table_items));
+    table_items.calculate_ht_info(BuildKeyConstructor::get_key_column_bytes(table_items));
+
+    ASSERT_TRUE(table_items.is_collision_free_and_unique);
+    ASSERT_EQ(static_cast<size_t>(num_rows), table_items.estimate_ndv());
+}
+
 } // namespace starrocks

@@ -348,12 +348,14 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
     }
 
     uint64_t runtime_join_filter_pushdown_limit = runtime_bloom_filter_row_limit();
-    size_t ht_row_count = _hash_join_builder->hash_table_row_count();
+    // Gate push-down by estimated distinct keys, not rows: a low-NDV build yields a small, useful filter
+    // even when it has many rows.
+    size_t ht_ndv = get_ht_ndv_estimate();
 
     if (_is_push_down) {
         if (_probe_node_type == TPlanNodeType::EXCHANGE_NODE && _build_node_type == TPlanNodeType::EXCHANGE_NODE) {
             _is_push_down = false;
-        } else if (ht_row_count > runtime_join_filter_pushdown_limit) {
+        } else if (ht_ndv > runtime_join_filter_pushdown_limit) {
             _is_push_down = false;
         }
 
@@ -568,9 +570,21 @@ Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     return ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
+size_t HashJoiner::get_ht_ndv_estimate() {
+    size_t ndv = 0;
+    _hash_join_builder->visitHt([&ndv](JoinHashTable* ht) { ndv += ht->table_items()->estimate_ndv(); });
+    return ndv;
+}
+
 Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
     size_t ht_row_count = get_ht_row_count();
+    // Gate the exact IN-filter by estimated distinct keys, not rows: a low-NDV build fits the pushdown
+    // literal cap even with many rows. A chained estimate is a lower bound, so it may slightly undercount,
+    // but the cap is re-enforced on the actual predicate size before storage push-down
+    // (ScanConjunctsManager checks hash_set().size() vs max_pushdown_conditions_per_column), so an
+    // undercount only risks applying the IN at the operator level instead of pushing it to the index.
+    size_t ht_ndv = get_ht_ndv_estimate();
 
     // Use FE session variable if set, otherwise fall back to BE config
     size_t max_conditions = config::max_pushdown_conditions_per_column;
@@ -578,7 +592,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
         max_conditions = state->query_options().max_pushdown_conditions_per_column;
     }
 
-    if (ht_row_count > max_conditions) {
+    if (ht_ndv > max_conditions) {
         return Status::OK();
     }
 
@@ -618,7 +632,8 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
 
 Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t limit) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
-    size_t ht_row_count = get_ht_row_count();
+    // Size and gate the bloom by estimated distinct keys, not rows.
+    size_t ht_ndv = get_ht_ndv_estimate();
     std::vector<JoinHashTable*> hash_tables;
     _hash_join_builder->visitHt([&hash_tables](JoinHashTable* ht) { hash_tables.emplace_back(ht); });
 
@@ -629,7 +644,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
             _runtime_bloom_filter_build_params.emplace_back();
             continue;
         }
-        if (!rf_desc->has_remote_targets() && ht_row_count > limit) {
+        if (!rf_desc->has_remote_targets() && ht_ndv > limit) {
             _runtime_bloom_filter_build_params.emplace_back();
             continue;
         }
@@ -658,7 +673,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
-            filter->get_membership_filter()->init(ht_row_count);
+            filter->get_membership_filter()->init(ht_ndv);
             RETURN_IF_ERROR(
                     RuntimeFilterBuilder::fill(filter.get(), build_type, columns, kHashJoinKeyColumnOffset, eq_null));
         }

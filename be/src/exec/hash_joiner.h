@@ -247,6 +247,11 @@ public:
 
     size_t get_ht_row_count() { return _hash_join_builder->hash_table_row_count(); }
 
+    // Estimated distinct build-key count, summed over the build's hash-table partitions (disjoint by
+    // hash, so the sum is the build NDV). Used to size and gate runtime filters by distinct keys
+    // rather than row count.
+    size_t get_ht_ndv_estimate();
+
     HashJoinBuilder* hash_join_builder() { return _hash_join_builder; }
 
     Status create_runtime_filters(RuntimeState* state);

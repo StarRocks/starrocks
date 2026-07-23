@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -296,6 +297,54 @@ public class SkewJoinV2Test extends PlanTestBase {
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = oldMockDictManager;
             connectContext.getSessionVariable().setEnableLowCardinalityOptimize(oldLowCardinality);
+        }
+    }
+
+    private static ColumnStatistic ndvStat(double ndv) {
+        return new ColumnStatistic(1, ndv, 0, 8, ndv);
+    }
+
+    // A two-key skew join exercises the broadcast friend mirroring the shuffle friend's gated conjuncts.
+    // The build-side size gate keeps the narrow key (v4) and drops the wide key (v5) on the partitioned
+    // shuffle friend. The broadcast friend must skip the same wide key; otherwise it builds filters for
+    // both keys and PlanFragment#collectNodes clears the remote runtime filters on both friends because
+    // their build-filter counts differ, discarding the surviving narrow filter.
+    @Test
+    public void testSkewJoinV2BroadcastFriendMirrorsGatedConjunct() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        long savedMax = sv.getGlobalRuntimeFilterBuildMaxSize();
+        long savedProbeMin = sv.getGlobalRuntimeFilterProbeMinSize();
+        boolean savedGrf = sv.getEnableGlobalRuntimeFilter();
+        StatisticStorage oldStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        try {
+            sv.setGlobalRuntimeFilterBuildMaxSize(1000);
+            sv.setGlobalRuntimeFilterProbeMinSize(0);
+            sv.setEnableGlobalRuntimeFilter(true);
+            sv.disableJoinReorder();
+
+            TestStatisticStorage storage = new TestStatisticStorage();
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+            OlapTable t0 = getOlapTable("t0");
+            OlapTable t1 = getOlapTable("t1");
+            setTableStatistics(t0, 100_000_000);
+            setTableStatistics(t1, 10_000_000);
+            // Build side t1: v4 is narrow (NDV below the size gate, filter kept), v5 is wide (NDV above the
+            // gate, filter dropped). Probe-side NDV is left unknown so the probe gate accepts on the
+            // build/probe row-count ratio (10M / 100M), keeping this test focused on the build-side mirroring.
+            storage.addColumnStatistic(t1, "v4", ndvStat(100));
+            storage.addColumnStatistic(t1, "v5", ndvStat(5_000_000));
+
+            String sql = "select v3, v6 from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4 and v2 = v5";
+            String plan = getVerboseExplain(sql);
+            // The narrow key's remote runtime filter survives the skew split; without the mirroring it would
+            // be cleared together with the broadcast friend's filters on the count mismatch.
+            assertContains(plan, "remote = true");
+        } finally {
+            sv.setGlobalRuntimeFilterBuildMaxSize(savedMax);
+            sv.setGlobalRuntimeFilterProbeMinSize(savedProbeMin);
+            sv.setEnableGlobalRuntimeFilter(savedGrf);
+            sv.enableJoinReorder();
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStorage);
         }
     }
 
