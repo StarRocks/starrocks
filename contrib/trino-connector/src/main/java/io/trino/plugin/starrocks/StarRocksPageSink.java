@@ -76,8 +76,14 @@ public class StarRocksPageSink
                 applier.applyOperationAsync(row);
             }
         }
+        catch (TrinoException e) {
+            throw e;
+        }
         catch (SQLException | JsonProcessingException e) {
             throw new TrinoException(STAR_ROCKS_WRITE_ERROR, e);
+        }
+        catch (RuntimeException e) {
+            throw new TrinoException(STAR_ROCKS_WRITE_ERROR, "Failed to serialize page for Stream Load", e);
         }
         return NOT_BLOCKED;
     }
@@ -118,14 +124,23 @@ public class StarRocksPageSink
             objectNode.put(columnName, type.getSlice(block, position).toStringUtf8());
         }
         else {
-            objectNode.put(columnName, type.getObject(block, position).toString());
+            Object object = type.getObject(block, position);
+            objectNode.put(columnName, object == null ? null : object.toString());
         }
     }
 
     @Override
     public CompletableFuture<Collection<Slice>> finish()
     {
-        applier.close();
+        try {
+            applier.close();
+        }
+        catch (TrinoException e) {
+            throw e;
+        }
+        catch (RuntimeException e) {
+            throw new TrinoException(STAR_ROCKS_WRITE_ERROR, "Failed to finalize Stream Load", e);
+        }
         return completedFuture(ImmutableList.of(Slices.wrappedLongArray(pageSinkId.getId())));
     }
 
@@ -133,5 +148,8 @@ public class StarRocksPageSink
     @Override
     public void abort()
     {
+        // StarRocks Stream Load is label-based and the FE will eventually garbage
+        // collect aborted labels on its own. We don't have a cheap synchronous
+        // cancel, but future partial-write cleanup can hook here.
     }
 }

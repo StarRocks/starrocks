@@ -6,20 +6,20 @@
 
     <groupId>com.starrocks</groupId>
     <artifactId>trino-starrocks</artifactId>
-    <version>418</version>
+    <version>479</version>
     <description>Trino - StarRocks Connector</description>
     <packaging>trino-plugin</packaging>
 
     <properties>
         <air.main.basedir>${project.basedir}</air.main.basedir>
-        <dep.airlift.version>230</dep.airlift.version>
-        <dep.airlift.units.version>1.8</dep.airlift.units.version>
-        <dep.jackson.version>2.15.0</dep.jackson.version>
-        <dep.guava.version>32.0.0-jre</dep.guava.version>
-        <dep.guice.version>6.0.0</dep.guice.version>
+        <dep.airlift.version>386</dep.airlift.version>
+        <dep.airlift.units.version>1.12</dep.airlift.units.version>
+        <dep.jackson.version>2.18.6</dep.jackson.version>
+        <dep.guava.version>33.5.0-jre</dep.guava.version>
+        <dep.guice.version>7.0.0</dep.guice.version>
         <dep.drift.version>1.14</dep.drift.version>
-        <dep.antlr.version>4.12.0</dep.antlr.version>
-        <dep.opentelemetry.version>1.26.0</dep.opentelemetry.version>
+        <dep.antlr.version>4.13.2</dep.antlr.version>
+        <dep.opentelemetry.version>1.57.0</dep.opentelemetry.version>
     </properties>
 
     <dependencies>
@@ -139,8 +139,10 @@
         <dependency>
             <groupId>org.jdbi</groupId>
             <artifactId>jdbi3-core</artifactId>
-            <version>3.23.0</version>
+            <version>3.50.0</version>
         </dependency>
+
+
 
         <!-- used by tests but also needed transitively -->
         <dependency>
@@ -189,6 +191,13 @@
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-context</artifactId>
             <version>${dep.opentelemetry.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api-incubator</artifactId>
+            <version>${dep.opentelemetry.version}-alpha</version>
             <scope>provided</scope>
         </dependency>
 

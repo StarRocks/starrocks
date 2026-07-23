@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.data.load.stream.StreamLoadUtils.getSendUrl;
-import static io.trino.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
+import static io.trino.plugin.starrocks.StarRocksErrorCode.STAR_ROCKS_WRITE_ERROR;
 
 public final class StarRocksOperationApplier
         implements AutoCloseable
@@ -95,8 +95,11 @@ public final class StarRocksOperationApplier
                     this.send();
                 }
             }
+            catch (TrinoException e) {
+                throw e;
+            }
             catch (Exception e) {
-                throw new TrinoException(GENERIC_INTERNAL_ERROR, e);
+                throw new TrinoException(STAR_ROCKS_WRITE_ERROR, "Stream load to StarRocks failed", e);
             }
         }
     }
@@ -125,6 +128,11 @@ public final class StarRocksOperationApplier
         try {
             StreamLoadDataFormat dataFormat = tableProperties.getDataFormat();
             String host = getAvailableHost();
+            if (host == null) {
+                throw new TrinoException(
+                        STAR_ROCKS_WRITE_ERROR,
+                        "None of the hosts in `load_url` could be reached for Stream Load");
+            }
             String table = region.getTemporaryTableName().orElseGet(region::getTable);
             String sendUrl = getSendUrl(host, region.getDatabase(), table);
             String label = region.getLabel();
@@ -147,34 +155,52 @@ public final class StarRocksOperationApplier
             try (CloseableHttpClient client = clientBuilder.build()) {
                 log.info("Stream loading, label : %s, request : %s", label, httpPut);
                 long startNanoTime = System.currentTimeMillis();
-                CloseableHttpResponse response = client.execute(httpPut);
-                String responseBody = EntityUtils.toString(response.getEntity());
+                try (CloseableHttpResponse response = client.execute(httpPut)) {
+                    String responseBody = EntityUtils.toString(response.getEntity());
 
-                log.info("Stream load completed, label : %s, database : %s, table : %s, body : %s",
-                        label, region.getDatabase(), table, responseBody);
+                    log.info("Stream load completed, label : %s, database : %s, table : %s, body : %s",
+                            label, region.getDatabase(), table, responseBody);
 
-                StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
-                StreamLoadResponse.StreamLoadResponseBody streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
-                streamLoadResponse.setBody(streamLoadBody);
-
-                String status = streamLoadBody.getStatus();
-
-                if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)
-                        || StreamLoadConstants.RESULT_STATUS_OK.equals(status)
-                        || StreamLoadConstants.RESULT_STATUS_TRANSACTION_PUBLISH_TIMEOUT.equals(status)) {
-                    streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
-                    region.complete(streamLoadResponse);
-                }
-                else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
-                    boolean succeed = checkLabelState(host, region.getDatabase(), label);
-                    if (!succeed) {
-                        throw new StreamLoadFailException("Stream load failed");
+                    StreamLoadResponse streamLoadResponse = new StreamLoadResponse();
+                    StreamLoadResponse.StreamLoadResponseBody streamLoadBody;
+                    try {
+                        streamLoadBody = objectMapper.readValue(responseBody, StreamLoadResponse.StreamLoadResponseBody.class);
                     }
+                    catch (Exception e) {
+                        // Stream Load responses are JSON. An HTML error page or an
+                        // empty body here means a proxy / gateway failure. Surface it
+                        // as a controlled write error with the raw body excerpt so the
+                        // user can see what actually came back without leaking a raw
+                        // Jackson parse stack trace through GENERIC_INTERNAL_ERROR.
+                        String excerpt = responseBody == null
+                                ? "<null>"
+                                : responseBody.substring(0, Math.min(responseBody.length(), 500));
+                        throw new TrinoException(
+                                STAR_ROCKS_WRITE_ERROR,
+                                "Unexpected Stream Load response for label " + label + ": " + excerpt,
+                                e);
+                    }
+                    streamLoadResponse.setBody(streamLoadBody);
+
+                    String status = streamLoadBody.getStatus();
+
+                    if (StreamLoadConstants.RESULT_STATUS_SUCCESS.equals(status)
+                            || StreamLoadConstants.RESULT_STATUS_OK.equals(status)
+                            || StreamLoadConstants.RESULT_STATUS_TRANSACTION_PUBLISH_TIMEOUT.equals(status)) {
+                        streamLoadResponse.setCostNanoTime(System.nanoTime() - startNanoTime);
+                        region.complete(streamLoadResponse);
+                    }
+                    else if (StreamLoadConstants.RESULT_STATUS_LABEL_EXISTED.equals(status)) {
+                        boolean succeed = checkLabelState(host, region.getDatabase(), label);
+                        if (!succeed) {
+                            throw new StreamLoadFailException("Stream load failed");
+                        }
+                    }
+                    else {
+                        throw new StreamLoadFailException(responseBody, streamLoadBody);
+                    }
+                    return streamLoadResponse;
                 }
-                else {
-                    throw new StreamLoadFailException(responseBody, streamLoadBody);
-                }
-                return streamLoadResponse;
             }
             catch (Exception e) {
                 log.error("Stream load failed unknown, label : " + label, e);
@@ -192,12 +218,21 @@ public final class StarRocksOperationApplier
     {
         String[] hosts = properties.getLoadUrls();
         int size = hosts.length;
-        long pos = availableHostPos;
-        while (pos < pos + size) {
-            String host = "http://" + hosts[(int) (pos % size)];
+        if (size == 0) {
+            return null;
+        }
+        // Bounded rotation: try each host at most once per call. The original
+        // `while (pos < pos + size)` condition is always true for positive size
+        // (long overflow aside), so with no reachable host the method would spin
+        // forever. Tracking the starting position in a local variable and walking
+        // `size` steps gives a deterministic O(size) probe that returns null when
+        // every host is unreachable.
+        long startPos = availableHostPos;
+        for (int i = 0; i < size; i++) {
+            long pos = startPos + i;
+            String host = "http://" + hosts[(int) Math.floorMod(pos, size)];
             if (testHttpConnection(host)) {
-                pos++;
-                availableHostPos = pos;
+                availableHostPos = pos + 1;
                 return host;
             }
         }
@@ -289,7 +324,10 @@ public final class StarRocksOperationApplier
     public void callback(Throwable e)
     {
         log.error("Stream load failed", e);
-        throw new TrinoException(GENERIC_INTERNAL_ERROR, e);
+        if (e instanceof TrinoException trinoException) {
+            throw trinoException;
+        }
+        throw new TrinoException(STAR_ROCKS_WRITE_ERROR, "Stream load to StarRocks failed", e);
     }
 
     @Override

@@ -22,6 +22,7 @@ import com.google.inject.multibindings.Multibinder;
 import com.starrocks.data.load.stream.StreamLoadDataFormat;
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
 import com.starrocks.data.load.stream.properties.StreamLoadTableProperties;
+import io.opentelemetry.api.OpenTelemetry;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
 import io.trino.plugin.base.session.SessionPropertiesProvider;
 import io.trino.plugin.jdbc.BaseJdbcConfig;
@@ -36,7 +37,7 @@ import io.trino.plugin.jdbc.credential.CredentialConfig;
 import io.trino.plugin.jdbc.credential.CredentialProvider;
 import io.trino.plugin.jdbc.ptf.Query;
 import io.trino.spi.connector.ConnectorPageSinkProvider;
-import io.trino.spi.ptf.ConnectorTableFunction;
+import io.trino.spi.function.table.ConnectorTableFunction;
 
 import java.sql.SQLException;
 import java.util.Properties;
@@ -81,14 +82,16 @@ public class StarRocksClientModule
     @Provides
     @Singleton
     @ForBaseJdbc
-    public static ConnectionFactory createConnectionFactory(BaseJdbcConfig config, CredentialProvider credentialProvider, StarRocksJdbcConfig starRocksJdbcConfig)
+    public static ConnectionFactory createConnectionFactory(BaseJdbcConfig config, CredentialProvider credentialProvider, StarRocksJdbcConfig starRocksJdbcConfig, OpenTelemetry openTelemetry)
             throws SQLException
     {
-        return new DriverConnectionFactory(
-                new Driver(),
-                transConnectionUrl(config.getConnectionUrl()),
-                getConnectionProperties(starRocksJdbcConfig),
-                credentialProvider);
+        return DriverConnectionFactory.builder(
+                        new Driver(),
+                        transConnectionUrl(config.getConnectionUrl()),
+                        credentialProvider)
+                .setConnectionProperties(getConnectionProperties(starRocksJdbcConfig))
+                .setOpenTelemetry(openTelemetry)
+                .build();
     }
 
     public static Properties getConnectionProperties(StarRocksJdbcConfig starRocksJdbcConfig)
