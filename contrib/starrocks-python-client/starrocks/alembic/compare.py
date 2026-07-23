@@ -1048,9 +1048,14 @@ def _compare_mv_refresh(
         normalized = " ".join(str(val).split()).upper()
         # StarRocks 4.1+ renders a periodic async refresh (ASYNC ... EVERY / START) with the
         # SCHEDULE keyword in SHOW CREATE MATERIALIZED VIEW, while users typically declare it as
-        # ASYNC. Treat the leading SCHEDULE keyword as ASYNC so equivalent schemes do not diff.
-        if normalized.startswith("SCHEDULE"):
-            normalized = "ASYNC" + normalized[len("SCHEDULE"):]
+        # ASYNC. Treat the SCHEDULE keyword as ASYNC so equivalent schemes do not diff. It may
+        # appear at the start, or after an optional IMMEDIATE/DEFERRED moment prefix, e.g.
+        # "DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)".
+        for moment_prefix in ("", "IMMEDIATE ", "DEFERRED "):
+            keyword = moment_prefix + "SCHEDULE"
+            if normalized.startswith(keyword):
+                normalized = moment_prefix + "ASYNC" + normalized[len(keyword):]
+                break
         # Normalize START("...") (SHOW CREATE) vs START('...') (metadata) quote styles.
         normalized = normalized.replace('"', "'")
         return normalized

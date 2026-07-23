@@ -212,6 +212,14 @@ class TestCompareMaterializedView:
             ),
             # Case/whitespace only differences.
             ("async every(interval 10 minute)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
+            # SCHEDULE may appear after an IMMEDIATE/DEFERRED moment prefix. StarRocks 4.1 emits
+            # "REFRESH DEFERRED SCHEDULE EVERY(...)" for a deferred scheduled MV, which reflection
+            # canonicalizes to "DEFERRED ASYNC ..."; metadata using the 4.1 SCHEDULE spelling must
+            # still be treated as equivalent.
+            ("DEFERRED ASYNC EVERY(INTERVAL 1 HOUR)", "DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+            ("IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+            # Both sides using the SCHEDULE spelling with a moment prefix.
+            ("DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)", "DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)"),
         ],
     )
     def test_no_change_mv_refresh_schedule_alias(self, conn_refresh, meta_refresh):
