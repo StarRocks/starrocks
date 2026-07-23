@@ -768,3 +768,102 @@ class TestAlterTableIntegration:
             finally:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
                 conn.commit()
+
+
+@pytest.mark.integration
+class TestEnableStatisticCollectOnFirstLoadIntegration:
+    """End-to-end tests for the `enable_statistic_collect_on_first_load` property.
+
+    StarRocks only records this property in information_schema.tables_config when it is set
+    to a falsy value; a truthy (or unset) value is never reported. These tests use real
+    reflection to verify that:
+      - setting it true in the model produces no phantom diff (the reported bug), and
+      - leaving it unmanaged in the model never triggers a spurious reset, even when the
+        database value is false.
+    """
+
+    PROP = "enable_statistic_collect_on_first_load"
+    engine: Engine
+    test_schema: Optional[str]
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.engine = create_test_engine()
+        cls.test_schema = test_default_schema
+        with cls.engine.connect() as conn:
+            conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS {cls.test_schema}")
+            conn.commit()
+
+    @classmethod
+    def teardown_class(cls) -> None:
+        cls.engine.dispose()
+
+    def _setup_autogen_context(self) -> Mock:
+        from alembic.autogenerate.api import AutogenContext
+        from sqlalchemy import inspect
+        autogen_context = Mock(spec=AutogenContext)
+        autogen_context.dialect = self.engine.dialect
+        autogen_context.inspector = inspect(self.engine)
+        return autogen_context
+
+    def _ops_for(self, table_name: str, db_value: Optional[str], meta_props: dict):
+        """Create a table with the property set to ``db_value`` (or unset when None),
+        reflect it, compare against a target with ``meta_props``, and return the ops.
+        """
+        full = f"{self.test_schema}.{table_name}"
+        with self.engine.connect() as conn:
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
+            db_props = '"replication_num" = "1"'
+            if db_value is not None:
+                db_props += f', "{self.PROP}" = "{db_value}"'
+            conn.exec_driver_sql(
+                f"CREATE TABLE {full} (id INT) DISTRIBUTED BY HASH(id) PROPERTIES ({db_props})"
+            )
+            conn.commit()
+            try:
+                metadata_db = MetaData()
+                reflected_table = Table(
+                    table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema
+                )
+                metadata_target = MetaData()
+                target_props = {"replication_num": "1", **meta_props}
+                target_table = Table(
+                    table_name, metadata_target,
+                    Column("id", Integer),
+                    schema=self.test_schema,
+                    starrocks_distributed_by="HASH(id)",
+                    starrocks_properties=target_props,
+                )
+                autogen_context = self._setup_autogen_context()
+                upgrade_ops = UpgradeOps()
+                compare_starrocks_table(
+                    autogen_context, upgrade_ops, self.test_schema, table_name,
+                    reflected_table, target_table,
+                )
+                return upgrade_ops.ops
+            finally:
+                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
+                conn.commit()
+
+    def test_meta_true_db_true_no_phantom_diff(self):
+        """The reported bug: model sets true, DB has it true (so it is not reported)."""
+        ops = self._ops_for("stat_true_true", db_value="true", meta_props={self.PROP: "true"})
+        assert len(ops) == 0, f"Unexpected phantom diff: {[type(o).__name__ for o in ops]}"
+
+    def test_meta_absent_db_false_no_implicit_reset(self):
+        """DB has it false but the model does not manage it -> no spurious reset."""
+        ops = self._ops_for("stat_absent_false", db_value="false", meta_props={})
+        assert len(ops) == 0, f"Unexpected implicit reset: {[type(o).__name__ for o in ops]}"
+
+    def test_meta_false_db_false_no_change(self):
+        """Both sides false -> no change."""
+        ops = self._ops_for("stat_false_false", db_value="false", meta_props={self.PROP: "false"})
+        assert len(ops) == 0, f"Unexpected diff: {[type(o).__name__ for o in ops]}"
+
+    def test_meta_true_db_false_detects_change(self):
+        """Model wants true while DB has it false -> a real change is detected."""
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        ops = self._ops_for("stat_true_false", db_value="false", meta_props={self.PROP: "true"})
+        prop_ops = [o for o in ops if isinstance(o, AlterTablePropertiesOp)]
+        assert len(prop_ops) == 1
+        assert prop_ops[0].properties.get(self.PROP) == "true"

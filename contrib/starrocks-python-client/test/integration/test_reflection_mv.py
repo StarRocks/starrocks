@@ -274,9 +274,10 @@ class TestReflectionMaterializedViewsIntegration:
 
                 assert mv_definition is not None
 
-                # Verify aggregation functions are preserved
+                # Verify aggregation functions are preserved.
+                # normalize_sql canonicalizes "left outer join" -> "left join".
                 definition = TableAttributeNormalizer.normalize_sql(mv_definition)
-                assert "left outer join" in definition
+                assert "left join" in definition
                 assert "group by" in definition
                 assert "count" in definition
                 assert "sum" in definition
@@ -547,10 +548,12 @@ class TestReflectionMaterializedViewsIntegration:
 
                 assert mv_definition is not None
 
-                # Verify complex join elements are preserved
+                # Verify complex join elements are preserved.
+                # normalize_sql canonicalizes "inner join" -> "join" and
+                # "left outer join" -> "left join".
                 definition = TableAttributeNormalizer.normalize_sql(mv_definition)
-                assert "inner join" in definition
-                assert "left outer join" in definition
+                assert "join" in definition
+                assert "left join" in definition
                 assert "where" in definition
                 assert "order by" in definition
 

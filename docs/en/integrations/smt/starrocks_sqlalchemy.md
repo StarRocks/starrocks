@@ -590,6 +590,8 @@ You can directly use above command to generate the Python script for tables/view
 - Keys model changes (for example, changing DUPLICATE KEY to PRIMARY KEY) are not supported via `ALTER TABLE`; use an explicit plan (usually dropping and recreating with backfill).
 - StarRocks does not provide transactional DDL across multiple statements; review generated migrations and apply them operationally. If a migration fails midway, you may need to handle rollback **manually**.
 - For distribution, if you omit the `BUCKETS` clause, StarRocks may auto-assign bucket count; the dialect is designed to avoid noisy diffs in that case.
+- **View and materialized view definition comparison (StarRocks < 4.0.6):** On clusters older than 4.0.6, StarRocks rewrites view definitions into a canonical form when they are stored, so the SQL you write in your model may differ syntactically from what the cluster reflects back. The dialect reconciles this by round-tripping your model SQL through a temporary view to obtain the DB's canonical form before comparison. This requires all tables and views referenced by the model definition to already exist in the database. When they do not (for example, during a forward migration that also creates those objects), the dialect falls back to a regex-based normalizer, which covers the most common rewrite patterns but may not handle every edge case.
+- **View definition drift after a cluster upgrade:** If a StarRocks cluster is upgraded while views already exist, those views were canonicalized by the old version and may not match the verbatim form the upgraded cluster would produce. Autogenerate may emit spurious view migrations in that window. Recreating the affected views (drop and re-apply the migration) resolves the drift.
 
 ## Summary
 

@@ -182,42 +182,100 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
-    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
-        """
-        Normalize an SQL string for comparison.
-        - Converts to lowercase
-        - Removes leading/trailing whitespace
-        - Replaces multiple spaces with a single space
-        - Removes trailing semicolons
-        - Removes all qualifiers (e.g., ``schema.table.``) from identifiers.
+    def _strip_line_comments(sql: str) -> str:
+        """Replace ``-- ...`` line comments with a space, skipping ``--`` inside string
+        literals or backtick identifiers (where it is data, not a comment)."""
+        result: List[str] = []
+        in_string = False
+        in_backtick = False
+        quote_char = None
+        i = 0
+        n = len(sql)
+        while i < n:
+            ch = sql[i]
+            if in_string:
+                result.append(ch)
+                if ch == quote_char and sql[i - 1] != '\\':
+                    in_string = False
+            elif in_backtick:
+                result.append(ch)
+                if ch == '`':
+                    in_backtick = False
+            elif ch == '`':
+                in_backtick = True
+                result.append(ch)
+            elif ch in ("'", '"'):
+                in_string = True
+                quote_char = ch
+                result.append(ch)
+            elif ch == '-' and i + 1 < n and sql[i + 1] == '-':
+                # Replace "-- ... \n" (newline included) with one space.
+                result.append(' ')
+                i += 2
+                while i < n and sql[i] != '\n':
+                    i += 1
+                i += 1
+                continue
+            else:
+                result.append(ch)
+            i += 1
+        return ''.join(result)
 
-        Args:
-            sql: The SQL string to normalize.
-            lowercase: Whether to convert the SQL string to lowercase.
-            remove_qualifiers: Whether to remove all qualifiers (e.g., ``schema.table.``) from identifiers.
+    @staticmethod
+    def _collapse_whitespace_outside_strings(sql: str) -> str:
+        """Collapse runs of whitespace to a single space, leaving whitespace inside string
+        literals untouched so that e.g. ``'a   b'`` and ``'a b'`` stay distinct."""
+        result: List[str] = []
+        in_string = False
+        quote_char = None
+        i = 0
+        n = len(sql)
+        while i < n:
+            ch = sql[i]
+            if in_string:
+                result.append(ch)
+                if ch == quote_char and sql[i - 1] != '\\':
+                    in_string = False
+            elif ch in ("'", '"'):
+                in_string = True
+                quote_char = ch
+                result.append(ch)
+            elif ch.isspace():
+                result.append(' ')
+                while i + 1 < n and sql[i + 1].isspace():
+                    i += 1
+            else:
+                result.append(ch)
+            i += 1
+        return ''.join(result)
+
+    @staticmethod
+    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
+        """Normalize an SQL string for comparison (string hygiene only, no semantic
+        canonicalization — that lives in :mod:`starrocks.common.sql_canonical`).
+
+        Lowercases, strips ``--`` comments and backtick quotes, collapses whitespace and
+        trailing semicolons (all string-literal-safe), and optionally removes ``schema.table.``
+        qualifiers.
         """
         if sql is None:
             return None
-        # string with \ in SQL statement
         sql = sql.replace('\\n', '\n').replace('\\t', '\t')
-        # This is for MySQL-like escaping of single quotes in string literals
-        # e.g., 'O\'Brien' becomes 'O''Brien' for standard SQL
+        # MySQL-style escaping: 'O\'Brien' -> 'O''Brien'
         sql = sql.replace("\\'", "''")
 
-        sql = re.sub(r"--.*?(?:\n|$)", " ", sql)
+        sql = TableAttributeNormalizer._strip_line_comments(sql)
         if lowercase:
             sql = sql.lower().strip()
 
-        # Removes qualifiers like `schema`. from `schema`.`table`.`column`
-        # It handles multiple qualifiers.
         if remove_qualifiers:
             sql = re.sub(r"((?:`[^`]+`|\w+)\.)+", "", sql)
 
-        # Removes backticks
         sql = TableAttributeNormalizer.strip_identifier_backticks(sql)
 
-        sql = re.sub(r"\s+", " ", sql).strip()
-        sql = sql.rstrip(";")
+        sql = TableAttributeNormalizer._collapse_whitespace_outside_strings(sql).strip()
+        # Strip trailing semicolons together with any surrounding whitespace.
+        sql = sql.rstrip(" ;")
         return sql
 
     @staticmethod
