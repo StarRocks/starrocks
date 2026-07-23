@@ -18,7 +18,9 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -98,6 +100,39 @@ final class IvmRetractableAdmission {
                         + "non-orderable output column type over a cloud-native PRIMARY KEY base, but got: "
                         + output.getType());
             }
+        }
+    }
+
+    /**
+     * A {@code SELECT *} / {@code t.*} over a forwardable derived table re-expands during MV re-analysis and
+     * picks up the inner block's own prepended {@code __ROW_ID__}, colliding with the outer {@code __ROW_ID__}
+     * ("Duplicate column name"). Reject it with a clear message; list the columns explicitly instead.
+     */
+    static void rejectStarOverDerivedTable(SelectRelation selectRelation) {
+        if (!(selectRelation.getRelation() instanceof SubqueryRelation)
+                || !IvmRowIdDeriver.canForwardSubqueryRowId((SubqueryRelation) selectRelation.getRelation())) {
+            return;
+        }
+        if (selectRelation.getSelectList().getItems().stream().anyMatch(SelectListItem::isStar)) {
+            throw new SemanticException("IVMAnalyzer does not support SELECT * over a derived table on a "
+                    + "cloud-native PRIMARY KEY base; list the columns explicitly");
+        }
+    }
+
+    /**
+     * A derived table with an explicit column alias list ({@code t(a, b)}) fixes the sub-query's column count,
+     * but exposeKeysAsOutputs appends a hidden __rowid_key_N__ to forward the row id -- so the re-analysis
+     * count check rejects the MV with an opaque error. Reject it up front; alias the columns in the sub-query.
+     */
+    static void rejectExplicitColumnAliasDerivedTable(SelectRelation selectRelation) {
+        if (!(selectRelation.getRelation() instanceof SubqueryRelation)
+                || !IvmRowIdDeriver.canForwardSubqueryRowId((SubqueryRelation) selectRelation.getRelation())) {
+            return;
+        }
+        if (CollectionUtils.isNotEmpty(selectRelation.getRelation().getExplicitColumnNames())) {
+            throw new SemanticException("IVMAnalyzer does not support a derived table with an explicit column "
+                    + "alias list (e.g. t(a, b)) over a cloud-native PRIMARY KEY base; alias the columns inside "
+                    + "the sub-query instead");
         }
     }
 

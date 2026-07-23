@@ -150,11 +150,6 @@ CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_rej_sub DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM rej_pk) t;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support subquery relation, but got: SubqueryRelation.')
--- !result
 CREATE TABLE rej_dup (id INT NOT NULL, v BIGINT)
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 -- result:

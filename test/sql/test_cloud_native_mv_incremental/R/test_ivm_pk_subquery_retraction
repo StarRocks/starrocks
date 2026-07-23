@@ -1,0 +1,488 @@
+-- name: test_ivm_pk_subquery_retraction @cloud
+CREATE TABLE pk_sq_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_sq_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_sq
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.v, t.name FROM (SELECT id, v, name FROM pk_sq_base WHERE v >= 0) t;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+1	10	a
+2	20	b
+3	30	c
+-- !result
+UPDATE pk_sq_base SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+1	10	a
+2	99	b
+3	30	c
+-- !result
+UPDATE pk_sq_base SET v = -5 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+2	99	b
+3	30	c
+-- !result
+DELETE FROM pk_sq_base WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+2	99	b
+-- !result
+INSERT INTO pk_sq_base VALUES (4,40,'d');
+-- result:
+-- !result
+UPDATE pk_sq_base SET v = 7 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+1	7	a
+2	99	b
+4	40	d
+-- !result
+DELETE FROM pk_sq_base WHERE id = 4;
+-- result:
+-- !result
+INSERT INTO pk_sq_base VALUES (5,40,'d');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- result:
+1	7	a
+2	99	b
+5	40	d
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v,name FROM mv_pk_sq EXCEPT SELECT id,v,name FROM pk_sq_base WHERE v>=0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,name FROM pk_sq_base WHERE v>=0 EXCEPT SELECT id,v,name FROM mv_pk_sq) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_sq;
+-- result:
+-- !result
+DROP TABLE pk_sq_base;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_over_join @cloud
+CREATE TABLE pk_sqj_a (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_sqj_b (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_sqj_a VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO pk_sqj_b VALUES (1,100),(2,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_sqj
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.s FROM (SELECT a.id AS id, a.v + b.w AS s FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id) t;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+-- result:
+1	110
+2	220
+-- !result
+UPDATE pk_sqj_a SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_sqj_b SET w = 222 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+-- result:
+1	233
+2	220
+-- !result
+DELETE FROM pk_sqj_b WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+-- result:
+1	233
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,s FROM mv_pk_sqj EXCEPT SELECT a.id, a.v + b.w FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id, a.v + b.w FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id EXCEPT SELECT id,s FROM mv_pk_sqj) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk_sqj;
+-- result:
+-- !result
+DROP TABLE pk_sqj_a;
+-- result:
+-- !result
+DROP TABLE pk_sqj_b;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_hidden_key @cloud
+CREATE TABLE pk_hk_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_hk_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_hk
+DISTRIBUTED BY HASH(v) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.v, t.name FROM (SELECT v, name FROM pk_hk_base) t;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- result:
+10	a
+20	b
+30	c
+-- !result
+UPDATE pk_hk_base SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- result:
+10	a
+30	c
+99	b
+-- !result
+DELETE FROM pk_hk_base WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- result:
+10	a
+99	b
+-- !result
+INSERT INTO pk_hk_base VALUES (4,40,'d');
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- result:
+10	a
+40	d
+99	b
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT v,name FROM mv_pk_hk EXCEPT SELECT v,name FROM pk_hk_base) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT v,name FROM pk_hk_base EXCEPT SELECT v,name FROM mv_pk_hk) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS mv_cnt FROM mv_pk_hk;
+-- result:
+3
+-- !result
+SELECT COUNT(*) AS base_cnt FROM pk_hk_base;
+-- result:
+3
+-- !result
+DROP MATERIALIZED VIEW mv_pk_hk;
+-- result:
+-- !result
+DROP TABLE pk_hk_base;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_varchar_key @cloud
+CREATE TABLE pk_svk (k VARCHAR(64) NOT NULL, v BIGINT)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_svk VALUES ('alpha',10),('beta',20),('gamma',30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_svk
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.k, t.v FROM (SELECT k, v FROM pk_svk WHERE v >= 0) t;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_svk WITH SYNC MODE;
+SELECT k, v FROM mv_svk ORDER BY k;
+-- result:
+alpha	10
+beta	20
+gamma	30
+-- !result
+UPDATE pk_svk SET v = 99 WHERE k = 'beta';
+-- result:
+-- !result
+DELETE FROM pk_svk WHERE k = 'gamma';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_svk WITH SYNC MODE;
+SELECT k, v FROM mv_svk ORDER BY k;
+-- result:
+alpha	10
+beta	99
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k,v FROM mv_svk EXCEPT SELECT k,v FROM pk_svk WHERE v>=0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k,v FROM pk_svk WHERE v>=0 EXCEPT SELECT k,v FROM mv_svk) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_svk;
+-- result:
+-- !result
+DROP TABLE pk_svk;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_composite_key @cloud
+CREATE TABLE pk_sck (a INT NOT NULL, b INT NOT NULL, v BIGINT)
+PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_sck VALUES (1,1,10),(1,2,20),(2,1,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sck
+DISTRIBUTED BY HASH(a) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.a, t.b, t.v FROM (SELECT a, b, v FROM pk_sck WHERE v >= 0) t;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sck WITH SYNC MODE;
+SELECT a, b, v FROM mv_sck ORDER BY a, b;
+-- result:
+1	1	10
+1	2	20
+2	1	30
+-- !result
+UPDATE pk_sck SET v = 99 WHERE a = 1 AND b = 2;
+-- result:
+-- !result
+DELETE FROM pk_sck WHERE a = 2 AND b = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sck WITH SYNC MODE;
+SELECT a, b, v FROM mv_sck ORDER BY a, b;
+-- result:
+1	1	10
+1	2	99
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT a,b,v FROM mv_sck EXCEPT SELECT a,b,v FROM pk_sck WHERE v>=0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a,b,v FROM pk_sck WHERE v>=0 EXCEPT SELECT a,b,v FROM mv_sck) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_sck;
+-- result:
+-- !result
+DROP TABLE pk_sck;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_union_branch @cloud
+CREATE TABLE pk_uba (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE pk_ubb (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pk_uba VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+INSERT INTO pk_ubb VALUES (2,20),(3,99),(4,40);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ub
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.v FROM (SELECT id, v FROM pk_uba) t UNION ALL SELECT id, v FROM pk_ubb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	10
+2	20
+2	20
+3	30
+3	99
+4	40
+-- !result
+UPDATE pk_uba SET v = 11 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	11
+2	20
+2	20
+3	30
+3	99
+4	40
+-- !result
+UPDATE pk_ubb SET v = 41 WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	11
+2	20
+2	20
+3	30
+3	99
+4	41
+-- !result
+DELETE FROM pk_uba WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	11
+2	20
+2	20
+3	99
+4	41
+-- !result
+DELETE FROM pk_ubb WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	11
+2	20
+3	99
+4	41
+-- !result
+INSERT INTO pk_uba VALUES (5,50);
+-- result:
+-- !result
+INSERT INTO pk_ubb VALUES (5,50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+1	11
+2	20
+3	99
+4	41
+5	50
+5	50
+-- !result
+DELETE FROM pk_uba WHERE id = 1;
+-- result:
+-- !result
+INSERT INTO pk_uba VALUES (6,11);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- result:
+2	20
+3	99
+4	41
+5	50
+5	50
+6	11
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v,COUNT(*) c FROM mv_ub GROUP BY id,v EXCEPT SELECT id,v,COUNT(*) c FROM (SELECT id,v FROM pk_uba UNION ALL SELECT id,v FROM pk_ubb) o GROUP BY id,v) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,COUNT(*) c FROM (SELECT id,v FROM pk_uba UNION ALL SELECT id,v FROM pk_ubb) o GROUP BY id,v EXCEPT SELECT id,v,COUNT(*) c FROM mv_ub GROUP BY id,v) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_ub;
+-- result:
+-- !result
+DROP TABLE pk_uba;
+-- result:
+-- !result
+DROP TABLE pk_ubb;
+-- result:
+-- !result
+-- name: test_ivm_pk_subquery_rejects @cloud
+CREATE TABLE sq_rej (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE sq_rej2 (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_sub_agg DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.sv FROM (SELECT id, SUM(v) AS sv FROM sq_rej GROUP BY id) t;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_sub_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM sq_rej UNION ALL SELECT id, v FROM sq_rej2) t;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_sub_star DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT * FROM (SELECT id, v FROM sq_rej) t;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support SELECT * over a derived table on a cloud-native PRIMARY KEY base; list the columns explicitly.')
+-- !result
+CREATE MATERIALIZED VIEW mv_rej_sub_nested DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t1.id, t1.v FROM (SELECT t2.id, t2.v FROM (SELECT id, v FROM sq_rej) t2) t1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+-- !result
+DROP TABLE sq_rej;
+-- result:
+-- !result
+DROP TABLE sq_rej2;
+-- result:
+-- !result

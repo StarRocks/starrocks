@@ -15,22 +15,18 @@
 package com.starrocks.sql.analyzer.mv;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
-import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
@@ -41,21 +37,19 @@ import java.util.List;
 
 /**
  * Tests for {@link IvmRowIdInjector#discriminateUnionBranchRowIds}: each retractable UNION ALL branch's
- * {@code __ROW_ID__} must be re-keyed to {@code encode(branch ordinal, keys)} so two branches whose primary
- * keys collide stay distinct MV rows under net-collapse.
+ * {@code __ROW_ID__} is re-keyed to {@code encode(branch ordinal, keys)} -- reading the keys back out of the
+ * branch's own {@code __ROW_ID__} column -- so two branches whose primary keys collide stay distinct MV rows
+ * under net-collapse.
  */
 public class IvmRowIdInjectorTest {
 
-    private static Column keyColumn(String name) {
-        Column column = new Column(name, IntegerType.INT, false);
-        column.setIsKey(true);
-        return column;
-    }
-
-    // The shape IVMAnalyzer leaves for a branch: __ROW_ID__ at index 0, then the branch's real outputs.
-    private static SelectList branchSelectList() {
+    // The shape IVMAnalyzer leaves for a retractable branch: __ROW_ID__ = FROM_BINARY(ENCODE_ROW_ID(<keys>))
+    // at index 0, then the branch's real outputs. discriminateUnionBranchRowIds reads the keys back out of it.
+    private static SelectList branchSelectList(String keyTable, String keyColumn) {
+        List<Expr> keys = Lists.newArrayList(new SlotRef(new TableName("db", keyTable), keyColumn));
+        FunctionCallExpr rowId = IvmOpUtils.buildRowIdFuncExpr(IvmOpUtils.deduceEncodeRowIdVersion(keys), keys);
         SelectList selectList = new SelectList();
-        selectList.addItem(new SelectListItem(new IntLiteral(0), IvmOpUtils.COLUMN_ROW_ID));
+        selectList.addItem(new SelectListItem(rowId, IvmOpUtils.COLUMN_ROW_ID));
         selectList.addItem(new SelectListItem(new IntLiteral(7), "v"));
         return selectList;
     }
@@ -63,60 +57,23 @@ public class IvmRowIdInjectorTest {
     @Test
     public void testDiscriminateUnionBranchRowIdsPrependsBranchOrdinal(
             @Mocked CreateMaterializedViewStatement statement,
-            @Mocked SelectRelation branch0, @Mocked TableRelation rel0, @Mocked OlapTable table0,
-            @Mocked SelectRelation branch1, @Mocked TableRelation rel1, @Mocked OlapTable table1) {
-        SelectList selectList0 = branchSelectList();
-        SelectList selectList1 = branchSelectList();
+            @Mocked SelectRelation branch0, @Mocked SelectRelation branch1) {
+        SelectList selectList0 = branchSelectList("a0", "id");
+        SelectList selectList1 = branchSelectList("a1", "id");
         new Expectations() {
             {
-                branch0.getRelation();
-                result = rel0;
-                minTimes = 0;
-                rel0.getTable();
-                result = table0;
-                minTimes = 0;
-                rel0.getResolveTableName();
-                result = new TableName("db", "a0");
-                minTimes = 0;
-                table0.isCloudNativeTableOrMaterializedView();
-                result = true;
-                minTimes = 0;
-                table0.getKeysType();
-                result = KeysType.PRIMARY_KEYS;
-                minTimes = 0;
-                table0.getBaseSchema();
-                result = List.of(keyColumn("id"));
-                minTimes = 0;
                 branch0.getSelectList();
                 result = selectList0;
                 minTimes = 0;
                 branch0.getOutputExpression();
-                result = Lists.newArrayList(new IntLiteral(0), new IntLiteral(7));
+                result = Lists.newArrayList(selectList0.getItems().get(0).getExpr(), new IntLiteral(7));
                 minTimes = 0;
 
-                branch1.getRelation();
-                result = rel1;
-                minTimes = 0;
-                rel1.getTable();
-                result = table1;
-                minTimes = 0;
-                rel1.getResolveTableName();
-                result = new TableName("db", "a1");
-                minTimes = 0;
-                table1.isCloudNativeTableOrMaterializedView();
-                result = true;
-                minTimes = 0;
-                table1.getKeysType();
-                result = KeysType.PRIMARY_KEYS;
-                minTimes = 0;
-                table1.getBaseSchema();
-                result = List.of(keyColumn("id"));
-                minTimes = 0;
                 branch1.getSelectList();
                 result = selectList1;
                 minTimes = 0;
                 branch1.getOutputExpression();
-                result = Lists.newArrayList(new IntLiteral(0), new IntLiteral(7));
+                result = Lists.newArrayList(selectList1.getItems().get(0).getExpr(), new IntLiteral(7));
                 minTimes = 0;
             }
         };
@@ -124,8 +81,8 @@ public class IvmRowIdInjectorTest {
         List<QueryRelation> branches = Lists.newArrayList(branch0, branch1);
         IvmRowIdInjector.discriminateUnionBranchRowIds(statement, branches);
 
-        assertBranchOrdinal(selectList0, 0);
-        assertBranchOrdinal(selectList1, 1);
+        assertBranchOrdinal(selectList0, 0, "id");
+        assertBranchOrdinal(selectList1, 1, "id");
 
         new Verifications() {
             {
@@ -135,7 +92,25 @@ public class IvmRowIdInjectorTest {
         };
     }
 
-    private static void assertBranchOrdinal(SelectList selectList, long expectedOrdinal) {
+    @Test
+    public void testDiscriminateRejectsBranchMissingRowIdColumn(
+            @Mocked CreateMaterializedViewStatement statement, @Mocked SelectRelation branch0) {
+        SelectList noRowId = new SelectList();
+        noRowId.addItem(new SelectListItem(new IntLiteral(7), "v"));
+        new Expectations() {
+            {
+                branch0.getSelectList();
+                result = noRowId;
+                minTimes = 0;
+            }
+        };
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> IvmRowIdInjector.discriminateUnionBranchRowIds(statement, Lists.newArrayList(branch0)),
+                "a branch whose column 0 is not __ROW_ID__ must be rejected, not silently mis-keyed");
+    }
+
+    // encode(branch ordinal, <key read back from column 0>) wrapped in FROM_BINARY.
+    private static void assertBranchOrdinal(SelectList selectList, long expectedOrdinal, String expectedKeyColumn) {
         Expr rowIdExpr = selectList.getItems().get(0).getExpr();
         Assertions.assertInstanceOf(FunctionCallExpr.class, rowIdExpr);
         FunctionCallExpr fromBinary = (FunctionCallExpr) rowIdExpr;
@@ -148,5 +123,10 @@ public class IvmRowIdInjectorTest {
                 "the encode must lead with the branch ordinal constant");
         Assertions.assertEquals(expectedOrdinal, ((IntLiteral) discriminant).getValue(),
                 "branch " + expectedOrdinal + " must lead its encode with its ordinal");
+        Expr key = encode.getChild(1);
+        Assertions.assertInstanceOf(SlotRef.class, key,
+                "the key must be read back from column 0, not re-derived");
+        Assertions.assertEquals(expectedKeyColumn, ((SlotRef) key).getColumnName(),
+                "the read-back key must be the branch's own primary key column");
     }
 }

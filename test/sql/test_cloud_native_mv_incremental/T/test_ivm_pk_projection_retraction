@@ -70,9 +70,6 @@ CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
--- sub-query (derived table) over a PK base
-CREATE MATERIALIZED VIEW mv_rej_sub DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
-PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM rej_pk) t;
 -- UNION ALL mixing a retractable PK branch with an append-only (DUPLICATE KEY) branch: the union would carry
 -- __ROW_ID__ on the PK branch only, so the analyzer rejects the mix. A pure-PK UNION ALL is now supported --
 -- see test_ivm_pk_union_retraction.

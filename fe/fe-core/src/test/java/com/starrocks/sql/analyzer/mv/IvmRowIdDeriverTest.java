@@ -20,9 +20,13 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.type.IntegerType;
@@ -34,10 +38,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 /**
- * Tests for {@link IvmRowIdDeriver}: the row id of a retractable projection/filter/join MV is built from
- * its base primary keys (an inner/cross join concatenates both sides), and every shape this foundation does not
- * maintain (non-PK base, non-cloud-native base, mixed join, non-inner/cross join op, sub-query) derives null so
- * the analyzer rejects it at CREATE.
+ * Tests for {@link IvmRowIdDeriver}: the row id of a retractable projection/filter/join/derived-table MV is
+ * built from its base primary keys (an inner/cross join concatenates both sides; a derived table forwards the
+ * inner block's keys through the sub-query alias), and every shape this foundation does not maintain (non-PK
+ * base, non-cloud-native base, mixed join, non-inner/cross join op, an aggregate / union inner sub-query)
+ * derives null so the analyzer rejects it at CREATE.
  */
 public class IvmRowIdDeriverTest {
 
@@ -321,7 +326,112 @@ public class IvmRowIdDeriverTest {
     }
 
     @Test
-    public void testSubqueryRelationYieldsNull(@Mocked SubqueryRelation subquery) {
-        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(subquery));
+    public void testSubqueryOverAggregateYieldsNull(@Mocked SubqueryRelation subquery, @Mocked QueryStatement qs,
+                                                    @Mocked SelectRelation innerSelect) {
+        new Expectations() {
+            {
+                subquery.getQueryStatement();
+                result = qs;
+                minTimes = 0;
+                qs.getQueryRelation();
+                result = innerSelect;
+                minTimes = 0;
+                innerSelect.getGroupBy();
+                result = List.of(new SlotRef(new TableName("db", "t"), "id"));
+                minTimes = 0;
+            }
+        };
+        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(subquery),
+                "a sub-query over an aggregate inner (identity is the group keys) is a deferred combination");
+    }
+
+    @Test
+    public void testSubqueryOverNestedSubqueryYieldsNull(@Mocked SubqueryRelation subquery, @Mocked QueryStatement qs,
+                                                         @Mocked SelectRelation innerSelect,
+                                                         @Mocked SubqueryRelation innerFrom) {
+        new Expectations() {
+            {
+                subquery.getQueryStatement();
+                result = qs;
+                minTimes = 0;
+                qs.getQueryRelation();
+                result = innerSelect;
+                minTimes = 0;
+                innerSelect.getRelation();
+                result = innerFrom;
+                minTimes = 0;
+            }
+        };
+        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(subquery),
+                "a nested derived table (a sub-query inside the sub-query) is a deferred combination");
+    }
+
+    @Test
+    public void testSubqueryOverUnionYieldsNull(@Mocked SubqueryRelation subquery, @Mocked QueryStatement qs,
+                                                @Mocked UnionRelation innerUnion) {
+        new Expectations() {
+            {
+                subquery.getQueryStatement();
+                result = qs;
+                minTimes = 0;
+                qs.getQueryRelation();
+                result = innerUnion;
+                minTimes = 0;
+            }
+        };
+        Assertions.assertNull(IvmRowIdDeriver.deriveRowIdKeys(subquery),
+                "a sub-query over a union (multi-input) is a deferred combination");
+    }
+
+    @Test
+    public void testSubqueryForwardsInnerPkKeys(@Mocked SubqueryRelation subquery, @Mocked QueryStatement qs,
+                                                @Mocked SelectRelation inner, @Mocked TableRelation tableRelation,
+                                                @Mocked OlapTable table) {
+        SelectList innerSelectList = new SelectList();
+        innerSelectList.addItem(new SelectListItem(new SlotRef(new TableName("db", "pk_t"), "id"), "id"));
+        new Expectations() {
+            {
+                subquery.getQueryStatement();
+                result = qs;
+                minTimes = 0;
+                qs.getQueryRelation();
+                result = inner;
+                minTimes = 0;
+                inner.getRelation();
+                result = tableRelation;
+                minTimes = 0;
+                tableRelation.getTable();
+                result = table;
+                minTimes = 0;
+                tableRelation.getResolveTableName();
+                result = new TableName("db", "pk_t");
+                minTimes = 0;
+                table.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                table.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                table.getBaseSchema();
+                result = List.of(keyColumn("id"));
+                minTimes = 0;
+                inner.getSelectList();
+                result = innerSelectList;
+                minTimes = 0;
+                inner.getOutputExpression();
+                result = List.of(new SlotRef(new TableName("db", "pk_t"), "id"));
+                minTimes = 0;
+                subquery.getResolveTableName();
+                result = new TableName(null, "t");
+                minTimes = 0;
+            }
+        };
+
+        List<Expr> keys = IvmRowIdDeriver.deriveRowIdKeys(subquery);
+        Assertions.assertNotNull(keys, "a derived table over a PK base forwards the inner key");
+        Assertions.assertEquals(1, keys.size());
+        Assertions.assertInstanceOf(SlotRef.class, keys.get(0));
+        Assertions.assertEquals("__rowid_key_0__", ((SlotRef) keys.get(0)).getColumnName(),
+                "the forwarded key references the exposed inner output column");
     }
 }

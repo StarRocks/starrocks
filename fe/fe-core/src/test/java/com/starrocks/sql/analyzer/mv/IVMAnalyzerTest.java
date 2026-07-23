@@ -1088,6 +1088,30 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
     }
 
+    /**
+     * A derived table over an append-only (Iceberg) base has no retractable row id, so rewriteSubqueryRelation
+     * forwards the inner block's non-retractability and the MV falls back to AUTO_INCREMENT.
+     */
+    @Test
+    public void testDerivedTableOverAppendOnlyYieldsAutoIncrement() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_subq_append "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM (SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0`) t";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "append-only derived-table MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.AUTO_INCREMENT, result.get().rowIdStrategy(),
+                "a derived table over an append-only base has no retractable row id");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /**

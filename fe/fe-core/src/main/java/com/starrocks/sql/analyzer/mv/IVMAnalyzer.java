@@ -260,13 +260,17 @@ public class IVMAnalyzer {
     }
 
     private boolean rewriteSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
-        QueryStatement subQueryStatement = subqueryRelation.getQueryStatement();
-        boolean childHasComputedRowId = rewriteImpl(subQueryStatement.getQueryRelation());
-        if (childHasComputedRowId) {
-            throw new SemanticException("IVMAnalyzer does not support subquery relation, " +
-                    "but got: %s", subqueryRelation.getClass().getSimpleName());
+        // Enterprise: forward the inner block's retractability (community rejects a retractable sub-query). The
+        // outer derives its row id via IvmRowIdDeriver.deriveSubqueryKeys; the inner's own __ROW_ID__ is pruned.
+        boolean innerHasComputedRowId = rewriteImpl(subqueryRelation.getQueryStatement().getQueryRelation());
+        // The outer can forward the row id only for a plain projection/filter/join inner. An inner that computes
+        // a row id we cannot forward (aggregate/DISTINCT/union) is rejected here, else the MV would be classified
+        // retractable with no __ROW_ID__ on its output and fail the CREATE-time trial with an opaque error.
+        if (innerHasComputedRowId && !IvmRowIdDeriver.canForwardSubqueryRowId(subqueryRelation)) {
+            throw new SemanticException("IVMAnalyzer does not support a derived table whose inner block computes "
+                    + "a row id that cannot be forwarded (an aggregate / DISTINCT / union inner)");
         }
-        return false;
+        return innerHasComputedRowId;
     }
 
     private boolean rewriteSetRelation(SetOperationRelation setOperationRelation) throws AnalysisException {
@@ -328,6 +332,8 @@ public class IVMAnalyzer {
                     groupByClause.getGroupingType());
         }
         boolean isAggregate = rewriteAggregate(selectRelation);
+        IvmRetractableAdmission.rejectStarOverDerivedTable(selectRelation);
+        IvmRetractableAdmission.rejectExplicitColumnAliasDerivedTable(selectRelation);
         // Does THIS block's own output carry __ROW_ID__ (from the aggregate above or a retractable PK
         // projection)? The PK-base gate below keys on this, not on nested inputs.
         boolean rowIdOnOutput = IvmRetractableAdmission.admitRowIdOnOutput(statement, selectRelation, isAggregate);

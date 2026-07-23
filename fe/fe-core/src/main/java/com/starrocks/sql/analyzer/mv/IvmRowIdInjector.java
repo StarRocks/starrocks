@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
@@ -83,7 +84,7 @@ final class IvmRowIdInjector {
         for (int i = 0; i < branches.size(); i++) {
             List<Expr> keys = Lists.newArrayList();
             keys.add(new IntLiteral(i));
-            keys.addAll(IvmRowIdDeriver.deriveRowIdKeys(branches.get(i)));
+            keys.addAll(extractRowIdKeys((SelectRelation) branches.get(i)));
             discriminatedKeys.add(keys);
             encodeRowIdVersion = Math.max(encodeRowIdVersion, IvmOpUtils.deduceEncodeRowIdVersion(keys));
         }
@@ -114,5 +115,21 @@ final class IvmRowIdInjector {
             newOutputs.add(outputs.get(i));
         }
         selectRelation.setOutputExpr(newOutputs);
+    }
+
+    /**
+     * Read the branch's row-id keys back out of its {@code __ROW_ID__} column (output column 0) instead of
+     * re-deriving: re-deriving a forwardable derived-table branch would expose its inner keys a second time
+     * and make the CREATE-time re-analysis ambiguous.
+     */
+    private static List<Expr> extractRowIdKeys(SelectRelation branch) {
+        SelectListItem rowIdItem = branch.getSelectList().getItems().get(0);
+        Preconditions.checkState(IvmOpUtils.COLUMN_ROW_ID.equals(rowIdItem.getAlias()),
+                "union branch output column 0 must be %s but was %s", IvmOpUtils.COLUMN_ROW_ID, rowIdItem.getAlias());
+        // __ROW_ID__ = FROM_BINARY(ENCODE_ROW_ID(k1, ..., kn), 'encode64'); the encode call's args are the keys.
+        Expr encodeCall = ((FunctionCallExpr) rowIdItem.getExpr()).getChild(0);
+        List<Expr> keys = Lists.newArrayList();
+        encodeCall.getChildren().forEach(key -> keys.add(key.clone()));
+        return keys;
     }
 }

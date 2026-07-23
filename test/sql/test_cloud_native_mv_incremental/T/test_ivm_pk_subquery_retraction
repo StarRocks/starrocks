@@ -1,0 +1,220 @@
+-- name: test_ivm_pk_subquery_retraction @cloud
+-- Derived-table (sub-query) IVM MV over a cloud-native PRIMARY KEY base, retractable (delete/update) refresh.
+-- The inner block's row id is exposed as an inner output column and forwarded through the sub-query alias, so
+-- the outer block can target the exact MV rows. The filter lives in the inner block. Oracle: after every
+-- incremental refresh the MV exactly equals (base WHERE v>=0), diff=0 both ways.
+CREATE TABLE pk_sq_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_sq_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+CREATE MATERIALIZED VIEW mv_pk_sq
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.v, t.name FROM (SELECT id, v, name FROM pk_sq_base WHERE v >= 0) t;
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- value update, stays in the inner filter
+UPDATE pk_sq_base SET v = 99 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- update out of the inner filter (v<0): row must leave the MV
+UPDATE pk_sq_base SET v = -5 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- delete: row must leave the MV
+DELETE FROM pk_sq_base WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- insert a new row, then update id=1 back into the filter
+INSERT INTO pk_sq_base VALUES (4,40,'d');
+UPDATE pk_sq_base SET v = 7 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+-- change the primary key via delete+insert (PK tables reject UPDATE SET pk): id 4 -> 5
+DELETE FROM pk_sq_base WHERE id = 4;
+INSERT INTO pk_sq_base VALUES (5,40,'d');
+REFRESH MATERIALIZED VIEW mv_pk_sq WITH SYNC MODE;
+SELECT id, v, name FROM mv_pk_sq ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id,v,name FROM mv_pk_sq EXCEPT SELECT id,v,name FROM pk_sq_base WHERE v>=0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,name FROM pk_sq_base WHERE v>=0 EXCEPT SELECT id,v,name FROM mv_pk_sq) t;
+DROP MATERIALIZED VIEW mv_pk_sq;
+DROP TABLE pk_sq_base;
+
+-- name: test_ivm_pk_subquery_over_join @cloud
+-- Derived table whose inner is an inner join of two PK tables: the inner row id is encode(a.pk, b.pk),
+-- forwarded through the sub-query alias. When both join sides change the same key in one interval the MV must
+-- still land on the final combined value. Oracle: diff=0 both ways.
+CREATE TABLE pk_sqj_a (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_sqj_b (id INT NOT NULL, w BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_sqj_a VALUES (1,10),(2,20);
+INSERT INTO pk_sqj_b VALUES (1,100),(2,200);
+CREATE MATERIALIZED VIEW mv_pk_sqj
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.s FROM (SELECT a.id AS id, a.v + b.w AS s FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id) t;
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+-- both join sides change the same key in one interval: land on 11 + 222
+UPDATE pk_sqj_a SET v = 11 WHERE id = 1;
+UPDATE pk_sqj_b SET w = 222 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+-- delete a join-side row: its joined row drops
+DELETE FROM pk_sqj_b WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_sqj WITH SYNC MODE;
+SELECT id, s FROM mv_pk_sqj ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id,s FROM mv_pk_sqj EXCEPT SELECT a.id, a.v + b.w FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a.id, a.v + b.w FROM pk_sqj_a a JOIN pk_sqj_b b ON a.id = b.id EXCEPT SELECT id,s FROM mv_pk_sqj) t;
+DROP MATERIALIZED VIEW mv_pk_sqj;
+DROP TABLE pk_sqj_a;
+DROP TABLE pk_sqj_b;
+
+-- name: test_ivm_pk_subquery_hidden_key @cloud
+-- The inner block projects only value columns, not the primary key, so exposeKeysAsOutputs must expose the
+-- hidden PK as an inner output column for the outer row id to key on it. Values are distinct per row so the
+-- set oracle holds; a delete/update still targets the exact MV row through the exposed hidden key.
+CREATE TABLE pk_hk_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_hk_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+CREATE MATERIALIZED VIEW mv_pk_hk
+DISTRIBUTED BY HASH(v) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.v, t.name FROM (SELECT v, name FROM pk_hk_base) t;
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- update a value keyed by the hidden id: the MV row for that id updates
+UPDATE pk_hk_base SET v = 99 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+-- delete by id: the MV row leaves via the exposed hidden key
+DELETE FROM pk_hk_base WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+INSERT INTO pk_hk_base VALUES (4,40,'d');
+REFRESH MATERIALIZED VIEW mv_pk_hk WITH SYNC MODE;
+SELECT v, name FROM mv_pk_hk ORDER BY v;
+SELECT COUNT(*) AS diff FROM (SELECT v,name FROM mv_pk_hk EXCEPT SELECT v,name FROM pk_hk_base) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT v,name FROM pk_hk_base EXCEPT SELECT v,name FROM mv_pk_hk) t;
+SELECT COUNT(*) AS mv_cnt FROM mv_pk_hk;
+SELECT COUNT(*) AS base_cnt FROM pk_hk_base;
+DROP MATERIALIZED VIEW mv_pk_hk;
+DROP TABLE pk_hk_base;
+
+-- name: test_ivm_pk_subquery_varchar_key @cloud
+-- Derived table over a VARCHAR single-column PK: the forwarded key is a VARCHAR SlotRef (v1 row-id encoding).
+CREATE TABLE pk_svk (k VARCHAR(64) NOT NULL, v BIGINT)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_svk VALUES ('alpha',10),('beta',20),('gamma',30);
+CREATE MATERIALIZED VIEW mv_svk
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.k, t.v FROM (SELECT k, v FROM pk_svk WHERE v >= 0) t;
+REFRESH MATERIALIZED VIEW mv_svk WITH SYNC MODE;
+SELECT k, v FROM mv_svk ORDER BY k;
+UPDATE pk_svk SET v = 99 WHERE k = 'beta';
+DELETE FROM pk_svk WHERE k = 'gamma';
+REFRESH MATERIALIZED VIEW mv_svk WITH SYNC MODE;
+SELECT k, v FROM mv_svk ORDER BY k;
+SELECT COUNT(*) AS diff FROM (SELECT k,v FROM mv_svk EXCEPT SELECT k,v FROM pk_svk WHERE v>=0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k,v FROM pk_svk WHERE v>=0 EXCEPT SELECT k,v FROM mv_svk) t;
+DROP MATERIALIZED VIEW mv_svk;
+DROP TABLE pk_svk;
+
+-- name: test_ivm_pk_subquery_composite_key @cloud
+-- Derived table over a composite PRIMARY KEY: two keys are exposed (__rowid_key_0__, __rowid_key_1__) and
+-- forwarded, so the outer row id is encode(a, b).
+CREATE TABLE pk_sck (a INT NOT NULL, b INT NOT NULL, v BIGINT)
+PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_sck VALUES (1,1,10),(1,2,20),(2,1,30);
+CREATE MATERIALIZED VIEW mv_sck
+DISTRIBUTED BY HASH(a) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.a, t.b, t.v FROM (SELECT a, b, v FROM pk_sck WHERE v >= 0) t;
+REFRESH MATERIALIZED VIEW mv_sck WITH SYNC MODE;
+SELECT a, b, v FROM mv_sck ORDER BY a, b;
+UPDATE pk_sck SET v = 99 WHERE a = 1 AND b = 2;
+DELETE FROM pk_sck WHERE a = 2 AND b = 1;
+REFRESH MATERIALIZED VIEW mv_sck WITH SYNC MODE;
+SELECT a, b, v FROM mv_sck ORDER BY a, b;
+SELECT COUNT(*) AS diff FROM (SELECT a,b,v FROM mv_sck EXCEPT SELECT a,b,v FROM pk_sck WHERE v>=0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a,b,v FROM pk_sck WHERE v>=0 EXCEPT SELECT a,b,v FROM mv_sck) t;
+DROP MATERIALIZED VIEW mv_sck;
+DROP TABLE pk_sck;
+
+-- name: test_ivm_pk_subquery_union_branch @cloud
+-- A forwardable derived table as one branch of a top-level UNION ALL over cloud-native PRIMARY KEY bases:
+-- branch 0 is a derived table (SELECT ... FROM (SELECT ... FROM pk) t), branch 1 a plain table. Each branch is
+-- re-keyed to encode(branch ordinal, forwarded keys), so two branches sharing an (id,v) stay two MV rows. The
+-- oracle groups by value with its row count to catch a dropped cross-branch duplicate; diff=0 both ways after
+-- every incremental delete/update refresh.
+CREATE TABLE pk_uba (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE pk_ubb (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pk_uba VALUES (1,10),(2,20),(3,30);
+INSERT INTO pk_ubb VALUES (2,20),(3,99),(4,40);
+CREATE MATERIALIZED VIEW mv_ub
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT t.id, t.v FROM (SELECT id, v FROM pk_uba) t UNION ALL SELECT id, v FROM pk_ubb;
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- value update on the derived-table branch
+UPDATE pk_uba SET v = 11 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- value update on the plain branch
+UPDATE pk_ubb SET v = 41 WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- delete from the derived-table branch
+DELETE FROM pk_uba WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- delete from the plain branch
+DELETE FROM pk_ubb WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- insert into both branches, re-creating a cross-branch duplicate (5,50)
+INSERT INTO pk_uba VALUES (5,50);
+INSERT INTO pk_ubb VALUES (5,50);
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+-- change a primary key on the derived-table branch via delete+insert: id 1 -> 6
+DELETE FROM pk_uba WHERE id = 1;
+INSERT INTO pk_uba VALUES (6,11);
+REFRESH MATERIALIZED VIEW mv_ub WITH SYNC MODE;
+SELECT id, v FROM mv_ub ORDER BY id, v;
+SELECT COUNT(*) AS diff FROM (SELECT id,v,COUNT(*) c FROM mv_ub GROUP BY id,v EXCEPT SELECT id,v,COUNT(*) c FROM (SELECT id,v FROM pk_uba UNION ALL SELECT id,v FROM pk_ubb) o GROUP BY id,v) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,COUNT(*) c FROM (SELECT id,v FROM pk_uba UNION ALL SELECT id,v FROM pk_ubb) o GROUP BY id,v EXCEPT SELECT id,v,COUNT(*) c FROM mv_ub GROUP BY id,v) t;
+DROP MATERIALIZED VIEW mv_ub;
+DROP TABLE pk_uba;
+DROP TABLE pk_ubb;
+
+-- name: test_ivm_pk_subquery_rejects @cloud
+-- Sub-query combinations this first cut does not yet maintain over a cloud-native PK base: an aggregate inner
+-- (its identity is the group keys, not the base PK) or a union inner (multi-input). A plain projection / filter
+-- / join derived table over a PK base is supported -- see test_ivm_pk_subquery_retraction.
+CREATE TABLE sq_rej (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE sq_rej2 (id INT NOT NULL, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_rej_sub_agg DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.sv FROM (SELECT id, SUM(v) AS sv FROM sq_rej GROUP BY id) t;
+CREATE MATERIALIZED VIEW mv_rej_sub_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM sq_rej UNION ALL SELECT id, v FROM sq_rej2) t;
+-- SELECT * over a derived table would re-expand to the inner's own __ROW_ID__ and collide with the outer one
+CREATE MATERIALIZED VIEW mv_rej_sub_star DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT * FROM (SELECT id, v FROM sq_rej) t;
+-- a nested derived table (a sub-query inside the sub-query) is a deferred combination
+CREATE MATERIALIZED VIEW mv_rej_sub_nested DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t1.id, t1.v FROM (SELECT t2.id, t2.v FROM (SELECT id, v FROM sq_rej) t2) t1;
+DROP TABLE sq_rej;
+DROP TABLE sq_rej2;
