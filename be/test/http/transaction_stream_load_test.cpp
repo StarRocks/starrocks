@@ -1232,4 +1232,175 @@ TEST_F(TransactionStreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     }
 }
 
+TEST_F(TransactionStreamLoadActionTest, malformed_channel_id_returns_error) {
+    // Before the fix, std::stoi threw an uncaught std::invalid_argument here and aborted
+    // the whole BE process; now a malformed channel_id must be rejected per request.
+    // "0abc" guards the numeric-prefix case: std::stoi would silently parse the "0" prefix
+    // and attach the request to channel 0 instead of returning a per-request error.
+    // "2147483648" is one past INT32_MAX: std::stoi threw an uncaught std::out_of_range.
+    const char* malformed_values[] = {"abc", "0abc", "2147483648"};
+    for (const char* value : malformed_values) {
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        request._headers.emplace(HTTP_CHANNEL_ID, value);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << "value=" << value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << "value=" << value;
+        const std::string expected_msg = std::string("Invalid channel id ") + value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), expected_msg.c_str()))
+                << "value=" << value << " message=" << doc["Message"].GetString();
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, malformed_numeric_header_returns_error) {
+    struct TestCase {
+        const char* label;
+        const std::string header;
+        const char* value;
+        const char* expected_msg;
+    };
+    // Each value is non-numeric, has trailing garbage after a numeric prefix, or is out of
+    // the range of the target integer type. Before the fix, std::stol/std::stoll either threw
+    // an uncaught std::invalid_argument / std::out_of_range and aborted the whole BE process,
+    // or (for a value like "16abc") silently parsed the numeric prefix and ignored the rest;
+    // now every malformed numeric header must be rejected with a per-request error instead.
+    TestCase test_cases[] = {
+            {"bad_content_length", HttpHeaders::CONTENT_LENGTH, "abc", "Invalid content length"},
+            {"trailing_content_length", HttpHeaders::CONTENT_LENGTH, "16abc", "Invalid content length"},
+            {"overflow_content_length", HttpHeaders::CONTENT_LENGTH, "99999999999999999999999999",
+             "Invalid content length"},
+            {"negative_content_length", HttpHeaders::CONTENT_LENGTH, "-16", "Invalid content length"},
+            {"bad_load_mem_limit", HTTP_LOAD_MEM_LIMIT, "99999999999999999999999999", "Invalid load mem limit format"},
+            {"trailing_load_mem_limit", HTTP_LOAD_MEM_LIMIT, "10abc", "Invalid load mem limit format"},
+            {"bad_load_dop", HTTP_LOAD_DOP, "99999999999999999999999999", "Invalid load_dop format"},
+            // beyond i32: thrift load_dop is an i32
+            {"i32_overflow_load_dop", HTTP_LOAD_DOP, "2147483648", "Invalid load_dop format"},
+            {"trailing_load_dop", HTTP_LOAD_DOP, "2x", "Invalid load_dop format"},
+            {"bad_exec_mem_limit", HTTP_EXEC_MEM_LIMIT, "abc", "Invalid exec_mem_limit format"},
+            {"overflow_exec_mem_limit", HTTP_EXEC_MEM_LIMIT, "99999999999999999999999999",
+             "Invalid exec_mem_limit format"},
+            {"trailing_exec_mem_limit", HTTP_EXEC_MEM_LIMIT, "5garbage", "Invalid exec_mem_limit format"},
+    };
+
+    for (const auto& tc : test_cases) {
+        // Begin a fresh transaction so the load request below has a context to attach to.
+        TransactionManagerAction txn_action(&_env);
+        HttpRequest begin_req(_evhttp_req);
+        begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&begin_req);
+        {
+            rapidjson::Document doc;
+            doc.Parse(k_response_str.c_str());
+            ASSERT_STREQ("OK", doc["Status"].GetString()) << "begin failed for label=" << tc.label;
+        }
+
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        }
+        request._headers.emplace(tc.header, tc.value);
+        // A malformed numeric header makes on_header fail and send the error reply itself;
+        // handle() is not called for a failed on_header (it DCHECKs a live context).
+        ASSERT_EQ(-1, action.on_header(&request)) << "header=" << tc.header << " value=" << tc.value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << "header=" << tc.header << " value=" << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_msg))
+                << "header=" << tc.header << " message=" << doc["Message"].GetString();
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, negative_numeric_header_returns_error) {
+    // Negative values parse successfully, so they bypass the StringParser rejection and must
+    // still be caught by the pre-existing range checks.
+    TransactionManagerAction txn_action(&_env);
+    HttpRequest begin_req(_evhttp_req);
+    begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin_req._headers.emplace(HTTP_LABEL_KEY, "negative_load_mem_limit");
+    begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin_req);
+    {
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_LABEL_KEY, "negative_load_mem_limit");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_LOAD_MEM_LIMIT, "-1");
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "load_mem_limit must be equal or greater than 0"))
+            << "message=" << doc["Message"].GetString();
+}
+
+TEST_F(TransactionStreamLoadActionTest, valid_numeric_headers_populate_request) {
+    TransactionManagerAction txn_action(&_env);
+    HttpRequest begin_req(_evhttp_req);
+    begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin_req._headers.emplace(HTTP_LABEL_KEY, "valid_numeric_headers");
+    begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin_req);
+    {
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    TStreamLoadPutRequest captured_request;
+    SyncPoint::GetInstance()->SetCallBack(
+            "TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+            [&](void* arg) { captured_request = *static_cast<TStreamLoadPutRequest*>(arg); });
+
+    // Valid values must keep flowing into TStreamLoadPutRequest unchanged: this guards the
+    // success path of the same parsing that the malformed and negative cases exercise for rejection.
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator);
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_LABEL_KEY, "valid_numeric_headers");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    request._headers.emplace(HTTP_LOAD_MEM_LIMIT, "1048576");
+    request._headers.emplace(HTTP_LOAD_DOP, "2");
+    ASSERT_EQ(0, action.on_header(&request));
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString()) << k_response_str;
+    ASSERT_TRUE(captured_request.__isset.loadMemLimit);
+    ASSERT_EQ(1048576, captured_request.loadMemLimit);
+    ASSERT_TRUE(captured_request.__isset.load_dop);
+    ASSERT_EQ(2, captured_request.load_dop);
+}
+
 } // namespace starrocks

@@ -793,4 +793,132 @@ TEST_F(StreamLoadActionTest, format_arrow) {
     ASSERT_EQ(TFileFormatType::FORMAT_ARROW, ctx->format);
 }
 
+TEST_F(StreamLoadActionTest, malformed_numeric_header_returns_error) {
+    struct TestCase {
+        const std::string header;
+        const char* value;
+        const char* expected_msg;
+    };
+    // Each value is non-numeric, has trailing garbage after a numeric prefix, or is out of
+    // the range of the target integer type. Before the fix, std::stol/std::stoll either threw
+    // an uncaught std::invalid_argument / std::out_of_range and aborted the whole BE process,
+    // or (for a value like "16abc") silently parsed the numeric prefix and ignored the rest;
+    // now every malformed numeric header must be rejected with a per-request error instead.
+    TestCase test_cases[] = {
+            {HttpHeaders::CONTENT_LENGTH, "abc", "Invalid content length"},
+            {HttpHeaders::CONTENT_LENGTH, "16abc", "Invalid content length"},
+            {HttpHeaders::CONTENT_LENGTH, "99999999999999999999999999", "Invalid content length"},
+            {HTTP_EXEC_MEM_LIMIT, "abc", "Invalid exec_mem_limit format"},
+            {HTTP_EXEC_MEM_LIMIT, "99999999999999999999999999", "Invalid exec_mem_limit format"},
+            {HTTP_EXEC_MEM_LIMIT, "5garbage", "Invalid exec_mem_limit format"},
+            {HTTP_LOAD_MEM_LIMIT, "99999999999999999999999999", "Invalid load mem limit format"},
+            {HTTP_LOAD_MEM_LIMIT, "10abc", "Invalid load mem limit format"},
+            {HTTP_SKIP_HEADER, "99999999999999999999999999", "Invalid csv load skip_header format"},
+            {HTTP_SKIP_HEADER, "3x", "Invalid csv load skip_header format"},
+            {HTTP_LOAD_DOP, "99999999999999999999999999", "Invalid load_dop format"},
+            {HTTP_LOAD_DOP, "2147483648", "Invalid load_dop format"}, // beyond i32: thrift load_dop is an i32
+            {HTTP_LOAD_DOP, "2x", "Invalid load_dop format"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "99999999999999999999999999", "Invalid log_rejected_record_num format"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "4x", "Invalid log_rejected_record_num format"},
+    };
+
+    for (const auto& tc : test_cases) {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        }
+        request._headers.emplace(tc.header, tc.value);
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << "header=" << tc.header << " value=" << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_msg))
+                << "header=" << tc.header << " message=" << doc["Message"].GetString();
+    }
+}
+
+TEST_F(StreamLoadActionTest, negative_numeric_header_returns_error) {
+    struct TestCase {
+        const std::string header;
+        const char* value;
+        const char* expected_msg;
+    };
+    // Negative or below-minimum values parse successfully, so they bypass the StringParser
+    // rejection and must still be caught by a range check.
+    TestCase test_cases[] = {
+            {HttpHeaders::CONTENT_LENGTH, "-16", "Invalid content length"},
+            {HTTP_SKIP_HEADER, "-1", "skip_header must be equal or greater than 0"},
+            {HTTP_LOAD_MEM_LIMIT, "-1", "load_mem_limit must be equal or greater than 0"},
+            {HTTP_LOG_REJECTED_RECORD_NUM, "-2", "log_rejected_record_num must be equal or greater than -1"},
+            {HTTP_EXEC_MEM_LIMIT, "0", "exec_mem_limit must be greater than 0"},
+            {HTTP_EXEC_MEM_LIMIT, "-1", "exec_mem_limit must be greater than 0"},
+    };
+
+    for (const auto& tc : test_cases) {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        }
+        request._headers.emplace(tc.header, tc.value);
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << "header=" << tc.header << " value=" << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_msg))
+                << "header=" << tc.header << " message=" << doc["Message"].GetString();
+    }
+}
+
+TEST_F(StreamLoadActionTest, valid_numeric_headers_populate_request) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    TStreamLoadPutRequest captured_request;
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout", [&](void* arg) {
+        captured_request = *static_cast<TStreamLoadPutRequest*>(arg);
+    });
+
+    // Valid values must keep flowing into TStreamLoadPutRequest unchanged: this guards the
+    // success path of the same parsing that the malformed and negative cases exercise for rejection.
+    HttpRequest request(_evhttp_req);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_SKIP_HEADER, "1");
+    request._headers.emplace(HTTP_LOAD_MEM_LIMIT, "1048576");
+    request._headers.emplace(HTTP_LOAD_DOP, "2");
+    request._headers.emplace(HTTP_LOG_REJECTED_RECORD_NUM, "-1"); // -1 is the allowed lower bound
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString()) << k_response_str;
+    ASSERT_TRUE(captured_request.__isset.skipHeader);
+    ASSERT_EQ(1, captured_request.skipHeader);
+    ASSERT_TRUE(captured_request.__isset.loadMemLimit);
+    ASSERT_EQ(1048576, captured_request.loadMemLimit);
+    ASSERT_TRUE(captured_request.__isset.load_dop);
+    ASSERT_EQ(2, captured_request.load_dop);
+    ASSERT_TRUE(captured_request.__isset.log_rejected_record_num);
+    ASSERT_EQ(-1, captured_request.log_rejected_record_num);
+}
+
 } // namespace starrocks
