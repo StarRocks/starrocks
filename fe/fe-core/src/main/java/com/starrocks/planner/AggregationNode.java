@@ -61,6 +61,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TNormalAggregationNode;
 import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
@@ -118,6 +119,20 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
     // used for Top-N optimization for aggregation
     private SortInfo topNSortInfo;
     private long topNLimit = -1;
+
+    // NDV (cardinality) estimate of the group-by key, propagated to the BE only when
+    // the optimizer proved it safe to reserve from (see PlanFragmentBuilder). -1 means
+    // "do not reserve"; a positive value lets the BE reserve the merge hash table up front.
+    private long estimatedCardinality = -1;
+
+    // Number of instances the group-by keyspace is sharded across, applied to
+    // estimatedCardinality at serialization time. The planner estimate is the full
+    // keyspace NDV; when this aggregation's input is hash-shuffled on the grouping key,
+    // each fragment instance owns a disjoint shard, so the per-instance estimate is
+    // estimatedCardinality / groupByKeyspaceShards. Stays 1 (whole keyspace per instance)
+    // for co-located inputs. The BE further divides by the per-instance pipeline DOP,
+    // giving est / (instances * dop).
+    private int groupByKeyspaceShards = 1;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -188,6 +203,25 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
         this.groupByMinMaxStats = groupByMinMaxStats;
+    }
+
+    public void setEstimatedCardinality(long estimatedCardinality) {
+        this.estimatedCardinality = estimatedCardinality;
+    }
+
+    // Divide the propagated NDV estimate by the cluster-wide instance count when this
+    // aggregation's input is hash-shuffled on the grouping key, so each instance reserves
+    // only its own key shard (est / instances on the FE, then / dop on the BE). Idempotent:
+    // estimatedCardinality is kept raw and the divisor is applied at toThrift time, so
+    // re-invocation across retries / batch deploy does not compound. No-op for co-located
+    // inputs (the divisor only narrows the reserve, so a mismatch can only under-reserve).
+    public void scaleReserveEstimateByInstances(DataPartition inputPartition, int numInstances) {
+        if (estimatedCardinality <= 0 || numInstances <= 1) {
+            return;
+        }
+        if (inputPartition != null && inputPartition.getType() == TPartitionType.HASH_PARTITIONED) {
+            groupByKeyspaceShards = numInstances;
+        }
     }
 
     @Override
@@ -350,6 +384,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
         msg.agg_node.setEnable_pipeline_share_limit(
                 ConnectContext.get().getSessionVariable().getEnableAggregationPipelineShareLimit());
+        if (estimatedCardinality > 0) {
+            msg.agg_node.setEstimated_cardinality(estimatedCardinality / groupByKeyspaceShards);
+        }
     }
 
     protected String getDisplayLabelDetail() {

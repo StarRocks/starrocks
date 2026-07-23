@@ -111,6 +111,9 @@ public class TFragmentInstanceFactory {
                                          int totalTableSinkDop) {
         // TODO(lzh): move to a more proper place.
         execFragment.setLayoutInfosForRuntimeFilters();
+        // Divide the group-by NDV reserve estimate by the now-known instance count, before
+        // the plan tree is serialized below.
+        execFragment.scaleAggReserveEstimateByInstanceCount();
 
         PlanFragment fragment = execFragment.getPlanFragment();
 
