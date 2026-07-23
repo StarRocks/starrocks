@@ -1086,6 +1086,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_JOIN_IS_NULL_PREDICATE = "cbo_derive_join_is_null_predicate";
 
+    public static final String CBO_DERIVE_PREDICATE_NULL_ALTERNATIVE = "cbo_derive_predicate_null_alternative";
+
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
@@ -3405,6 +3407,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
     private boolean cboDeriveJoinIsNullPredicate = true;
+
+    @VarAttr(name = CBO_DERIVE_PREDICATE_NULL_ALTERNATIVE)
+    private boolean cboDerivePredicateNullAlternative = true;
 
     @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
     private boolean cboDecimalCastStringStrict = true;
@@ -5959,6 +5964,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboDeriveJoinIsNullPredicate() {
         return cboDeriveJoinIsNullPredicate;
+    }
+
+    public boolean isCboDerivePredicateNullAlternative() {
+        return cboDerivePredicateNullAlternative;
+    }
+
+    public void setCboDerivePredicateNullAlternative(boolean cboDerivePredicateNullAlternative) {
+        this.cboDerivePredicateNullAlternative = cboDerivePredicateNullAlternative;
     }
 
     public void setCboEqBaseType(String cboEqBaseType) {

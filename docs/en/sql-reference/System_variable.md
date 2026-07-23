@@ -287,6 +287,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: Boolean
 * **Introduced in**: `v3.2.0`
 
+### cbo_derive_predicate_null_alternative
+
+* **Description**: Whether the optimizer can derive additional scan filters from `OR` predicates that contain `IS NULL` or null-safe equal (`<=>`) conditions. For example, `WHERE (v1 = 1 AND v2 = 2) OR (v1 IS NULL AND v2 = 4)` additionally produces `(v1 = 1) OR (v1 IS NULL)`, which is pushed down to the scan for partition pruning and data skipping. A filter that can never be true, such as `v1 <=> NULL AND v1 = 3`, returns an empty result without reading any data. The variable does not affect query results, only how much data is scanned.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Introduced in**: -
+
 ### cbo_disabled_rules
 
 * **Description**: Comma-separated list of optimizer rule names to disable for the current session. Each name must match a `RuleType` enum value and only rules whose names start with `TF_` (transformation rules) or `GP_` (group-combination rules) may be disabled. The session variable is stored on `SessionVariable` (`getCboDisabledRules` / `setCboDisabledRules`) and is applied by the optimizer via `OptimizerOptions.applyDisableRuleFromSessionVariable()`, which parses the list and clears the corresponding rule switches so those rules are skipped during planning. When set through a SET statement, values are validated and the server will reject unknown names or names not starting with `TF_`/`GP_` with clear error messages (e.g. "Unknown rule name(s): ..." or "Only TF_ ... and GP_ ... can be disabled"). At planner runtime, unknown rule names are ignored with a warning (logged as "Ignoring unknown rule name: ... (may be from different version)"). Names must match enum identifiers exactly (case-sensitive). Whitespace around names is trimmed; empty entries are ignored.
