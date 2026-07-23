@@ -31,6 +31,9 @@ class SpillProcessTasksBuilder;
 namespace spill {
 class Spiller;
 }
+namespace pipeline {
+class ContextWithDependency;
+}
 
 class SpillProcessTask {
 public:
@@ -109,6 +112,12 @@ public:
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
 
+    // Lifetime anchor: the spilling context (hash joiner / aggregator, a ContextWithDependency) that
+    // owns the state referenced by the spill tasks. SpillProcessOperator refs it on prepare and
+    // unrefs it on close, so the context cannot close() (free that state) while spill tasks run.
+    void set_guarded_context(pipeline::ContextWithDependency* context) { _guarded_context = context; }
+    pipeline::ContextWithDependency* guarded_context() const { return _guarded_context; }
+
     Status execute(SpillProcessTasksBuilder& task_builder);
 
     void close();
@@ -117,6 +126,7 @@ private:
     bool _is_finishing = false;
     bool _is_working = false;
     bool _is_closed = false;
+    pipeline::ContextWithDependency* _guarded_context = nullptr;
     std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
