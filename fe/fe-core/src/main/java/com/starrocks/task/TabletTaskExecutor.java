@@ -542,6 +542,16 @@ public class TabletTaskExecutor {
                         break;
                     }
                 }
+                // Not finished within this interval: a leader that has begun transferring/demoting closes
+                // leader-work admission, so stop waiting for BE tablet-creation this node can no longer finish
+                // (demotion must not block for the full creation timeout); the re-elected leader re-drives it
+                // from durable state. Checked after the await so an already-finished creation still succeeds.
+                if (!GlobalStateMgr.getCurrentState().isLeaderWorkAdmissionOpen()) {
+                    String errMsg = "fail to create tablet: leader work admission is closed";
+                    LOG.warn(errMsg);
+                    countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "leader work admission is closed"));
+                    throw new DdlException(errMsg);
+                }
 
                 timeLeft -= waitInterval;
             }

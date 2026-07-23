@@ -87,7 +87,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private Map<String, String> properties = Maps.newHashMap();
 
     @SerializedName(value = "rewriteTasks")
-    private List<OptimizeTask> rewriteTasks = Lists.newArrayList();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    List<OptimizeTask> rewriteTasks = Lists.newArrayList();
     private int progress = 0;
 
     @SerializedName(value = "sourcePartitionNames")
@@ -133,6 +134,35 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.allPartitionOptimized = job.allPartitionOptimized;
         this.distributionInfo = job.distributionInfo;
         this.optimizeOperation = job.optimizeOperation;
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-enters runWaitingTxnJob (rebuild + re-register the rewrite tasks).
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Restore serialized-but-diverged fields to their durable WAITING_TXN snapshot: the
+        // journal copy was written before any rewrite task or finish bookkeeping existed, and
+        // runWaitingTxnJob APPENDS to rewriteTasks (a stale list would double the tasks).
+        rewriteTasks.clear();
+        sourcePartitionNames.clear();
+        tmpPartitionNames.clear();
+        allPartitionOptimized = false;
+        distributionInfo = null;
+        progress = 0;
+        if (jobState == JobState.PENDING) {
+            // Undo a partially executed runPendingJob: a fenced attempt may have appended tmp
+            // partition ids that the durable PENDING image does not have; re-running with the
+            // stale list would pair 2N tmp partitions against N sources.
+            tmpPartitionIds.clear();
+            watershedTxnId = -1;
+        }
+        // optimizeClause is deliberately KEPT: a real reload nulls it and self-cancels the
+        // job; keeping it is safe (every derived value is recomputed on re-run) and strictly
+        // better. A mid-RUNNING handoff still ends in a clean cancel via the TaskManager task
+        // name collision - identical to genuine-restart behavior.
     }
 
     public List<Long> getTmpPartitionIds() {

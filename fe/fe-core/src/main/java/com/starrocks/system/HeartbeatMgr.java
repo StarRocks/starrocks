@@ -89,7 +89,9 @@ public class HeartbeatMgr extends LeaderDaemon {
     private static final AtomicReference<TMasterInfo> MASTER_INFO = new AtomicReference<>();
 
     private final boolean needRegisterMetric;
-    private volatile ExecutorService executor;
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    volatile ExecutorService executor;
 
     public HeartbeatMgr(boolean needRegisterMetric) {
         super("heartbeat-mgr", Config.heartbeat_timeout_second * 1000L);
@@ -98,6 +100,9 @@ public class HeartbeatMgr extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
+        // The re-activation cleanliness gate verifies the previous pool terminated before start() runs
+        // (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here - just rebuild the pool if a previous demotion shut it down (or on first start).
         if (executor == null || executor.isShutdown()) {
             executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                     Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
@@ -107,11 +112,10 @@ public class HeartbeatMgr extends LeaderDaemon {
 
     @Override
     protected synchronized void onStopped() {
-        ExecutorService e = executor;
-        if (e != null) {
-            e.shutdownNow();
-            executor = null;
-        }
+        // Shut down the heartbeat pool and wait until it actually terminates, so this worker does not
+        // clear isRunning until the in-flight heartbeat RPCs return (the re-activation gate reads
+        // isRunning as the single quiescence signal). start() rebuilds the pool on re-election.
+        shutdownNowAndAwaitTermination("HeartbeatMgr.executor", executor);
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
@@ -211,10 +215,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                     hbPackage.addHbResponse(response);
                 }
             } catch (InterruptedException e) {
-                // Demotion interrupts the worker to make it exit before the drain timeout;
-                // keep draining would make {@link #onJoinTimeout()} fire and terminate the JVM.
-                // Restore the flag so LeaderDaemon.loop observes stop and abandon the rest -
-                // the next leader will re-run heartbeats from scratch.
+                // Demotion interrupts the worker to make it stop promptly. Restore the flag so
+                // LeaderDaemon.loop observes the stop request and abandon the rest - the next
+                // leader will re-run heartbeats from scratch.
                 Thread.currentThread().interrupt();
                 LOG.warn("heartbeat drain interrupted, abandoning remaining responses");
                 return;

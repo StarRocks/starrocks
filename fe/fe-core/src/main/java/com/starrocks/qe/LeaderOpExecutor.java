@@ -138,32 +138,18 @@ public class LeaderOpExecutor {
         }
         try {
             forward();
-            if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
-                long deadline = System.currentTimeMillis() + waitTimeoutMs;
-                LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
-                ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
-                if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
-                    // NOTE: It is a known pitfall that when FE journal catch-up consumes the whole waitTimeoutMs,
-                    // remaining becomes 0, and the subsequent StarMgr wait returns immediately because
-                    // JournalObserver.waitForReplay() treats timeoutMs <= 0 as success even if replay is still behind.
-                    int remaining = (int) Math.max(0, deadline - System.currentTimeMillis());
-                    LOG.info("waiting for star mgr journal replay to {}", result.maxStarMgrJournalId);
-                    StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
-                            result.maxStarMgrJournalId, remaining,
-                            () -> StarMgrServer.getCurrentState().getReplayId());
-                }
+            MysqlStateType resultState = result.state == null ? null : MysqlStateType.fromString(result.state);
+            if (shouldWaitJournalSync(resultState)) {
+                waitForForwardedJournalReplay();
             }
 
-            if (result.state != null) {
-                MysqlStateType state = MysqlStateType.fromString(result.state);
-                if (state != null) {
-                    ctx.getState().setStateType(state);
-                    if (result.isSetErrorMsg()) {
-                        ctx.getState().setMsg(result.getErrorMsg());
-                    }
-                    if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
-                        afterForward();
-                    }
+            if (resultState != null) {
+                ctx.getState().setStateType(resultState);
+                if (result.isSetErrorMsg()) {
+                    ctx.getState().setMsg(result.getErrorMsg());
+                }
+                if (resultState == MysqlStateType.EOF || resultState == MysqlStateType.OK) {
+                    afterForward();
                 }
             }
 
@@ -191,6 +177,54 @@ public class LeaderOpExecutor {
                 ArrowFlightSqlProxyQueryManager.getInstance().deregister(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             }
         }
+    }
+
+    private boolean shouldWaitJournalSync(MysqlStateType resultState) {
+        if (GracefulExitFlag.isGracefulExit() || getGlobalStateMgr().isLeader()) {
+            return false;
+        }
+        if (resultState == MysqlStateType.ERR) {
+            LOG.info("skip waiting for forwarded journal replay because leader returned ERR: {}",
+                    result.isSetErrorMsg() ? result.getErrorMsg() : "");
+            return false;
+        }
+        return true;
+    }
+
+    private void waitForForwardedJournalReplay() throws DdlException {
+        if (!result.isSetMaxJournalId()) {
+            return;
+        }
+        int replayWaitTimeoutMs = getForwardedJournalReplayWaitTimeoutMs();
+        long deadline = System.currentTimeMillis() + replayWaitTimeoutMs;
+        LOG.info("forwarding to leader get result max journal id: {}, wait timeout {}ms",
+                result.maxJournalId, replayWaitTimeoutMs);
+        // FORWARD_WITH_SYNC must actually sync before returning: if local replay does not catch up within the
+        // timeout, let the DdlException propagate and fail the statement. Swallowing it would return success
+        // while this FE is still behind, so the same session's next statement could miss the change it just made.
+        getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, replayWaitTimeoutMs);
+        if (RunMode.isSharedDataMode() && result.isSetMaxStarMgrJournalId()) {
+            // Math.max(1, ...) so the StarMgr wait still enforces even if the FE-journal wait consumed the whole
+            // timeout: waitOn() treats timeoutMs <= 0 as success even when replay is still behind, which would
+            // otherwise let a stale StarMgr view slip through.
+            int remaining = (int) Math.max(1, deadline - System.currentTimeMillis());
+            LOG.info("waiting for star mgr journal replay to {}, remaining timeout {}ms",
+                    result.maxStarMgrJournalId, remaining);
+            StarMgrServer.getCurrentState().getStarMgrJournalObservable().waitOn(
+                    result.maxStarMgrJournalId, remaining,
+                    () -> StarMgrServer.getCurrentState().getReplayId());
+        }
+    }
+
+    private int getForwardedJournalReplayWaitTimeoutMs() {
+        if (waitTimeoutMs <= 0) {
+            return 0;
+        }
+        return Math.max(1, Math.min(waitTimeoutMs, Config.thrift_rpc_timeout_ms));
+    }
+
+    private GlobalStateMgr getGlobalStateMgr() {
+        return ctx.getGlobalStateMgr() == null ? GlobalStateMgr.getCurrentState() : ctx.getGlobalStateMgr();
     }
 
     private void afterForward() throws DdlException {
@@ -375,4 +409,3 @@ public class LeaderOpExecutor {
         return params;
     }
 }
-

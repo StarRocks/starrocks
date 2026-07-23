@@ -159,6 +159,10 @@ public class StarMgrMetaSyncerTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                GlobalStateMgr.getServingState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
 
@@ -195,6 +199,12 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getColocateTableIndex();
                 minTimes = 0;
                 result = colocateTableIndex;
+
+                // StarMgrMetaSyncer.runAfterLeaseValid() only runs the destructive shard/worker deletion when
+                // the captured leader lease is still valid; keep it valid so tests exercise that path.
+                globalStateMgr.isLeaderLeaseValid((com.starrocks.server.LeaderLease) any);
+                minTimes = 0;
+                result = true;
             }
         };
 
@@ -332,7 +342,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        starMgrMetaSyncer.runAfterCatalogReady();
+        starMgrMetaSyncer.runAfterLeaseValid();
         Assertions.assertEquals(1, starOSAgent.listShardGroup().size());
     }
 
@@ -1393,13 +1403,13 @@ public class StarMgrMetaSyncerTest {
 
         long oldConfig = Config.shard_group_clean_threshold_sec;
         Config.shard_group_clean_threshold_sec = 0;
-        syncer.runAfterCatalogReady();
+        syncer.runAfterLeaseValid();
         ClusterSnapshotJob j3 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         j3.setState(ClusterSnapshotJobState.FINISHED);
-        syncer.runAfterCatalogReady();
+        syncer.runAfterLeaseValid();
         ClusterSnapshotJob j4 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
         j4.setState(ClusterSnapshotJobState.FINISHED);
-        syncer.runAfterCatalogReady();
+        syncer.runAfterLeaseValid();
         Config.shard_group_clean_threshold_sec = oldConfig;
     }
 
@@ -1501,7 +1511,7 @@ public class StarMgrMetaSyncerTest {
             cleanedGroupIds.clear();
             // shardGroupSet1 will be expired
             long begin = System.currentTimeMillis();
-            starMgrMetaSyncer.runAfterCatalogReady();
+            starMgrMetaSyncer.runAfterLeaseValid();
             long elapse = System.currentTimeMillis() - begin;
             LOG.warn("The check takes {}ms", elapse);
             Assertions.assertTrue(elapse < 5000, String.format("The check takes %dms.", elapse));
@@ -1513,7 +1523,7 @@ public class StarMgrMetaSyncerTest {
             cleanedGroupIds.clear();
             // shardGroupSet1 and shardGroupSet2 will be expired
             long begin = System.currentTimeMillis();
-            starMgrMetaSyncer.runAfterCatalogReady();
+            starMgrMetaSyncer.runAfterLeaseValid();
             long elapse = System.currentTimeMillis() - begin;
             LOG.warn("The check takes {}ms", elapse);
             Assertions.assertTrue(elapse < 5000, String.format("The check takes %dms.", elapse));
@@ -1593,7 +1603,7 @@ public class StarMgrMetaSyncerTest {
             Config.shard_group_clean_threshold_sec = 4; // 4 seconds
             cleanedGroupIds.clear();
             long begin = System.currentTimeMillis();
-            starMgrMetaSyncer.runAfterCatalogReady();
+            starMgrMetaSyncer.runAfterLeaseValid();
             long elapse = System.currentTimeMillis() - begin;
             Assertions.assertTrue(elapse >= delayMs.get());
             // Nothing cleaned
@@ -1604,7 +1614,7 @@ public class StarMgrMetaSyncerTest {
             Config.shard_group_clean_threshold_sec = 4; // 4 seconds
             cleanedGroupIds.clear();
             long begin = System.currentTimeMillis();
-            starMgrMetaSyncer.runAfterCatalogReady();
+            starMgrMetaSyncer.runAfterLeaseValid();
             long elapse = System.currentTimeMillis() - begin;
             Assertions.assertTrue(elapse >= delayMs.get());
             // All cleaned
@@ -1716,7 +1726,7 @@ public class StarMgrMetaSyncerTest {
 
         cleanedGroupIds.clear();
         Assertions.assertEquals(0L, groupCounter.get());
-        starMgrMetaSyncer.runAfterCatalogReady();
+        starMgrMetaSyncer.runAfterLeaseValid();
         // all groups should be counted
         Assertions.assertEquals(groupIds.size(), groupCounter.get());
         // Assertions.assertEquals(expectedCleanedGroupIds.size(), cleanedGroupIds.size());

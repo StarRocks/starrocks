@@ -44,6 +44,7 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Range;
+import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +59,9 @@ import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TPriority;
+import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletRange;
@@ -489,5 +493,93 @@ public class AgentTaskTest {
         CreateReplicaTask task = builder.build();
         TCreateTabletReq req = task.toThrift();
         Assertions.assertTrue(req.isSetRange());
+    }
+
+    @Test
+    public void testAbandonInFlightTasksReleasesLatchAndClearsQueue() {
+        AgentTaskQueue.clearAllTasks();
+        MarkedCountDownLatch<Long, Long> l = new MarkedCountDownLatch<>(1);
+        l.addMark(backendId1, tabletId1);
+        ((CreateReplicaTask) createReplicaTask).setLatch(l);
+        AgentTaskQueue.addTask(createReplicaTask);
+
+        // Leader-demotion drain: fail every in-flight agent task latch (so a waiter such as
+        // TabletTaskExecutor.waitForFinished unblocks with the demotion reason instead of waiting out
+        // its timeout) AND drop the tasks from the queue so they do not leak across a demote/re-elect.
+        AgentTaskQueue.abandonInFlightTasks(new Status(TStatusCode.CANCELLED, "leader is demoting"));
+
+        Assertions.assertEquals(0, l.getCount());
+        Assertions.assertFalse(l.getStatus().ok());
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
+    public void testAddTaskRejectedWhenLeaderDemoting() {
+        AgentTaskQueue.clearAllTasks();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeaderDemoting() {
+                return true;
+            }
+        };
+        // Source guard: once demoting, no new agent task may be enqueued, so a create-tablet
+        // started after the drain fails fast instead of hanging on a never-marked latch.
+        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
+    public void testAddTaskRejectedAfterDemotionCompleted() {
+        AgentTaskQueue.clearAllTasks();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public com.starrocks.ha.FrontendNodeType getFeType() {
+                return com.starrocks.ha.FrontendNodeType.FOLLOWER;
+            }
+        };
+        // A straggling leader-session thread (e.g. a DDL that passed admission before the
+        // demotion) must not enqueue AFTER the demotion completed either - otherwise it waits
+        // out its full timeout and leaves a stale entry in the follower's queue that could
+        // shadow a same-signature task after re-election.
+        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
+    public void testCancelPendingWaiterReleasesLatchOfEveryLatchHolder() {
+        Status demoting = new Status(TStatusCode.CANCELLED, "leader is demoting");
+
+        // DropAutoIncrementMapTask
+        DropAutoIncrementMapTask dropAiTask = new DropAutoIncrementMapTask(backendId1, tableId, 1L);
+        MarkedCountDownLatch<Long, Long> dropAiLatch = new MarkedCountDownLatch<>(1);
+        dropAiLatch.addMark(backendId1, -1L);
+        dropAiTask.setLatch(dropAiLatch);
+        dropAiTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, dropAiLatch.getCount());
+        Assertions.assertFalse(dropAiLatch.getStatus().ok());
+
+        // TabletMetadataUpdateAgentTask
+        Set<Long> tablets = new HashSet<>();
+        tablets.add(tabletId1);
+        MarkedCountDownLatch<Long, Set<Long>> metaLatch = new MarkedCountDownLatch<>(1);
+        metaLatch.addMark(backendId1, tablets);
+        TabletMetadataUpdateAgentTask metaTask = TabletMetadataUpdateAgentTaskFactory
+                .createEnablePersistentIndexUpdateTask(backendId1, tablets, true);
+        metaTask.setLatch(metaLatch);
+        metaTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, metaLatch.getCount());
+
+        // PushTask
+        PushTask pushTask = new PushTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1,
+                replicaId1, 0, 1L, 100, 1L, TPushType.LOAD_V2, TPriority.NORMAL, 1L, 1L,
+                null, null, "UTC", com.starrocks.thrift.TTabletType.TABLET_TYPE_DISK, null);
+        MarkedCountDownLatch<Long, Long> pushLatch = new MarkedCountDownLatch<>(1);
+        pushLatch.addMark(backendId1, tabletId1);
+        pushTask.setCountDownLatch(pushLatch);
+        pushTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, pushLatch.getCount());
+
+        // A task with no latch attached must be a no-op, not an NPE.
+        new DropAutoIncrementMapTask(backendId1, tableId, 2L).cancelPendingWaiter(demoting);
     }
 }

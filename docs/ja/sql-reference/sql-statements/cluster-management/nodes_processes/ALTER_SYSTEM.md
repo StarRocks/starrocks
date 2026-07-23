@@ -45,6 +45,14 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
   ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
   ```
 
+- Leader ロールを別の Follower FE にグレースフルに引き継ぎます（プロセスを再起動せず、その場で降格）。
+
+  ```SQL
+  ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
+  ```
+
+  ターゲットは稼働中の Follower FE である必要があります。このステートメントは現在の Leader FE 上で実行され、Leader ロールをターゲットの Follower に引き継ぎます。その後、元の Leader は再起動せずにその場で Follower に降格します。新しい Leader は `SHOW PROC '/frontends'\G` で確認できます。`FORCE` を指定すると、進行中の Leader 切り替えを置き換えます。`FORCE` を指定しない場合、切り替えが既に進行中であればこのステートメントは失敗します。
+
 | **パラメータ**      | **必須** | **説明**                                                     |
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | はい          | FE インスタンスのホスト名または IP アドレス。インスタンスに複数の IP アドレスがある場合は、設定項目 `priority_networks` の値を使用します。 |
@@ -208,4 +216,10 @@ ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+例 9: Leader ロールを特定の Follower FE に引き継ぎます。
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

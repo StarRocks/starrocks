@@ -30,7 +30,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -62,7 +62,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public class StarMgrMetaSyncer extends FrontendDaemon {
+public class StarMgrMetaSyncer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StarMgrMetaSyncer.class);
 
     private static final LongCounterMetric SHARD_GROUP_DELETE_COUNTER = new LongCounterMetric(
@@ -689,15 +689,21 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         long newInterval = Config.star_mgr_meta_sync_interval_sec * 1000L;
         if (newInterval > 0 && getInterval() != newInterval) {
             setInterval(newInterval);
         }
         long start = System.currentTimeMillis();
         acquireBackgroundComputeResource();
-        deleteUnusedShardAndShardGroup();
-        deleteUnusedWorker();
+        // Shard/tablet/worker deletion is an irreversible external side effect (object-store data and
+        // starMgr shards). If this node started demoting mid-cycle (the interrupt may be eaten), skip the
+        // destructive phase so it cannot reap shards using this node's now-stale metadata during the
+        // follower window; the re-elected leader re-runs the sync from its own durable state.
+        if (isCapturedLeaseValid()) {
+            deleteUnusedShardAndShardGroup();
+            deleteUnusedWorker();
+        }
         syncTableMetaAndColocationInfo();
         long end = System.currentTimeMillis();
         META_SYNC_PROCESS_TIME_COST_TOTAL.increase((end - start) / 1000.0);

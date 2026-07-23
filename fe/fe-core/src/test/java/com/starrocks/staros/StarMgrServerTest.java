@@ -19,6 +19,7 @@ import com.staros.exception.StarException;
 import com.staros.manager.StarManagerServer;
 import com.starrocks.common.Config;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.leader.CheckpointController;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -88,5 +89,25 @@ public class StarMgrServerTest {
             }
         };
         server.replayAndGenerateImage(tempFolder.getPath(), 1L);
+    }
+
+    @Test
+    public void testStopCheckpointControllerNullSafe() {
+        // stopCheckpointController must be a no-op when startCheckpointController has not run.
+        StarMgrServer server = new StarMgrServer();
+        Assertions.assertNull(server.checkpointController);
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
+    }
+
+    @Test
+    public void testStopCheckpointControllerStopsExistingController() {
+        // stopCheckpointController must forward the fire-and-forget stopBestEffort() to the owned
+        // controller (demotion no longer joins). With a freshly constructed (never started) controller
+        // this just requests stop without side effects, so it exercises the not-null branch.
+        StarMgrServer server = new StarMgrServer();
+        server.checkpointController = new CheckpointController(
+                "star_os_checkpoint_controller_test", new com.starrocks.utframe.MockJournal(), "");
+
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
     }
 }

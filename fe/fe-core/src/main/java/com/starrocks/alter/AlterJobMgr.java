@@ -143,23 +143,24 @@ public class AlterJobMgr {
     }
 
     /**
-     * Coordinated stop for leader demotion: drain each handler so onStopped() runs and the
-     * worker threads exit cleanly. Wraps each handler call in its own try-catch so a
-     * misbehaving handler cannot abort the remaining handlers' drain.
+     * Fire-and-forget stop for leader demotion: request stop on each handler without joining, so the
+     * single state-change thread is not blocked. Each handler's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. Each handler call is
+     * wrapped in its own try-catch so a misbehaving handler cannot abort the remaining handlers' stop.
      */
-    public void stopGracefully(long timeoutMs) {
+    public void stopBestEffort() {
         try {
-            schemaChangeHandler.stopGracefully(timeoutMs);
+            schemaChangeHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop schemaChangeHandler failed", t);
         }
         try {
-            materializedViewHandler.stopGracefully(timeoutMs);
+            materializedViewHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop materializedViewHandler failed", t);
         }
         try {
-            clusterHandler.stopGracefully(timeoutMs);
+            clusterHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop clusterHandler failed", t);
         }

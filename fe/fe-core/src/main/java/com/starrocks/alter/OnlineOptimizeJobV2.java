@@ -86,7 +86,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
 
-    private Future<Constants.TaskRunState> future = null;
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    Future<Constants.TaskRunState> future = null;
 
     @SerializedName(value = "tmpPartitionIds")
     private List<Long> tmpPartitionIds = Lists.newArrayList();
@@ -97,7 +98,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     private Map<String, String> properties = Maps.newHashMap();
 
     @SerializedName(value = "rewriteTasks")
-    private List<OptimizeTask> rewriteTasks = Lists.newArrayList();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    List<OptimizeTask> rewriteTasks = Lists.newArrayList();
     private int progress = 0;
 
     @SerializedName(value = "sourcePartitionNames")
@@ -143,6 +145,45 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.allPartitionOptimized = job.allPartitionOptimized;
         this.distributionInfo = job.distributionInfo;
         this.optimizeOperation = job.optimizeOperation;
+    }
+
+    @Override
+    protected void resetTransientState() {
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // The single in-flight INSERT future is attributed to "the task currently being
+        // processed" by position, not identity: a stale result from the previous leader
+        // session would be consumed by a NEW task whose INSERT never ran, and its EMPTY temp
+        // partition would be durably swapped in. Cancel hard and drop it.
+        if (future != null) {
+            future.cancel(true);
+            future = null;
+        }
+        // runWaitingTxnJob APPENDS to rewriteTasks; watershedTxnId is reallocated per task
+        // during RUNNING and its durable WAITING_TXN value is -1.
+        rewriteTasks.clear();
+        watershedTxnId = -1;
+        progress = 0;
+        if (jobState == JobState.PENDING) {
+            tmpPartitionIds.clear();
+            allPartitionOptimized = false;
+        }
+        // Drop the never-journaled double-write routing so the demoted node behaves like a
+        // freshly loaded FE (best-effort: db/table may already be gone).
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
+                        .getLocalMetastore().getTable(db.getId(), tableId);
+                if (tbl != null) {
+                    disableDoubleWritePartition(db, tbl);
+                }
+            }
+        } catch (Throwable t) {
+            LOG.warn("clear double-write partitions failed on leader handoff, job: {}", jobId, t);
+        }
+        // optimizeClause deliberately kept - see OptimizeJobV2.resetTransientState().
     }
 
     public List<Long> getTmpPartitionIds() {

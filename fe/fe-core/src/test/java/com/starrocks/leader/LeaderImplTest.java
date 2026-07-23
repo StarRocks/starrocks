@@ -25,9 +25,16 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTaskType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -145,5 +152,56 @@ public class LeaderImplTest {
         TMasterResult result = leader.report(new TReportRequest());
         Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
         Assertions.assertEquals("current fe is not master", result.getStatus().getError_msgs().get(0));
+    }
+
+    @Test
+    public void testCreateFinishTaskReturnsLeaderTransferredWhenLeaderDemoting(@Mocked GlobalStateMgr globalStateMgr,
+                                                                               @Mocked NodeMgr nodeMgr,
+                                                                               @Mocked SystemInfoService clusterInfo) {
+        Backend backend = new Backend(10001L, "172.26.80.2", 9050);
+        backend.setBePort(9060);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderDemoting();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderWorkAdmissionOpen();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getBackendWithBePort("172.26.80.2", 9060);
+                result = backend;
+                minTimes = 0;
+            }
+        };
+
+        TFinishTaskRequest request = new TFinishTaskRequest(
+                new TBackend("172.26.80.2", 9060, 8040),
+                TTaskType.CREATE,
+                58052L,
+                new TStatus(TStatusCode.OK));
+
+        TMasterResult result = leader.finishTask(request);
+
+        Assertions.assertEquals(TStatusCode.LEADER_TRANSFERRED, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getStatus().getError_msgs());
+        Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("leader is transferring"));
     }
 }

@@ -236,6 +236,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
         JournalObservable realObservable = new JournalObservable();
         Mockito.when(mockStarMgrServer.getStarMgrJournalObservable()).thenReturn(realObservable);
         Mockito.when(mockStarMgrServer.getReplayId()).thenReturn(1L);
+        GlobalStateMgr originalGsm = connectContext.getGlobalStateMgr();
 
         connectContext.getSessionVariable().setQueryTimeoutS(2);
 
@@ -255,11 +256,16 @@ public class LeaderOpExecutorStarMgrJournalTest {
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(true);
             starMgrMock.when(StarMgrServer::getCurrentState).thenReturn(mockStarMgrServer);
 
+            // Route getGlobalStateMgr() through the follower mock (as the other tests do); otherwise ctx keeps
+            // the real leader GSM, shouldWaitJournalSync() returns false, the sync wait never runs, and nothing
+            // is thrown.
+            connectContext.setGlobalStateMgr(mockGsm);
             LeaderOpExecutor executor = new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(),
                     connectContext, RedirectStatus.FORWARD_WITH_SYNC, false, null);
 
             Assertions.assertThrows(DdlException.class, executor::execute);
         } finally {
+            connectContext.setGlobalStateMgr(originalGsm);
             connectContext.getSessionVariable().setQueryTimeoutS(300);
         }
     }

@@ -103,68 +103,83 @@ public class ExportExportingTask extends PriorityLeaderTask {
             job.setDoExportingThread(Thread.currentThread());
         }
 
-        if (job.isReplayed()) {
-            // If the job is created from replay thread, all plan info will be lost.
-            // so the job has to be cancelled.
-            String failMsg = "FE restarted or Leader changed during exporting. Job must be cancelled";
-            job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
-            return;
-        }
-
-        // sub tasks execute in parallel
-        List<Coordinator> coords = job.getCoordList();
-        int coordSize = coords.size();
-        List<ExportExportingSubTask> subTasks = Lists.newArrayList();
-        for (int i = 0; i < coordSize; i++) {
-            Coordinator coord = coords.get(i);
-            ExportExportingSubTask subTask = new ExportExportingSubTask(coord, i, coordSize, job);
-            subTasks.add(subTask);
-            subTasksDoneSignal.addMark(i, -1);
-        }
-        for (ExportExportingSubTask subTask : subTasks) {
-            if (!submitSubTask(subTask)) {
-                job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "submit exporting task failed");
+        try {
+            if (job.isReplayed()) {
+                // If the job is created from replay thread, all plan info will be lost.
+                // so the job has to be cancelled.
+                String failMsg = "FE restarted or Leader changed during exporting. Job must be cancelled";
+                job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
                 return;
             }
-            LOG.info("submit export sub task success. task idx: {}, task query id: {}",
-                    subTask.getTaskIdx(), subTask.getQueryId());
-        }
 
-        boolean success = false;
-        try {
-            success = subTasksDoneSignal.await(getLeftTimeSecond(), TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            LOG.warn("export sub task signal await error", e);
-        }
-
-        Status status = subTasksDoneSignal.getStatus();
-        if (!success || !status.ok()) {
-            if (!success) {
-                job.cancelInternal(ExportFailMsg.CancelType.TIMEOUT, "timeout");
-            } else {
-                job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, status.getErrorMsg());
+            // sub tasks execute in parallel
+            List<Coordinator> coords = job.getCoordList();
+            int coordSize = coords.size();
+            List<ExportExportingSubTask> subTasks = Lists.newArrayList();
+            for (int i = 0; i < coordSize; i++) {
+                Coordinator coord = coords.get(i);
+                ExportExportingSubTask subTask = new ExportExportingSubTask(coord, i, coordSize, job);
+                subTasks.add(subTask);
+                subTasksDoneSignal.addMark(i, -1);
             }
+            for (ExportExportingSubTask subTask : subTasks) {
+                if (!submitSubTask(subTask)) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        // Interrupted by export executor shutdown on leader demotion: leave the job
+                        // in EXPORTING so the next leader reschedules it, do not cancel a healthy job.
+                        LOG.warn("interrupted while submitting export sub tasks; leaving job {} in EXPORTING", job);
+                        return;
+                    }
+                    job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "submit exporting task failed");
+                    return;
+                }
+                LOG.info("submit export sub task success. task idx: {}, task query id: {}",
+                        subTask.getTaskIdx(), subTask.getQueryId());
+            }
+
+            boolean success = false;
+            try {
+                success = subTasksDoneSignal.await(getLeftTimeSecond(), TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // Interrupted by export executor shutdown on leader demotion. Do NOT cancel a
+                // healthy job as a timeout - leave it in EXPORTING so the next leader reschedules it.
+                // Re-assert the interrupt so the pool thread unwinds promptly.
+                Thread.currentThread().interrupt();
+                LOG.warn("export sub task await interrupted; leaving job {} in EXPORTING for the next leader", job, e);
+                return;
+            }
+
+            Status status = subTasksDoneSignal.getStatus();
+            if (!success || !status.ok()) {
+                if (!success) {
+                    job.cancelInternal(ExportFailMsg.CancelType.TIMEOUT, "timeout");
+                } else {
+                    job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, status.getErrorMsg());
+                }
+                registerProfile();
+                return;
+            }
+
+            // move tmp file to final destination
+            Status mvStatus = moveTmpFiles();
+            if (!mvStatus.ok()) {
+                String failMsg = "move tmp file to final destination fail, ";
+                failMsg += mvStatus.getErrorMsg();
+                job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
+                LOG.warn("move tmp file to final destination fail. job:{}", job);
+                registerProfile();
+                return;
+            }
+
+            // finish job
+            job.finish();
             registerProfile();
-            return;
-        }
-
-        // move tmp file to final destination
-        Status mvStatus = moveTmpFiles();
-        if (!mvStatus.ok()) {
-            String failMsg = "move tmp file to final destination fail, ";
-            failMsg += mvStatus.getErrorMsg();
-            job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
-            LOG.warn("move tmp file to final destination fail. job:{}", job);
-            registerProfile();
-            return;
-        }
-
-        // finish job
-        job.finish();
-        registerProfile();
-
-        synchronized (this) {
-            job.setDoExportingThread(null);
+        } finally {
+            // Always release the runtime thread reference, on every path (success, cancel, or
+            // interrupt), so a re-elected leader is not blocked by a stale doExportingThread.
+            synchronized (this) {
+                job.setDoExportingThread(null);
+            }
         }
     }
 
@@ -180,7 +195,10 @@ public class ExportExportingTask extends PriorityLeaderTask {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                LOG.warn("Failed to execute submitSubTask", e);
+                // Re-assert the interrupt and stop retrying; exec() checks the interrupt flag and
+                // leaves the job in EXPORTING rather than cancelling it on demotion.
+                Thread.currentThread().interrupt();
+                return false;
             }
         }
         return true;

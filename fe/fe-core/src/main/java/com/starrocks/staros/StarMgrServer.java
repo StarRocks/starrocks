@@ -52,7 +52,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private CheckpointController checkpointController = null;
+    // Package-private so same-package tests can inject a mock controller and verify
+    // stopCheckpointController without reflection.
+    CheckpointController checkpointController = null;
     private CheckpointWorker checkpointWorker = null;
     private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;
@@ -227,6 +229,21 @@ public class StarMgrServer {
         checkpointController = new CheckpointController(
                 "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
         checkpointController.start();
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startCheckpointController()}. Fire-and-forget stop for leader
+     * demotion: requests stop on the StarMgr-side CheckpointController without joining, so the single
+     * state-change thread is not blocked. The controller's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. The field is left
+     * as-is because {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once its worker exits.
+     */
+    public void stopCheckpointController() {
+        CheckpointController controller = checkpointController;
+        if (controller != null) {
+            controller.stopBestEffort();
+        }
     }
 
     private void becomeFollower() {

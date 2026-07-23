@@ -233,6 +233,41 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
+    /**
+     * Reset this job's in-memory state to its last durable (journaled) equivalent. Historically
+     * "FE restart or master changed" reloaded jobs from the image/journal, which implicitly
+     * discarded in-memory-only progress (the deliberately unlogged WAITING_TXN -&gt; RUNNING
+     * transitions) and leader-session transients (batch tasks, latches, futures). An in-place
+     * leader demote / re-elect cycle keeps the very same objects alive, so this hook performs
+     * that normalization explicitly. Invoked from AlterHandler at BOTH ends of the cycle:
+     * onStopped() (demotion - release stale futures early) and start() (activation - guarantee
+     * every job is normalized before the first scheduling cycle dispatches it, regardless of
+     * how the previous session stopped). Idempotent, so running it at both ends is safe.
+     *
+     * Synchronized on the job: run() and cancel() use the same monitor, so a straggling user
+     * cancel or a finish-callback thread surviving the executor's shutdownNow() cannot
+     * interleave with the reset. Final states are left untouched. Must NOT write to the
+     * journal - on the demotion side it is already sealed when this runs.
+     */
+    public synchronized void resetToLastDurableState() {
+        if (jobState.isFinalState()) {
+            return;
+        }
+        if (publishVersionFuture != null) {
+            publishVersionFuture.cancel(false);
+            publishVersionFuture = null;
+        }
+        resetTransientState();
+    }
+
+    /**
+     * Subclass hook for {@link #resetToLastDurableState()}: map in-memory-only job states back
+     * to their last durable predecessor and recreate/clear leader-session transients (batch
+     * tasks, latches, flags, futures). Runs under the job monitor with the journal sealed.
+     */
+    protected void resetTransientState() {
+    }
+
     public void setComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
         this.warehouseId = computeResource.getWarehouseId();

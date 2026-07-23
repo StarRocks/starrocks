@@ -1,0 +1,223 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.common.util;
+
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class LeaderDaemonTest {
+    @Test
+    public void testStopBestEffortDoesNotInterruptWhenOptedOut(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        // Interrupt-unsafe daemons override interruptOnStop() to false (e.g. CheckpointController,
+        // which calls BDBJE directly). stopBestEffort() then must NOT interrupt the worker; it relies
+        // on the cycle finishing / cooperative bail. Here the daemon stays blocked on the latch,
+        // uninterrupted, until the test releases it, then self-cleans on its own exit.
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+        daemon.interruptOnStopFlag = false;
+
+        daemon.start();
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        // Fire-and-forget: returns immediately without joining and, being opted out, without interrupting.
+        daemon.stopBestEffort();
+        Assertions.assertTrue(daemon.isStopRequested());
+        Thread.sleep(200);
+        Assertions.assertFalse(interrupted.get());
+        Assertions.assertTrue(daemon.isRunning(), "opted-out worker keeps running until it bails cooperatively");
+
+        release.countDown();
+        awaitQuiesced(daemon);
+        Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertFalse(interrupted.get());
+        Assertions.assertTrue(stopped.get());
+    }
+
+    @Test
+    public void testSetStopStillInterruptsRunningCycle(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+
+        daemon.start();
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        daemon.setStop();
+
+        for (int i = 0; i < 50 && !interrupted.get(); i++) {
+            Thread.sleep(20);
+        }
+        release.countDown();
+
+        Assertions.assertTrue(interrupted.get());
+        Assertions.assertTrue(daemon.isStopRequested());
+    }
+
+    @Test
+    public void testZeroIntervalKeepsLoopingInsteadOfHangingAfterOneCycle(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        mockValidLeaderLease(globalStateMgr);
+        // An interval==0 LeaderDaemon is a "tight drain loop" (report-handler / resource-report-handler /
+        // routine-load-task-scheduler): runAfterLeaseValid() self-paces via a blocking poll/sleep and the
+        // outer loop must call it again immediately. The regression was that loop() ran
+        // stopSignal.wait(intervalMs) == wait(0), which blocks forever, so the daemon ran exactly one cycle
+        // then hung. This test requires the daemon to run several cycles.
+        CountDownLatch cycles = new CountDownLatch(3);
+        LeaderDaemon daemon = new LeaderDaemon("zero-interval-daemon", 0L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() throws InterruptedException {
+                cycles.countDown();
+                Thread.sleep(10);
+            }
+        };
+
+        daemon.start();
+        try {
+            Assertions.assertTrue(cycles.await(5, TimeUnit.SECONDS),
+                    "interval=0 daemon must keep looping, not hang after a single cycle");
+        } finally {
+            daemon.stopBestEffort();
+        }
+        awaitQuiesced(daemon);
+        Assertions.assertFalse(daemon.isRunning());
+    }
+
+    @Test
+    public void testStopBestEffortDoesNotJoinAndWorkerSelfCleansAndDeregisters(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        // Fire-and-forget demotion: stopBestEffort() requests stop (interrupting the worker by default)
+        // and returns WITHOUT joining. The worker then exits on its own, runs onStopped() as its last
+        // act, and deregisters from the running-instances registry that the re-activation cleanliness
+        // gate reads.
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+
+        daemon.start();
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+        Assertions.assertTrue(LeaderDaemon.getRunningInstances().contains(daemon),
+                "a started daemon must appear in the running-instances registry");
+
+        daemon.stopBestEffort();
+        Assertions.assertTrue(daemon.isStopRequested());
+
+        // The worker self-cleans and deregisters on its own; wait for it (stopBestEffort did not join).
+        awaitQuiesced(daemon);
+        Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertFalse(LeaderDaemon.getRunningInstances().contains(daemon),
+                "worker must deregister from the running-instances registry on exit");
+        Assertions.assertTrue(stopped.get(), "worker must run onStopped() on its own exit");
+        Assertions.assertTrue(interrupted.get(), "default stopBestEffort interrupts the blocked worker");
+    }
+
+    private static void awaitQuiesced(LeaderDaemon daemon) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000L;
+        while (System.currentTimeMillis() < deadline
+                && (daemon.isRunning() || LeaderDaemon.getRunningInstances().contains(daemon))) {
+            Thread.sleep(10);
+        }
+    }
+
+    private void mockValidLeaderLease(GlobalStateMgr globalStateMgr) {
+        LeaderLease lease = new LeaderLease(1L, 1L);
+        new Expectations() {
+            {
+                globalStateMgr.isReady();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.captureLeaderLease();
+                result = lease;
+                minTimes = 0;
+
+                globalStateMgr.isLeaderLeaseValid(lease);
+                result = true;
+                minTimes = 0;
+            }
+        };
+    }
+
+    private static class TestLeaderDaemon extends LeaderDaemon {
+        private final GlobalStateMgr globalStateMgr;
+        private final CountDownLatch entered;
+        private final CountDownLatch release;
+        private final AtomicBoolean interrupted;
+        private final AtomicBoolean stopped;
+        // Whether a stop request may interrupt this daemon's worker. Default true (the framework
+        // default); the opt-out test sets it false to exercise the interrupt-unsafe daemon path.
+        boolean interruptOnStopFlag = true;
+
+        TestLeaderDaemon(GlobalStateMgr globalStateMgr, CountDownLatch entered, CountDownLatch release,
+                         AtomicBoolean interrupted, AtomicBoolean stopped) {
+            super("test-leader-daemon", 1000L);
+            this.globalStateMgr = globalStateMgr;
+            this.entered = entered;
+            this.release = release;
+            this.interrupted = interrupted;
+            this.stopped = stopped;
+        }
+
+        @Override
+        protected void runAfterLeaseValid() throws InterruptedException {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+                throw e;
+            }
+        }
+
+        @Override
+        protected GlobalStateMgr getGlobalStateMgr() {
+            return globalStateMgr;
+        }
+
+        @Override
+        protected boolean interruptOnStop() {
+            return interruptOnStopFlag;
+        }
+
+        @Override
+        protected void onStopped() {
+            stopped.set(true);
+        }
+    }
+}

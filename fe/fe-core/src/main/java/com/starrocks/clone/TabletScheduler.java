@@ -346,7 +346,11 @@ public class TabletScheduler extends LeaderDaemon {
             result.first = (res == AddResult.ADDED);
         } catch (InterruptedException e) {
             // heldLock has already been re-acquired by sleepUnlocked().
-            LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
+            // Re-assert the interrupt so the caller (e.g. TabletChecker / ColocateTableBalancer
+            // leader daemon being stopped on demotion) unwinds its cycle promptly instead of
+            // silently swallowing the cancel.
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while executing blockingAddTabletCtxToScheduler", e);
         }
 
         return result;

@@ -20,6 +20,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,6 +62,9 @@ public class StateChangeExecutor extends Daemon {
             String msg = "notify new FE type transfer: " + newType;
             LOG.warn(msg);
             Util.stdoutWithTime(msg);
+            for (StateChangeExecution execution : executions) {
+                execution.notifyNewFETypeTransfer(newType);
+            }
             typeTransferQueue.put(newType);
         } catch (InterruptedException e) {
             LOG.error("failed to put new FE type: {}, {}.", newType, e);
@@ -166,11 +170,36 @@ public class StateChangeExecutor extends Daemon {
                     break;
                 }
                 case LEADER: {
-                    // exit if leader changed to any other type
-                    String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
-                    LOG.error(msg);
-                    Util.stdoutWithTime(msg);
-                    System.exit(-1);
+                    switch (newType) {
+                        case FOLLOWER:
+                        case OBSERVER:
+                        case UNKNOWN: {
+                            if (RunMode.isSharedDataMode()) {
+                                // Graceful in-place leader demotion is not supported in shared-data mode yet:
+                                // StarMgr writes its own journal (StarOSBDBJEJournalSystem) with no WALApplier,
+                                // so its in-flight state is not fenced/drained by the demotion. Exit for a clean
+                                // restart as a non-leader (the pre-graceful-demotion behavior): the new process
+                                // re-initializes StarMgr and replays the journal.
+                                String msg = "graceful leader demotion is not supported in shared-data mode; "
+                                        + "exit to restart as " + newType.name();
+                                LOG.warn(msg);
+                                Util.stdoutWithTime(msg);
+                                System.exit(-1);
+                            }
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToNonLeader(newType);
+                            }
+                            break;
+                        }
+                        default: {
+                            String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
+                            LOG.error(msg);
+                            Util.stdoutWithTime(msg);
+                            System.exit(-1);
+                            break;
+                        }
+                    }
+                    break;
                 }
                 default:
                     break;

@@ -613,41 +613,46 @@ public class PublishVersionDaemonTest {
     }
 
     @Test
-    public void testOnStoppedReleasesExecutorsAndDedupSets() throws Exception {
+    public void testOnStoppedReleasesExecutorsAndDedupSets() {
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        // Force lazy init of both executors through their getters; getDeleteTxnLogExecutor is private.
+        // Force lazy init of both executors through their getters.
         ThreadPoolExecutor taskExec = daemon.getTaskExecutor();
-        ThreadPoolExecutor deleteExec =
-                (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        ThreadPoolExecutor deleteExec = daemon.getDeleteTxnLogExecutor();
         Assertions.assertNotNull(taskExec);
         Assertions.assertNotNull(deleteExec);
 
         // Populate both dedup sets so we can verify onStopped() clears them.
         Set<Long> publishing = Sets.newConcurrentHashSet();
         publishing.add(42L);
-        FieldUtils.writeField(daemon, "publishingTransactionIds", publishing, true);
+        daemon.publishingTransactionIds = publishing;
         Set<Long> batchTable = Sets.newConcurrentHashSet();
         batchTable.add(7L);
-        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", batchTable, true);
+        daemon.publishingLakeTransactionsBatchTableId = batchTable;
 
         daemon.onStopped();
 
         Assertions.assertTrue(taskExec.isShutdown(), "taskExecutor must be shut down");
         Assertions.assertTrue(deleteExec.isShutdown(), "deleteTxnLogExecutor must be shut down");
-        Assertions.assertNull(FieldUtils.readField(daemon, "taskExecutor", true));
-        Assertions.assertNull(FieldUtils.readField(daemon, "deleteTxnLogExecutor", true));
+        Assertions.assertTrue(taskExec.isTerminated(),
+                "taskExecutor must be terminated after onStopped() awaits drain");
+        Assertions.assertTrue(deleteExec.isTerminated(),
+                "deleteTxnLogExecutor must be terminated after onStopped() awaits drain");
+        Assertions.assertNull(daemon.taskExecutor,
+                "taskExecutor reference must be nulled after successful drain so getter rebuilds fresh");
+        Assertions.assertNull(daemon.deleteTxnLogExecutor,
+                "deleteTxnLogExecutor reference must be nulled after successful drain");
         Assertions.assertTrue(publishing.isEmpty(), "publishingTransactionIds must be cleared");
         Assertions.assertTrue(batchTable.isEmpty(), "publishingLakeTransactionsBatchTableId must be cleared");
     }
 
     @Test
-    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() throws Exception {
+    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() {
         // Fresh instance: executors and dedup sets may both be null. onStopped must be no-op-safe.
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        FieldUtils.writeField(daemon, "taskExecutor", null, true);
-        FieldUtils.writeField(daemon, "deleteTxnLogExecutor", null, true);
-        FieldUtils.writeField(daemon, "publishingTransactionIds", null, true);
-        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
+        daemon.taskExecutor = null;
+        daemon.deleteTxnLogExecutor = null;
+        daemon.publishingTransactionIds = null;
+        daemon.publishingLakeTransactionsBatchTableId = null;
         Assertions.assertDoesNotThrow(daemon::onStopped);
     }
 

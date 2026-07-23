@@ -1480,6 +1480,15 @@ public class DefaultCoordinator extends Coordinator {
                 return true;
             }
 
+            // The wait was interrupted (e.g. a leader-demotion shutdownNow() on the loading/export pool
+            // that runs this coordinator). Stop re-looping so the pool task unwinds promptly instead of
+            // waiting out the remaining query/load timeout; the interrupt flag is preserved for the caller.
+            if (Thread.currentThread().isInterrupted()) {
+                LOG.warn("interrupted while joining, stop waiting for profile after {} seconds",
+                        timeoutS - leftTimeoutS);
+                return false;
+            }
+
             if (!checkBackendState()) {
                 return true;
             }

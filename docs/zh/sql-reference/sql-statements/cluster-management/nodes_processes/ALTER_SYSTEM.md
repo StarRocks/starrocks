@@ -42,6 +42,14 @@ description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker
     ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...]
     ```
 
+- 将 Leader 角色优雅切换到另一个 Follower FE（原地交接，不重启进程）。
+
+    ```SQL
+    ALTER SYSTEM TRANSFER LEADER TO "host:edit_log_port" [FORCE]
+    ```
+
+    目标必须是存活的 Follower FE。该语句在当前 Leader FE 上执行，将 Leader 角色交接给目标 Follower，原 Leader 随后原地降级为 Follower（而非重启）。可通过 `SHOW PROC '/frontends'\G` 确认新的 Leader。指定 `FORCE` 时会抢占一个正在进行中的 Leader 切换；不指定 `FORCE` 时，若已有切换在进行中则该语句失败。
+
      参数说明如下：
 
     | **参数**           | **必选** | **说明**                                                     |
@@ -191,4 +199,10 @@ ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+示例九：将 Leader 角色切换到指定的 Follower FE。
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

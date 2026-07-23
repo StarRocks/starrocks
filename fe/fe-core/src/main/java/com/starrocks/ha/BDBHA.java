@@ -45,6 +45,7 @@ import com.sleepycat.je.OperationResult;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.ReadOptions;
 import com.sleepycat.je.rep.MasterStateException;
+import com.sleepycat.je.rep.MasterTransferFailureException;
 import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationGroup;
@@ -62,6 +63,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class BDBHA implements HAProtocol {
     private static final Logger LOG = LogManager.getLogger(BDBHA.class);
@@ -145,6 +147,28 @@ public class BDBHA implements HAProtocol {
     public String getLeaderNodeName() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         return replicationGroupAdmin.getMasterNodeName();
+    }
+
+    @Override
+    public String transferToMaster(String nodeName, int timeoutMs, boolean force) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        if (replicationGroupAdmin == null) {
+            throw new IllegalStateException("replication group admin is not available, cannot transfer leader");
+        }
+        Set<String> candidates = new HashSet<>();
+        candidates.add(nodeName);
+        try {
+            // This runs on the current master and hands mastership to `nodeName`; BDBJE waits up to
+            // timeoutMs for the target replica to catch up, then completes the transfer. On the master
+            // this triggers the in-place safe demotion path (no System.exit on a clean handoff).
+            String winner = replicationGroupAdmin.transferMaster(candidates, timeoutMs, TimeUnit.MILLISECONDS, force);
+            LOG.info("transfer leader to {} (force={}, timeoutMs={}) succeeded, new master is {}",
+                    nodeName, force, timeoutMs, winner);
+            return winner;
+        } catch (MasterTransferFailureException | UnknownMasterException e) {
+            LOG.warn("failed to transfer leader to {} (force={})", nodeName, force, e);
+            throw new RuntimeException("failed to transfer leader to " + nodeName + ": " + e.getMessage(), e);
+        }
     }
 
     @Override

@@ -21,6 +21,7 @@ import com.starrocks.ha.FrontendNodeType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,6 +50,19 @@ public class LeaderDaemonTest {
         gsm.setFrontendNodeType(FrontendNodeType.LEADER);
         gsm.publishLeaderLease(42L);
         return gsm;
+    }
+
+    /** Fire-and-forget stop is async; wait for the worker to run onStopped() and clear isRunning. */
+    private static void awaitQuiesced(LeaderDaemon d) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 3000L;
+        while (System.currentTimeMillis() < deadline && d.isRunning()) {
+            Thread.sleep(10);
+        }
+    }
+
+    private static void stopAndAwait(LeaderDaemon d) throws InterruptedException {
+        d.stopBestEffort();
+        awaitQuiesced(d);
     }
 
     private static class CountingDaemon extends LeaderDaemon {
@@ -80,7 +94,7 @@ public class LeaderDaemonTest {
     }
 
     @Test
-    public void testRestartAfterStopGracefully() throws Exception {
+    public void testRestartAfterStop() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
         CountingDaemon d = new CountingDaemon("restart-test", 5L, gsm);
 
@@ -88,13 +102,16 @@ public class LeaderDaemonTest {
         Assertions.assertTrue(d.firstCycle.await(3, TimeUnit.SECONDS), "first cycle must run");
         Assertions.assertTrue(d.isRunning());
 
-        d.stopGracefully(2000L);
+        // Fire-and-forget stop; the worker self-cleans and clears isRunning on its own exit.
+        d.stopBestEffort();
+        awaitQuiesced(d);
         Assertions.assertTrue(d.stoppedCalled.get());
         Assertions.assertFalse(d.isRunning());
-        Assertions.assertTrue(d.isStopped());
+        Assertions.assertTrue(d.isStopRequested());
 
-        // Reset observables and restart the same instance - mimics a re-elected leader reusing
-        // the singleton Mgr across leader sessions.
+        // Reset observables and restart the same instance - mimics a re-elected leader reusing the
+        // singleton Mgr across leader sessions. start() CASes on isRunning==false, which is why we
+        // waited for the worker to fully quiesce above.
         d.stoppedCalled.set(false);
         int cyclesAfterFirstStop = d.cycles.get();
 
@@ -106,7 +123,7 @@ public class LeaderDaemonTest {
         }
         Assertions.assertTrue(d.cycles.get() > cyclesAfterFirstStop, "worker should resume producing cycles");
 
-        d.stopGracefully(2000L);
+        stopAndAwait(d);
         Assertions.assertFalse(d.isRunning());
     }
 
@@ -127,11 +144,11 @@ public class LeaderDaemonTest {
             Thread.sleep(10);
         }
         Assertions.assertFalse(d.isRunning(), "daemon must self-stop after lease becomes invalid");
-        Assertions.assertTrue(d.isStopped());
+        Assertions.assertTrue(d.isStopRequested());
     }
 
     @Test
-    public void testStopGracefullyRunsOnStoppedAfterWorkerExits() throws Exception {
+    public void testStopBestEffortRunsOnStoppedAfterWorkerExits() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
         AtomicBoolean workerExited = new AtomicBoolean();
         AtomicBoolean onStoppedObservedWorkerExit = new AtomicBoolean();
@@ -158,59 +175,11 @@ public class LeaderDaemonTest {
 
         d.start();
         Thread.sleep(100);
-        d.stopGracefully(2000L);
+        d.stopBestEffort();
+        awaitQuiesced(d);
         Assertions.assertTrue(onStoppedObservedWorkerExit.get(),
                 "onStopped must run after the worker has exited runAfterLeaseValid");
         Assertions.assertFalse(d.isRunning());
-    }
-
-    @Test
-    public void testJoinTimeoutInvokesFailureHookAndKeepsStateFenced() throws Exception {
-        TestGlobalStateMgr gsm = activeLeader();
-        CountDownLatch inWork = new CountDownLatch(1);
-        AtomicBoolean joinTimeoutHook = new AtomicBoolean();
-        AtomicBoolean onStoppedCalled = new AtomicBoolean();
-        // Worker that swallows interrupts and busy-loops, forcing the join-timeout path.
-        LeaderDaemon d = new LeaderDaemon("timeout-test", 0L) {
-            @Override
-            protected GlobalStateMgr getGlobalStateMgr() {
-                return gsm;
-            }
-
-            @Override
-            protected void runAfterLeaseValid() {
-                inWork.countDown();
-                long until = System.currentTimeMillis() + 500L;
-                while (System.currentTimeMillis() < until) {
-                    // Clear the interrupt flag so LeaderDaemon.loop cannot observe stop promptly.
-                    Thread.interrupted();
-                }
-            }
-
-            @Override
-            protected void onStopped() {
-                onStoppedCalled.set(true);
-            }
-
-            @Override
-            protected void onJoinTimeout() {
-                // Test override: record the call instead of terminating the JVM.
-                joinTimeoutHook.set(true);
-            }
-        };
-
-        d.start();
-        Assertions.assertTrue(inWork.await(2, TimeUnit.SECONDS));
-
-        long start = System.currentTimeMillis();
-        d.stopGracefully(100L);
-        long elapsed = System.currentTimeMillis() - start;
-
-        // Must honor the join timeout rather than blocking for the full busy span.
-        Assertions.assertTrue(elapsed < 2000L, "stopGracefully should honor the join timeout; elapsed=" + elapsed);
-        Assertions.assertTrue(joinTimeoutHook.get(), "onJoinTimeout must fire when the worker doesn't exit in time");
-        Assertions.assertFalse(onStoppedCalled.get(), "onStopped must NOT run on the timeout path");
-        Assertions.assertTrue(d.isStopped());
     }
 
     @Test
@@ -235,19 +204,19 @@ public class LeaderDaemonTest {
         // Second start() while running must be a no-op - no second worker thread.
         d.start();
         Assertions.assertTrue(d.isRunning());
-        d.stopGracefully(2000L);
+        stopAndAwait(d);
     }
 
     @Test
-    public void testSetStopIsIdempotent() {
+    public void testSetStopIsIdempotent() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
         CountingDaemon d = new CountingDaemon("idempotent-setstop", 5L, gsm);
         d.start();
         d.setStop();
         // Second setStop() is a no-op and must not throw even after worker is already scheduled to exit.
         d.setStop();
-        Assertions.assertTrue(d.isStopped());
-        d.stopGracefully(2000L);
+        Assertions.assertTrue(d.isStopRequested());
+        stopAndAwait(d);
     }
 
     @Test
@@ -272,8 +241,9 @@ public class LeaderDaemonTest {
         };
         d.start();
         Thread.sleep(50);
-        // A throwing onStopped must not prevent stopGracefully from completing its state reset.
-        d.stopGracefully(2000L);
+        // A throwing onStopped must not prevent the worker from completing its state reset (isRunning=false).
+        d.stopBestEffort();
+        awaitQuiesced(d);
         Assertions.assertFalse(d.isRunning(), "state reset must still run after onStopped throws");
         stateReset.set(!d.isRunning());
         Assertions.assertTrue(stateReset.get());
@@ -302,7 +272,7 @@ public class LeaderDaemonTest {
         // Loop must keep running past RuntimeExceptions from runAfterLeaseValid.
         Assertions.assertTrue(afterFailures.await(3, TimeUnit.SECONDS),
                 "loop must survive runtime exceptions and keep iterating");
-        d.stopGracefully(2000L);
+        stopAndAwait(d);
     }
 
     @Test
@@ -328,21 +298,58 @@ public class LeaderDaemonTest {
         };
         d.start();
         Thread.sleep(150);
-        d.stopGracefully(2000L);
+        d.stopBestEffort();
+        awaitQuiesced(d);
         // Body must never have been invoked because GSM stayed unready; the worker must still have exited.
         Assertions.assertFalse(ranBody.get());
         Assertions.assertFalse(d.isRunning());
-        Assertions.assertTrue(d.isStopped());
+        Assertions.assertTrue(d.isStopRequested());
     }
 
     @Test
     public void testSetStopBeforeStartIsSafe() {
         CountingDaemon d = new CountingDaemon("setstop-before-start", 5L, activeLeader());
-        // Before start(), there is no worker to interrupt. setStop() must still flip isStopped.
+        // Before start(), there is no worker to interrupt. setStop() must still flip the stop request.
         d.setStop();
-        Assertions.assertTrue(d.isStopped());
-        // stopGracefully without a worker thread must be a no-op that returns cleanly.
-        d.stopGracefully(100L);
+        Assertions.assertTrue(d.isStopRequested());
+        // stopBestEffort without a worker thread must be a no-op that returns cleanly.
+        d.stopBestEffort();
         Assertions.assertFalse(d.isRunning());
+    }
+
+    @Test
+    public void testIsAgentTaskDispatchDisallowed() {
+        // The agent-task enqueue guard and the AgentBatchTask dispatch fence share this predicate: a
+        // node must not push BE agent tasks unless it is an active, non-demoting leader.
+        TestGlobalStateMgr leader = activeLeader();
+        Assertions.assertFalse(leader.isAgentTaskDispatchDisallowed(), "an active leader may dispatch agent tasks");
+
+        // Demoting: disallowed even though feType is still LEADER (leaderRoleState == DEMOTING).
+        leader.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        Assertions.assertTrue(leader.isAgentTaskDispatchDisallowed(),
+                "a demoting node must not dispatch even while feType is still LEADER");
+
+        // Follower (not demoting): disallowed via feType.
+        TestGlobalStateMgr follower = new TestGlobalStateMgr();
+        follower.setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        Assertions.assertTrue(follower.isAgentTaskDispatchDisallowed(), "a follower must not dispatch agent tasks");
+    }
+
+    @Test
+    public void testFindLeaderSessionStragglersIgnoresFreshRunningPools() {
+        // Regression: a freshly-constructed (running, never-shut-down) leader-session pool must NOT be
+        // flagged as a straggler by the re-activation gate. The gate keys on isShutdown()-but-not-
+        // terminated, not merely !isTerminated(); a running pool has isShutdown()==false. Before the fix
+        // this false-positived and System.exit'd the process on a normal (re-)activation with live pools.
+        TestGlobalStateMgr gsm = new TestGlobalStateMgr();
+        List<String> stragglers = gsm.findLeaderSessionStragglers();
+        Assertions.assertFalse(stragglers.contains("loadingLoadTaskScheduler(pool)"),
+                "a fresh running load pool must not be flagged as a straggler");
+        Assertions.assertFalse(stragglers.contains("pendingLoadTaskScheduler(pool)"),
+                "a fresh running load pool must not be flagged as a straggler");
+        Assertions.assertFalse(stragglers.contains("exportChecker(pools)"),
+                "fresh/absent export pools must not be flagged as stragglers");
+        Assertions.assertFalse(stragglers.contains("taskManager(schedulers)"),
+                "fresh running task-manager schedulers must not be flagged as stragglers");
     }
 }

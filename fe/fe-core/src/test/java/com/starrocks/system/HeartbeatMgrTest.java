@@ -65,7 +65,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 
@@ -251,19 +250,42 @@ public class HeartbeatMgrTest {
     }
 
     @Test
-    public void testOnStoppedShutsDownAndClearsExecutor() throws Exception {
+    public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
         HeartbeatMgr mgr = new HeartbeatMgr(false);
         // start() lazy-inits the executor.
         mgr.start();
-        Field execField = HeartbeatMgr.class.getDeclaredField("executor");
-        execField.setAccessible(true);
-        ExecutorService before = (ExecutorService) execField.get(mgr);
+        ExecutorService before = mgr.executor;
         Assertions.assertNotNull(before, "executor must be initialized after start()");
 
         // protected onStopped() is visible from the same package.
         mgr.onStopped();
 
         Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
-        Assertions.assertNull(execField.get(mgr), "executor reference must be nulled for re-init on next start()");
+        Assertions.assertTrue(before.isTerminated(),
+                "previous executor must be terminated after onStopped() awaits drain");
+        // Reference is kept (not nulled); start() rebuilds on isShutdown() so reuse is safe.
+        Assertions.assertSame(before, mgr.executor,
+                "executor reference is retained after successful drain");
+        Assertions.assertNotNull(mgr.executor);
     }
+
+    @Test
+    public void testStartRebuildsExecutorAfterOnStopped() {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        mgr.start();
+        ExecutorService originalExecutor = mgr.executor;
+        mgr.onStopped();
+        Assertions.assertTrue(originalExecutor.isTerminated());
+
+        mgr.start();
+        try {
+            Assertions.assertNotSame(originalExecutor, mgr.executor,
+                    "executor must be rebuilt on re-election");
+            Assertions.assertFalse(mgr.executor.isShutdown(),
+                    "rebuilt executor must accept new heartbeats");
+        } finally {
+            mgr.setStop();
+        }
+    }
+
 }

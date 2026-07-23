@@ -92,6 +92,15 @@ final class PreSplitFlow {
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
                     ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
+
+        /**
+         * Backward-compatible constructor for callers with no rollup to project;
+         * defaults secondaryIndexSpecs to empty.
+         */
+        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
+                List<Column> partitionColumns, long estimatedBytes, ComputeResource computeResource) {
+            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource, List.of());
+        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,

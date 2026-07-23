@@ -234,7 +234,7 @@ public class TabletReshardJobMgrTest {
         Assertions.assertEquals(normalJob.getParallelTablets() + abnormalJob.getParallelTablets(),
                 jobMgr.getTotalParallelTablets());
 
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterLeaseValid();
 
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, normalJob.getJobState());
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, abnormalJob.getJobState());
@@ -248,7 +248,7 @@ public class TabletReshardJobMgrTest {
         abnormalJob.finishedTimeMs = 0;
         Assertions.assertTrue(abnormalJob.isExpired());
 
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterLeaseValid();
 
         Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
     }
@@ -367,12 +367,12 @@ public class TabletReshardJobMgrTest {
         // A covering snapshot (safe-deletion boundary <= finishedTimeMs): the expired job is retained
         // so isTableSafeToDeleteTablet() keeps the pre-reshard tablets alive.
         boundary[0] = 500L;
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterCatalogReadyForTest();
         Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
 
         // No covering snapshot (boundary > finishedTimeMs): the expired job is reaped (no leak).
         boundary[0] = 2000L;
-        jobMgr.runAfterCatalogReady();
+        jobMgr.runAfterCatalogReadyForTest();
         Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
     }
 

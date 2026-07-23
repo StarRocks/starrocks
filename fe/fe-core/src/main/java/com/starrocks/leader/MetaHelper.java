@@ -62,6 +62,7 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class MetaHelper {
@@ -89,6 +90,18 @@ public class MetaHelper {
 
     public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir)
             throws IOException {
+        downloadImageFile(urlStr, timeout, journalId, destDir, null);
+    }
+
+    /**
+     * Same as {@link #downloadImageFile(String, int, String, File)} but publishes the freshly
+     * opened {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can
+     * hold its own reference and {@link HttpURLConnection#disconnect() disconnect} it on demotion
+     * to break out of a stuck socket read. MetaHelper itself performs no cancellation.
+     */
+    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
+                                         Consumer<HttpURLConnection> onConnect)
+            throws IOException {
         HttpURLConnection conn = null;
         String checksum = null;
         String destFilename = Storage.IMAGE + "." + journalId;
@@ -97,6 +110,9 @@ public class MetaHelper {
         try (FileOutputStream out = new FileOutputStream(partFile)) {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
+            if (onConnect != null) {
+                onConnect.accept(conn);
+            }
             conn.setConnectTimeout(timeout);
             conn.setReadTimeout(timeout);
 
@@ -149,11 +165,25 @@ public class MetaHelper {
     }
 
     public static void httpGet(String urlStr, int timeout) throws IOException {
+        httpGet(urlStr, timeout, null);
+    }
+
+    /**
+     * Same as {@link #httpGet(String, int)} but publishes the freshly opened
+     * {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can hold its
+     * own reference and {@link HttpURLConnection#disconnect() disconnect} it on demotion to break
+     * out of a stuck socket read (e.g. a checkpoint push that can otherwise block up to an hour).
+     * MetaHelper itself performs no cancellation.
+     */
+    public static void httpGet(String urlStr, int timeout, Consumer<HttpURLConnection> onConnect) throws IOException {
         URL url = new URL(urlStr);
         HttpURLConnection conn = null;
 
         try {
             conn = (HttpURLConnection) url.openConnection();
+            if (onConnect != null) {
+                onConnect.accept(conn);
+            }
             conn.setConnectTimeout(timeout);
             conn.setReadTimeout(timeout);
 
