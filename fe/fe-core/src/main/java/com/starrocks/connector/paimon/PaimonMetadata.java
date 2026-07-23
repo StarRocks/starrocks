@@ -136,6 +136,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
+    // Resolved tag name, keyed by "tableName#snapshotId" (snapshot ids are per-table, not global).
+    private final Map<String, String> scanTags = new ConcurrentHashMap<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -377,7 +379,12 @@ public class PaimonMetadata implements ConnectorMetadata {
         view.setComment(comment);
         return view;
     }
-
+    
+    @Override
+    public void clear() {
+        scanTags.clear();
+    }
+    
     @Override
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
@@ -487,6 +494,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                             .map(p -> p.getKey().id())
                             .findFirst()
                             .get();
+                    scanTags.put(table.fullName() + "#" + snapshotId, refNameParts[1]);
                 }
             } else {
                 throw new StarRocksConnectorException("Please input correct format like branch:branch_name or tag:tag_name");
@@ -622,7 +630,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
 
         Map<String, String> options = new HashMap<>();
-        options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        String currentTag = scanTags.get(
+                paimonTable.getCatalogDBName() + "." + paimonTable.getCatalogTableName() + "#" + snapshotId);
+        boolean isDeltaScan = tvrVersionRange.start().isPresent() && tvrVersionRange.end().isPresent();
+        if (currentTag != null && !isDeltaScan) {
+            // Use scan.tag-name: tags survive snapshot expiration, scan.snapshot-id does not.
+            options.put(CoreOptions.SCAN_TAG_NAME.key(), currentTag);
+        } else {
+            options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        }
 
         org.apache.paimon.table.Table paimonNativeTable = getNativeTable(paimonTable.getNativeTable(),
                 tvrVersionRange).copy(options);
