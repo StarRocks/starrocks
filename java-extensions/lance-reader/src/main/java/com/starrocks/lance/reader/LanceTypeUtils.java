@@ -21,6 +21,7 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -73,14 +74,25 @@ public class LanceTypeUtils {
         } else if (arrowType instanceof ArrowType.Decimal) {
             ArrowType.Decimal decType = (ArrowType.Decimal) arrowType;
             return "decimal(" + decType.getPrecision() + "," + decType.getScale() + ")";
-        } else if (arrowType instanceof ArrowType.List) {
-            return "array";
-        } else if (arrowType instanceof ArrowType.Struct) {
-            return "struct";
+        } else if (arrowType instanceof ArrowType.List || arrowType instanceof ArrowType.FixedSizeList) {
+            throw new IllegalArgumentException("List types require child field information");
         } else {
             // Fallback for unsupported types
             return "string";
         }
+    }
+
+    private static String fromArrowField(Field field) {
+        ArrowType arrowType = field.getType();
+        if (arrowType instanceof ArrowType.List || arrowType instanceof ArrowType.FixedSizeList) {
+            List<Field> children = field.getChildren();
+            if (children.size() != 1) {
+                throw new IllegalArgumentException(
+                        "Lance list field must have exactly one child: " + field.getName());
+            }
+            return "array<" + fromArrowField(children.get(0)) + ">";
+        }
+        return fromArrowType(arrowType);
     }
 
     /**
@@ -89,7 +101,7 @@ public class LanceTypeUtils {
     public static Map<String, String> buildTypeMapping(Schema schema) {
         Map<String, String> typeMap = new HashMap<>();
         for (Field field : schema.getFields()) {
-            typeMap.put(field.getName(), fromArrowType(field.getType()));
+            typeMap.put(field.getName(), fromArrowField(field));
         }
         return typeMap;
     }

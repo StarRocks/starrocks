@@ -25,9 +25,18 @@ import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
 import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeStampMicroVector;
+import org.apache.arrow.vector.TimeStampMilliVector;
+import org.apache.arrow.vector.TimeStampNanoVector;
+import org.apache.arrow.vector.TimeStampSecVector;
+import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.complex.FixedSizeListVector;
+import org.apache.arrow.vector.complex.ListVector;
+import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.FieldType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +45,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -175,16 +186,67 @@ public class LanceColumnValueTest {
 
     @Test
     public void testGetDateTime() {
-        try (TimeStampMicroVector vector = new TimeStampMicroVector("timestamp", allocator)) {
-            // 2024-01-15T10:30:00 in micros since epoch
-            LocalDateTime expected = LocalDateTime.of(2024, 1, 15, 10, 30, 0);
-            long micros = expected.toInstant(ZoneOffset.UTC).getEpochSecond() * 1_000_000;
-            vector.allocateNew(1);
-            vector.setSafe(0, micros);
+        LocalDateTime expected = LocalDateTime.of(2024, 1, 15, 10, 30, 0, 123_000_000);
+        assertTimestamp(expected.withNano(0), new TimeStampSecVector("seconds", allocator), 1);
+        assertTimestamp(expected, new TimeStampMilliVector("millis", allocator), 1_000);
+        assertTimestamp(expected, new TimeStampMicroVector("micros", allocator), 1_000_000);
+        assertTimestamp(expected, new TimeStampNanoVector("nanos", allocator), 1_000_000_000);
+    }
+
+    @Test
+    public void testUnpackList() {
+        try (ListVector vector = ListVector.empty("list", allocator)) {
+            vector.addOrGetVector(FieldType.nullable(new ArrowType.Int(32, true)));
+            vector.allocateNew();
+            IntVector data = (IntVector) vector.getDataVector();
+            int start = vector.startNewValue(0);
+            data.setSafe(start, 10);
+            data.setSafe(start + 1, 20);
+            vector.endValue(0, 2);
             vector.setValueCount(1);
 
+            List<com.starrocks.jni.connector.ColumnValue> values = new ArrayList<>();
+            new LanceColumnValue(vector, 0).unpackArray(values);
+
+            assertEquals(2, values.size());
+            assertEquals(10, values.get(0).getInt());
+            assertEquals(20, values.get(1).getInt());
+        }
+    }
+
+    @Test
+    public void testUnpackFixedSizeList() {
+        try (FixedSizeListVector vector = FixedSizeListVector.empty("vector", 2, allocator)) {
+            vector.addOrGetVector(FieldType.nullable(
+                    new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)));
+            vector.allocateNew();
+            Float4Vector data = (Float4Vector) vector.getDataVector();
+            vector.setNotNull(0);
+            data.setSafe(0, 1.5f);
+            data.setSafe(1, 2.5f);
+            vector.setValueCount(1);
+
+            List<com.starrocks.jni.connector.ColumnValue> values = new ArrayList<>();
+            new LanceColumnValue(vector, 0).unpackArray(values);
+
+            assertEquals(2, values.size());
+            assertEquals(1.5f, values.get(0).getFloat());
+            assertEquals(2.5f, values.get(1).getFloat());
+        }
+    }
+
+    private void assertTimestamp(LocalDateTime expected, TimeStampVector vector, long unitsPerSecond) {
+        try (TimeStampVector closeableVector = vector) {
+            long value = expected.toInstant(ZoneOffset.UTC).getEpochSecond() * unitsPerSecond;
+            if (unitsPerSecond > 1) {
+                value += expected.getNano() / (1_000_000_000 / unitsPerSecond);
+            }
+            closeableVector.allocateNew(1);
+            closeableVector.setSafe(0, value);
+            closeableVector.setValueCount(1);
+
             assertEquals(expected,
-                    new LanceColumnValue(vector, 0).getDateTime(ColumnType.TypeValue.DATETIME));
+                    new LanceColumnValue(closeableVector, 0).getDateTime(ColumnType.TypeValue.DATETIME));
         }
     }
 }
