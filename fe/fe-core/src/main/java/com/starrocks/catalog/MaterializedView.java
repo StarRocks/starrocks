@@ -438,6 +438,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         private AsyncRefreshContext asyncRefreshContext;
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
+        // Wall-clock confirm time of the last successful refresh run, not the base-table data version (see lastRefreshTime).
+        @SerializedName(value = "lastFreshnessConfirmedAt")
+        private long lastFreshnessConfirmedAt;
 
         public MvRefreshScheme() {
             this.moment = RefreshMoment.IMMEDIATE;
@@ -497,10 +500,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastRefreshTime = lastRefreshTime;
         }
 
+        public long getLastFreshnessConfirmedAt() {
+            return lastFreshnessConfirmedAt;
+        }
+
+        public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+            this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+        }
+
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
+            res.lastFreshnessConfirmedAt = this.lastFreshnessConfirmedAt;
             if (this.asyncRefreshContext != null) {
                 res.asyncRefreshContext = this.asyncRefreshContext.copy();
             }
@@ -514,6 +526,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", type=" + type +
                     ", asyncRefreshContext=" + asyncRefreshContext +
                     ", lastRefreshTime=" + lastRefreshTime +
+                    ", lastFreshnessConfirmedAt=" + lastFreshnessConfirmedAt +
                     '}';
         }
     }

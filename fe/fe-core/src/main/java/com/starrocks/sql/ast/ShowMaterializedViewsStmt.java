@@ -68,7 +68,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
             "query_rewrite_status",
             "creator",
             "last_refresh_process_time",
-            "last_refresh_job_id"
+            "last_refresh_job_id",
+            "last_freshness_confirmed_at"
     );
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(

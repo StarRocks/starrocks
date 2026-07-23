@@ -63,6 +63,7 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | last_refresh_error_message | The reason why the last refresh failed (if the materialized view state is not active). |
 | rows                       | The number of data rows in the materialized view.            |
 | text                       | The statement used to create the materialized view.          |
+| last_freshness_confirmed_at | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `last_refresh_time` (the base-table data version), this is wall-clock time. Empty until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
 
 ## Examples
 
