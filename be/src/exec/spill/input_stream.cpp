@@ -226,9 +226,15 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(workgroup::YieldContext& 
     if (has_chunk()) {
         return read_from_buffer();
     }
-    // if prefetch failed, return empty chunk
-    DCHECK(false);
-    return std::make_unique<Chunk>();
+    // Buffer is empty and the stream is not at EOF: the restore/prefetch task finished without
+    // producing a chunk -- either a real I/O/deserialize error, or the query was cancelled while a
+    // restore task was in flight. Surface that as an error instead of asserting (debug: DCHECK
+    // abort) or returning an empty chunk (release: would be mistaken for valid data and silently
+    // drop restored rows). The underlying failure is recorded on the spiller's task status.
+    if (Status st = _spiller->task_status(); !st.ok()) {
+        return st;
+    }
+    return Status::InternalError("spill BufferedInputStream: no buffered chunk and stream is not at EOF");
 }
 
 Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {

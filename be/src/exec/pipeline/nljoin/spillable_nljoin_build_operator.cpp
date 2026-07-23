@@ -54,6 +54,18 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto spiller = _spill_channel->spiller();
 
+    // On cancellation, do not run spiller->flush() during teardown. The not-spilled branch below
+    // already delegates to NLJoinBuildOperator::set_finishing, which early-returns when cancelled;
+    // guard the spilled branch the same way to avoid touching spill state while the query is being
+    // torn down.
+    if (state->is_cancelled()) {
+        if (spiller != nullptr) {
+            spiller->cancel();
+        }
+        _spill_channel->set_finishing();
+        return NLJoinBuildOperator::set_finishing(state);
+    }
+
     if (!spiller->spilled()) {
         _spill_channel->set_finishing();
         RETURN_IF_ERROR(NLJoinBuildOperator::set_finishing(state));
