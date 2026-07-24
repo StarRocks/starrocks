@@ -236,4 +236,31 @@ public class RoutineLoadJobMetaTest {
         TRoutineLoadTask t = task.createRoutineLoadTask();
         Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_AVRO, t.getFormat());
     }
+
+    @Test
+    public void testKafkaTaskInfoCreateRoutineLoadTaskFormatAvro() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(105L, "kafka_avro_rl_job", db.getId(),
+                table.getId(), "localhost:9092", "topic1");
+        Map<String, String> jobProperties = Deencapsulation.getField(job, "jobProperties");
+        jobProperties.put("format", "avro");
+
+        String label = "kafka_avro_rl_label";
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(table.getId()), label, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                60, job.getComputeResource());
+
+        KafkaTaskInfo task = new KafkaTaskInfo(UUIDUtil.genUUID(), job, 1000, 2000,
+                com.google.common.collect.ImmutableMap.of(0, 0L), 3000);
+        task.setBeId(10001L);
+        Deencapsulation.setField(task, "txnId", txnId);
+        Deencapsulation.setField(task, "label", label);
+
+        TRoutineLoadTask t = task.createRoutineLoadTask();
+        Assertions.assertEquals(com.starrocks.thrift.TFileFormatType.FORMAT_AVRO, t.getFormat());
+    }
 }
