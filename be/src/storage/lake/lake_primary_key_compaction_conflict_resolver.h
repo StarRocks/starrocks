@@ -63,6 +63,11 @@ public:
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
+protected:
+    // Output segment row counts taken from the rowset metadata (segment_metas), so the base resolver's
+    // "without read data" path can advance the rows-mapper without opening any segment footer.
+    std::vector<uint32_t> output_segment_num_rows() const override;
+
 private:
     // input
     const TabletMetadata* _metadata = nullptr;
