@@ -50,13 +50,21 @@ entry, **unsure** → tracking issue.
   (`FROM order`, `CREATE INDEX index`), clear syntax slip. Confirm the intended
   feature exists (`read_query` on `information_schema`, `SHOW FUNCTIONS`,
   `table_overview`). → propose a fix (Step 2).
+  Also **fixable by reformatting** — a client transcript whose statement is itself
+  runnable (e.g. `MYSQL > select … from table(generate_series(…))`). The fix is a
+  doc cleanup: strip the `mysql>` / `MYSQL >` prompt from the ```sql block so it
+  holds only the statement, and move the pasted result into a **separate non-SQL
+  block** (```plaintext / ```text). Verify the cleaned SQL runs (Step 2) — if it
+  does, this is a fix, not an illustrative suppression.
 - **version/build-gated** — the function/config/keyword isn't in this build
   (verify it's absent). Docs may be correct for a newer release. → **do not
   rewrite**; *suppress* (and recommend a "Since vX.Y" note if the doc lacks one).
 - **needs-setup** — references objects an isolated run can't have; fix only if
   making it self-contained is trivial and preserves intent, else *suppress*.
-- **illustrative** — synopsis, cross-dialect comparison, client transcript,
-  documented expected-error. → *suppress*.
+- **illustrative** — synopsis, cross-dialect comparison, documented expected-error,
+  or a client transcript whose SQL genuinely can't run in isolation (placeholder
+  table/columns). → *suppress*. But a transcript whose SQL **does** run is *fixable*
+  by reformatting (above) — reformat it, don't suppress.
 - **unsure** → do not suppress; flag for a human in the tracking issue.
 
 The three durably-not-runnable classes (version-gated / needs-setup / illustrative)

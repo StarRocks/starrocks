@@ -103,26 +103,6 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:1c13991486da935c81f3989c3a86535347c5f48205466155954f235c0f129bc1",
-      "file": "docs/en/sql-reference/sql-functions/utility-functions/bar.md",
-      "line": 26,
-      "snippet": "MYSQL > select r, bar(r, 0, 10, 20) as x from table(generate",
-      "category": "illustrative",
-      "reason": "MySQL client transcript (MYSQL > prompt with sample output)",
-      "added": "2026-07-23",
-      "added_by": "sql-doc-autofix"
-    },
-    {
-      "fingerprint": "sha256:99a086ef533ceb9ee8aed6d8848653484f372ee9dba306518b59d0482ae6bc62",
-      "file": "docs/en/sql-reference/sql-functions/utility-functions/equiwidth_bucket.md",
-      "line": 26,
-      "snippet": "MYSQL > select r, equiwidth_bucket(r, 0, 10, 20) as x from t",
-      "category": "illustrative",
-      "reason": "MySQL client transcript (MYSQL > prompt with sample output)",
-      "added": "2026-07-23",
-      "added_by": "sql-doc-autofix"
-    },
-    {
       "fingerprint": "sha256:0e2066d0b50921b957a1b54232e4c159b1d28e40fed5df35d71bc6860fe1586d",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md",
       "line": 20,
