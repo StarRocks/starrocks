@@ -205,15 +205,18 @@ How should I deliver the 2 verified fixes?
   4. Type something.
 ```
 
-The skill produces two things:
+The skill produces:
 
 - A **draft `[Doc]` PR** with the verified fixes. Its body is filled from the repo's
   PR template — including the type, behavior-change, and version **backport** boxes —
-  so it can actually be merged. Review the edits, confirm the backport version(s),
-  then un-draft.
-- A **tracking issue** listing every example it did *not* auto-fix (version-gated,
-  not self-contained, illustrative, or needing judgment), so those aren't lost when
-  the run scrolls by. Work through that issue separately.
+  so it can actually be merged. The same PR also adds any **suppressions** (a
+  `## Suppressions` section) for examples that legitimately can't run here
+  (version-gated, illustrative, needs external setup). Once merged, those stop being
+  reported on every run — so the noise shrinks over time. Review the edits and the
+  suppressions, confirm the backport version(s), then un-draft.
+- A **tracking issue** holding only the examples that genuinely need a human's
+  judgment, so those aren't lost when the run scrolls by. It's updated in place each
+  run (and closed when empty). Work through that issue separately.
 
 Full behavior and the report format:
 [.claude/skills/sql-doc-autofix/README.md](../.claude/skills/sql-doc-autofix/README.md).

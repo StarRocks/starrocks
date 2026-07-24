@@ -39,18 +39,25 @@ misaligned failures are not doc rot.
 
 ## Step 1 — Classify each candidate (the guardrail)
 Read `doc_context` to understand what the example *teaches*, use the MCP server to
-check reality, then assign exactly one class:
+check reality, then assign exactly one class. Each class routes to one of three
+destinations (Step 3): **fix** → PR edit, **durably-not-runnable** → PR suppression
+entry, **unsure** → tracking issue.
 - **fixable** — renamed/removed function, reserved word as identifier
   (`FROM order`, `CREATE INDEX index`), clear syntax slip. Confirm the intended
   feature exists (`read_query` on `information_schema`, `SHOW FUNCTIONS`,
   `table_overview`). → propose a fix (Step 2).
 - **version/build-gated** — the function/config/keyword isn't in this build
   (verify it's absent). Docs may be correct for a newer release. → **do not
-  rewrite**; recommend a "Since vX.Y" note.
+  rewrite**; *suppress* (and recommend a "Since vX.Y" note if the doc lacks one).
 - **needs-setup** — references objects an isolated run can't have; fix only if
-  making it self-contained is trivial and preserves intent, else flag.
-- **illustrative** — synopsis, cross-dialect comparison, client transcript. → leave.
-- **unsure** → flag for a human.
+  making it self-contained is trivial and preserves intent, else *suppress*.
+- **illustrative** — synopsis, cross-dialect comparison, client transcript,
+  documented expected-error. → *suppress*.
+- **unsure** → do not suppress; flag for a human in the tracking issue.
+
+The three durably-not-runnable classes (version-gated / needs-setup / illustrative)
+are what previously reappeared every run. They now get a **suppression entry** so
+the checker stops re-reporting them — see Step 3.
 
 ## Step 2 — Propose + verify (fixable only)
 Work in an isolated scratch database via the MCP server:
@@ -65,12 +72,32 @@ write_query: USE docfix_scratch;   -- do ALL test writes here
 - On success record `file`, `line`, `before`, `after`, verified statement; then
   `write_query: DROP DATABASE docfix_scratch;`.
 
-## Step 3 — Deliver: a DRAFT PR for the fixes + a tracking ISSUE for the rest
-Produce **both**, so nothing scrolls by and gets lost:
+## Step 3 — Deliver: a DRAFT PR (fixes + suppressions) + a review-only tracking ISSUE
+Three destinations, so nothing scrolls by, and so durably-not-runnable examples
+**stop being re-reported every run**:
 
-**Draft PR — the verified fixes.** Branch off `origin/main` in a git worktree
-(docs fixes target `main`, then backport). Confirm each example exists on `main`
-before editing; apply each verified edit to its source `.md`/`.mdx`.
+**Suppressions — the durably-not-runnable classes.** For each version-gated /
+needs-setup / illustrative candidate, append an entry to
+`docs/scripts/sql_verify_suppressions.json` **in the same draft PR** (below). Copy
+the candidate's `fingerprint` from `/tmp/candidates.json` verbatim (do not
+recompute it) into an entry:
+```json
+{ "fingerprint": "<from candidates.json>", "file": "<file>", "line": <line>,
+  "snippet": "<first ~60 chars of the statement>", "category": "version-gated",
+  "reason": "<one line: why it won't run here>", "added": "<YYYY-MM-DD>",
+  "added_by": "sql-doc-autofix" }
+```
+`category` ∈ `version-gated | needs-setup | illustrative | expected-error`. Once
+this PR merges, the checker skips these by content hash — they never reappear (and
+re-surface only if the example text meaningfully changes). Suppression is a
+judgment call, so it lands **only** via the human-reviewed PR — never edit the file
+outside the PR, and **never suppress a `fixable` or `unsure` item**.
+
+**Draft PR — the verified fixes _and_ the suppression additions.** Branch off
+`origin/main` in a git worktree (docs fixes target `main`, then backport). Confirm
+each example exists on `main` before editing; apply each verified edit to its
+source `.md`/`.mdx`, and add the suppression entries to
+`docs/scripts/sql_verify_suppressions.json`.
 Build the PR body **from `.github/PULL_REQUEST_TEMPLATE.md`** — PRs missing the
 template's checkboxes cannot be merged, so render it and fill it in (do not write a
 freeform body, and `gh pr create --body` overrides the template so you must supply
@@ -80,6 +107,9 @@ the filled template yourself):
   behavior.` (a docs-only fix) and uncheck the default `Yes`
 - put the **Fixes** table (`file:line`, before → after, "verified: runs on
   `<cluster version>`") under *What I'm doing:*
+- add a **`## Suppressions`** section listing each entry added to
+  `sql_verify_suppressions.json` (`file:line` · category · one-line reason), so the
+  reviewer sees exactly which examples are being permanently silenced and can object
 - reference the tracking issue with a **non-closing** keyword — `Tracking: #<issue>`
   (or `Refs #<issue>`). Do **not** use `Fixes/Closes/Resolves #`: those auto-close
   the issue on merge, and it holds the *un*-fixed work. Clear the template's
@@ -89,14 +119,20 @@ the filled template yourself):
 
 Open it as a **draft** `[Doc]` PR; a human reviews and un-drafts.
 
-**Tracking issue — everything NOT auto-fixed.** So the version-gated /
-needs-setup / illustrative / review items are captured (not just flashed on
-screen), open a GitHub issue labeled `documentation,docs-maintainer`, titled
-`SQL doc examples needing review — <version>`. Body: a checkbox list grouped by
-category, each item `file:line` + its one-line reason. **If an open issue with
-that title already exists, update it instead of opening a duplicate.**
+**Tracking issue — only what needs a human.** The durably-not-runnable classes now
+go to the suppression list (above), so the issue holds **only `unsure` items** —
+the ones genuinely needing judgment. Open/update a GitHub issue labeled
+`documentation,docs-maintainer`, titled `SQL doc examples needing review —
+<version>`, with a checkbox list, each item `file:line` + its one-line reason.
+**If an open issue with that title already exists, update it** (don't duplicate):
+regenerate its body from this run's `unsure` set. Any previously-listed item you
+have now suppressed in this PR should be checked off with a note; if the list is
+**empty**, comment "all triaged" and **close** the issue. (On the first run after
+this change, the existing items are all durably-not-runnable — migrate them into
+suppression entries in the PR and close/empty the issue.)
 
-Cross-link the two (PR body → issue, issue → PR) and report both URLs at the end.
+Cross-link (PR body → issue when non-empty, issue → PR) and report all URLs at the
+end.
 
 ## Never
 - Never un-draft or merge; never commit without operator review.
@@ -105,3 +141,6 @@ Cross-link the two (PR body → issue, issue → PR) and report both URLs at the
   statements during verification.
 - Never rewrite an example to "make it pass" at the cost of what it teaches.
 - Never treat a version/build-gated failure as doc rot.
+- Never suppress a `fixable` or `unsure` example to silence it. Suppression is only
+  for durably-not-runnable examples, and every entry is reviewed in the PR before
+  merge — never edit `sql_verify_suppressions.json` outside the draft PR.

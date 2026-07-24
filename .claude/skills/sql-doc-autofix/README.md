@@ -49,15 +49,26 @@ python3 docs/scripts/autofix_candidates.py \
 Then invoke the **`sql-doc-autofix`** skill in Claude Code.
 
 ## What it produces
-Two things, so nothing is lost:
-1. A **draft** `[Doc]` PR (target `main`) with the **verified fixes** — its body is
-   built from `.github/PULL_REQUEST_TEMPLATE.md` with the required checkboxes filled
-   (Doc type, behavior-change = No, backport version), so it's actually mergeable.
-   You review, then un-draft.
-2. A **tracking issue** (`documentation,docs-maintainer`) listing every example it
-   did **not** auto-fix (version-gated / needs-setup / illustrative / review),
-   grouped and checkboxed — an existing same-title issue is updated rather than
-   duplicated. The PR and issue cross-link.
+1. A **draft** `[Doc]` PR (target `main`) with the **verified fixes** *and*
+   **suppression additions** — its body is built from
+   `.github/PULL_REQUEST_TEMPLATE.md` with the required checkboxes filled (Doc type,
+   behavior-change = No, backport version) plus a `## Suppressions` section listing
+   what it's silencing, so it's mergeable and reviewable. You review, then un-draft.
+2. A **tracking issue** (`documentation,docs-maintainer`) holding **only the items
+   that need a human** (`unsure`) — an existing same-title issue is updated rather
+   than duplicated, and closed when empty. The PR and issue cross-link.
+
+## Suppression list
+`docs/scripts/sql_verify_suppressions.json` is the durable "already reviewed —
+stop reporting this" record, so **durably-not-runnable examples aren't re-flagged
+every run**. Key points:
+- **Keyed by content hash** (`sample_fingerprint`), not `file:line` — an entry
+  survives the block moving, and **re-surfaces** if the example text is meaningfully
+  edited (reindenting doesn't count). The checker skips a match as `SKIP: suppressed`
+  before running it, and prints a "N suppressed" line so nothing is hidden silently.
+- **Lives with the tooling** (on `main`), so one list serves every version.
+- **Human-reviewed only:** the skill *proposes* entries in the draft PR; nothing is
+  silenced until you merge. Disable with `run_sql_samples.py --no-suppressions`.
 
 ## Classification (the guardrail)
 **"Executes" ≠ "correct documentation."** Every candidate is classified before any

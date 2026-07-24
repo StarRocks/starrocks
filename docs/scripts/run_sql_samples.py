@@ -53,10 +53,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from extract_sql_samples import SqlSample, extract_samples, derive_repo_root  # noqa: E402
+from extract_sql_samples import (  # noqa: E402
+    SqlSample, extract_samples, derive_repo_root, sample_fingerprint)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en/sql-reference"   # Phase 1 scope
+# Content-hashed "known / won't-fix" list, keyed by sample_fingerprint. Lives with
+# the tooling (not the docs checkout), so one list serves every version. Populated
+# by the sql-doc-autofix skill via reviewed PRs; a matched sample becomes
+# SKIP:suppressed and is never run or reported. See docs/scripts/README notes.
+DEFAULT_SUPPRESSIONS = Path(__file__).resolve().parent / "sql_verify_suppressions.json"
 
 # ── Skip rules: samples a bare cluster can't or shouldn't run ────────────────
 # Each entry: (reason, compiled regex). Matched against the sample body.
@@ -163,8 +169,34 @@ class Result:
     statement: str = ""       # the specific statement that failed
 
 
-def classify(body: str, profile: str) -> tuple[str, str]:
+def load_suppressions(path) -> dict[str, str]:
+    """Read the suppression list → {fingerprint: category}. A fingerprint here is
+    an example a human has already reviewed and judged won't-fix (version-gated,
+    illustrative, needs-setup, expected-error), so the checker should stop
+    re-reporting it. A missing/empty/unreadable file means no suppressions."""
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text())
+    except Exception:                                # noqa: BLE001
+        return {}
+    out: dict[str, str] = {}
+    for e in data.get("suppressions", []):
+        fp = e.get("fingerprint")
+        if fp:
+            out[fp] = e.get("category", "suppressed")
+    return out
+
+
+def classify(body: str, profile: str, suppressed: dict | None = None) -> tuple[str, str]:
     """Return (action, reason): action is 'run' or 'skip'."""
+    # A previously-reviewed won't-fix example: skip before running or matching any
+    # rule, so it drops out of FAIL and the report entirely.
+    if suppressed and sample_fingerprint(body) in suppressed:
+        return "skip", "suppressed"
     for reason, rx in _SKIP_RULES:
         if rx.search(body):
             return "skip", reason
@@ -218,7 +250,8 @@ def split_statements(sql: str) -> list[str]:
 
 
 # ── Execution ────────────────────────────────────────────────────────────────
-def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: str) -> list[Result]:
+def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: str,
+             suppressed: dict | None = None) -> list[Result]:
     import pymysql  # lazy: only needed for live runs
 
     def connect():
@@ -275,7 +308,7 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
             continue
 
         for s in samples:
-            action, reason = classify(s.body, profile)
+            action, reason = classify(s.body, profile, suppressed)
             if action == "skip":
                 results.append(Result(s, "SKIP", reason)); continue
             failed = None
@@ -332,11 +365,12 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
     return results, cluster_version
 
 
-def plan_only(by_file: dict[str, list[SqlSample]], profile: str) -> list[Result]:
+def plan_only(by_file: dict[str, list[SqlSample]], profile: str,
+              suppressed: dict | None = None) -> list[Result]:
     results = []
     for _, samples in sorted(by_file.items()):
         for s in samples:
-            action, reason = classify(s.body, profile)
+            action, reason = classify(s.body, profile, suppressed)
             results.append(Result(s, "SKIP" if action == "skip" else "RUN", reason))
     return results
 
@@ -364,6 +398,10 @@ def report_text(results: list[Result], dry: bool, meta: dict | None = None) -> s
     counts = summarize(results)
     head = "PLAN" if dry else "RESULTS"
     L.append(f"\n{head}: " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    suppressed_n = sum(1 for r in results if r.status == "SKIP" and r.reason == "suppressed")
+    if suppressed_n:
+        L.append(f"({suppressed_n} previously-reviewed example(s) suppressed via "
+                 f"sql_verify_suppressions.json)")
     if dry:
         skips = {}
         for r in results:
@@ -405,8 +443,12 @@ def report_markdown(results: list[Result], meta: dict | None = None) -> str:
               f"&nbsp; **Profile:** `{meta['profile']}`",
               "", f"> {meta['verdict']}", ""]
     L += ["**Signals:** " + " · ".join(f"{k} {counts.get(k, 0)}"
-                                      for k in ("PASS", "FAIL", "UNRESOLVED", "ENV", "SKIP")), "",
-         "- **FAIL** — executes with an error (the checklist below).",
+                                      for k in ("PASS", "FAIL", "UNRESOLVED", "ENV", "SKIP")), ""]
+    suppressed_n = sum(1 for r in results if r.status == "SKIP" and r.reason == "suppressed")
+    if suppressed_n:
+        L += [f"_{suppressed_n} previously-reviewed example(s) suppressed via "
+              f"`sql_verify_suppressions.json` — not re-listed here._", ""]
+    L += ["- **FAIL** — executes with an error (the checklist below).",
          "- **UNRESOLVED** — references a db/table/column/function defined elsewhere; separate signal.",
          "- **ENV** — test-cluster shape (single-BE replication), not a doc issue.", "",
          f"## Doc-rot candidates to review ({len(fails)})", ""]
@@ -484,7 +526,14 @@ def main() -> int:
                     help="Override the docs version label (default: git branch of the docs checkout)")
     ap.add_argument("--require-aligned", action="store_true",
                     help="Exit non-zero if the docs version and cluster version are not aligned")
+    ap.add_argument("--suppressions", type=Path, default=DEFAULT_SUPPRESSIONS,
+                    help="JSON list of reviewed won't-fix examples to skip "
+                         "(default: docs/scripts/sql_verify_suppressions.json)")
+    ap.add_argument("--no-suppressions", action="store_true",
+                    help="Ignore the suppression list (report every example)")
     args = ap.parse_args()
+
+    suppressed = {} if args.no_suppressions else load_suppressions(args.suppressions)
 
     samples = [s for s in extract_samples(args.docs_root) if s.runnable]
     by_file: dict[str, list[SqlSample]] = {}
@@ -494,11 +543,12 @@ def main() -> int:
         v.sort(key=lambda x: x.line_start)
 
     if args.dry_run:
-        results, cluster_version = plan_only(by_file, args.profile), ""
+        results, cluster_version = plan_only(by_file, args.profile, suppressed), ""
     else:
         results, cluster_version = run_live(
             by_file, dict(host=args.host, port=args.port,
-                          user=args.user, password=args.password), args.profile)
+                          user=args.user, password=args.password), args.profile,
+            suppressed)
 
     meta = build_meta(cluster_version, docs_version(args.docs_root, args.docs_version),
                       args.profile, args.docs_root)
@@ -508,7 +558,8 @@ def main() -> int:
         print(json.dumps({"meta": meta,
                           "results": [{"file": r.sample.file, "line": r.sample.line_start,
                                        "status": r.status, "reason": r.reason,
-                                       "statement": r.statement} for r in results]}, indent=2))
+                                       "statement": r.statement,
+                                       "fingerprint": r.sample.fingerprint} for r in results]}, indent=2))
     elif args.format == "md":
         print(report_markdown(results, meta))
     else:

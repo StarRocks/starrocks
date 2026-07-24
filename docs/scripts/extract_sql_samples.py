@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import re
@@ -55,6 +56,19 @@ def derive_repo_root(docs_root: Path) -> Path:
         if (parent / "docs" / "en").is_dir():
             return parent
     return REPO_ROOT
+
+
+def sample_fingerprint(body: str) -> str:
+    """Stable content hash of a SQL sample, used to suppress known / won't-fix
+    examples by *content* rather than by line number (which shifts whenever a
+    block moves). Normalization tolerates trivial reformatting — trailing
+    whitespace and runs of spaces/tabs are collapsed — but keeps line breaks and
+    case (case matters inside string literals). So reindenting an example keeps
+    the same fingerprint, while changing a token changes it, and a meaningfully
+    edited example re-surfaces for re-review."""
+    lines = [re.sub(r"[ \t]+", " ", ln.strip()) for ln in body.strip().splitlines()]
+    normalized = "\n".join(lines)
+    return "sha256:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 # ── SQL category detection ───────────────────────────────────────────────────
 
@@ -108,6 +122,7 @@ class SqlSample:
     category: str     # DDL | DML | SHOW_ADMIN | SET | SELECT | OTHER
     runnable: bool    # True if no placeholder patterns detected
     body: str         # raw SQL text
+    fingerprint: str = ""   # content hash (sample_fingerprint); stable suppression key
 
 
 # ── Extraction ───────────────────────────────────────────────────────────────
@@ -146,6 +161,7 @@ def extract_samples(docs_root: Path, repo_root: Path | None = None) -> list[SqlS
                             category=_categorize(body),
                             runnable=_is_runnable(body),
                             body=body,
+                            fingerprint=sample_fingerprint(body),
                         )
                     )
             i += 1
@@ -222,7 +238,7 @@ def _fmt_csv(samples: list[SqlSample]) -> str:
     buf = io.StringIO()
     writer = csv.DictWriter(
         buf,
-        fieldnames=["file", "line_start", "category", "runnable", "body"],
+        fieldnames=["file", "line_start", "category", "runnable", "body", "fingerprint"],
         lineterminator="\n",
     )
     writer.writeheader()

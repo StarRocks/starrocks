@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
+  "suppressions": []
+}

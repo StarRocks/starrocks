@@ -48,6 +48,7 @@ def main() -> int:
             "line": r["line"],
             "statement": r["statement"],
             "error": r["reason"],
+            "fingerprint": r.get("fingerprint", ""),   # stable suppression key
             "doc_context": prose,
         })
     if args.limit:
