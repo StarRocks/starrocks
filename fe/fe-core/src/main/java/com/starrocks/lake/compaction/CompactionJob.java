@@ -43,6 +43,11 @@ public class CompactionJob {
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks = Collections.emptyList();
+    // Set once every abort RPC has been delivered, so abort() (re-issued every scheduler tick by the
+    // tablet-reshard cleaning loop) stops resending after delivery but still retries a failed abort RPC.
+    // volatile for cross-thread visibility (abort() is called from both the compaction scheduler thread
+    // and the reshard cleaning thread); the check-then-set is deliberately not atomic — see abort().
+    private volatile boolean aborted = false;
     private boolean allowPartialSuccess = false;
     private final ComputeResource computeResource;
     private String warehouse;
@@ -169,8 +174,34 @@ public class CompactionJob {
         this.scoreAfter = scoreAfter;
     }
 
+    /**
+     * Requests abort of every task's compaction RPC. Idempotent: the tablet-reshard cleaning loop
+     * re-issues it every scheduler tick until the job leaves the running set, and it stops resending
+     * once all abort RPCs have been delivered. A caller can watch {@link #isAborted()} across a call to
+     * detect the false-&gt;true transition and, e.g., abort the compaction transaction exactly once.
+     */
     public void abort() {
-        tasks.forEach(CompactionTask::abort);
+        // The check-then-set is intentionally not atomic (see the volatile field): concurrent callers may
+        // resend duplicate (idempotent) abort RPCs for the same tasks, but the flag must only be set after
+        // delivery succeeds, which a compareAndSet at entry could not express.
+        if (aborted) {
+            return;
+        }
+        boolean allDelivered = true;
+        for (CompactionTask task : tasks) {
+            if (!task.abort()) {
+                allDelivered = false;
+            }
+        }
+        // Only mark the job aborted once every abort RPC was delivered, so a transient RPC failure is
+        // retried on the next tick instead of leaving the compaction running.
+        if (allDelivered) {
+            aborted = true;
+        }
+    }
+
+    public boolean isAborted() {
+        return aborted;
     }
 
     public PhysicalPartition getPartition() {
