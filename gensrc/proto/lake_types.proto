@@ -354,6 +354,12 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
+
+    // Tags 50, 51 are occupied by downstream distributions and already persisted
+    // in downstream tablet metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    repeated int64 placeholder_50 = 50;
+    optional bytes placeholder_51 = 51;
 }
 
 message MetadataUpdateInfoPB {

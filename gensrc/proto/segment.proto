@@ -352,4 +352,10 @@ message BloomFilterIndexPB {
 
 message BuiltinInvertedIndexPB {
     optional BitmapIndexPB bitmap_index = 1;
+    // Tags 2-4 are occupied by downstream distributions and already persisted
+    // in downstream segment metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    optional int32 placeholder_2 = 2;
+    optional bytes placeholder_3 = 3;
+    optional bytes placeholder_4 = 4;
 }

@@ -36,10 +36,19 @@ EncryptionKey::EncryptionKey() = default;
 EncryptionKey::EncryptionKey(EncryptionKeyPB pb) : _pb(std::move(pb)) {}
 EncryptionKey::~EncryptionKey() = default;
 
+static bool is_downstream_placeholder_type(EncryptionKeyTypePB type) {
+    return type == PLACEHOLDER_21 || type == PLACEHOLDER_22 || type == PLACEHOLDER_23;
+}
+
 static const std::string& get_identifier_from_pb(const EncryptionKeyPB& pb) {
     switch (pb.type()) {
     case NORMAL_KEY:
         return pb.has_plain_key() ? pb.plain_key() : pb.encrypted_key();
+    case PLACEHOLDER_21:
+    case PLACEHOLDER_22:
+    case PLACEHOLDER_23:
+        // downstream-occupied placeholder values, never produced by upstream
+        break;
     }
     CHECK(false) << fmt::format("get_identifier_from_pb not supported for type:{}", pb.type());
 }
@@ -121,6 +130,11 @@ StatusOr<std::unique_ptr<EncryptionKey>> EncryptionKey::create_from_pb(Encryptio
     switch (pb.type()) {
     case EncryptionKeyTypePB::NORMAL_KEY:
         return std::make_unique<NormalKey>(std::move(pb));
+    case EncryptionKeyTypePB::PLACEHOLDER_21:
+    case EncryptionKeyTypePB::PLACEHOLDER_22:
+    case EncryptionKeyTypePB::PLACEHOLDER_23:
+        // downstream-occupied placeholder values, never produced by upstream
+        break;
     }
     return Status::NotSupported(fmt::format("key type not supported:{}", pb.type()));
 }
@@ -150,6 +164,15 @@ Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::v
                                           std::vector<std::unique_ptr<EncryptionKey>>& owned_keys,
                                           bool cache_last_key) {
     int nkey = metaPb.key_hierarchy_size();
+    // Downstream-occupied placeholder key types may appear in metadata written by
+    // downstream distributions; reject them up front instead of crashing later in
+    // the identifier/cache path.
+    for (int k = 0; k < nkey; k++) {
+        if (is_downstream_placeholder_type(metaPb.key_hierarchy(k).type())) {
+            return Status::NotSupported(
+                    fmt::format("encryption key type not supported:{}", metaPb.key_hierarchy(k).type()));
+        }
+    }
     int i = nkey - 1;
     for (; i >= 0; i--) {
         bool use_cache = (i != nkey - 1) || cache_last_key;
