@@ -151,6 +151,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyze(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        analyzeState.registerLocalScope(scope);
         Visitor visitor = new Visitor(analyzeState, session);
         bottomUpAnalyze(visitor, expression, scope);
     }
@@ -161,6 +162,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyzeWithVisitor(Expr expression, AnalyzeState analyzeState, Scope scope, Visitor visitor) {
+        analyzeState.registerLocalScope(scope);
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -713,6 +715,7 @@ public class ExpressionAnalyzer {
             // construct a new scope to analyze the lambda function
             Scope lambdaScope = new Scope(args, scope);
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
+            AnalyzerUtils.verifyNoAIFunctions(node.getChild(0), "Lambda function body");
             node.setType(FunctionType.FUNCTION);
             scope.clearLambdaInputs();
             return null;
@@ -1151,6 +1154,7 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
+                verifyNoAiInConditionalFunction(node);
                 return null;
             }
 
@@ -1175,6 +1179,7 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
+                    verifyNoAiInConditionalFunction(node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1189,7 +1194,18 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
+            verifyNoAiInConditionalFunction(node);
             return null;
+        }
+
+        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+            String resolvedFunctionName = node.getFn().functionName();
+            if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.NULLIF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.COALESCE.equalsIgnoreCase(resolvedFunctionName)) {
+                AnalyzerUtils.verifyNoAIFunctions(node, "conditional expression");
+            }
         }
 
         /**
@@ -1624,6 +1640,7 @@ public class ExpressionAnalyzer {
             }
 
             node.setType(returnType);
+            AnalyzerUtils.verifyNoAIFunctions(node, "conditional expression");
             return null;
         }
 

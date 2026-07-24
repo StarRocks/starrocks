@@ -22,6 +22,27 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: Flink/Spark SQLによって作成されたスキャンタスクの総数。
 
+## `ai_http_requests_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送レイヤーが受け付けた AI HTTP attempt の総数です。最初の attempt と再試行 attempt の両方を含みます。`AIHttpClient::submit` が成功を返した場合にのみカウントされ、admission の待機と同期的に拒否された送信はカウントされません。
+
+## `ai_http_retries_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 受け付けられた AI HTTP 再試行 attempt の総数です。最初の attempt は含まれず、スケジュールされた後に転送レイヤーが受け付ける前にキャンセルされた再試行もカウントされません。このため、このカウンターは常に `ai_http_requests_total` 以下です。
+
+## `ai_http_timeouts_total`
+
+- タイプ: Counter
+- ラベル: なし
+- 単位: カウント
+- 説明: 転送タイムアウト、または request/query deadline の期限切れによって終了した、受け付け済み AI HTTP attempt の総数です。受け付けられた各 attempt は最大 1 回だけカウントされます。キャンセル、シャットダウン、および HTTP attempt が受け付けられる前に到達した deadline はカウントされません。
+
 ## `async_delta_writer_queue_count`
 
 - 単位: カウント

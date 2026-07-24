@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -230,6 +231,119 @@ public class AnalyzerUtils {
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof GroupingFunctionCallExpr, calls);
         if (!calls.isEmpty()) {
             throw new SemanticException(clause + " clause cannot contain grouping", expression.getPos());
+        }
+    }
+
+    public static void verifyNoAIFunctions(Expr expression, String clause) {
+        FunctionCallExpr function = findFirstAIFunction(expression);
+        if (function != null) {
+            throw new SemanticException(clause + " cannot contain AI function "
+                    + function.getFunctionName(), expression.getPos());
+        }
+    }
+
+    public static boolean containsAIFunction(ParseNode node) {
+        return findFirstAIFunction(node) != null;
+    }
+
+    private static FunctionCallExpr findFirstAIFunction(ParseNode node) {
+        AIFunctionVisitor visitor = new AIFunctionVisitor();
+        visitor.visit(node);
+        return visitor.firstAIFunction;
+    }
+
+    private static class AIFunctionVisitor extends AstTraverser<Void, Void> {
+        private FunctionCallExpr firstAIFunction;
+
+        @Override
+        public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+            if (firstAIFunction == null && expr.getFn() != null && expr.getFn().isAi()) {
+                firstAIFunction = expr;
+            }
+            return super.visitExpression(expr, context);
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(cte -> visit(cte, context));
+            }
+            node.getRelations().forEach(relation -> visit(relation, context));
+            if (node.getOrderBy() != null) {
+                node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitValues(ValuesRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(cte -> visit(cte, context));
+            }
+            if (node.getOrderBy() != null) {
+                node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+            }
+            node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
+            return null;
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            if (node.getChildExpressions() != null) {
+                node.getChildExpressions().forEach(this::visit);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            return super.visitJoin(node, context);
+        }
+
+        @Override
+        public Void visitPivotRelation(PivotRelation node, Void context) {
+            if (node.getQuery() != null) {
+                visit(node.getQuery());
+            }
+            node.getAggregateFunctions().forEach(aggregation -> visit(aggregation.getFunctionCallExpr()));
+            node.getRewrittenAggFunctions().forEach(this::visit);
+            return null;
+        }
+    }
+
+    static void verifyNoCorrelatedAIFunctionsInQueryBlock(AnalyzeState analyzeState) {
+        if (!analyzeState.hasOuterColumnReference()) {
+            return;
+        }
+
+        for (Expr expression : analyzeState.getOutputExpressions()) {
+            verifyNoCorrelatedAIFunctionsInQueryBlock(expression, "SELECT list");
+        }
+        if (analyzeState.getPredicate() != null) {
+            verifyNoCorrelatedAIFunctionsInQueryBlock(analyzeState.getPredicate(), "WHERE clause");
+        }
+        if (analyzeState.getHaving() != null) {
+            verifyNoCorrelatedAIFunctionsInQueryBlock(analyzeState.getHaving(), "HAVING clause");
+        }
+        for (OrderByElement orderByElement : analyzeState.getOrderBy()) {
+            verifyNoCorrelatedAIFunctionsInQueryBlock(orderByElement.getExpr(), "ORDER BY clause");
+        }
+        for (Expr joinOnPredicate : analyzeState.getJoinOnPredicates()) {
+            verifyNoCorrelatedAIFunctionsInQueryBlock(joinOnPredicate, "JOIN ON clause");
+        }
+    }
+
+    private static void verifyNoCorrelatedAIFunctionsInQueryBlock(Expr expression, String clause) {
+        AIFunctionVisitor visitor = new AIFunctionVisitor() {
+            @Override
+            public Void visitSubqueryExpr(Subquery node, Void context) {
+                return null;
+            }
+        };
+        visitor.visit(expression);
+        if (visitor.firstAIFunction != null) {
+            throw new SemanticException(clause + " cannot contain correlated AI function "
+                    + visitor.firstAIFunction.getFunctionName(), visitor.firstAIFunction.getPos());
         }
     }
 
@@ -2035,6 +2149,27 @@ public class AnalyzerUtils {
                     throw new SemanticException("Materialized view query statement select item " +
                             ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
                 }
+                return super.visitFunctionCall(expr, context);
+            }
+
+            @Override
+            public Void visitSetOp(SetOperationRelation node, Void context) {
+                super.visitSetOp(node, context);
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitValues(ValuesRelation node, Void context) {
+                if (node.hasWithClause()) {
+                    node.getCteRelations().forEach(cte -> visit(cte, context));
+                }
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
                 return null;
             }
         }.visit(node);

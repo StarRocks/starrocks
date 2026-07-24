@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.rule.implementation.AIProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.BenchmarkScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
@@ -99,6 +100,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneAIProjectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
@@ -143,6 +145,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAIProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
@@ -208,6 +211,7 @@ public class RuleSet {
             new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
+            new AIProjectImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),
             new AssertOneRowImplementationRule(),
@@ -259,6 +263,7 @@ public class RuleSet {
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(
             new PruneScanColumnRule(),
             new PruneHDFSScanColumnRule(),
+            new PruneAIProjectColumnsRule(),
             new PruneProjectColumnsRule(),
             new PruneFilterColumnsRule(),
             new PruneUKFKGroupByKeysRule(), // Put this before PruneAggregateColumnsRule
@@ -286,6 +291,7 @@ public class RuleSet {
                     new PushDownPredicateWindowRule(),
                     new PushDownPredicateJoinRule(),
                     new PushDownJoinOnClauseRule(),
+                    new PushDownPredicateAIProjectRule(),
                     new PushDownPredicateProjectRule(),
                     new PushDownPredicateUnionRule(),
                     new PushDownPredicateExceptRule(),

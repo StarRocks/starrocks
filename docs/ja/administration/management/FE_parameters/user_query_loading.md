@@ -82,6 +82,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## クエリエンジン
 
+### `ai_default_chat_endpoint`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：SYSTEM `ai_complete` 呼び出しが使用する完全な HTTPS POST URL。URL にはホストが必要で、ユーザー情報、フラグメント、制御文字を含めることはできません。値が空の場合、endpoint を設定するまで SYSTEM `ai_complete` の解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。API key は FE 構成項目ではありません。各 BE が `AI_FUNCTION_MODEL_API_KEY` をローカルで読み取り、FE はクエリプランでキーを送信しません。AI クエリを実行するすべての BE で `AI_FUNCTION_MODEL_ENDPOINT` をこの URL と完全に同一の値に設定し、BE のローカル認証情報を管理者が承認した endpoint にバインドする必要があります。そのため FE endpoint を変更した場合は、この環境変数も更新し、新しい AI クエリを実行する前に対象 BE を再起動する必要があります。
+- 導入時期：-
+
+### `ai_default_chat_model`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 導入時期：-
+
+### `ai_default_chat_provider`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 有効な値：`openai_compatible`
+- 変更可能：Yes
+- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。空またはサポートされていない値の場合、解析は失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 導入時期：-
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - デフォルト：60000

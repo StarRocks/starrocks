@@ -40,6 +40,106 @@ This topic introduces the following types of BE configurations:
 
 ## Query
 
+### ai_function_request_timeout_ms
+
+- Default: 600000
+- Type: Int
+- Unit: Milliseconds
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum independent lifetime of one AI task, covering admission, the initial HTTP attempt, all retries and backoff, and completion classification. These stages share one absolute request deadline; the timeout does not restart for each attempt. At each asynchronous boundary, the effective deadline is the earlier of this immutable request deadline and the query's current deadline. Query cancellation and deadline updates remain live for the lifetime of the task. `0` disables the independent request limit, so only the live query lifecycle applies. Reduce the value to fail slow model calls sooner. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_connect_timeout_ms
+
+- Default: 10000
+- Type: Int
+- Unit: Milliseconds
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum time allowed to establish the connection for an AI HTTP attempt. When the independent request deadline is enabled, the transport also bounds connection establishment by the remaining request lifetime without extending that deadline. `0` disables the independent connection limit. If both independent limits are `0`, the transport installs no static connection or request timeout; live query cancellation and deadline checks still apply. Reduce the value to detect unreachable model endpoints sooner, or increase it for networks with slow connection establishment. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_response_bytes
+
+- Default: 8388608
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_worker_thread_num
+
+- Default: 16
+- Type: Int
+- Unit: Threads
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Number of workers that process AI HTTP completions and response classification. Increase it when completion processing is backlogged; decrease it to limit CPU and memory overhead. This does not change the fixed AI completion-queue capacity established at BE startup. Runtime updates take effect live by resizing the worker pool and require no BE restart.
+- Introduced in: -
+
+### ai_function_sub_chunk_size
+
+- Default: 64
+- Type: Int
+- Unit: Rows
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum number of rows grouped into an AI execution sub-chunk. Smaller values provide finer scheduling and cancellation granularity but add scheduling overhead; larger values reduce that overhead but retain more rows per task. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_retries
+
+- Default: 3
+- Type: Int
+- Unit: Attempts
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum shared retry ordinal allowed when the latest failure is a retryable transport or provider failure. The initial HTTP attempt is excluded. Ordinary and throttle retries consume the same retry ordinal; this limit is not added to the throttle limit. Set it to `0` to disable retries after ordinary retryable failures. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_retries_on_throttle
+
+- Default: 5
+- Type: Int
+- Unit: Attempts
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum shared retry ordinal allowed when the latest failure is provider throttling, such as an HTTP 429 response. The initial HTTP attempt is excluded. Ordinary and throttle retries consume the same retry ordinal, so this is a different ceiling for the current failure class, not an independent retry budget. Set it to `0` to disable retries after throttling. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_on_error
+
+- Default: ignore
+- Type: String
+- Unit: -
+- Valid values: `ignore`, `fail`
+- Is mutable: Yes
+- Description: Controls row-level AI function failures. `ignore` returns NULL for a failed row and continues the query, while `fail` aborts the query. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_rate_limit_qps_chat
+
+- Default: 128
+- Type: Int
+- Unit: Requests per second
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Per-BE request admission rate for each chat/text bucket, keyed by endpoint, credential, and capability. Lower it to comply with provider quotas or reduce outbound load; increase it only when the provider and BE have sufficient capacity. Runtime updates take effect live, wake queued admissions, and require no BE restart.
+- Introduced in: -
+
+### ai_function_max_inflight
+
+- Default: 512
+- Type: Int
+- Unit: Requests
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Process-wide maximum number of AI HTTP attempts that can concurrently hold an in-flight admission permit. Lower it to bound HTTP and response-memory pressure. This is an admission limit, not a per-query quota. Runtime updates take effect live, wake queued admissions, and require no BE restart; the fixed completion-queue capacity established at startup does not change.
+- Introduced in: -
+
 ### agg_hash_map_prefetch_dist
 
 - Default: 16

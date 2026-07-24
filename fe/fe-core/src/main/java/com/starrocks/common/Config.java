@@ -4862,4 +4862,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
             "Default false for security. Set true to allow internal service calls.")
     public static boolean http_request_allow_private_in_allowlist = false;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

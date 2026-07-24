@@ -20,6 +20,30 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// AI function runtime configuration. Values are validated and published as complete runtime snapshots before use.
+// A zero request timeout leaves the live query lifecycle as the only deadline.
+CONF_mInt64(ai_function_request_timeout_ms, "600000");
+
+// A zero connect timeout disables the independent connection cap.
+CONF_mInt64(ai_function_connect_timeout_ms, "10000");
+
+CONF_mInt64(ai_function_max_response_bytes, "8388608");
+
+CONF_mInt32(ai_function_worker_thread_num, "16");
+
+CONF_mInt32(ai_function_sub_chunk_size, "64");
+
+CONF_mInt32(ai_function_max_retries, "3");
+
+CONF_mInt32(ai_function_max_retries_on_throttle, "5");
+
+CONF_mString(ai_function_on_error, "ignore");
+
+CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+
+CONF_mInt32(ai_function_max_inflight, "512");
+
+// Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
 CONF_Int32(llm_max_queue_size, "4096");
 
 CONF_Int32(llm_max_concurrent_queries, "8");

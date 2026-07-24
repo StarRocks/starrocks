@@ -92,10 +92,13 @@ public class SelectAnalyzer {
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        groupByExpressions.forEach(expression -> AnalyzerUtils.verifyNoAIFunctions(expression, "GROUP BY clause"));
         widenGroupingKeyNullability(groupByClause, outputScope, outputExpressions, groupByExpressions);
 
         boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
+            outputExpressions.forEach(expression ->
+                    AnalyzerUtils.verifyNoAIFunctions(expression, "SELECT DISTINCT"));
             if (!groupByExpressions.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                         .verify(outputExpressions);
@@ -115,6 +118,8 @@ public class SelectAnalyzer {
         List<Expr> orderByExpressions =
                 orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
 
+        AnalyzerUtils.verifyNoCorrelatedAIFunctionsInQueryBlock(analyzeState);
+
         analyzeGroupingOperations(analyzeState, groupByClause, outputExpressions);
 
         List<Expr> sourceExpressions = new ArrayList<>(outputExpressions);
@@ -124,6 +129,8 @@ public class SelectAnalyzer {
 
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
+        aggregates.forEach(aggregate -> aggregate.getChildren().forEach(argument ->
+                AnalyzerUtils.verifyNoAIFunctions(argument, "aggregate function arguments")));
         boolean isGroupByAll = groupByClause != null
                 && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
         boolean isAggregationQuery = AnalyzerUtils.isAggregate(aggregates, groupByExpressions) ||
@@ -462,6 +469,8 @@ public class SelectAnalyzer {
             outputWindowFunctions.addAll(window);
         }
         analyzeState.setOutputAnalytic(outputWindowFunctions);
+        outputWindowFunctions.forEach(expression ->
+                AnalyzerUtils.verifyNoAIFunctions(expression, "window function"));
 
         List<AnalyticExpr> orderByWindowFunctions = new ArrayList<>();
         for (Expr expression : orderByExpressions) {
@@ -474,6 +483,8 @@ public class SelectAnalyzer {
             orderByWindowFunctions.addAll(window);
         }
         analyzeState.setOrderByAnalytic(orderByWindowFunctions);
+        orderByWindowFunctions.forEach(expression ->
+                AnalyzerUtils.verifyNoAIFunctions(expression, "window function"));
     }
 
     private void analyzeWhere(Expr whereClause, AnalyzeState analyzeState, Scope scope) {
