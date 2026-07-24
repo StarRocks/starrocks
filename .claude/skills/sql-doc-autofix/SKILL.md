@@ -32,8 +32,12 @@ DOCS=../sr-branch-$SR_VERSION/docs/en/sql-reference
 python3 docs/scripts/run_sql_samples.py --docs-root "$DOCS" \
     --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run.json
 python3 docs/scripts/autofix_candidates.py --run-json /tmp/run.json \
-    --repo ../sr-branch-$SR_VERSION --limit 20 > /tmp/candidates.json
+    --repo ../sr-branch-$SR_VERSION > /tmp/candidates.json
 ```
+Triage **every** FAIL in the run — do not cap the batch. Suppression means a
+triaged item won't recur, so there's no benefit to leaving a remainder for a later
+run. (`autofix_candidates.py` defaults to all candidates; pass `--limit N` only if
+you deliberately want a smaller batch.)
 Check the `meta` block: if docs and cluster versions are **not aligned**, stop —
 misaligned failures are not doc rot.
 
