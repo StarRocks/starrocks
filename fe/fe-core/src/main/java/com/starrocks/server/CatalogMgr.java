@@ -198,15 +198,9 @@ public class CatalogMgr {
 
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
-        readLock();
-        try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
-        } finally {
-            readUnlock();
-        }
-
         writeLock();
         try {
+            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
             connectorMgr.removeConnector(catalogName);
             Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
