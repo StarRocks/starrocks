@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iomanip>
 #include <set>
 #include <utility>
@@ -30,10 +31,12 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -178,6 +181,101 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+}
+
+// Regression test for issue #75203: a transient object-storage failure while a physical-split scan
+// lazily loads a lake rowset's segments used to leave PhysicalSplitMorselQueue's range iterator
+// uninitialized; a successful retry inside the same loop then dereferenced a null _range in
+// SparseRangeIterator::has_more() -> SIGSEGV @0x0.
+//
+// We reproduce the exact non-idempotency window with a SyncPoint that fails the FIRST segment-load
+// attempt and succeeds afterward, then drive PhysicalSplitMorselQueue::try_get(). With the fix
+// (Rowset::get_segments_checked() primed in _init_segment), the failure surfaces as its real,
+// retryable Status instead of crashing, and repeated try_get() calls stay crash-free.
+TEST_F(LakeDuplicateTabletReaderTest, test_issue_75203_physical_split_transient_segment_load) {
+    // 1. Write one rowset with one segment that has rows.
+    std::vector<int> k{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> v{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k.data(), k.size() * sizeof(int));
+    c1->append_numbers(v.data(), v.size() * sizeof(int));
+    Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+        auto* rowset_meta = _tablet_metadata->add_rowsets();
+        rowset_meta->set_overlapped(false);
+        rowset_meta->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* seg = rowset_meta->add_segment_metas();
+            seg->set_filename(file.path);
+            seg->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // 2. Enable parallel segment load so the injectable sync point fires.
+    auto old_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = true;
+    DeferOp restore_cfg([&]() { config::enable_load_segment_parallel = old_parallel; });
+
+    // 3. Fail the FIRST segment-load attempt, succeed after: the #75203 non-idempotency window.
+    std::atomic<int> load_calls{0};
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void* arg) {
+        if (load_calls.fetch_add(1) == 0) {
+            *reinterpret_cast<Status*>(arg) = Status::IOError("injected transient segment load failure (#75203)");
+        }
+    });
+    DeferOp clear_sp([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::load_segments::parallel_load");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // 4. Fresh lake rowsets (empty _segments, so the first checked load actually hits object storage).
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_FALSE(rowsets.empty());
+
+    // 5. Build a PhysicalSplitMorselQueue over the tablet + rowset (physical split; small
+    //    splitted_scan_rows forces the split walk).
+    TScanRange scan_range;
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.tablet_id = _tablet_metadata->id();
+    internal_scan_range.version = "2";
+    internal_scan_range.partition_id = 1;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(1, scan_range));
+    pipeline::PhysicalSplitMorselQueue queue(std::move(morsels), 1, 1);
+
+    auto lake_tablet = std::make_shared<Tablet>(_tablet_mgr.get(), _tablet_metadata->id());
+    std::vector<BaseTabletSharedPtr> tablets{lake_tablet};
+    queue.set_tablets(tablets);
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.push_back({rowsets[0]});
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(_tablet_schema);
+
+    // 6. Without the fix this crashes (@0x0) in has_more(); with the fix the transient failure
+    //    surfaces as its real Status from try_get(), no crash.
+    auto result = queue.try_get();
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("injected"), std::string::npos) << result.status().to_string();
+
+    // The crash repetition ends: a second call also does not crash (queue is exhausted).
+    auto again = queue.try_get();
+    ASSERT_TRUE(again.ok());
+    ASSERT_EQ(again.value(), nullptr);
 }
 
 class LakeAggregateTabletReaderTest : public TestBase {
