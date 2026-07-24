@@ -47,6 +47,7 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | name                       | The name of the materialized view.                           |
 | refresh_type               | The refresh type of the materialized view, including ROLLUP, MANUAL, ASYNC, and INCREMENTAL. |
 | is_active                  | Whether the materialized view state is active. Valid Value: `true` and `false`. |
+| inactive_reason            | The reason why the materialized view is inactive.            |
 | partition_type             | The partition type of the materialized view, including RANGE and UNPARTITIONED.                |
 | task_id                    | ID of the materialized view refresh task.                  |
 | task_name                  | Name of the materialized view refresh task.                |
@@ -63,7 +64,13 @@ Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_r
 | last_refresh_error_message | The reason why the last refresh failed (if the materialized view state is not active). |
 | rows                       | The number of data rows in the materialized view.            |
 | text                       | The statement used to create the materialized view.          |
+| extra_message              | Extra information about the latest refresh task.             |
+| query_rewrite_status       | Query rewrite status of the materialized view.               |
+| creator                    | Creator of the materialized view refresh task.               |
+| last_refresh_process_time  | The process start time of the latest refresh task.           |
+| last_refresh_job_id        | Job ID of the latest refresh task.                           |
 | last_freshness_confirmed_at | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `last_refresh_time` (the base-table data version), this is wall-clock time. Empty until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
+| last_refresh_time          | Time up to which base table updates are reflected in the materialized view. |
 
 ## Examples
 

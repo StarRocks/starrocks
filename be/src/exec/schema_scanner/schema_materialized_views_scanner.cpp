@@ -54,6 +54,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"LAST_REFRESH_PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_FRESHNESS_CONFIRMED_AT", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"LAST_REFRESH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -433,6 +434,21 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
                 DateTimeValue t;
                 if (!t.from_date_str(info.last_freshness_confirmed_at.data(),
                                      info.last_freshness_confirmed_at.size())) {
+                    nullable_column->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                }
+            } else {
+                fill_data_column_with_null(column.get());
+            }
+            break;
+        }
+        case 29: {
+            // LAST_REFRESH_TIME
+            if (info.__isset.last_refresh_time) {
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                DateTimeValue t;
+                if (!t.from_date_str(info.last_refresh_time.data(), info.last_refresh_time.size())) {
                     nullable_column->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);

@@ -38,3 +38,4 @@ The following fields are provided in `materialized_views`:
 | LAST_REFRESH_PROCESS_TIME            | Process time of the most recent refresh task.                |
 | LAST_REFRESH_JOB_ID                  | Job ID of the most recent refresh task.                      |
 | LAST_FRESHNESS_CONFIRMED_AT          | Start time of the most recent successful refresh, recorded once the entire refresh (all of its task runs) completes; a refresh that found no base-table changes to apply also confirms freshness. The materialized view reflects base-table data as of this moment. Unlike `LAST_REFRESH_TIME` (the base-table data version), this is wall-clock time. `NULL` until the first successful refresh, and for synchronous materialized views. A partition-scoped (partial) REFRESH does not advance it. |
+| LAST_REFRESH_TIME                    | Time up to which base table updates are reflected in the materialized view. |
