@@ -15,12 +15,16 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "common/config_scan_io_fwd.h"
 #include "fmt/format.h"
 
 namespace starrocks::pipeline {
 
 BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_operators, ChunkBufferLimiterPtr limiter)
-        : _output_operators(output_operators), _strategy(strategy), _limiter(std::move(limiter)) {
+        : _output_operators(output_operators),
+          _strategy(strategy),
+          _output_batch(std::max<int64_t>(1, config::shared_scan_output_chunk_batch_size)),
+          _limiter(std::move(limiter)) {
     DCHECK_GT(output_operators, 0);
     for (int i = 0; i < output_operators; i++) {
         _sub_buffers.emplace_back(std::make_unique<QueueT>());
@@ -73,21 +77,28 @@ bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     return ok;
 }
 
-bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+int BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
-    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
+    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return -1;
     bool ret;
+    int target_index;
     size_t memory_usage = chunk->memory_usage();
     if (_strategy == BalanceStrategy::kDirect) {
-        ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
+        target_index = buffer_index % _output_operators;
+        ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
         // TODO: try to balance data according to number of rows
         // But the hard part is, that may needs to maintain a min-heap to account the rows of each
         // output operator, which would introduce some extra overhead
-        int target_index = _output_index.fetch_add(1);
-        target_index %= _output_operators;
+        //
+        // Route _output_batch consecutive chunks to the same output before advancing. Coarsening
+        // the granularity lets a consumer drain a run per wakeup instead of being rescheduled once
+        // per chunk, which cuts pipeline scheduling churn while keeping the load spread across all
+        // outputs. _output_batch == 1 is strict per-chunk round-robin.
+        int64_t seq = _output_index.fetch_add(1);
+        target_index = static_cast<int>((seq / _output_batch) % _output_operators);
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
@@ -95,7 +106,9 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
     if (ret) {
         _memory_usage += memory_usage;
     }
-    return ret;
+    // The chunk now lives in sub-buffer `target_index`, whose consumer is the driver with that
+    // driver_sequence. Return it so the caller can wake exactly that driver.
+    return ret ? target_index : -1;
 }
 
 void BalancedChunkBuffer::set_finished(int buffer_index) {
