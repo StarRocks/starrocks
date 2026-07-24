@@ -18,6 +18,8 @@
 #include <gtest/gtest.h>
 #include <gutil/strings/substitute.h>
 
+#include <cstring>
+#include <memory>
 #include <vector>
 
 #include "column/column_builder.h"
@@ -460,6 +462,77 @@ PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
     ondemand::object double_overflow_obj = double_overflow_doc.get_object();
     auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
     ASSERT_FALSE(double_overflow_json.ok());
+}
+
+namespace {
+// Build an EXACT-size buffer (new char[capacity], so ASAN's redzone sits precisely at the end)
+// holding `json` at the front, with every byte set to a non-NUL, non-whitespace filler and NO
+// trailing NUL. This mirrors the stream-load path, where the JSON lives in a fixed-size buffer
+// allocated without simdjson padding, so the bytes after the value are not NUL. A strlen on an
+// unbounded raw pointer would read past the end of such a buffer; ASAN turns that read into a test
+// failure. std::vector is intentionally avoided: it may over-allocate, leaving an uninitialized
+// tail that could hold an early NUL and mask the overflow.
+std::unique_ptr<char[]> make_unterminated_buffer(const std::string& json, size_t capacity) {
+    auto buf = std::make_unique<char[]>(capacity);
+    std::memset(buf.get(), 'A', capacity);
+    std::memcpy(buf.get(), json.data(), json.size());
+    return buf;
+}
+} // namespace
+
+// A JSON string whose escape sequence is invalid: it is structurally well-formed (so parsing and
+// field lookup succeed) but throws simdjson_error when the value is materialized during conversion,
+// which drives the DataQualityError path that constructs the error message from the raw JSON.
+TEST(JsonValueTest, ConvertFromSimdjsonErrorValueBounded) {
+    using namespace simdjson;
+    const std::string json = R"({"a": "\p"})";
+    const size_t capacity = json.size() + SIMDJSON_PADDING + 32;
+    auto buf = make_unterminated_buffer(json, capacity);
+
+    ondemand::parser parser;
+    ondemand::document doc = parser.iterate(padded_string_view(buf.get(), json.size(), capacity));
+    ondemand::value val = doc.find_field("a");
+
+    auto maybe_json = JsonValue::from_simdjson(&val);
+    ASSERT_FALSE(maybe_json.ok());
+    ASSERT_TRUE(maybe_json.status().is_data_quality_error());
+}
+
+TEST(JsonValueTest, ConvertFromSimdjsonErrorObjectBounded) {
+    using namespace simdjson;
+    const std::string json = R"({"a": "\p"})";
+    const size_t capacity = json.size() + SIMDJSON_PADDING + 32;
+    auto buf = make_unterminated_buffer(json, capacity);
+
+    ondemand::parser parser;
+    ondemand::document doc = parser.iterate(padded_string_view(buf.get(), json.size(), capacity));
+    ondemand::object obj = doc.get_object();
+
+    auto maybe_json = JsonValue::from_simdjson(&obj);
+    ASSERT_FALSE(maybe_json.ok());
+    ASSERT_TRUE(maybe_json.status().is_data_quality_error());
+}
+
+// A MALFORMED document that simdjson's lazy stage-1 parse still accepts: the ROOT object is closed
+// (so doc.get_object() succeeds) but it contains an unclosed nested array. Conversion throws while
+// materializing the invalid-escape string, and then object::raw_json() must consume() the broken
+// structure, hits the unmatched array, and returns an error. The fix must not let that error throw a
+// second exception out of the catch: assert nothing escapes and a DataQualityError is returned. This
+// exercises the object overload's raw_json() error-guard branch. (A missing ROOT brace instead would
+// make doc.get_object() throw INCOMPLETE_ARRAY_OR_OBJECT before conversion runs, never reaching it.)
+TEST(JsonValueTest, ConvertFromSimdjsonErrorMalformedObjectBounded) {
+    using namespace simdjson;
+    const std::string json = R"({"a":["\p"})"; // JSON bytes: {"a":["\p"} — nested array left unclosed
+    const size_t capacity = json.size() + SIMDJSON_PADDING + 32;
+    auto buf = make_unterminated_buffer(json, capacity);
+
+    ondemand::parser parser;
+    ondemand::document doc = parser.iterate(padded_string_view(buf.get(), json.size(), capacity));
+    ondemand::object obj = doc.get_object();
+
+    auto maybe_json = JsonValue::from_simdjson(&obj);
+    ASSERT_FALSE(maybe_json.ok());
+    ASSERT_TRUE(maybe_json.status().is_data_quality_error());
 }
 
 } // namespace starrocks
