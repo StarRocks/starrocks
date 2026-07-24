@@ -96,6 +96,25 @@ PARALLEL_TEST(SimdFilterTest, zero_and_one_masks) {
     EXPECT_EQ(500, values_one[4]);
 }
 
+PARALLEL_TEST(SimdFilterTest, non_normalized_selector) {
+    // Any non-zero selector byte keeps the row, including bytes with the high bit
+    // set (0x80..0xff) -- the vector paths must not treat those as dropped. Use
+    // >= 32 elements so the AVX2/AVX-512 batch path (not just the tail) runs.
+    constexpr size_t kN = 40;
+    std::vector<int32_t> values(kN);
+    std::vector<int32_t> expected;
+    std::vector<uint8_t> selector(kN);
+    for (size_t i = 0; i < kN; ++i) {
+        values[i] = static_cast<int32_t>(i);
+        // keep even indices, marked with assorted non-zero (incl. high-bit) bytes.
+        selector[i] = (i % 2 == 0) ? static_cast<uint8_t>(0x80 | (i & 0x7f)) : 0;
+        if (selector[i]) expected.push_back(values[i]);
+    }
+    size_t size = filter_range(values.data(), values.data(), selector, 0, kN);
+    ASSERT_EQ(expected.size(), size);
+    for (size_t i = 0; i < size; ++i) EXPECT_EQ(expected[i], values[i]);
+}
+
 // Exercise the vectorised batch path (>= 32 lanes) against a scalar reference
 // across selectivities, for both 4- and 8-byte widths.
 template <typename T>

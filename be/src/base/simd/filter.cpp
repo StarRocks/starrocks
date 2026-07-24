@@ -115,7 +115,10 @@ __attribute__((target("avx2"))) size_t scan_avx2(Elem* dst, const Elem* src, con
     const __m256i all0 = _mm256_setzero_si256();
     while (start + kBatchNums <= to) {
         __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
-        uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(sel, all0));
+        // Keep every non-zero selector byte: cmpeq-zero + invert, so that bytes
+        // with the high bit set (e.g. 0xff) are kept, not dropped as a signed
+        // cmpgt(sel, 0) would.
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
@@ -143,7 +146,10 @@ __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w4(uint32_t
     const __m256i all0 = _mm256_setzero_si256();
     while (start + kBatchNums <= to) {
         __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
-        uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(sel, all0));
+        // Keep every non-zero selector byte: cmpeq-zero + invert, so that bytes
+        // with the high bit set (e.g. 0xff) are kept, not dropped as a signed
+        // cmpgt(sel, 0) would.
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
@@ -175,7 +181,10 @@ __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w8(uint64_t
     const __m256i all0 = _mm256_setzero_si256();
     while (start + kBatchNums <= to) {
         __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
-        uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(sel, all0));
+        // Keep every non-zero selector byte: cmpeq-zero + invert, so that bytes
+        // with the high bit set (e.g. 0xff) are kept, not dropped as a signed
+        // cmpgt(sel, 0) would.
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
