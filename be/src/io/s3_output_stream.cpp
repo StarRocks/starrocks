@@ -105,8 +105,8 @@ Status S3OutputStream::create_multipart_upload() {
     _s3_op_watch.start();
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (int64_t _us = _s3_op_watch.elapsed_time() / 1000; _us >= 100000) {
-        LOG(WARNING) << "S3_OP_LAT op=CreateMultipartUpload bucket=" << _bucket << " key=" << _object
-                     << " us=" << _us << " ok=" << outcome.IsSuccess();
+        LOG(WARNING) << "S3_OP_LAT op=CreateMultipartUpload bucket=" << _bucket << " key=" << _object << " us=" << _us
+                     << " ok=" << outcome.IsSuccess();
     }
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
@@ -129,8 +129,8 @@ Status S3OutputStream::singlepart_upload() {
     _s3_op_watch.start();
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
     if (int64_t _us = _s3_op_watch.elapsed_time() / 1000; _us >= 100000) {
-        LOG(WARNING) << "S3_OP_LAT op=PutObject bucket=" << _bucket << " key=" << _object
-                     << " bytes=" << _buffer.size() << " us=" << _us << " ok=" << outcome.IsSuccess();
+        LOG(WARNING) << "S3_OP_LAT op=PutObject bucket=" << _bucket << " key=" << _object << " bytes=" << _buffer.size()
+                     << " us=" << _us << " ok=" << outcome.IsSuccess();
     }
     if (!outcome.IsSuccess()) {
         std::string error_msg =
