@@ -1228,7 +1228,7 @@ under the License.
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.7.11</version>
+                <version>42.7.12</version>
             </dependency>
 
             <dependency>
@@ -1712,6 +1712,21 @@ under the License.
                                              unused tether feature references it -->
                                         <exclude>org.apache.avro:avro-ipc</exclude>
                                         <exclude>org.apache.avro:avro-ipc-jetty</exclude>
+                                        <!-- CVE-2026-10050 (jetty-client, jetty-security) and
+                                             CVE-2026-2332 (jetty-http): excluded from the hadoop-common /
+                                             hadoop-client edges in fe-core. Those exclusions only hold
+                                             because hadoop-common is the nearest jetty-server path, so a
+                                             later Hadoop bump could silently re-introduce the jars now
+                                             that the trivy waiver is gone - ban them to fail the build
+                                             instead. Restricted to compile/runtime: spark-dpp and hive-udf
+                                             legitimately see them at provided scope (supplied by
+                                             Spark/Hive at runtime, never packaged). -->
+                                        <exclude>org.eclipse.jetty:jetty-client:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-client:*:jar:runtime</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security:*:jar:runtime</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http:*:jar:compile</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http:*:jar:runtime</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>
