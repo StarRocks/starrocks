@@ -63,6 +63,10 @@ public:
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>&
                     handler) = 0;
     // This function won't read data from each segment files. Only need to get segment's row count.
+    // The handler's `segments` argument may be EMPTY: a backend that gets row counts from metadata
+    // (see output_segment_num_rows()) leaves it empty to avoid opening segment footers, and only
+    // materialises it when it must detect physically-lost segments (null slots). Callers must derive
+    // the segment count from output_segment_num_rows() when `segments` is empty.
     virtual Status segment_iterator(
             const std::function<
                     Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,

@@ -14,6 +14,9 @@
 
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 
+#include <algorithm>
+
+#include "common/config_lake_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_delvec_loader.h"
@@ -88,10 +91,25 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
 Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
         const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
-    // load all segments
+    // This "without read data" path never touches segment data -- it only needs each output
+    // segment's row count, which execute_without_update_index otherwise reads from the tablet
+    // metadata via output_segment_num_rows(). Opening every output segment's footer just to fetch
+    // num_rows is pure overhead on a large compaction, so skip it on the default path and leave
+    // `segments` empty (the handler then derives all row counts from metadata).
+    //
+    // Fall back to loading the segments (the pre-optimization behavior) when either:
+    //   - experimental_lake_ignore_lost_segment is on -- a null slot is the sole signal that an output
+    //     segment is physically missing, which the handler must tolerate; or
+    //   - the metadata is missing num_rows for some output segment -- e.g. a compaction txn log written
+    //     by an older BE during a rolling upgrade; the segment footer then supplies the row count.
+    const auto output_num_rows = output_segment_num_rows();
+    const bool metadata_missing_num_rows = std::any_of(output_num_rows.begin(), output_num_rows.end(),
+                                                       [](uint32_t n) { return n == kUnknownSegmentNumRows; });
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
-    RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    if (config::experimental_lake_ignore_lost_segment || metadata_missing_num_rows) {
+        RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
+        RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    }
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
