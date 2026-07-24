@@ -1405,12 +1405,12 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testCheckProgressVal() {
         KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
-        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", (Object) null));
-        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_ZERO));
-        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_END));
-        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_BEGINNING));
-        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", "invalid_numeric"));
-        Assertions.assertTrue(Deencapsulation.invoke(job, "checkProgressVal", "100"));
+        Assertions.assertFalse(job.checkProgressVal(null));
+        Assertions.assertFalse(job.checkProgressVal(KafkaProgress.OFFSET_ZERO));
+        Assertions.assertFalse(job.checkProgressVal(KafkaProgress.OFFSET_END));
+        Assertions.assertFalse(job.checkProgressVal(KafkaProgress.OFFSET_BEGINNING));
+        Assertions.assertFalse(job.checkProgressVal("invalid_numeric"));
+        Assertions.assertTrue(job.checkProgressVal("100"));
     }
 }
 

@@ -26,13 +26,13 @@ import com.starrocks.proto.PPulsarMetaProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -142,7 +142,8 @@ public class PulsarRoutineLoadJobTest {
     public void fromCreateStmt_createsJobSuccessfully(@Mocked CreateRoutineLoadStmt stmt,
                                                        @Mocked GlobalStateMgr globalStateMgr,
                                                        @Injectable Database db,
-                                                       @Injectable OlapTable table) throws StarRocksException {
+                                                       @Injectable OlapTable table,
+                                                       @Injectable Warehouse warehouse) throws StarRocksException {
         new Expectations() {
             {
                 stmt.getDBName();
@@ -157,9 +158,17 @@ public class PulsarRoutineLoadJobTest {
                 result = "sub1";
                 stmt.getFormat();
                 result = "csv";
+                stmt.getJobProperties();
+                result = ImmutableMap.of("warehouse", "default_warehouse");
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull("default_warehouse");
+                result = warehouse;
+                warehouse.getId();
+                result = 1L;
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
                 result = db;
+                db.getFullName();
+                result = "test_db";
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test_db", "test_table");
                 result = table;
                 db.getId();
@@ -171,8 +180,6 @@ public class PulsarRoutineLoadJobTest {
             }
         };
 
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
         PulsarRoutineLoadJob job = PulsarRoutineLoadJob.fromCreateStmt(stmt);
         Assertions.assertNotNull(job);
         Assertions.assertEquals("http://pulsar-service", job.getServiceUrl());
@@ -184,7 +191,8 @@ public class PulsarRoutineLoadJobTest {
     public void fromCreateStmt_createsJobWithArrowFormat(@Mocked CreateRoutineLoadStmt stmt,
                                                           @Mocked GlobalStateMgr globalStateMgr,
                                                           @Injectable Database db,
-                                                          @Injectable OlapTable table) throws StarRocksException {
+                                                          @Injectable OlapTable table,
+                                                          @Injectable Warehouse warehouse) throws StarRocksException {
         new Expectations() {
             {
                 stmt.getDBName();
@@ -199,9 +207,17 @@ public class PulsarRoutineLoadJobTest {
                 result = "sub1";
                 stmt.getFormat();
                 result = "arrow";
+                stmt.getJobProperties();
+                result = ImmutableMap.of("warehouse", "default_warehouse");
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull("default_warehouse");
+                result = warehouse;
+                warehouse.getId();
+                result = 1L;
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
                 result = db;
+                db.getFullName();
+                result = "test_db";
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test_db", "test_table");
                 result = table;
                 db.getId();
@@ -213,8 +229,6 @@ public class PulsarRoutineLoadJobTest {
             }
         };
 
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
         PulsarRoutineLoadJob job = PulsarRoutineLoadJob.fromCreateStmt(stmt);
         Assertions.assertNotNull(job);
         Assertions.assertEquals("arrow", job.getFormat());
