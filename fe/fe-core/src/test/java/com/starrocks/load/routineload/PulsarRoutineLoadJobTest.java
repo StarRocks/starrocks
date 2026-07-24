@@ -157,8 +157,6 @@ public class PulsarRoutineLoadJobTest {
                 result = "sub1";
                 stmt.getFormat();
                 result = "csv";
-                stmt.getWarehouseName();
-                result = "default_warehouse";
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
                 result = db;
@@ -201,8 +199,6 @@ public class PulsarRoutineLoadJobTest {
                 result = "sub1";
                 stmt.getFormat();
                 result = "arrow";
-                stmt.getWarehouseName();
-                result = "default_warehouse";
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
                 result = db;
