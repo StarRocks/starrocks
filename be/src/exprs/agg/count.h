@@ -32,6 +32,14 @@ struct AggregateCountFunctionState
     int64_t count = 0;
 };
 
+inline const Int64Column* count_unwrap_intermediate(const Column* column) {
+    if (column->is_nullable()) {
+        column = down_cast<const NullableColumn*>(column)->data_column().get();
+    }
+    DCHECK(column->is_numeric());
+    return down_cast<const Int64Column*>(column);
+}
+
 // count not null column
 template <bool IsWindowFunc>
 class CountAggregateFunction final : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
@@ -91,8 +99,7 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_numeric());
-        const auto* input_column = down_cast<const Int64Column*>(column);
+        const auto* input_column = count_unwrap_intermediate(column);
         this->data(state).count += input_column->immutable_data()[row_num];
     }
 
@@ -290,8 +297,7 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_numeric());
-        const auto* input_column = down_cast<const Int64Column*>(column);
+        const auto* input_column = count_unwrap_intermediate(column);
         this->data(state).count += input_column->immutable_data()[row_num];
     }
 
