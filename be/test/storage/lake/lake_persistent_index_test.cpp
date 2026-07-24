@@ -326,6 +326,81 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+// The parallel reverse-lookup in erase (for keys not resolved by the active memtable) must produce
+// exactly the same old_values as the serial path. Build an index whose keys all live in sstables,
+// then erase every key both with and without parallel execution and compare bit-for-bit.
+TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
+    auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
+    auto saved_parallel = config::enable_pk_index_parallel_execution;
+    auto saved_min_rows = config::pk_index_parallel_execution_min_rows;
+    // Tiny l0 budget forces every batch to flush, so all keys end up in sstables (active memtable
+    // empty) and the whole delete goes through the reverse lookup. A small min-rows lets the parallel
+    // path split the delete into many concurrent subsets without needing a huge key count.
+    config::l0_max_mem_usage = 10;
+    config::pk_index_parallel_execution_min_rows = 1000;
+    DeferOp restore([&]() {
+        config::l0_max_mem_usage = saved_l0_max_mem_usage;
+        config::enable_pk_index_parallel_execution = saved_parallel;
+        config::pk_index_parallel_execution_min_rows = saved_min_rows;
+    });
+
+    using Key = uint64_t;
+    const int kBatches = 13;
+    const int kPerBatch = 1000;
+    const int kTotal = kBatches * kPerBatch; // 13000 keys; with min-rows=1000 -> ~13 concurrent lookup subsets
+
+    // Insert kTotal distinct keys across kBatches flushed batches, then erase all of them and return
+    // the reverse-looked-up old values.
+    auto build_and_erase = [&](std::vector<IndexValue>* erase_old_values) {
+        std::vector<Key> keys(kTotal);
+        std::vector<Slice> key_slices(kTotal);
+        for (int i = 0; i < kTotal; ++i) {
+            keys[i] = i;
+            key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
+        }
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+        ASSERT_OK(index->init(_tablet_metadata));
+        for (int b = 0; b < kBatches; ++b) {
+            std::vector<Key> bk(kPerBatch);
+            std::vector<Slice> bks(kPerBatch);
+            std::vector<IndexValue> bv(kPerBatch);
+            for (int j = 0; j < kPerBatch; ++j) {
+                int gid = b * kPerBatch + j;
+                bk[j] = gid;
+                bks[j] = Slice((uint8_t*)(&bk[j]), sizeof(Key));
+                bv[j] = IndexValue((uint64_t)(gid + 1)); // distinct, non-null
+            }
+            index->prepare(EditVersion(b + 1, 0), 0);
+            std::vector<IndexValue> old(kPerBatch);
+            ASSERT_OK(index->upsert(kPerBatch, bks.data(), bv.data(), old.data()));
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10s: commit every sstable
+        }
+        erase_old_values->assign(kTotal, IndexValue(NullIndexValue));
+        ASSERT_OK(index->erase(kTotal, key_slices.data(), erase_old_values->data(), /*del_rssid=*/12345));
+    };
+
+    std::vector<IndexValue> serial_values;
+    config::enable_pk_index_parallel_execution = false;
+    build_and_erase(&serial_values);
+
+    std::vector<IndexValue> parallel_values;
+    config::enable_pk_index_parallel_execution = true;
+    build_and_erase(&parallel_values);
+
+    ASSERT_EQ(serial_values.size(), parallel_values.size());
+    int found = 0;
+    for (int i = 0; i < kTotal; ++i) {
+        ASSERT_EQ(serial_values[i].get_value(), parallel_values[i].get_value()) << "mismatch at index " << i;
+        // Reverse lookup must have found the value inserted for this key.
+        ASSERT_EQ(serial_values[i].get_value(), (uint64_t)(i + 1)) << "wrong old value at index " << i;
+        if (serial_values[i].get_value() != NullIndexValue) {
+            ++found;
+        }
+    }
+    ASSERT_EQ(found, kTotal); // every key was resolved through the sstable reverse lookup
+}
+
 TEST_F(LakePersistentIndexTest, test_replace) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;

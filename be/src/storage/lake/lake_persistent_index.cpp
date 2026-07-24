@@ -479,10 +479,83 @@ Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std:
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid) {
     KeyIndexSet not_founds;
     size_t num_found;
+    // Writing the tombstones into the active memtable must stay on the caller thread: it mutates the
+    // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
+    // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
+    // still has to be read back from the inactive memtables and sstables to build the delete vector.
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), del_rssid));
-    KeyIndexSet& key_indexes = not_founds;
-    RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
+
+    // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
+    // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
+    // parallel_upsert. The lookup is read-only against immutable inactive memtables / sstables (safe to
+    // run concurrently, as the parallel upsert path already relies on), and each subset writes disjoint
+    // positions of `old_values`, so no lock is needed for the result array -- only the shared status.
+    //
+    // Task granularity is governed by the same config the upsert side uses: SegmentPKIterator splits
+    // each segment into pk_index_parallel_execution_min_rows-row chunks (one task each), so use that as
+    // both the per-task subset size and the threshold below which the delete stays serial.
+    const size_t min_rows_per_task = config::pk_index_parallel_execution_min_rows > 0
+                                             ? static_cast<size_t>(config::pk_index_parallel_execution_min_rows)
+                                             : 16384;
+    const bool have_backing_store = !_sstable_filesets.empty() || !_inactive_memtables.empty();
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution && have_backing_store && not_founds.size() > min_rows_per_task) {
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
+
+    if (token == nullptr) {
+        // Serial path: single reverse lookup over the whole not_founds set.
+        RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &not_founds, -1));
+        RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
+        RETURN_IF_ERROR(flush_memtable());
+        return Status::OK();
+    }
+
+    // Parallel path: split not_founds into min_rows_per_task-sized subsets and look each up concurrently.
+    std::vector<KeyIndexSet> subsets;
+    {
+        KeyIndexSet cur;
+        for (auto idx : not_founds) {
+            cur.insert(idx);
+            if (cur.size() >= min_rows_per_task) {
+                subsets.push_back(std::move(cur));
+                cur.clear();
+            }
+        }
+        if (!cur.empty()) {
+            subsets.push_back(std::move(cur));
+        }
+    }
+    TRACE_COUNTER_SCOPE_LATENCY_US("parallel_erase_wait_us");
+    std::mutex mutex;
+    Status status;
+    for (auto& subset : subsets) {
+        // get_from_* consume the key-index set (erasing resolved entries), so each task works on its
+        // own copy. keys/old_values/mutex/status outlive token->wait() below, so capture by pointer/ref.
+        auto func = [this, n, keys, old_values, &subset, &mutex, &status]() {
+            KeyIndexSet key_indexes = subset;
+            auto st = get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1);
+            if (st.ok()) {
+                st = get_from_sstables(n, keys, old_values, &key_indexes, -1);
+            }
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            }
+        };
+        auto submit_st = token->submit_func(func);
+        if (!submit_st.ok()) {
+            // Fall back to running this subset inline; it is read-only and touches disjoint positions,
+            // so it is safe to run alongside the tasks already submitted.
+            func();
+        }
+    }
+    token->wait();
+    RETURN_IF_ERROR(status);
+
+    // Flush only after every reverse lookup has finished: flush_memtable may merge a flushed memtable
+    // into _sstable_filesets, which the concurrent readers above must not race with.
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
