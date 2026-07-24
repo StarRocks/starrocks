@@ -793,7 +793,7 @@ DISTRIBUTED BY HASH(`id`);
   
     - すべてのカラムを含む DDL を定義します。
     - コネクタにカラム `score` を条件として使用することを伝えるために、オプション `sink.properties.merge_condition` を `score` に設定します。
-    - コネクタに Stream Load を使用することを伝えるために、オプション `sink.version` を `V1` に設定します。
+    - オプション `sink.version` を `V1` または `V2` に設定します。どちらも条件付き更新をサポートしています。
 
     ```SQL
     CREATE TABLE `score_board` (
