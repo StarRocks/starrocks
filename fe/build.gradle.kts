@@ -63,7 +63,7 @@ subprojects {
         set("io.netty.version", "4.1.136.Final")
         set("jackson.version", "2.21.4")
         set("jackson-annotations.version", "2.21")
-        set("jetty.version", "9.4.57.v20241219")
+        set("jetty.version", "9.4.58.v20250814")
         set("jprotobuf-starrocks.version", "1.0.0")
         set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.9.1")
@@ -249,7 +249,7 @@ subprojects {
             implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
-            implementation("org.postgresql:postgresql:42.7.11")
+            implementation("org.postgresql:postgresql:42.7.12")
             implementation("org.roaringbitmap:RoaringBitmap:0.8.13")
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
@@ -282,6 +282,13 @@ subprojects {
         // ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's unused tether feature references it
         exclude(group = "org.apache.avro", module = "avro-ipc")
         exclude(group = "org.apache.avro", module = "avro-ipc-jetty")
+        // CVE-2026-10050 (jetty-client/jetty-security: Digest auth bypass) and
+        // CVE-2026-2332 (jetty-http): only reachable via Hadoop's embedded
+        // HttpServer2 and the YARN websocket timeline client, neither of which
+        // StarRocks ever instantiates (Hadoop is used purely as an FS client).
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
     }
 
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java

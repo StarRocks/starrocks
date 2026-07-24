@@ -279,6 +279,17 @@
                         <groupId>org.wildfly.openssl</groupId>
                         <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
+                    <!-- CVE-2026-10050 (jetty-security) / CVE-2026-2332 (jetty-http):
+                         both are only reachable via Hadoop's embedded HttpServer2,
+                         which the JNI readers never instantiate (FS client use only). -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-http</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -318,6 +329,13 @@
                 <artifactId>hadoop-mapreduce-client-core</artifactId>
                 <version>${hadoop.version}</version>
                 <exclusions>
+                    <!-- CVE-2026-10050: vulnerable DigestAuthentication lives in
+                         jetty-client, pulled via hadoop-yarn-client -> websocket-client.
+                         The YARN websocket timeline client is unused by the readers. -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
