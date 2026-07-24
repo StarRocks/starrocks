@@ -372,6 +372,34 @@ public class AutovacuumDaemon extends LeaderDaemon {
     }
 
     private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+        // Recovery escape hatch (lake_vacuum_reset_partition_ids): force-reset this partition's incremental
+        // vacuum state and skip the round. A wedged pass -- an in-flight proposal that never commits, or a
+        // resume cursor that never advances -- otherwise re-attempts the same doomed band every round forever.
+        // checkAndClearResetPartition() consumes the id (matches AND removes it atomically) so this fires
+        // exactly ONCE per set: the very next round re-derives a clean fresh pass and vacuum resumes normally.
+        // It must be one-shot -- an id that stayed matched would reset + skip every round and the partition
+        // would never vacuum at all, worse than the wedge it recovers from. reset() discards the in-flight
+        // proposal/cursor/generation but intentionally preserves minRetainedVersion (the already-vacuumed walk
+        // floor), so the fresh walk does not re-descend into and re-read already-deleted versions. Journaled
+        // under the table WRITE lock like every other vacuum-state mutation (see updateVacuumState), so the
+        // reset survives an FE failover.
+        if (checkAndClearResetPartition(partition.getId())) {
+            VacuumState state = partition.getVacuumState();
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            try {
+                state.reset();
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyPartitionVacuumState(
+                        new PartitionVacuumStateInfo(db.getId(), table.getId(), partition.getId(), state));
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            }
+            partition.setLastVacuumTime(System.currentTimeMillis());
+            LOG.warn("force-reset incremental vacuum state for {}.{}.{} via lake_vacuum_reset_partition_ids; "
+                            + "id cleared from the config, the next round starts a fresh pass",
+                    db.getFullName(), table.getName(), partition.getId());
+            return;
+        }
         List<Tablet> tablets = new ArrayList<>();
         // Visible MaterializedIndex ids (getId()) this round -- the tablet generation. Stored with each
         // proposal so the next round can detect a wholesale tablet-set replacement (split / sort-key change).
@@ -867,6 +895,47 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
         }
         return false;
+    }
+
+    // Returns true iff this partition is listed in lake_vacuum_reset_partition_ids, AND removes it in the same
+    // step so the force-reset is consumed exactly once per set (a matched id left in place would reset + skip
+    // every round).
+    private static boolean checkAndClearResetPartition(long partitionId) {
+        // Fast path -- no reset requested, the overwhelmingly common case. Called every round for every
+        // partition, so the hot path must stay lock-free; only actually taking the lock when an id is present
+        // keeps the escape hatch off the critical path. A stale read races by at most one round: the hatch
+        // tolerates a naptime (2s) delay and the next round re-reads.
+        if (Config.lake_vacuum_reset_partition_ids.isEmpty()) {
+            return false;
+        }
+        // An id is set (rare, admin-triggered): consume it under a lock. synchronized because the auto_vacuum
+        // pool processes partitions in parallel; without it a read-modify-write of the shared config string
+        // could resurrect an id another thread just dropped. Writes the in-memory Config field directly
+        // (leader-only daemon; the value is not persisted).
+        synchronized (AutovacuumDaemon.class) {
+            String current = Config.lake_vacuum_reset_partition_ids;
+            if (current.isEmpty()) {
+                return false;
+            }
+            String target = String.valueOf(partitionId);
+            boolean matched = false;
+            List<String> remain = new ArrayList<>();
+            for (String id : current.split(";")) {
+                String trimmed = id.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.equals(target)) {
+                    matched = true;
+                } else {
+                    remain.add(trimmed);
+                }
+            }
+            if (matched) {
+                Config.lake_vacuum_reset_partition_ids = String.join(";", remain);
+            }
+            return matched;
+        }
     }
 
     public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
