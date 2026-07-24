@@ -1802,6 +1802,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testIsStalenessSatisfiedWithPositiveStalenessWithinBudget() {
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         refreshScheme.setLastRefreshTime(1_000_000L);
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
         MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test2", columns, KeysType.AGG_KEYS,
                 null, null, refreshScheme);
         mv.setMaxMVRewriteStaleness(600);
@@ -1813,5 +1814,109 @@ public class MaterializedViewTest extends StarRocksTestBase {
             }
         };
         Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Core regression for cross-partition staleness masking: a chained partial run renews
+     * lastRefreshTime with one recently-committed partition's visible version time, but the freshness
+     * baseline must be the last CONFIRMED complete refresh. gap(baseTs, lastRefreshTime)=500s is within
+     * the 600s budget (old semantics would return true), while gap(baseTs, confirmedAt)=1500s exceeds it.
+     */
+    @Test
+    public void testIsStalenessSatisfiedUsesConfirmedFreshnessNotLastRefreshTime() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(2_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_1", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(2_000_000L + 500 * 1000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Confirmed-freshness gap within budget when lastFreshnessConfirmedAt differs from lastRefreshTime
+     * (i.e. a partial refresh ran after the last confirmed complete batch): the rollback guard compares
+     * baseTs against lastRefreshTime (1_500_000 < 1_200_000 is false, so it does not fire), and the
+     * staleness gap is measured against lastFreshnessConfirmedAt (500s within the 600s budget).
+     */
+    @Test
+    public void testIsStalenessSatisfiedConfirmedWithinBudget() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(1_200_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_2", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_500_000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Quiet MV: no base commits since the confirmed batch started (baseTs < confirmedAt). The negative
+     * gap means fresh — must NOT be treated as the rollback case (which is detected against
+     * lastRefreshTime, not confirmedAt).
+     */
+    @Test
+    public void testIsStalenessSatisfiedQuietMvNegativeGapIsFresh() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(2_000_000L);
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_3", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                // == lastRefreshTime (no regression), < confirmedAt (no commits since batch start)
+                return Optional.of(1_000_000L);
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
+
+    /**
+     * Freshness never confirmed by a complete refresh (new MV / only partial refreshes / upgraded FE):
+     * conservative false, even though the lastRefreshTime-based gap (100s) is within the 600s budget.
+     */
+    @Test
+    public void testIsStalenessSatisfiedNotConfirmedYet() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_4", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(600);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_100_000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    @Test
+    public void testIsStalenessSatisfiedZeroStalenessConfig() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastFreshnessConfirmedAt(1_000_000L);
+        refreshScheme.setLastRefreshTime(1_000_000L);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_confirmed_5", columns,
+                KeysType.AGG_KEYS, null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(0);
+        Assertions.assertFalse(mv.isStalenessSatisfied());
     }
 }
