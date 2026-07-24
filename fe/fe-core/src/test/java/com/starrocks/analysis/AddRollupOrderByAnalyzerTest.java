@@ -50,6 +50,13 @@ public class AddRollupOrderByAnalyzerTest {
             public boolean isCloudNativeTable() {
                 return true;
             }
+
+            // The column-subset guard in visitAddRollupClause introspects the partition columns; an
+            // unpartitioned range table has none, so the guard is a no-op for these ORDER BY cases.
+            @Mock
+            public java.util.List<Column> getPartitionColumns() {
+                return Lists.newArrayList();
+            }
         };
         return new OlapTable();
     }
