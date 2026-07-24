@@ -362,13 +362,9 @@ Status PhysicalSplitMorselQueue::_init_segment() {
             return Status::OK();
         }
         RETURN_IF_ERROR(rowset->load());
-        // Prime the segment list here (issue #75203). For lake rowsets, get_segments()
-        // loads segment footers from object storage and silently swallows transient
-        // failures (returning {}), which later leaves the split iterator with a null
-        // _range and crashes in SparseRangeIterator::has_more(). get_segments_checked()
-        // surfaces the real load status so a transient failure fails the query cleanly
-        // instead of segfaulting. Bind to a local so status() is read from a named
-        // StatusOr, never from a temporary.
+        // Prime the segment list so a transient load failure fails the query here instead of
+        // leaving the split iterator with a null _range that later crashes has_more(). Unlike
+        // get_segments(), get_segments_checked() surfaces the real load status (issue #75203).
         auto segments_or = rowset->get_segments_checked();
         RETURN_IF_ERROR(segments_or.status());
     }

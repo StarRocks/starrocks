@@ -757,19 +757,14 @@ RowsetId Rowset::rowset_id() const {
 }
 
 StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
-    // Thread-safety contract: this lazy-init is intentionally lock-free, so _segments and
-    // _segments_loaded are read/written without synchronization. Callers must serialize calls on a
-    // given Rowset. All current callers do: the physical/logical split morsel queues call it under
-    // their _mutex, and lake Rowset objects are created per-reader over immutable metadata (never
-    // shared across threads). We deliberately do NOT use std::call_once: on a transient failure we
-    // must leave _segments_loaded false so a later call retries the load, whereas call_once would
-    // mark the one-shot init done even on failure and defeat the retry (issue #75203).
+    // Lock-free lazy init: callers must serialize calls on a given Rowset (the split morsel queues
+    // hold _mutex; lake Rowsets are per-reader over immutable metadata). Not std::call_once -- that
+    // marks init done even on a transient failure and would defeat the retry (issue #75203).
     if (_segments_loaded) {
         return _segments;
     }
-    // Lazily materialize the segments from object storage. Unlike get_segments() below, propagate a
-    // transient load failure as its real (retryable) Status instead of swallowing it (issue #75203).
-    // On failure we leave _segments_loaded false so a later retry re-attempts the load.
+    // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
+    // _segments_loaded stays false so a later call retries.
     ASSIGN_OR_RETURN(auto segs, segments(true));
     _segments = std::move(segs);
     _segments_loaded = true;
@@ -777,9 +772,8 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
 }
 
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    // Best-effort shim over get_segments_checked() for callers that tolerate an empty result on a
-    // transient load failure (e.g. compaction flat-JSON path derivation). Callers that must not
-    // silently proceed on failure use get_segments_checked() and check the Status.
+    // Best-effort shim for callers that tolerate an empty result on a transient failure; callers
+    // that must not proceed on failure use get_segments_checked() and check the Status.
     auto res = get_segments_checked();
     return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
