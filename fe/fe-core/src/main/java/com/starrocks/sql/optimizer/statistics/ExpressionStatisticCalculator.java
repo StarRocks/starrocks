@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -160,6 +159,7 @@ public class ExpressionStatisticCalculator {
             }
             return builder.build();
         }
+
         @Override
         public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
             if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
@@ -265,14 +265,13 @@ public class ExpressionStatisticCalculator {
             return builder.build();
         }
 
-
-
         private static double clampFraction(double value) {
             if (Double.isNaN(value)) {
                 return 0.0;
             }
             return Math.max(0.0, Math.min(1.0, value));
         }
+
         @Override
         public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
             // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
@@ -333,7 +332,6 @@ public class ExpressionStatisticCalculator {
                         .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
             }
 
-
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
             }
@@ -378,6 +376,7 @@ public class ExpressionStatisticCalculator {
                     return Optional.empty();
             }
         }
+
         @Override
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
             // 1. compute children column statistics
@@ -415,7 +414,6 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
             final var inputStat = operator.getChild(0).accept(this, context);
-
 
             Map<String, Long> mcvs = new HashMap<>();
             if (!inputStat.isUnknown()) {
@@ -973,6 +971,8 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue();
                     maxValue = left.getMaxValue();
                     break;
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(List.of(left, right), callOperator);
                 case FunctionSet.WEEK:
                     minValue = 0;
                     maxValue = 53;
@@ -1033,6 +1033,118 @@ public class ExpressionStatisticCalculator {
                 return Optional.of((ConstantOperator) op);
             }
             return Optional.empty();
+        }
+
+        private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            double nullsFraction = inputs.stream()
+                    .mapToDouble(ColumnStatistic::getNullsFraction)
+                    .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
+            List<ColumnStatistic> reachableInputs = reachableCoalesceInputs(inputs);
+            double distinctValues = Math.min(rowCount,
+                    reachableInputs.stream()
+                            .mapToDouble(ColumnStatistic::getDistinctValuesCount)
+                            .sum());
+            double coalesceMin = Double.NEGATIVE_INFINITY;
+            double coalesceMax = Double.POSITIVE_INFINITY;
+            final Type resultType = callOperator.getType();
+            if (resultType.isNumericType() || resultType.isDateType() || resultType.isTime()) {
+                coalesceMin = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
+                coalesceMax = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
+            }
+            Map<String, Long> mcv = buildCoalesceMcv(inputs);
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(coalesceMin)
+                    .setMaxValue(coalesceMax)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues);
+
+            if (!mcv.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+            }
+
+            return builder.build();
+        }
+
+        private List<ColumnStatistic> reachableCoalesceInputs(List<ColumnStatistic> inputs) {
+            List<ColumnStatistic> reachable = new ArrayList<>();
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                if (nullsFraction < 1.0) {
+                    reachable.add(input);
+                }
+                if (nullsFraction == 0) {
+                    break;
+                }
+            }
+            return reachable;
+        }
+
+        private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
+            Map<String, Long> coalesceMcv = new HashMap<>();
+            long maxRows = Math.round(rowCount);
+            List<Map.Entry<String, Double>> contributions = collectWeightedCoalesceMcv(inputs);
+            long mcvTotalRowsAccountedFor = 0;
+            for (int i = 0; i < contributions.size(); i++) {
+                final var contribution = contributions.get(i);
+                long scaled = Math.round(contribution.getValue());
+                if (scaled <= 0) {
+                    continue;
+                }
+                if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
+                    scaleRemainingMcvs(contributions.subList(i, contributions.size()),
+                            maxRows - mcvTotalRowsAccountedFor, coalesceMcv);
+                    return coalesceMcv;
+                }
+                coalesceMcv.merge(contribution.getKey(), scaled, Long::sum);
+                mcvTotalRowsAccountedFor += scaled;
+            }
+
+            return coalesceMcv;
+        }
+
+        private List<Map.Entry<String, Double>> collectWeightedCoalesceMcv(List<ColumnStatistic> inputs) {
+            List<Map.Entry<String, Double>> contributions = new ArrayList<>();
+            double weight = 1.0;
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                final var histogram = input.getHistogram();
+                if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
+                    for (final var entry : histogram.getMCV().entrySet().stream()
+                            .sorted((a, b) -> {
+                                int cmp = Long.compare(b.getValue(), a.getValue());
+                                return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
+                            })
+                            .collect(Collectors.toList())) {
+                        contributions.add(Map.entry(entry.getKey(), entry.getValue() * weight));
+                    }
+                }
+                // A never-null column means every later column is unreachable.
+                if (nullsFraction == 0) {
+                    break;
+                }
+                weight *= nullsFraction;
+            }
+            return contributions;
+        }
+
+        private void scaleRemainingMcvs(List<Map.Entry<String, Double>> remaining, long remainingBudget,
+                                        Map<String, Long> targetMcv) {
+            if (remainingBudget <= 0) {
+                return;
+            }
+            double totalWeighted = remaining.stream().mapToDouble(Map.Entry::getValue).sum();
+            if (totalWeighted <= 0) {
+                return;
+            }
+            for (final var entry : remaining) {
+                double scaled = Math.floor(remainingBudget * entry.getValue() / totalWeighted);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), (long) scaled, Long::sum);
+                }
+            }
         }
 
         private ColumnStatistic calculateDateTruncStats(CallOperator callOperator, ColumnStatistic dateStatistic) {
@@ -1169,6 +1281,8 @@ public class ExpressionStatisticCalculator {
             double averageRowSize;
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
                     final var condStat = childColumnStatisticList.get(0);
                     final var thenStat = childColumnStatisticList.get(1);
@@ -1395,7 +1509,6 @@ public class ExpressionStatisticCalculator {
 
             return ColumnStatistic.unknown();
         }
-
 
         private static ColumnStatistic getArrayMapLambdaStats(CallOperator callOperator,
                                                               LambdaFunctionOperator lambda,
