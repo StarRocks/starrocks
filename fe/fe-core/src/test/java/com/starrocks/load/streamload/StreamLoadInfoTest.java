@@ -183,6 +183,15 @@ public class StreamLoadInfoTest {
         assertEquals(TFileFormatType.FORMAT_JSON, info.getFormatType());
     }
 
+    @Test
+    public void testFromRoutineLoadJobWithCsv() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+
+        StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(job);
+        assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, info.getFormatType());
+    }
+
+
     private TStreamLoadPutRequest buildTStreamLoadPutRequest() {
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.setTxnId(1);
