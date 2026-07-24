@@ -180,10 +180,10 @@ public class UnionDictionaryManager {
         return ConstantOperator.createInt(index);
     }
 
-    List<Map<ColumnRefOperator, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
+    List<Map<Integer, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
                                                                                List<List<ColumnRefOperator>> childColumns,
                                                                                ColumnRefSet allStringColumns) {
-        List<Map<ColumnRefOperator, ConstantOperator>> result = Lists.newArrayList();
+        List<Map<Integer, ConstantOperator>> result = Lists.newArrayList();
         childColumns.forEach(c -> result.add(Maps.newHashMap()));
         for (int i = 0; i < outputColumns.size(); ++i) {
             if (!allStringColumns.contains(outputColumns.get(i).getId())) {
@@ -197,7 +197,7 @@ public class UnionDictionaryManager {
             for (int j = 0; j < childColumns.size(); ++j) {
                 ColumnRefOperator c = childColumns.get(j).get(i);
                 if (constantColumns.containsKey(c.getId())) {
-                    result.get(j).put(c, generateConstantOperator(c, dictData));
+                    result.get(j).put(i, generateConstantOperator(c, dictData));
                 }
             }
         }

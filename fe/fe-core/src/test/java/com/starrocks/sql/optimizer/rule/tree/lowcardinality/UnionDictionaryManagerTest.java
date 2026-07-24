@@ -275,14 +275,16 @@ class UnionDictionaryManagerTest {
         stringRefToDefineExprMap.put(4, col1);
         stringRefToDefineExprMap.put(5, col2);
         stringRefToDefineExprMap.put(6, col3);
-        List<Map<ColumnRefOperator, ConstantOperator>> constantEncodingMap =
+        List<Map<Integer, ConstantOperator>> constantEncodingMap =
                 unionDictionaryManager.generateConstantEncodingMap(List.of(col4, col5, col6),
-                        List.of(List.of(col1, col8, col3), List.of(col7, col2, col9)),
-                        new ColumnRefSet(List.of(col1, col2, col4, col5)));
+                        List.of(List.of(col1, col8, col3), List.of(col7, col2, col7)),
+                        new ColumnRefSet(List.of(col1, col2, col4, col5, col6)));
 
         Assertions.assertEquals(2, constantEncodingMap.size());
-        Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
-        Assertions.assertEquals(Map.of(col7, ConstantOperator.createInt(2)), constantEncodingMap.get(1));
+        Assertions.assertEquals(Map.of(1, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
+        Assertions.assertEquals(
+                Map.of(0, ConstantOperator.createInt(2), 2, ConstantOperator.createInt(1)),
+                constantEncodingMap.get(1));
     }
 
     @Test

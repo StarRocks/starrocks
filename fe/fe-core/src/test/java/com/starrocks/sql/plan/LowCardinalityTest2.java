@@ -3077,7 +3077,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
-                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+                "  |      [34: expr, INT, true] | [35: expr, INT, false] | [36: expr, INT, true]", plan);
     }
 
     @Test
