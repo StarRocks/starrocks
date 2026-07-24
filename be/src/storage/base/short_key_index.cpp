@@ -50,7 +50,8 @@ Status ShortKeyIndexBuilder::add_item(const Slice& key) {
     return Status::OK();
 }
 
-Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Slice>* body, PageFooterPB* page_footer) {
+Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Slice>* body, PageFooterPB* page_footer,
+                                      ShortKeyEncodingPB short_key_encoding, uint32_t num_sort_key_columns) {
     page_footer->set_type(SHORT_KEY_PAGE);
     page_footer->set_uncompressed_size(_key_buf.size() + _offset_buf.size());
 
@@ -61,6 +62,8 @@ Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Sli
     footer->set_segment_id(_segment_id);
     footer->set_num_rows_per_block(_num_rows_per_block);
     footer->set_num_segment_rows(num_segment_rows);
+    footer->set_short_key_encoding(short_key_encoding);
+    footer->set_num_sort_key_columns(num_sort_key_columns);
 
     body->emplace_back(_key_buf);
     body->emplace_back(_offset_buf);
@@ -83,14 +86,23 @@ Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& fo
     Slice offset_slice(body.data + _footer.key_bytes(), _footer.offset_bytes());
     // +1 for record total length
     _offsets.resize(_footer.num_items() + 1);
+    // Runtime-validate the offset table (not just DCHECK): offsets must be non-decreasing and no
+    // larger than key_bytes so key(i) always yields an in-bounds, non-negative-length Slice. A page
+    // that passes the CRC but carries a corrupt/decreasing/out-of-range offset would otherwise make
+    // key(i) read out of bounds; reject it here so callers get a clean Corruption and can fall back.
+    uint32_t prev_offset = 0;
     for (uint32_t i = 0; i < _footer.num_items(); ++i) {
         uint32_t offset = 0;
         if (!get_varint32(&offset_slice, &offset)) {
             return Status::Corruption("Fail to get varint from index offset buffer");
         }
-        DCHECK(offset <= _footer.key_bytes())
-                << "Offset is larger than total bytes, offset=" << offset << ", key_bytes=" << _footer.key_bytes();
+        if (offset < prev_offset || offset > _footer.key_bytes()) {
+            return Status::Corruption(strings::Substitute(
+                    "Short key index offset out of order or out of range, offset=$0, prev=$1, key_bytes=$2", offset,
+                    prev_offset, _footer.key_bytes()));
+        }
         _offsets[i] = offset;
+        prev_offset = offset;
     }
     _offsets[_footer.num_items()] = _footer.key_bytes();
 

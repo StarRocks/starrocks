@@ -20,8 +20,27 @@
 #include <optional>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs.h"
+#include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "platform/store_path.h"
+#include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/rowset.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_range.h"
+#include "storage/tablet_schema.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -1414,6 +1433,703 @@ TEST(TabletSplitterTest, ApplyOwnership_step0_shape_mismatch_aborts_unmodified) 
     auto status = apply_segment_ownership_to_new_tablet_rowset(&source_rowset, ownership, 0);
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(2, source_rowset.segment_metas_size()); // unmodified
+}
+
+// =============================================================================
+// SegmentSplitInfo::load_samples_from_short_key_index -- decodes samples directly
+// from a real full-key short key index (config::enable_full_sort_key_index = true
+// at write time), rather than from SegmentMetadataPB.deprecated_sort_key_samples.
+// BE_TEST's default SegmentWriterOptions::num_rows_per_block == 100 keeps these
+// tests small (see segment_writer.h).
+// =============================================================================
+
+namespace {
+
+VariantTuple make_int32_tuple(int32_t value) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+    return tuple;
+}
+
+SegmentSplitInfo make_int32_seg(int32_t min_v, int32_t max_v, int64_t num_rows, int64_t data_size, uint32_t source_id) {
+    SegmentSplitInfo s;
+    s.min_key = make_int32_tuple(min_v);
+    s.max_key = make_int32_tuple(max_v);
+    s.num_rows = num_rows;
+    s.data_size = data_size;
+    s.source_id = source_id;
+    return s;
+}
+
+SegmentSplitInfo make_int32_sampled_seg(int32_t min_v, int32_t max_v, int64_t num_rows, int64_t data_size,
+                                        int64_t row_interval, const std::vector<int32_t>& sample_values,
+                                        uint32_t source_id) {
+    SegmentSplitInfo s = make_int32_seg(min_v, max_v, num_rows, data_size, source_id);
+    s.sort_key_sample_row_interval = row_interval;
+    s.sort_key_samples.reserve(sample_values.size());
+    for (int32_t v : sample_values) {
+        s.sort_key_samples.push_back(make_int32_tuple(v));
+    }
+    return s;
+}
+
+// Single INT key column + single INT value column, DUP_KEYS. num_short_key_columns=1.
+std::shared_ptr<TabletSchema> make_full_sort_key_test_schema() {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_id(9001);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(1);
+    c0->set_name("k1");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(2);
+    c1->set_name("v1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(false);
+    c1->set_aggregation("REPLACE");
+    return TabletSchema::create(schema_pb);
+}
+
+// Writes a segment with |num_rows| rows (key column = 0..num_rows-1 in order, value
+// column constant 0) to |fs| at |path| under the writer-time value of
+// config::enable_full_sort_key_index, then opens it and loads its short key index.
+StatusOr<std::shared_ptr<Segment>> write_and_open_int_key_segment(const std::shared_ptr<FileSystem>& fs,
+                                                                  const std::string& path,
+                                                                  const std::shared_ptr<TabletSchema>& schema,
+                                                                  int64_t num_rows) {
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(path));
+    SegmentWriterOptions opts;
+    SegmentWriter writer(std::move(wfile), /*segment_id=*/0, schema, opts);
+    RETURN_IF_ERROR(writer.init());
+
+    auto chunk_schema = ChunkHelper::convert_schema(schema);
+    auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+    auto cols = chunk->columns();
+    for (int64_t i = 0; i < num_rows; ++i) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+    }
+    RETURN_IF_ERROR(writer.append_chunk(*chunk));
+
+    uint64_t file_size = 0, index_size = 0, footer_position = 0;
+    RETURN_IF_ERROR(writer.finalize(&file_size, &index_size, &footer_position));
+
+    FileInfo file_info{.path = path};
+    ASSIGN_OR_RETURN(auto segment, Segment::open(fs, file_info, /*segment_id=*/0, schema));
+    RETURN_IF_ERROR(segment->load_index());
+    return segment;
+}
+
+} // namespace
+
+class FullSortKeyShortKeyIndexLoaderTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        _old_enable_full_sort_key_index = config::enable_full_sort_key_index;
+        config::enable_full_sort_key_index = true;
+        _fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_OK(_fs->create_dir(kDir));
+        _schema = make_full_sort_key_test_schema();
+        const auto idxes = _schema->sort_key_idxes();
+        _sort_key_idxes.assign(idxes.begin(), idxes.end());
+    }
+
+    void TearDown() override { config::enable_full_sort_key_index = _old_enable_full_sort_key_index; }
+
+    Schema schema() const { return ChunkHelper::convert_schema(_schema); }
+
+    const std::string kDir = "/full_key_loader_test";
+    std::shared_ptr<MemoryFileSystem> _fs;
+    std::shared_ptr<TabletSchema> _schema;
+    std::vector<uint32_t> _sort_key_idxes;
+    bool _old_enable_full_sort_key_index = false;
+};
+
+// Fewer than 2 short-key blocks (entry 0 alone is row 0 == min_key, not a sample) must
+// yield empty samples AND interval == 0, preserving the samples.empty() <=>
+// interval==0 invariant. Covers a below-block-size segment and an exactly-one-block
+// segment (num_rows == num_rows_per_block).
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, FewerThanTwoBlocksYieldsEmptySamplesAndZeroInterval) {
+    for (int64_t num_rows : {int64_t{1}, int64_t{50}, int64_t{100}}) {
+        ASSIGN_OR_ABORT(auto segment,
+                        write_and_open_int_key_segment(_fs, kDir + "/seg_" + std::to_string(num_rows) + ".dat", _schema,
+                                                       num_rows));
+        ASSERT_TRUE(segment->has_full_sort_key_index_page());
+        ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+
+        SegmentSplitInfo info;
+        info.num_rows = num_rows;
+        info.min_key = make_int32_tuple(0);
+        info.max_key = make_int32_tuple(static_cast<int32_t>(num_rows > 0 ? num_rows - 1 : 0));
+        Schema s = schema();
+        ASSIGN_OR_ABORT(bool loaded, info.load_samples_from_short_key_index(*segment, s, _sort_key_idxes));
+        EXPECT_TRUE(loaded) << "num_rows=" << num_rows;
+        EXPECT_TRUE(info.sort_key_samples.empty()) << "num_rows=" << num_rows;
+        EXPECT_EQ(0, info.sort_key_sample_row_interval) << "num_rows=" << num_rows;
+    }
+}
+
+// Ordered rows with a partial last block (250 = 2*100 + 50): samples must start at row
+// num_rows_per_block (100), be NON-DECREASING, and satisfy
+// samples.size() * interval < num_rows.
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, OrderedRowsNonDecreasingSamplesPartialLastBlock) {
+    const int64_t num_rows = 250;
+    ASSIGN_OR_ABORT(auto segment, write_and_open_int_key_segment(_fs, kDir + "/seg_ordered.dat", _schema, num_rows));
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+    ASSERT_EQ(100u, segment->num_rows_per_block());
+
+    SegmentSplitInfo info;
+    info.num_rows = num_rows;
+    info.min_key = make_int32_tuple(0);
+    info.max_key = make_int32_tuple(static_cast<int32_t>(num_rows - 1));
+    Schema s = schema();
+    ASSIGN_OR_ABORT(bool loaded, info.load_samples_from_short_key_index(*segment, s, _sort_key_idxes));
+    ASSERT_TRUE(loaded);
+
+    ASSERT_EQ(2u, info.sort_key_samples.size());
+    EXPECT_EQ(100, info.sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, info.sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(100, info.sort_key_sample_row_interval);
+    for (size_t i = 1; i < info.sort_key_samples.size(); ++i) {
+        EXPECT_LE(info.sort_key_samples[i - 1].compare(info.sort_key_samples[i]), 0);
+    }
+    EXPECT_LT(static_cast<int64_t>(info.sort_key_samples.size()) * info.sort_key_sample_row_interval, num_rows);
+}
+
+// Exactly block-aligned (300 == 3*100, no partial tail): still 2 samples (entries
+// 1 and 2; entry 0 is min_key, not a sample), at rows 100 and 200.
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, ExactlyBlockAligned) {
+    const int64_t num_rows = 300;
+    ASSIGN_OR_ABORT(auto segment, write_and_open_int_key_segment(_fs, kDir + "/seg_aligned.dat", _schema, num_rows));
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+
+    SegmentSplitInfo info;
+    info.num_rows = num_rows;
+    info.min_key = make_int32_tuple(0);
+    info.max_key = make_int32_tuple(static_cast<int32_t>(num_rows - 1));
+    Schema s = schema();
+    ASSIGN_OR_ABORT(bool loaded, info.load_samples_from_short_key_index(*segment, s, _sort_key_idxes));
+    ASSERT_TRUE(loaded);
+
+    ASSERT_EQ(2u, info.sort_key_samples.size());
+    EXPECT_EQ(100, info.sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, info.sort_key_samples[1][0].value().get_int32());
+    EXPECT_LT(static_cast<int64_t>(info.sort_key_samples.size()) * info.sort_key_sample_row_interval, num_rows);
+}
+
+// A full page that is present + usable but decoded with sort_key_idxes whose arity does not
+// match the persisted num_sort_key_columns must return false (NOT abort) and leave
+// sort_key_samples empty, so the caller falls back to metadata samples / coarse [min, max].
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, ArityMismatchReturnsFalseAndLeavesSamplesEmpty) {
+    const int64_t num_rows = 250;
+    ASSIGN_OR_ABORT(auto segment, write_and_open_int_key_segment(_fs, kDir + "/seg_arity.dat", _schema, num_rows));
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+    ASSERT_EQ(1u, segment->num_sort_key_columns());
+
+    SegmentSplitInfo info;
+    info.num_rows = num_rows;
+    info.min_key = make_int32_tuple(0);
+    info.max_key = make_int32_tuple(static_cast<int32_t>(num_rows - 1));
+    Schema s = schema();
+    // Empty sort_key_idxes -> decoded arity 0 != persisted arity 1 -> runtime arity check rejects.
+    std::vector<uint32_t> mismatched_idxes;
+    ASSIGN_OR_ABORT(bool loaded, info.load_samples_from_short_key_index(*segment, s, mismatched_idxes));
+    EXPECT_FALSE(loaded);
+    EXPECT_TRUE(info.sort_key_samples.empty());
+    EXPECT_EQ(0, info.sort_key_sample_row_interval);
+}
+
+// A full page that is present + usable but whose decoded samples fall outside the
+// SegmentSplitInfo's [min_key, max_key] must return false (NOT abort) and leave
+// sort_key_samples empty for the caller's fallback.
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, OutOfRangeSamplesReturnFalseAndLeaveSamplesEmpty) {
+    const int64_t num_rows = 250;
+    ASSIGN_OR_ABORT(auto segment, write_and_open_int_key_segment(_fs, kDir + "/seg_oor.dat", _schema, num_rows));
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+
+    SegmentSplitInfo info;
+    info.num_rows = num_rows;
+    // Real samples are 100 and 200; deliberately narrow [min, max] excludes them.
+    info.min_key = make_int32_tuple(500);
+    info.max_key = make_int32_tuple(600);
+    Schema s = schema();
+    ASSIGN_OR_ABORT(bool loaded, info.load_samples_from_short_key_index(*segment, s, _sort_key_idxes));
+    EXPECT_FALSE(loaded);
+    EXPECT_TRUE(info.sort_key_samples.empty());
+    EXPECT_EQ(0, info.sort_key_sample_row_interval);
+}
+
+// Feeding calculate_range_split_boundaries with a SegmentSplitInfo whose samples came
+// from a real full-key short key index must produce IDENTICAL results to feeding it an
+// equivalent SegmentSplitInfo whose samples came from the legacy
+// deprecated_sort_key_samples metadata path, for the same underlying key distribution
+// (250 ordered rows, sampled every 100 rows -> samples [100, 200]).
+TEST_F(FullSortKeyShortKeyIndexLoaderTest, BoundariesMatchMetadataSamplePath) {
+    const int64_t num_rows = 250;
+    ASSIGN_OR_ABORT(auto segment, write_and_open_int_key_segment(_fs, kDir + "/seg_cmp.dat", _schema, num_rows));
+    ASSERT_TRUE(segment->has_full_sort_key_index_page());
+    ASSERT_TRUE(segment->ensure_full_sort_key_index_usable());
+
+    SegmentSplitInfo from_index = make_int32_seg(0, static_cast<int32_t>(num_rows - 1), num_rows, /*data_size=*/2500,
+                                                 /*source_id=*/1);
+    Schema s = schema();
+    ASSIGN_OR_ABORT(bool loaded, from_index.load_samples_from_short_key_index(*segment, s, _sort_key_idxes));
+    ASSERT_TRUE(loaded);
+
+    SegmentSplitInfo from_metadata = make_int32_sampled_seg(0, static_cast<int32_t>(num_rows - 1), num_rows,
+                                                            /*data_size=*/2500, /*row_interval=*/100,
+                                                            /*sample_values=*/{100, 200}, /*source_id=*/1);
+
+    // A second, disjoint segment so ordered_ranges has >= 2 boundary points and a
+    // 2-way split is possible.
+    SegmentSplitInfo other = make_int32_seg(1000, 2000, 100, 1000, /*source_id=*/2);
+
+    ASSIGN_OR_ABORT(auto result_index, calculate_range_split_boundaries({from_index, other}, /*target_split_count=*/2,
+                                                                        /*target_value_per_split=*/200,
+                                                                        /*use_num_rows=*/true,
+                                                                        /*track_sources=*/true));
+    ASSIGN_OR_ABORT(auto result_metadata,
+                    calculate_range_split_boundaries({from_metadata, other}, /*target_split_count=*/2,
+                                                     /*target_value_per_split=*/200,
+                                                     /*use_num_rows=*/true, /*track_sources=*/true));
+
+    ASSERT_EQ(result_metadata.boundaries.size(), result_index.boundaries.size());
+    for (size_t i = 0; i < result_metadata.boundaries.size(); ++i) {
+        EXPECT_EQ(0, result_metadata.boundaries[i].compare(result_index.boundaries[i]));
+    }
+    EXPECT_EQ(result_metadata.range_num_rows, result_index.range_num_rows);
+    EXPECT_EQ(result_metadata.range_data_sizes, result_index.range_data_sizes);
+}
+
+// =============================================================================
+// build_segments_from_rowsets plumbing: per-segment source selection when a real
+// lake TabletManager is threaded through. Mirrors LakeTabletReshardTest's real-disk
+// fixture pattern (be/test/storage/lake/tablet_reshard_test.cpp).
+// =============================================================================
+
+class BuildSegmentsFromRowsetsLoaderTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        std::vector<starrocks::StorePath> paths;
+        CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
+        _test_dir = paths[0].path + "/tablet_splitter_loader_test";
+        _location_provider = std::make_shared<FixedLocationProvider>(_test_dir);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 16384);
+    }
+
+    void TearDown() override {
+        auto status = fs::remove_all(_test_dir);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+    }
+
+    void prepare_tablet_dirs(int64_t tablet_id) {
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(tablet_id)));
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(tablet_id)));
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(tablet_id)));
+    }
+
+    static std::shared_ptr<TabletSchema> int_key_schema() { return make_full_sort_key_test_schema(); }
+
+    void set_int_key_schema(TabletMetadataPB* metadata) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_id(9101);
+        schema->set_num_short_key_columns(1);
+        auto* c0 = schema->add_column();
+        c0->set_unique_id(1);
+        c0->set_name("k1");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto* c1 = schema->add_column();
+        c1->set_unique_id(2);
+        c1->set_name("v1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation("REPLACE");
+    }
+
+    // Writes a real segment (key column 0..num_rows-1, value column constant 0) under
+    // this fixture's TabletManager-resolved path for |tablet_id|/|segment_name|, under
+    // the writer-time value of config::enable_full_sort_key_index. Returns file size.
+    uint64_t write_int_key_segment(int64_t tablet_id, const std::string& segment_name, int64_t num_rows) {
+        auto tablet_schema = int_key_schema();
+        auto segment_path = _tablet_manager->segment_location(tablet_id, segment_name);
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wfile_or = fs::new_writable_file(fopts, segment_path);
+        CHECK_OK(wfile_or.status());
+
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile_or.value()), 0, tablet_schema, opts);
+        CHECK_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        for (int64_t i = 0; i < num_rows; ++i) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        }
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+        return file_size;
+    }
+
+    std::string _test_dir;
+    std::shared_ptr<FixedLocationProvider> _location_provider;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+};
+
+// A real, non-null TabletManager plumbed through build_segments_from_rowsets opens the
+// rowset's segment via Rowset::get_rowsets/load_segments, resolves the rowset's own
+// (historical) schema and sort_key_idxes, and -- for a full-key segment -- reads its
+// short key index into SegmentSplitInfo.sort_key_samples, exactly matching direct
+// SegmentSplitInfo::load_samples_from_short_key_index usage.
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, RealFullKeySegmentPopulatesSamplesViaLoader) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string seg_name = "seg_full_key.dat";
+    const uint64_t seg_size = write_int_key_segment(tablet_id, seg_name, num_rows);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(num_rows);
+    rowset->set_data_size(seg_size);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(num_rows);
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    ASSERT_EQ(2u, segments[0].sort_key_samples.size());
+    EXPECT_EQ(100, segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[0].sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
+}
+
+// Tablet split is NOT read-config-gated: with config::enable_full_sort_key_index_read = false,
+// build_segments_from_rowsets must STILL populate samples from a present + usable full page (the
+// read config gates only query seek paths, never split-boundary precision).
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, ReadConfigOffStillLoadsSamplesFromFullPage) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore_write([&] { config::enable_full_sort_key_index = old_enable; });
+    const bool old_read = config::enable_full_sort_key_index_read;
+    config::enable_full_sort_key_index_read = false; // split must ignore this
+    DeferOp restore_read([&] { config::enable_full_sort_key_index_read = old_read; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string seg_name = "seg_read_off.dat";
+    const uint64_t seg_size = write_int_key_segment(tablet_id, seg_name, num_rows);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(num_rows);
+    rowset->set_data_size(seg_size);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(num_rows);
+    make_int32_tuple(0).to_proto(sm->mutable_sort_key_min());
+    make_int32_tuple(static_cast<int32_t>(num_rows - 1)).to_proto(sm->mutable_sort_key_max());
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    ASSERT_EQ(2u, segments[0].sort_key_samples.size());
+    EXPECT_EQ(100, segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[0].sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
+}
+
+// A legacy (non full-key) segment falls back to the pre-existing
+// deprecated_sort_key_samples metadata path even when a real TabletManager
+// successfully opens the segment file.
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, LegacySegmentFallsBackToDeprecatedSamples) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = false;
+    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string seg_name = "seg_legacy.dat";
+    const uint64_t seg_size = write_int_key_segment(tablet_id, seg_name, num_rows);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(num_rows);
+    rowset->set_data_size(seg_size);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(num_rows);
+    sm->set_deprecated_sort_key_sample_row_interval(100);
+    make_int32_tuple(100).to_proto(sm->add_deprecated_sort_key_samples());
+    make_int32_tuple(200).to_proto(sm->add_deprecated_sort_key_samples());
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    ASSERT_EQ(2u, segments[0].sort_key_samples.size());
+    EXPECT_EQ(100, segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[0].sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
+}
+
+// A skipped/ignored/lost segment (Rowset::LoadedSegment::segment == nullptr, produced
+// here via a missing segment file + experimental_lake_ignore_lost_segment=true) must
+// fall back to coarse (empty samples, interval 0) WITHOUT dereferencing the null
+// segment -- while a sibling real full-key segment in the SAME rowset still gets its
+// samples from the loader.
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, LostSegmentFallsBackWithoutDereferencingNull) {
+    const bool old_enable_full_key = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore_full_key([&] { config::enable_full_sort_key_index = old_enable_full_key; });
+    const bool old_ignore_lost = config::experimental_lake_ignore_lost_segment;
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp restore_ignore_lost([&] { config::experimental_lake_ignore_lost_segment = old_ignore_lost; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string present_seg_name = "seg_present.dat";
+    const uint64_t present_seg_size = write_int_key_segment(tablet_id, present_seg_name, num_rows);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(num_rows);
+    rowset->set_data_size(present_seg_size);
+
+    auto* sm_present = rowset->add_segment_metas();
+    sm_present->set_filename(present_seg_name);
+    sm_present->set_size(present_seg_size);
+    sm_present->set_num_rows(num_rows);
+
+    // Never written to disk; with experimental_lake_ignore_lost_segment=true this
+    // becomes a null LoadedSegment placeholder instead of a hard load error.
+    auto* sm_lost = rowset->add_segment_metas();
+    sm_lost->set_filename("seg_missing.dat");
+    sm_lost->set_size(100);
+    sm_lost->set_num_rows(10);
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(2u, segments.size());
+
+    // segments[0]: the real, present full-key segment -- still gets samples.
+    ASSERT_EQ(2u, segments[0].sort_key_samples.size());
+    EXPECT_EQ(100, segments[0].sort_key_sample_row_interval);
+
+    // segments[1]: the lost segment -- coarse fallback, no crash.
+    EXPECT_TRUE(segments[1].sort_key_samples.empty());
+    EXPECT_EQ(0, segments[1].sort_key_sample_row_interval);
+    EXPECT_EQ(10, segments[1].num_rows);
+}
+
+// Regression for the split-reader crash: metadata carrying a sample-less segment but an
+// UNSET schema id (as synthetic reshard metadata routinely produces) must degrade to the
+// coarse path, NOT abort in the Rowset ctor's GlobalTabletSchemaMap::emplace, which
+// asserts DCHECK_NE(TabletSchema::invalid_id(), id). A real, non-null TabletManager is
+// supplied; the schema gate must reject the loader before the Rowset is constructed, so
+// no file I/O and no abort occur (no segment is written to disk here).
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, UnsetSchemaIdDegradesToCoarseWithoutAbort) {
+    const int64_t tablet_id = next_id();
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    // Schema left entirely unset -> schema().id() == TabletSchema::invalid_id().
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename("never_written.dat");
+    sm->set_size(100);
+    sm->set_num_rows(10);
+    make_int32_tuple(0).to_proto(sm->mutable_sort_key_min());
+    make_int32_tuple(9).to_proto(sm->mutable_sort_key_max());
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    EXPECT_TRUE(segments[0].sort_key_samples.empty());
+    EXPECT_EQ(0, segments[0].sort_key_sample_row_interval);
+    EXPECT_EQ(0, segments[0].min_key[0].value().get_int32());
+    EXPECT_EQ(9, segments[0].max_key[0].value().get_int32());
+}
+
+// A present, non-full-key segment that carries NO deprecated_sort_key_samples: the
+// sample-less perf gate lets the loader open it, the segment is found to be legacy
+// (no full sort key index), and it degrades to the coarse [min, max] path -- empty
+// samples, interval 0, with the metadata bounds preserved.
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, OpenedNonFullKeySegmentWithoutSamplesFallsBackToCoarse) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = false;
+    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const int64_t num_rows = 250;
+    const std::string seg_name = "seg_coarse.dat";
+    const uint64_t seg_size = write_int_key_segment(tablet_id, seg_name, num_rows);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(num_rows);
+    rowset->set_data_size(seg_size);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(num_rows);
+    // Coarse bounds only, NO deprecated samples -> the perf gate cannot skip the loader,
+    // so the segment is genuinely opened and only then found to be legacy.
+    make_int32_tuple(0).to_proto(sm->mutable_sort_key_min());
+    make_int32_tuple(249).to_proto(sm->mutable_sort_key_max());
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    EXPECT_TRUE(segments[0].sort_key_samples.empty());
+    EXPECT_EQ(0, segments[0].sort_key_sample_row_interval);
+    EXPECT_EQ(0, segments[0].min_key[0].value().get_int32());
+    EXPECT_EQ(249, segments[0].max_key[0].value().get_int32());
+}
+
+// Two rowsets, each mapped through rowset_to_schema to its OWN historical schema, both
+// backed by real full-key segments of different row counts. build_segments_from_rowsets
+// must resolve each rowset's schema independently (from historical_schemas) and decode
+// each segment's short key index with it. The top-level schema().id() is deliberately
+// cleared so that a wrong fallback to it -- rather than the per-rowset historical schema
+// -- would trip the invalid-id gate and skip the loader, failing these assertions.
+TEST_F(BuildSegmentsFromRowsetsLoaderTest, TwoRowsetsDistinctHistoricalSchemasDecodeIndependently) {
+    const bool old_enable = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = true;
+    DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const std::string seg0 = "seg_hist0.dat";
+    const std::string seg1 = "seg_hist1.dat";
+    const uint64_t size0 = write_int_key_segment(tablet_id, seg0, 250);
+    const uint64_t size1 = write_int_key_segment(tablet_id, seg1, 350);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    set_int_key_schema(metadata.get());
+    // No top-level schema id: forces resolution through the per-rowset historical schemas.
+    metadata->mutable_schema()->clear_id();
+
+    auto& hist = *metadata->mutable_historical_schemas();
+    hist[5001] = metadata->schema();
+    hist[5001].set_id(5001);
+    hist[5002] = metadata->schema();
+    hist[5002].set_id(5002);
+    auto& r2s = *metadata->mutable_rowset_to_schema();
+
+    auto* rowset0 = metadata->add_rowsets();
+    rowset0->set_id(10);
+    rowset0->set_num_rows(250);
+    rowset0->set_data_size(size0);
+    auto* sm0 = rowset0->add_segment_metas();
+    sm0->set_filename(seg0);
+    sm0->set_size(size0);
+    sm0->set_num_rows(250);
+    r2s[10] = 5001;
+
+    auto* rowset1 = metadata->add_rowsets();
+    rowset1->set_id(11);
+    rowset1->set_num_rows(350);
+    rowset1->set_data_size(size1);
+    auto* sm1 = rowset1->add_segment_metas();
+    sm1->set_filename(seg1);
+    sm1->set_size(size1);
+    sm1->set_num_rows(350);
+    r2s[11] = 5002;
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, &segments));
+    ASSERT_EQ(2u, segments.size());
+
+    // rowset0 (schema 5001, 250 rows): samples at rows 100, 200.
+    ASSERT_EQ(2u, segments[0].sort_key_samples.size());
+    EXPECT_EQ(100, segments[0].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[0].sort_key_samples[1][0].value().get_int32());
+
+    // rowset1 (schema 5002, 350 rows): samples at rows 100, 200, 300 -- decoded with its
+    // own schema, proving per-rowset resolution rather than a shared/top-level schema.
+    ASSERT_EQ(3u, segments[1].sort_key_samples.size());
+    EXPECT_EQ(100, segments[1].sort_key_samples[0][0].value().get_int32());
+    EXPECT_EQ(200, segments[1].sort_key_samples[1][0].value().get_int32());
+    EXPECT_EQ(300, segments[1].sort_key_samples[2][0].value().get_int32());
+}
+
+// tablet_manager == nullptr (synthetic metadata-only callers, e.g. every other test in
+// this file) must skip the loader entirely and source purely from
+// deprecated_sort_key_samples / coarse, without attempting any file I/O.
+TEST(TabletSplitterTest, BuildSegmentsFromRowsets_NullTabletManagerSkipsLoader) {
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(1);
+    metadata->set_version(1);
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename("never_written.dat");
+    sm->set_size(100);
+    sm->set_num_rows(10);
+    sm->mutable_sort_key_min()->CopyFrom(make_bigint_tuple_pb(0));
+    sm->mutable_sort_key_max()->CopyFrom(make_bigint_tuple_pb(9));
+
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, metadata, &segments));
+    ASSERT_EQ(1u, segments.size());
+    EXPECT_TRUE(segments[0].sort_key_samples.empty());
+    EXPECT_EQ(0, segments[0].sort_key_sample_row_interval);
 }
 
 } // namespace starrocks::lake

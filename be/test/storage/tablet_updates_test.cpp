@@ -21,6 +21,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "data_workflows/consistency/engine_checksum_task.h"
@@ -1518,6 +1519,12 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_random_pick) {
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
+    // This test asserts the legacy truncated short-key encoding (short_key_encode over
+    // num_short_key_columns) of compacted segments; pin the full sort key index off, as it
+    // now defaults on and would otherwise write the full-key encoding into the short key index.
+    auto saved_full_sort_key_index = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = false;
+    DeferOp restore_full_sort_key_index([&] { config::enable_full_sort_key_index = saved_full_sort_key_index; });
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;
@@ -1852,6 +1859,12 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index_with_rows_ma
 TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
+    // This test asserts the legacy truncated short-key encoding (short_key_encode over
+    // num_short_key_columns) of compacted segments; pin the full sort key index off, as it
+    // now defaults on and would otherwise write the full-key encoding into the short key index.
+    auto saved_full_sort_key_index = config::enable_full_sort_key_index;
+    config::enable_full_sort_key_index = false;
+    DeferOp restore_full_sort_key_index([&] { config::enable_full_sort_key_index = saved_full_sort_key_index; });
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;

@@ -159,6 +159,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
