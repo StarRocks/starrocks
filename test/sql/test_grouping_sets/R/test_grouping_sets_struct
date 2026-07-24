@@ -1,4 +1,7 @@
 -- name: test_grouping_sets_struct
+DROP TABLE IF EXISTS t_struct_gs;
+-- result:
+-- !result
 CREATE TABLE t_struct_gs (c0 INT, c2 STRUCT<a INT, b INT>)
 DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:
@@ -34,4 +37,7 @@ SELECT c0, array_length(array_agg(c2)) FROM t_struct_gs GROUP BY ROLLUP(c0) ORDE
 None	3
 1	2
 2	1
+-- !result
+DROP TABLE t_struct_gs;
+-- result:
 -- !result
