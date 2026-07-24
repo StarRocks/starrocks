@@ -22,10 +22,28 @@ import javax.validation.constraints.NotNull;
  * Waits for a transaction becomes visible.
  */
 public final class VisibleStateWaiter {
+    // May be null when the transaction is already known to be visible (e.g. reconstructed from the
+    // terminal-state cache after the full TransactionState was evicted).
     private final TransactionState txnState;
+    private final boolean alreadyVisible;
 
     VisibleStateWaiter(@NotNull TransactionState txnState) {
         this.txnState = txnState;
+        this.alreadyVisible = false;
+    }
+
+    private VisibleStateWaiter() {
+        this.txnState = null;
+        this.alreadyVisible = true;
+    }
+
+    /**
+     * Returns a waiter for a transaction that is already known to be visible. Used when the full
+     * {@link TransactionState} is no longer available (evicted) but the terminal outcome is known
+     * to be {@code VISIBLE}. Both {@code await} variants return immediately.
+     */
+    public static VisibleStateWaiter completed() {
+        return new VisibleStateWaiter();
     }
 
     /**
@@ -33,6 +51,9 @@ public final class VisibleStateWaiter {
      * If the current state is VISIBLE then this method returns immediately.
      */
     public void await() {
+        if (alreadyVisible) {
+            return;
+        }
         while (true) {
             try {
                 txnState.waitTransactionVisible();
@@ -55,6 +76,9 @@ public final class VisibleStateWaiter {
      * elapsed before the state becomes VISIBLE
      */
     public boolean await(long timeout, @NotNull TimeUnit unit) {
+        if (alreadyVisible) {
+            return true;
+        }
         try {
             return txnState.waitTransactionVisible(timeout, unit);
         } catch (InterruptedException e) {

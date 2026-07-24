@@ -1132,7 +1132,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 在一段时间内可以保留的最大加载作业数。如果超过此数量，将删除历史作业信息。
+- 描述: 在一段时间内可以保留的最大加载作业数。如果超过此数量，将删除历史作业信息。注意：这种基于数量的淘汰**忽略时间**。当某个数据库累积的已完成事务数超过 `label_keep_max_num` 时，即使最早的事务远未达到 `label_keep_max_second`，也会被删除。此时，从 savepoint 恢复并重新提交该事务的连接器（例如 Flink）会认为该事务丢失。如需在此类重新提交时保留事务的终态结果，请参见 `transaction_terminal_state_cache_num`。
 - 引入版本: -
 
 ### `label_keep_max_second`
@@ -1141,7 +1141,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 已完成且处于 FINISHED 或 CANCELLED 状态的加载作业标签的最长保留时间（秒）。默认值为 3 天。此持续时间过后，标签将被删除。此参数适用于所有类型的加载作业。值过大会消耗大量内存。
+- 描述: 已完成且处于 FINISHED 或 CANCELLED 状态的加载作业标签的最长保留时间（秒）。默认值为 3 天。此持续时间过后，标签将被删除。此参数适用于所有类型的加载作业。值过大会消耗大量内存。注意：这种基于时间的淘汰不会覆盖 `label_keep_max_num`；基于数量的淘汰仍可能在此时间之前删除事务。
+- 引入版本: -
+
+### `transaction_terminal_state_cache_num`
+
+- 默认值: 50000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 在完整事务状态因 `label_keep_max_num` 基于数量的淘汰而被删除后，每个数据库在轻量级缓存中保留的终态（VISIBLE/ABORTED）事务结果的最大数量。由于基于数量的淘汰忽略时间，事务可能远在 `label_keep_max_second` 之前就被删除。当连接器（例如 Flink）从 savepoint 恢复并重新提交此类事务时，FE 否则会返回 "transaction not found"，而连接器无法将其与"从未提交"区分开来，从而导致 abort/failover 循环。此缓存使 FE 能够以真实结果响应重新提交：对 VISIBLE/COMMITTED 返回幂等成功，对 ABORTED 返回提交失败。每个条目仅保留事务 id、label、状态、原因和完成时间；早于 `label_keep_max_second` 的条目视为不存在。设置为 `0` 可禁用该缓存。
 - 引入版本: -
 
 ### `load_checker_interval_second`

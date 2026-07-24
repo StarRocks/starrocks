@@ -70,10 +70,20 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: トランザクションロードリクエストの合計数。
 
+## `txn_count_eviction`
+
+- 単位: -
+- 説明: `label_keep_max_second` に達する前に、数量制限（`label_keep_max_num`）によって削除された完了トランザクションの数。継続的に非ゼロの場合、完了トランザクションの履歴が経過時間を無視する数量削除によって除去されていることを意味し、コネクターが savepoint/復帰後に再コミットする際にトランザクションが見つからなくなる可能性があります。`label_keep_max_num` または `transaction_terminal_state_cache_num` を大きくすることで緩和できます。
+
 ## `txn_request`
 
 - 単位: -
 - 説明: BEGIN、COMMIT、ROLLBACK、EXECのトランザクションリクエスト。
+
+## `txn_terminal_cache_hit`
+
+- 単位: -
+- 説明: 既に削除されたトランザクションの再コミットまたは状態照会が、"transaction not found" を返す代わりに終了状態キャッシュ（`transaction_terminal_state_cache_num` を参照）から回答された回数。
 
 ## `uint8_column_pool_bytes`
 

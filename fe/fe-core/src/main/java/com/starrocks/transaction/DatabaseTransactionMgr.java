@@ -158,6 +158,14 @@ public class DatabaseTransactionMgr {
     private final Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
     private long maxCommitTs = 0;
 
+    /*
+     * Lightweight cache of terminal (VISIBLE/ABORTED) transaction outcomes that survives the
+     * removal of the full TransactionState by count-based eviction (removeExpiredTxns). Lets a
+     * connector re-commit of an already-cleaned transaction get the real outcome instead of a
+     * "transaction not found" error. See TxnTerminalStateCache.
+     */
+    private final TxnTerminalStateCache terminalStateCache = new TxnTerminalStateCache();
+
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
@@ -350,7 +358,12 @@ public class DatabaseTransactionMgr {
 
         TransactionState transactionState = getTransactionState(transactionId);
         if (transactionState == null) {
-            throw new TransactionNotFoundException(transactionId);
+            // The full state may have been evicted (count-based eviction ignores age). If the
+            // terminal outcome is cached and was VISIBLE, treat the re-prepare as idempotent success.
+            resolveEvictedTxnOrThrow(transactionId);
+            LOG.info("transaction {} was already evicted with terminal state VISIBLE, "
+                    + "treat re-prepare as idempotent success", transactionId);
+            return;
         }
 
         transactionState.writeLock();
@@ -476,7 +489,13 @@ public class DatabaseTransactionMgr {
 
         TransactionState transactionState = getTransactionState(transactionId);
         if (transactionState == null) {
-            throw new TransactionNotFoundException(transactionId);
+            // The full state may have been evicted (count-based eviction ignores age). If the
+            // terminal outcome is cached and was VISIBLE, treat the re-commit as idempotent success
+            // and hand back an already-completed waiter; if it was ABORTED, fail the commit.
+            resolveEvictedTxnOrThrow(transactionId);
+            LOG.info("transaction {} was already evicted with terminal state VISIBLE, "
+                    + "treat re-commit as idempotent success", transactionId);
+            return VisibleStateWaiter.completed();
         }
         transactionState.writeLock();
         try {
@@ -766,6 +785,50 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    /**
+     * Called when a transaction id is no longer present in the running/final-status maps. Consults
+     * the terminal-state cache so a re-commit of an already-evicted transaction gets a definitive
+     * answer:
+     * <ul>
+     *   <li>cached ABORTED: throw {@link TransactionCommitFailedException} (do NOT fake success -
+     *       critical for truncate-then-resume, where a false success would silently drop data);</li>
+     *   <li>cached VISIBLE: return the record so the caller can respond idempotently;</li>
+     *   <li>not cached: throw {@link TransactionNotFoundException} (unchanged behavior).</li>
+     * </ul>
+     */
+    private TxnTerminalStateCache.Record resolveEvictedTxnOrThrow(long transactionId) throws StarRocksException {
+        TxnTerminalStateCache.Record record = terminalStateCache.getByTxnId(transactionId);
+        if (record == null) {
+            throw new TransactionNotFoundException(transactionId);
+        }
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_TXN_TERMINAL_CACHE_HIT.increase(1L);
+        }
+        if (record.status == TransactionStatus.ABORTED) {
+            throw new TransactionCommitFailedException(record.reason);
+        }
+        return record;
+    }
+
+    @VisibleForTesting
+    protected int getTerminalStateCacheSize() {
+        return terminalStateCache.size();
+    }
+
+    // Snapshot of the terminal-state cache for FE image serialization. The checkpoint worker runs
+    // clearExpiredJobs() (which count-evicts and populates this cache) before saveImage(), so the
+    // image must carry these outcomes or a post-checkpoint restart/failover would lose them and a
+    // recommit would wrongly get "transaction not found".
+    List<TxnTerminalStateCache.Record> getTerminalStateCacheSnapshot() {
+        return terminalStateCache.snapshot();
+    }
+
+    // Repopulate one cached terminal outcome from the FE image (same admission rules as a live put).
+    void restoreTerminalStateCacheRecord(long txnId, String label, TransactionStatus status, String reason,
+                                         long finishTime) {
+        terminalStateCache.restore(txnId, label, status, reason, finishTime);
+    }
+
     @VisibleForTesting
     @Nullable
     protected Set<Long> unprotectedGetTxnIdsByLabel(String label) {
@@ -858,6 +921,15 @@ public class DatabaseTransactionMgr {
         try {
             Set<Long> existingTxnIds = unprotectedGetTxnIdsByLabel(label);
             if (existingTxnIds == null || existingTxnIds.isEmpty()) {
+                // The full state may have been evicted; fall back to the cached terminal outcome so
+                // a connector probing by label can tell "committed then cleaned up" from "never existed".
+                TxnTerminalStateCache.Record record = terminalStateCache.getByLabel(label);
+                if (record != null) {
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_TXN_TERMINAL_CACHE_HIT.increase(1L);
+                    }
+                    return new TransactionStateSnapshot(record.status, record.reason);
+                }
                 return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
             }
             // find the latest txn (which id is largest)
@@ -2013,9 +2085,20 @@ public class DatabaseTransactionMgr {
             StringBuilder expiredTxnMsgs = new StringBuilder(1024);
             String prefix = "";
             int numJobsToRemove = getTransactionNum() - Config.label_keep_max_num;
+            int countEvicted = 0;
+            long youngestCountEvictedAgeMs = Long.MAX_VALUE;
             while (!finalStatusTransactionStateDeque.isEmpty()) {
                 TransactionState transactionState = finalStatusTransactionStateDeque.getFirst();
-                if (transactionState.isExpired(currentMillis) || numJobsToRemove > 0) {
+                boolean ageExpired = transactionState.isExpired(currentMillis);
+                if (ageExpired || numJobsToRemove > 0) {
+                    if (!ageExpired) {
+                        // Removed purely because the finished-txn count exceeds label_keep_max_num, even
+                        // though it has not yet reached label_keep_max_second. This is the eviction that
+                        // can make a connector re-commit after a savepoint/resume see the txn as missing.
+                        ++countEvicted;
+                        youngestCountEvictedAgeMs =
+                                Math.min(youngestCountEvictedAgeMs, currentMillis - transactionState.getFinishTime());
+                    }
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
                     --numJobsToRemove;
@@ -2035,12 +2118,25 @@ public class DatabaseTransactionMgr {
                 LOG.info("transaction list [{}] are expired, remove them from transaction manager",
                         expiredTxnMsgs);
             }
+            if (countEvicted > 0) {
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_TXN_COUNT_EVICTION.increase((long) countEvicted);
+                }
+                LOG.warn("db[{}] evicted {} finished transaction(s) by count (label_keep_max_num={}) before reaching "
+                                + "label_keep_max_second={}s; youngest evicted was {}s old. If connectors re-commit "
+                                + "after long pauses, raise label_keep_max_num or transaction_terminal_state_cache_num.",
+                        dbId, countEvicted, Config.label_keep_max_num, Config.label_keep_max_second,
+                        youngestCountEvictedAgeMs / 1000);
+            }
         } finally {
             writeUnlock();
         }
     }
 
     private void clearTransactionState(TransactionState transactionState) {
+        // Remember the terminal outcome before the full state is dropped, so a later re-commit of
+        // this (now evicted) transaction can be answered definitively instead of "not found".
+        terminalStateCache.put(transactionState);
         idToFinalStatusTransactionState.remove(transactionState.getTransactionId());
         Set<Long> txnIds = unprotectedGetTxnIdsByLabel(transactionState.getLabel());
         txnIds.remove(transactionState.getTransactionId());
@@ -2608,8 +2704,19 @@ public class DatabaseTransactionMgr {
         readLock();
         try {
             TransactionState transactionState = unprotectedGetTransactionState(txnId);
-            return transactionState == null ? new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null)
-                    : new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason());
+            if (transactionState != null) {
+                return new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason());
+            }
+            // The full state may have been evicted; return the cached terminal outcome if known so
+            // callers can distinguish "committed then cleaned up" from "never existed" (UNKNOWN).
+            TxnTerminalStateCache.Record record = terminalStateCache.getByTxnId(txnId);
+            if (record != null) {
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_TXN_TERMINAL_CACHE_HIT.increase(1L);
+                }
+                return new TransactionStateSnapshot(record.status, record.reason);
+            }
+            return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
         } finally {
             readUnlock();
         }
