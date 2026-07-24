@@ -21,6 +21,9 @@
 #include "column/global_dict/config.h"
 #include "compute_env/runtime_range_pruner.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
+#include "exprs/binary_predicate.h"
+#include "exprs/expr_context.h"
+#include "exprs/literal.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_in_filter.h"
 #include "storage_primitive/column_and_predicate.h"
@@ -42,15 +45,60 @@ struct RuntimeColumnPredicateBuilder {
         // keep consistent with ColumnRangeBuilder
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
                       lt_is_float<ltype> || lt_is_binary<ltype>) {
-            DCHECK(false) << "unreachable path";
-            return Status::NotSupported("unreachable path");
+            return std::vector<const ColumnPredicate*>{};
         } else {
             std::vector<const ColumnPredicate*> preds;
+            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
+            const RuntimeFilter* rf = desc->runtime_filter(driver_sequence);
+            ExprContext* probe_expr_ctx = desc->probe_expr_ctx();
+            Expr* probe_expr = probe_expr_ctx->root();
+
+            if (!probe_expr->is_slotref()) {
+                if (!probe_expr->is_monotonic()) return preds;
+
+                const auto* filter = down_cast<const MinMaxRuntimeFilter<mapping_type>*>(rf->get_min_max_filter());
+                if (filter == nullptr || filter->is_empty_range() || rf->has_null()) return preds;
+
+                using DecoderType = DummyDecoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
+                DecoderType decoder(nullptr);
+                MinMaxParser<MinMaxRuntimeFilter<mapping_type>, DecoderType> minmax_parser(filter, &decoder);
+
+                RuntimeState* state = probe_expr_ctx->runtime_state();
+                const TypeDescriptor& probe_type = probe_expr->type();
+
+                auto add_predicate = [&](ColumnPtr bound, TExprOpcode::type opcode) -> Status {
+                    TExprNode node;
+                    node.node_type = TExprNodeType::BINARY_PRED;
+                    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+                    node.child_type = to_thrift(ltype);
+                    node.__set_opcode(opcode);
+
+                    Expr* root = pool->add(VectorizedBinaryPredicateFactory::from_thrift(node));
+                    root->add_child(Expr::copy(pool, probe_expr));
+                    root->add_child(pool->add(new VectorizedLiteral(std::move(bound), probe_type)));
+                    root->set_monotonic(true);
+
+                    auto* expr_ctx = pool->add(new ExprContext(root));
+                    RETURN_IF_ERROR(expr_ctx->prepare(state));
+                    RETURN_IF_ERROR(expr_ctx->open(state));
+                    ASSIGN_OR_RETURN(auto* predicate, parser->parse_expr_ctx(*slot, state, expr_ctx));
+                    if (predicate == nullptr) return Status::OK();
+
+                    predicate = pool->add(predicate);
+                    predicate->set_index_filter_only(true);
+                    preds.emplace_back(predicate);
+                    return Status::OK();
+                };
+
+                RETURN_IF_ERROR(add_predicate(minmax_parser.template min_const_column<ltype>(probe_type, pool),
+                                              filter->left_close_interval() ? TExprOpcode::GE : TExprOpcode::GT));
+                RETURN_IF_ERROR(add_predicate(minmax_parser.template max_const_column<ltype>(probe_type, pool),
+                                              filter->right_close_interval() ? TExprOpcode::LE : TExprOpcode::LT));
+                return preds;
+            }
 
             // Treat tinyint and boolean as int
             constexpr LogicalType limit_type = ltype == TYPE_TINYINT || ltype == TYPE_BOOLEAN ? TYPE_INT : ltype;
-            // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr LogicalType mapping_type = ltype == TYPE_CHAR ? TYPE_VARCHAR : ltype;
 
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
@@ -65,8 +113,6 @@ struct RuntimeColumnPredicateBuilder {
 
             RangeType& range = full_range;
             range.set_index_filter_only(true);
-
-            const RuntimeFilter* rf = desc->runtime_filter(driver_sequence);
 
             // process agg in runtime-filter
             auto* in_filter = rf->get_in_filter();
@@ -291,9 +337,10 @@ inline auto RuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMa
                                                     ObjectPool* pool) -> StatusOr<PredicatesRawPtrs> {
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
+    auto* desc = _unarrived_runtime_filters[idx];
     return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(
-            slot_desc->type().type, false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser,
-            _unarrived_runtime_filters[idx], slot_desc, _driver_sequence, pool);
+            desc->probe_expr_type(), false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser, desc,
+            slot_desc, _driver_sequence, pool);
 }
 
 inline void RuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {
