@@ -16,7 +16,12 @@ package com.starrocks.lake.bookmark;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -25,6 +30,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -32,6 +38,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -156,6 +163,66 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
             spy.release.release();
             f3.get(60, TimeUnit.SECONDS);
             assertNull(spy.peekCreating());
+        } finally {
+            pool.shutdownNow();
+            pool.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    /**
+     * create() must publish the in-flight bookmark, partition versions already captured, BEFORE
+     * releasing the table read lock. The vacuum daemons rely on exactly this: version advances
+     * take the table write lock, so a slot published under the read lock is ordered before any
+     * visible version a vacuum round can read afterwards, and the round's fence read (placed
+     * after its visible-version read) cannot miss the bookmark. If create() released the lock
+     * first, a publish plus a whole vacuum round could run before the slot appears and reclaim
+     * the versions the bookmark just captured.
+     */
+    @Test
+    public void testCreatePublishesInFlightBookmarkBeforeTableUnlock() throws Exception {
+        long tableId = createDefaultTable();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        Partition p1 = table.getPartition("p1");
+        long lp1 = p1.getId();
+        long pp1 = p1.getSubPartitions().iterator().next().getId();
+        long expectedVersion = p1.getSubPartitions().iterator().next().getVisibleVersion();
+
+        TestBookmarkManager mgr = new TestBookmarkManager();
+        AtomicReference<Thread> createThread = new AtomicReference<>();
+        // null = create's unlock not observed; empty = the slot was missing (or had not captured
+        // p1) at the moment create() released the table lock. Only the first unlock on the
+        // create thread is recorded; background daemons unlocking the same table are ignored.
+        AtomicReference<Optional<Long>> slotVersionAtUnlock = new AtomicReference<>();
+        new MockUp<Locker>() {
+            @Mock
+            public void unLockTableWithIntensiveDbLock(Invocation invocation,
+                                                       Long lockDbId, Long lockTableId, LockType lockType) {
+                if (Thread.currentThread() == createThread.get()
+                        && lockTableId != null && lockTableId == tableId && lockType == LockType.READ) {
+                    TableBookmarkTracker tracker = mgr.tracker();
+                    Bookmark inFlight = tracker == null ? null : tracker.peekCreating();
+                    slotVersionAtUnlock.compareAndSet(null, inFlight == null
+                            ? Optional.empty()
+                            : inFlight.getPhysicalPartitionVersion(lp1, pp1));
+                }
+                invocation.proceed();
+            }
+        };
+
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<Bookmark> f = pool.submit(() -> {
+                createThread.set(Thread.currentThread());
+                return mgr.create(dbId, tableId, BookmarkHolder.forEmptyInfo("unlock_h1"));
+            });
+            TestTracker spy = waitForTracker(mgr);
+            spy.arrival.acquire();
+            // create() is parked just past its unlock; the sensor already recorded what the
+            // in-flight slot looked like at that moment.
+            assertEquals(Optional.of(expectedVersion), slotVersionAtUnlock.get());
+            spy.release.release();
+            f.get(60, TimeUnit.SECONDS);
         } finally {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);

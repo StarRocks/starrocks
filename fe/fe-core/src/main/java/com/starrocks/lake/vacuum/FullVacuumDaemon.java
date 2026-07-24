@@ -281,4 +281,8 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
     public static long computeMinActiveTxnId(Database db, Table table) {
         return LakeTableHelper.computeMinActiveTxnId(db.getId(), table.getId());
     }
+
+    public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+        vacuumPartitionImpl(db, table, partition);
+    }
 }

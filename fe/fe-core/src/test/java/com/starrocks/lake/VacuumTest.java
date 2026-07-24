@@ -49,6 +49,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -71,6 +72,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
@@ -638,148 +642,100 @@ public class VacuumTest {
         FeConstants.runningUnitTest = true;
     }
 
+    /**
+     * FullVacuumDaemon has the same ordering obligation as the autovacuum: read the bookmark
+     * fence only after the locked visible-version read, then clamp maxCheckVersion to it. A
+     * racing bookmark create is only guaranteed observable to fence reads placed after that
+     * read (create publishes the in-flight bookmark under the table read lock that also orders
+     * version advances), so the fence mock stays empty until this partition's visible version
+     * has been read.
+     */
     @Test
-    public void testFullVacuumRespectsBookmark() {
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        FullVacuumDaemon fullVacuumDaemon = new FullVacuumDaemon();
+    public void testFullVacuumReadsFenceAfterVisibleVersion() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(0L);
 
-        long expectedVisibleVersion = 10L;
-        long expectedOldestReferencedVersion = 4L;
-
-        long testDbId = 0;
-        List<Long> dbIds = currentState.getLocalMetastore().getDbIds();
-        for (Long dbId : dbIds) {
-            Database currDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (currDb != null && !currDb.isSystemDatabase()) {
-                testDbId = dbId;
-                break;
-            }
-        }
-        final Database sourceDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
-        for (Table tbl : sourceDb.getTables()) {
-            if (tbl.isOlapTable()) {
-                OlapTable olapTbl = (OlapTable) tbl;
-                for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
-                    part.setLastFullVacuumTime(1L);
-                    part.setMinRetainVersion(0L);
-                }
-            }
-        }
-
+        long bookmarkVersion = 4L;
+        PhysicalPartition vacuumedPartition = partition;
+        AtomicBoolean visibleVersionRead = new AtomicBoolean(false);
         new MockUp<PhysicalPartition>() {
             @Mock
-            public long getVisibleVersion() {
-                return expectedVisibleVersion;
+            public long getVisibleVersion(Invocation invocation) {
+                if (invocation.getInvokedInstance() == vacuumedPartition) {
+                    visibleVersionRead.set(true);
+                }
+                return invocation.proceed();
             }
         };
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(
+                () -> visibleVersionRead.get() ? Optional.of(bookmarkVersion) : Optional.empty());
 
-        new MockUp<Table>() {
-            @Mock
-            public boolean isCloudNativeTableOrMaterializedView() {
-                return true;
-            }
-        };
-
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(long dbId) {
-                return sourceDb;
-            }
-
-            @Mock
-            public List<Table> getTables(Long dbId) {
-                return sourceDb.getTables();
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
-                return new ComputeNode();
-            }
-        };
-
-        new MockUp<BrpcProxy>() {
-            @Mock
-            public LakeService getLakeService(String host, int port) {
-                return new LakeServiceWithMetrics(null);
-            }
-        };
-
-        new MockUp<LakeServiceWithMetrics>() {
-            @Mock
-            public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
-                VacuumFullResponse resp = new VacuumFullResponse();
-                resp.status = new StatusPB();
-                resp.status.statusCode = 0;
-                resp.vacuumedFiles = 1L;
-                resp.vacuumedFileSize = 1L;
-                return CompletableFuture.completedFuture(resp);
-            }
-        };
-
-        BookmarkFenceMocks fence = new BookmarkFenceMocks(expectedOldestReferencedVersion);
-
-        final StarOSAgent starOSAgent = new StarOSAgent();
-        final ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        final WarehouseManager curWarehouseManager = new WarehouseManager();
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public ClusterSnapshotMgr getClusterSnapshotMgr() {
-                return clusterSnapshotMgr;
-            }
-
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return curWarehouseManager;
-            }
-
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return starOSAgent;
-            }
-
             @Mock
             public BookmarkManager getBookmarkManager() {
                 return fence.bookmarkManager;
             }
         };
 
-        new MockUp<ClusterSnapshotMgr>() {
-            @Mock
-            public long getSafeDeletionTimeMs() {
-                return 454545L;
-            }
-        };
+        VacuumFullResponse mockResponse = new VacuumFullResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 1L;
+        mockResponse.vacuumedFileSize = 1L;
 
-        new MockUp<VacuumFullRequest>() {
-            @Mock
-            public void setMaxCheckVersion(long v) {
-                Assertions.assertEquals(expectedOldestReferencedVersion, v);
-            }
-        };
-
-        FeConstants.runningUnitTest = false;
-        int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
-        long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
-        Config.lake_fullvacuum_parallel_partitions = 1;
-        Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterCatalogReady");
-        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
-        Config.lake_fullvacuum_parallel_partitions = oldValue1;
-        FeConstants.runningUnitTest = true;
+        AtomicLong sentMaxCheckVersion = new AtomicLong(-1L);
+        LakeService localLakeService = mock(LakeService.class);
+        when(localLakeService.vacuumFull(any(VacuumFullRequest.class))).thenAnswer(invocation -> {
+            VacuumFullRequest req = invocation.getArgument(0);
+            sentMaxCheckVersion.set(req.maxCheckVersion);
+            return CompletableFuture.completedFuture(mockResponse);
+        });
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(localLakeService);
+            new FullVacuumDaemon().testVacuumPartitionImpl(db, olapTable, partition);
+        } finally {
+            // vacuumPartitionImpl writes partition.lastFullVacuumTime; reset it so tests that
+            // rely on the zero-init behavior of shouldVacuum see a clean slate.
+            partition.setLastFullVacuumTime(0L);
+        }
+        // -1 means no full-vacuum request was ever sent.
+        Assertions.assertEquals(bookmarkVersion, sentMaxCheckVersion.get());
     }
 
+    /**
+     * The vacuum round must read the bookmark fence only after its locked visible-version read,
+     * and clamp the request's minRetainVersion to it. The order is what makes a racing bookmark
+     * create safe: create() captures partition versions and publishes the in-flight bookmark
+     * under the table read lock, and version advances take the table write lock, so once vacuum
+     * has read a visible version the racing bookmark is guaranteed observable through the fence.
+     * A fence read placed before the visible-version read may miss that bookmark, and the round
+     * would delete the versions it pins. The fence mock models the racing create: it stays empty
+     * until this partition's visible version has been read.
+     */
     @Test
-    public void testAutoVacuumRespectsBookmark() throws Exception {
+    public void testAutoVacuumReadsFenceAfterVisibleVersion() throws Exception {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setMetadataSwitchVersion(0L);
         partition.setLastSuccVacuumVersion(0L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
 
-        long expectedOldestReferencedVersion = 4L;
-        BookmarkFenceMocks fence = new BookmarkFenceMocks(expectedOldestReferencedVersion);
+        long bookmarkVersion = 4L;
+        PhysicalPartition vacuumedPartition = partition;
+        AtomicBoolean visibleVersionRead = new AtomicBoolean(false);
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public long getVisibleVersion(Invocation invocation) {
+                if (invocation.getInvokedInstance() == vacuumedPartition) {
+                    visibleVersionRead.set(true);
+                }
+                return invocation.proceed();
+            }
+        };
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(
+                () -> visibleVersionRead.get() ? Optional.of(bookmarkVersion) : Optional.empty());
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -800,10 +756,11 @@ public class VacuumTest {
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
 
+        AtomicLong sentMinRetainVersion = new AtomicLong(-1L);
         LakeService localLakeService = mock(LakeService.class);
         when(localLakeService.vacuum(any(VacuumRequest.class))).thenAnswer(invocation -> {
             VacuumRequest req = invocation.getArgument(0);
-            Assertions.assertEquals(expectedOldestReferencedVersion, req.minRetainVersion);
+            sentMinRetainVersion.set(req.minRetainVersion);
             return mockFuture;
         });
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
@@ -814,19 +771,24 @@ public class VacuumTest {
             // (e.g. testVacuumCheck, which doesn't reset lastVacuumTime) see a clean slate.
             partition.setLastVacuumTime(0L);
         }
+        // -1 means no vacuum request was ever sent, i.e. the round returned early.
+        Assertions.assertEquals(bookmarkVersion, sentMinRetainVersion.get());
     }
 
-    /** Installs a MockUp so BookmarkManager.getPhysicalPartitionFenceVersion returns the given version. */
+    /**
+     * Installs a MockUp so BookmarkManager.getPhysicalPartitionFenceVersion returns whatever
+     * {@code fence} supplies at the moment vacuum reads it.
+     */
     private static class BookmarkFenceMocks {
         final BookmarkManager bookmarkManager = new BookmarkManager();
 
-        BookmarkFenceMocks(long version) {
+        BookmarkFenceMocks(Supplier<Optional<Long>> fence) {
             new MockUp<BookmarkManager>() {
                 @Mock
                 public Optional<Long> getPhysicalPartitionFenceVersion(long dbId, long tableId,
                                                                        long logicalPartitionId,
                                                                        long physicalPartitionId) {
-                    return Optional.of(version);
+                    return fence.get();
                 }
             };
         }
