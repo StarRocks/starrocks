@@ -500,6 +500,36 @@ public class CreateTableAnalyzer {
                                 !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
                 }
+            } else {
+                // For a range-distributed duplicate key table the sort key defines the tablet range
+                // boundaries, so every sort key column type must be encodable as a key on the BE.
+                // Types without a BE key coder (JSON/complex/floating-point/metric/variant via
+                // !canDistributedBy(), plus TIME which canDistributedBy() allows but has no key
+                // coder) would crash the short-key encoder, so reject them here.
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = -1;
+                    for (int i = 0; i < columnNames.size(); i++) {
+                        if (columnNames.get(i).equalsIgnoreCase(column)) {
+                            idx = i;
+                            break;
+                        }
+                    }
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist", column);
+                    }
+                    ColumnDef cd = columnDefs.get(idx);
+                    Type t = cd.getType();
+                    if (!t.canDistributedBy() || t.isTime()) {
+                        throw new SemanticException(
+                                "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+                    }
+                }
             }
         } else {
             // we should check sort key column type if table is primary key table
