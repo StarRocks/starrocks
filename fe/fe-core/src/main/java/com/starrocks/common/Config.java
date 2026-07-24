@@ -3473,6 +3473,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double lake_compaction_score_selector_min_score = 10.0;
 
+    @ConfField(mutable = true, comment = "When a partition's compaction score first crosses " +
+            "lake_compaction_score_selector_min_score (below -> at/above) and it would otherwise become " +
+            "immediately eligible for compaction, defer its next compaction by a random offset in " +
+            "[0, this value) milliseconds. This staggers the cold-start compaction wave that arises when many " +
+            "identically-loaded partitions cross the threshold in the same scheduling cycle: it spreads the same " +
+            "total compaction work over a wider window, reducing peak shared object-storage bandwidth contention " +
+            "with concurrent loads on the same tablets. 0 (default) disables the jitter and keeps the original " +
+            "behavior.")
+    public static long lake_compaction_score_selector_jitter_ms = 0;
+
     @ConfField(mutable = true, comment = "-1 means calculate the value in an adaptive way. set this value to 0 " +
             "will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
