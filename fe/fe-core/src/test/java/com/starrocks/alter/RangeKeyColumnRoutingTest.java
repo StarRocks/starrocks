@@ -384,6 +384,172 @@ public class RangeKeyColumnRoutingTest {
         Assertions.assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(dup, unrelatedModify));
     }
 
+    // ---- ADD ROLLUP guard tests (issue #76521) ----------------------------------
+    // A column-subset range rollup writes only its own columns in the online rewrite, which cannot
+    // supply a value for base columns the rollup omits. Two shapes are therefore rejected up front
+    // (mirroring the DROP-key-column guards): a rollup that omits a partition column, and a rollup whose
+    // generated column references a base column not included in the rollup.
+
+    /** Fetches the just-built (not yet run) range-rollup job and clears the handler. Build-not-run. */
+    private static AlterJobV2 fetchAndClearRollupJob() {
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        List<AlterJobV2> jobs = new java.util.ArrayList<>(handler.getAlterJobsV2().values());
+        handler.clearJobs();
+        return jobs.isEmpty() ? null : jobs.get(jobs.size() - 1);
+    }
+
+    /** Creates a range DUP table carrying a generated value column {@code g = v1 + 1}. */
+    private static OlapTable buildLakeRangeTableWithGeneratedColumn(String tableName) throws Exception {
+        starRocksAssert.withTable("create table " + tableName
+                + " (k1 int NOT NULL, v1 int, g bigint AS (v1 + 1))\n"
+                + "duplicate key(k1)\n"
+                + "order by(k1)\n"
+                + "properties('replication_num' = '1');");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName);
+    }
+
+    @Test
+    public void testAddRollupOmittingPartitionColumnRejected() throws Exception {
+        // Range table partitioned on k1; a rollup r(k2, v1) omits the partition column k1. BE routes each
+        // row by its partition value, so the rollup must retain it.
+        OlapTable partitioned = buildLakeRangePartitionedTable(KeysType.DUP_KEYS,
+                /*sortKey*/ List.of("k1", "k2"), /*partitionCol*/ "k1");
+        assertThrowsDdl("must contain partition column",
+                () -> alter(partitioned, "ADD ROLLUP r_no_part(k2, v1) ORDER BY (k2)"));
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    @Test
+    public void testAddRollupOmittingPartitionColumnStillAcceptedWhenIncluded() throws Exception {
+        // The same partitioned table accepts a rollup that keeps the partition column k1.
+        OlapTable partitioned = buildLakeRangePartitionedTable(KeysType.DUP_KEYS,
+                List.of("k1", "k2"), "k1");
+        alter(partitioned, "ADD ROLLUP r_with_part(k1, k2, v1) ORDER BY (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        Assertions.assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+    }
+
+    @Test
+    public void testAddRollupGeneratedColumnMissingDependencyRejected() throws Exception {
+        // r(k1, g) omits g's referenced column v1: the rewrite would recompute g from a NULL-filled v1
+        // and silently persist a wrong value. Rejected.
+        OlapTable t = buildLakeRangeTableWithGeneratedColumn("t_rangekey_gencol_" + TABLE_SEQ.incrementAndGet());
+        assertThrowsDdl("must also be in the rollup",
+                () -> alter(t, "ADD ROLLUP r_gen(k1, g) ORDER BY (k1)"));
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    @Test
+    public void testAddRollupGeneratedColumnWithDependencyAccepted() throws Exception {
+        // r(k1, g, v1) includes g's dependency v1, so g can be recomputed correctly. Accepted.
+        OlapTable t = buildLakeRangeTableWithGeneratedColumn("t_rangekey_gencol_" + TABLE_SEQ.incrementAndGet());
+        alter(t, "ADD ROLLUP r_gen_ok(k1, g, v1) ORDER BY (k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        Assertions.assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+    }
+
+    @Test
+    public void testAddReducedKeyRollupUnpartitionedAccepted() throws Exception {
+        // Regression: the common reduced-key column-subset rollup on an unpartitioned table with no
+        // generated columns must NOT be rejected by the new guards.
+        OlapTable dup = buildLakeRangeTable(KeysType.DUP_KEYS, List.of("k1", "k2"));
+        alter(dup, "ADD ROLLUP r_reduced(k2, v1) ORDER BY (k2)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        Assertions.assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+    }
+
+    /**
+     * Creates a shared-data range-distribution table with automatic EXPRESSION range partitioning
+     * ({@code date_trunc('day', dt)}). The partition column is the ordinary column {@code dt} (a single
+     * date/time expression partition exposes its underlying column, not a hidden generated one), so
+     * {@link OlapTable#getPartitionColumns()} returns {@code dt}.
+     *
+     * <p>Note on the generated-partition-column branch of the guard: a hidden
+     * {@code __generated_partition_column_*} is only synthesized by the MULTI-expression partition path
+     * ({@code CreateTableAnalyzer}); that branch reuses the exact same
+     * {@code getGeneratedColumnRef(...)} source-expansion that the rollup generated-column guard uses,
+     * which is covered by {@link #testAddRollupGeneratedColumnMissingDependencyRejected()}.
+     */
+    private static OlapTable buildLakeRangeExprPartitionedTable(String tableName) throws Exception {
+        starRocksAssert.withTable("create table " + tableName
+                + " (dt datetime NOT NULL, k1 int NOT NULL, v1 int)\n"
+                + "duplicate key(dt, k1)\n"
+                + "partition by date_trunc('day', dt)(\n"
+                + "    START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day)\n"
+                + ")\n"
+                + "order by(dt, k1)\n"
+                + "properties('replication_num' = '1');");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName);
+    }
+
+    @Test
+    public void testAddRollupOnExprPartitionRejectedWhenPartitionColumnOmitted() throws Exception {
+        // An expression-partitioned range table still routes each row by its partition column dt, so a
+        // column-subset rollup r(k1, v1) that omits dt is rejected (the rewrite has no value for dt).
+        OlapTable t = buildLakeRangeExprPartitionedTable("t_rangekey_exprpart_" + TABLE_SEQ.incrementAndGet());
+        List<Column> partitionColumns = t.getPartitionColumns();
+        Assertions.assertEquals(1, partitionColumns.size());
+        Assertions.assertEquals("dt", partitionColumns.get(0).getName());
+        assertThrowsDdl("must contain partition column",
+                () -> alter(t, "ADD ROLLUP r_expr_no(k1, v1) ORDER BY (k1)"));
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    @Test
+    public void testAddRollupOnExprPartitionAcceptedWhenPartitionColumnIncluded() throws Exception {
+        // The same table accepts a column-subset rollup that keeps the partition column dt (omitting the
+        // other base key k1).
+        OlapTable t = buildLakeRangeExprPartitionedTable("t_rangekey_exprpart_" + TABLE_SEQ.incrementAndGet());
+        alter(t, "ADD ROLLUP r_expr_ok(dt, v1) ORDER BY (dt)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        Assertions.assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+    }
+
+    /**
+     * Creates a shared-data range-distribution table with MULTI-expression automatic partitioning
+     * ({@code PARTITION BY site_id, date_trunc('day', event_day)}). The {@code date_trunc(...)} term
+     * synthesizes a hidden generated partition column ({@code __generated_partition_column_*}) over
+     * {@code event_day}, so {@link OlapTable#getPartitionColumns()} returns the ordinary {@code site_id}
+     * plus a generated column whose real source is {@code event_day}. This exercises the guard's
+     * generated-partition-column source-expansion branch.
+     */
+    private static OlapTable buildLakeRangeMultiExprPartitionedTable(String tableName) throws Exception {
+        starRocksAssert.withTable("create table " + tableName
+                + " (site_id int NOT NULL, event_day datetime NOT NULL, v1 int)\n"
+                + "duplicate key(site_id, event_day)\n"
+                + "partition by site_id, date_trunc('day', event_day)\n"
+                + "order by(site_id, event_day)\n"
+                + "properties('replication_num' = '1');");
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName);
+    }
+
+    @Test
+    public void testAddRollupOnMultiExprPartitionRejectsWhenGeneratedSourceOmitted() throws Exception {
+        // The generated partition column over event_day means the rollup must retain event_day (its
+        // source), not the hidden column. r(site_id, v1) keeps the ordinary partition column but omits
+        // event_day -> rejected, naming the source event_day.
+        OlapTable t = buildLakeRangeMultiExprPartitionedTable(
+                "t_rangekey_multiexpr_" + TABLE_SEQ.incrementAndGet());
+        List<Column> partitionColumns = t.getPartitionColumns();
+        Assertions.assertTrue(partitionColumns.stream().anyMatch(Column::isGeneratedColumn),
+                "expected a hidden generated partition column, got: "
+                        + partitionColumns.stream().map(Column::getName).collect(Collectors.toList()));
+        assertThrowsDdl("partition column source",
+                () -> alter(t, "ADD ROLLUP r_mexpr_no(site_id, v1) ORDER BY (site_id)"));
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    @Test
+    public void testAddRollupOnMultiExprPartitionAcceptedWhenGeneratedSourceIncluded() throws Exception {
+        // Including both partition inputs (ordinary site_id + generated-column source event_day) is
+        // accepted, even though the hidden generated partition column itself is never named.
+        OlapTable t = buildLakeRangeMultiExprPartitionedTable(
+                "t_rangekey_multiexpr_" + TABLE_SEQ.incrementAndGet());
+        alter(t, "ADD ROLLUP r_mexpr_ok(site_id, event_day, v1) ORDER BY (event_day, site_id)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        Assertions.assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+    }
+
     /** Runs the ALTER via analyzeAndCreateJob and returns the constructed (not run) job. */
     private static AlterJobV2 alterAndReturnJob(OlapTable table, String clauseSql) throws Exception {
         com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
