@@ -569,6 +569,51 @@ public class CreateTableAnalyzerTest {
     }
 
     @Test
+    public void testDupTableRangeSortKeyTypeRestriction() {
+        // Force range distribution via the session variable (ungated by run mode) so the range
+        // sort-key type validation is exercised regardless of the suite's ambient run mode.
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            // JSON sort key on a range-distributed duplicate table -> Should fail: JSON has no BE key
+            // coder, and range distribution encodes the sort key for tablet range boundaries (#11611).
+            String sql1 = "CREATE TABLE test_create_table_db.dup_range_json_sortkey\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    c  json\n" +
+                    ") DUPLICATE KEY(k1)\n" +
+                    "ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeFail(sql1, "Sort key column[c] type not supported");
+
+            // A normal (int) sort key on a range-distributed duplicate table -> Should pass. The
+            // ORDER BY reference uses a different case than the column definition to confirm the
+            // range sort-key column resolution is case-insensitive (matching OlapTableFactory).
+            String sql2 = "CREATE TABLE test_create_table_db.dup_range_int_sortkey\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    c  int\n" +
+                    ") DUPLICATE KEY(k1)\n" +
+                    "ORDER BY(C)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeSuccess(sql2);
+
+            // range distribution off -> a JSON sort key on a duplicate table stays unrestricted.
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            String sql3 = "CREATE TABLE test_create_table_db.dup_norange_json_sortkey\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    c  json\n" +
+                    ") DUPLICATE KEY(k1)\n" +
+                    "DISTRIBUTED BY HASH(k1)\n" +
+                    "ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeSuccess(sql3);
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+        }
+    }
+
+    @Test
     public void testCreateTableForceRange() {
         boolean oldEnableRangeDistribution = Config.enable_range_distribution;
         Config.enable_range_distribution = false;
