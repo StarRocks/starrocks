@@ -38,6 +38,92 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
+// === SDCG (Sparse Delta Column Group) ===
+// Master gate for the sparse delta column group write path (lake / shared-data only).
+// When false the behavior is byte-identical to today: column-mode partial update
+// always writes dense `.cols`, and no `.spcols` files are produced or referenced.
+CONF_mBool(enable_sparse_dcg, "false");
+
+// Density decision threshold: when (K updated rows / M source-segment rows) is at
+// least this ratio, take the dense `.cols` path instead of writing a sparse `.spcols`.
+CONF_mDouble(sdcg_dense_threshold, "0.3");
+
+// Absolute cap on K (updated rows in one source segment) for the sparse path: at or
+// above this many rows, fall back to dense even if the density ratio is below
+// sdcg_dense_threshold (large K makes per-ordinal random seeks costlier than a full
+// sequential scan; lake/object-storage favors the conservative cap).
+CONF_mInt64(sdcg_sparse_max_rows, "50000");
+
+// Cost-model lower gate on the source-segment row count M: only take the sparse `.spcols` path when the
+// base segment is at least this large. Sparse's per-file framing + 8B/row source_rowid + read-amp only
+// pay off when dense's whole-column rewrite (M rows × col width) is genuinely expensive, which scales
+// with M. On small segments (or K spread thin across many small segments, large R) dense is faster and
+// reads flatter even though sparse writes fewer bytes. M below this floor -> dense. Validated: small
+// segment (M~31k) sparse LOST, large segment (M>=100k/1M) sparse won 2-7x. 0 disables the gate.
+CONF_mInt64(sdcg_sparse_min_segment_rows, "65536");
+
+// SAFETY-VALVE cap on sparse overlay-chain depth. Convergence of the chain is normally done by
+// BACKGROUND lake PK compaction (it reads input segments through the DCG overlay and emits fresh dense
+// segments, dropping the sparse chain). Only if a chain reaches this HIGH cap before compaction
+// converges it does the writer fall back to a synchronous in-place dense rewrite -- a rare safety net,
+// no longer a per-batch convergence mechanism, so it does not inflate publish-time p95. (Was 16, which
+// fired a depth-16 dense rewrite on the load's critical path every ~16 partial-update batches.)
+CONF_mInt32(sdcg_promotion_hard_count, "256");
+
+// UNIFIED single user knob — per-column allowed READ-AMP BUDGET R_max (= max sparse overlay layers a
+// read must merge). Collapses the read-amp control into ONE number, mapped internally to the dense/sparse
+// gate + the fold trigger:
+//   <0 (default -1) = AUTO: per-column-WIDTH defaults (wide cols fold near depth-1 via
+//                    sdcg_compaction_trigger_depth_wide, narrow at the default depth) — the validated behavior.
+//   0  = force DENSE (no sparse overlay ever): write-time merge via column-dense (supersede) / row;
+//        zero sparse read-amp. (Fixed-column path in this first version; flexible-path budget TBD.)
+//   N>0 = allow sparse, fold the chain when it would exceed N layers (uniform trigger = N+1), overriding
+//        the per-width auto defaults. Larger N = more write throughput, more read-amp.
+// Design: handbook/plans/active/2026-06-01-partial-update-sdcg-design.md §5.2.4.
+CONF_mInt64(sdcg_read_amp_budget, "-1");
+
+// partial_update_mode=auto level-1 (per-load) column-vs-ROW routing by UPDATE WIDTH. ROW (whole-row
+// rewrite) wins over the column overlays when many columns change at once: sparse pays per-column
+// machinery (a roaring bitmap + column file + apply-time DCG merge PER updated column) and dense pays
+// M_seg*W_upd, both of which exceed row's bulk rewrite once the update is wide. So auto routes ROW when
+// the update touches a large fraction of value columns (>= sdcg_auto_row_width_frac) OR a large absolute
+// count (>= sdcg_auto_row_width_min_cols); otherwise COLUMN, whose per-segment dense/sparse format is
+// chosen at apply. Read-strictness no longer forces ROW (dense is read-flat too) -- it is handled at
+// level-2. Calibration knobs (mutable so they can be tuned on a live cluster).
+CONF_mDouble(sdcg_auto_row_width_frac, "0.5");
+
+CONF_mInt32(sdcg_auto_row_width_min_cols, "8");
+
+// partial_update_mode=auto level-2 (per-segment) sustained-load penalty: sparse write throughput decays
+// as the overlay chain deepens (chains outrun compaction), so scale the sparse/packed WRITE cost by
+// (1 + sdcg_auto_sparse_depth_penalty * chain_depth). This makes the cost model migrate sparse->dense as
+// depth grows under sustained load, instead of staying on sparse until the hard depth valve trips.
+// DEFAULT 0 (disabled): cluster tests showed a nonzero penalty makes auto OSCILLATE sparse<->dense with no
+// hysteresis, producing mixed overlay chains that read AND write worse than any single mode, while pure
+// sparse self-limits (compaction plateaus its depth). Kept as a mutable knob for future calibration, off
+// by default. Mutable for live calibration.
+CONF_mDouble(sdcg_auto_sparse_depth_penalty, "0");
+
+// DEPRECATED (no longer drives the write path): the old in-place-promotion threshold as a fraction of
+// the base segment row count M. Kept for config compatibility only; convergence is now
+// background-compaction-driven, not cum_K/M-threshold-driven.
+CONF_mDouble(sdcg_promotion_threshold, "0.3");
+
+// Per-column segment-level zone-map gate refinement. Historically, when a segment has ANY delta
+// column group, segment-level zone-map pruning is disabled for ALL non-key columns, because a DCG
+// rewrites some columns and the base segment's zone maps are stale for them. That is overly broad:
+// a column NOT present in any DCG still has fully valid base zone maps and can be pruned safely.
+// When true, segment-level zone-map pruning is restored per-column for columns absent from every
+// DCG (and for columns whose DCG layer stack contains no SPARSE overlay -- the dense `.cols` file's
+// own zone map already governs page-level pruning, see SegmentZoneMapPruner). Columns covered by a
+// SPARSE overlay are never segment-pruned (the overlay carries newer values). This refinement also
+// benefits stock dense-DCG tables (flag enable_sparse_dcg off), so it is gated separately. DEFAULT
+// false: this is the ONE SDCG read-path refinement that would otherwise change behavior for existing
+// dense-DCG tables even with enable_sparse_dcg off; keeping it off preserves the historical
+// all-or-nothing pruning so SDCG is fully inert by default (GA opt-in posture). Set true to opt into
+// the per-column pruning refinement (correct + reversible).
+CONF_mBool(sdcg_enable_per_column_zone_map, "false");
+
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");

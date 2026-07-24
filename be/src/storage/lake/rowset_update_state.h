@@ -15,9 +15,13 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
+#include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
@@ -181,6 +185,24 @@ private:
                                             size_t& total_conflicts);
 
     void _reset();
+
+    // === FLEXIBLE-on-ROW partial update helpers (single source of the reserved-uid contract) ===
+    //
+    // Read the hidden "__cset__" per-row set-id column from the `segment_id`-th `.upt` segment of
+    // this op_write's rowset, in physical (upsert) row order. Ports
+    // ColumnModePartialUpdateHandler::_read_cset_column_from_upt: synthesizes a 1-column schema
+    // carrying the reserved-uid SMALLINT "__cset__" (num_short_key_columns=0) and resolves it
+    // against the `.upt` footer BY THE RESERVED UNIQUE-ID kCsetReservedColumnUid (never by name).
+    StatusOr<std::vector<int32_t>> _read_cset_column_from_upt(uint32_t segment_id);
+
+    // Decode txn_meta.distinct_column_sets into per-set-id covered value-column unique-id sets.
+    // Index == set-id. A row whose "__cset__" set-id is `s` updated exactly the columns whose
+    // unique-ids are in the returned[s] set.
+    static std::vector<std::set<ColumnUID>> _decode_distinct_column_sets(const RowsetTxnMetaPB& txn_meta);
+
+    // FLEXIBLE-on-ROW signal: a flexible load whose per-row column-set dictionary was folded into
+    // txn_meta. Decoupled from partial_update_mode (the storage MODE is ROW_MODE for this path).
+    static bool _is_flexible_partial_update(const TxnLogPB_OpWrite& op_write);
 
     // one for each segment file
     std::vector<SegmentPKIteratorPtr> _upserts;

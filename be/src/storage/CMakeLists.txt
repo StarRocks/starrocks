@@ -108,6 +108,7 @@ set(STORAGE_FILES
     rowset/dictcode_column_iterator.cpp
     rowset/encoding_info.cpp
     rowset/fill_subfield_iterator.cpp
+    rowset/layered_overlay_column_iterator.cpp
     rowset/scalar_column_iterator.cpp
     rowset/index_page.cpp
     rowset/indexed_column_reader.cpp
@@ -226,6 +227,7 @@ set(STORAGE_FILES
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
+    lake/sdcg_overlay_merge.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp

@@ -62,6 +62,9 @@ public class FeNameFormat {
         FORBIDDEN_COLUMN_NAMES = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
+        // Hidden per-row column-set id slot injected for SDCG flexible partial update (Load.LOAD_CSET_COLUMN);
+        // reserve the name so a user column can't collide with the synthetic slot.
+        FORBIDDEN_COLUMN_NAMES.add("__cset__");
         // see RewriteSimpleAggToHDFSScanRule
         FORBIDDEN_COLUMN_NAMES.add("___count___");
         String allowedSpecialCharacters = "";

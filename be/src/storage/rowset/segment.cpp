@@ -48,6 +48,7 @@
 #include "column/flat_json/json_flat_path.h"
 #include "column/schema.h"
 #include "common/bloom_filter.h"
+#include "common/config_primary_key_fwd.h" // config::sdcg_enable_per_column_zone_map
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/split.h"
@@ -288,7 +289,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     return Status::OK();
 }
 
-bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
+bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options, ColumnUID column_unique_id) {
     if (read_options.dcg_loader == nullptr) {
         return true;
     }
@@ -306,8 +307,27 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
         uint32_t segment_id = _segment_id;
         st = read_options.dcg_loader->load(tablet_id, rowsetid, segment_id, INT64_MAX, &dcgs);
     }
-
-    return st.ok() && dcgs.size() == 0;
+    if (!st.ok()) {
+        return false; // cannot determine DCG state safely => do not prune at segment level
+    }
+    if (dcgs.empty()) {
+        return true; // no DCG at all => base zone maps are authoritative for every column
+    }
+    if (!config::sdcg_enable_per_column_zone_map) {
+        // Legacy all-or-nothing: any DCG disables segment-level ZM for non-key columns.
+        return false;
+    }
+    // Per-column refinement: a column NOT present in any DCG still has fully valid base zone maps,
+    // so it may use segment-level pruning. A column present in any DCG (dense `.cols` rewrite or
+    // sparse `.spcols` overlay) keeps the conservative disabled behavior: its base segment zone map
+    // is stale for the rewritten/overlaid rows, and we do not redirect segment-level ZM to the
+    // dense file's reader (page-level pruning already reads the dense file's own zone map).
+    for (const auto& dcg : dcgs) {
+        if (dcg->get_column_idx(column_unique_id).first >= 0) {
+            return false; // column appears in this DCG => keep its segment-level ZM disabled
+        }
+    }
+    return true;
 }
 
 struct SegmentZoneMapPruner {
@@ -322,7 +342,7 @@ struct SegmentZoneMapPruner {
             return false;
         } else {
             return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
-                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
+                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options, column_unique_id));
         }
     }
     bool operator()(const PredicateAndNode& node) const {
@@ -674,7 +694,8 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts, bool fill_meta_cache) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -691,7 +712,71 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
+    // Dense `.cols` read is kept byte-identical to the pre-SDCG path (direct Segment::open) so that
+    // existing dense column-mode partial-update tables read exactly as before -- SDCG stays inert at
+    // default config. (Routing the dense read through the lake metacache was an always-on change to the
+    // GA read path; deferred to a separate, independently-validated change.) The sparse `.spcols` opt-in
+    // path (new_sparse_dcg_segment) still uses the metacache.
+    (void)lake_io_opts;
+    (void)fill_meta_cache;
     return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+}
+
+StatusOr<std::shared_ptr<Segment>> Segment::new_sparse_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                                   const TabletSchemaCSPtr& read_tablet_schema,
+                                                                   const LakeIOOptions& lake_io_opts,
+                                                                   bool fill_meta_cache) {
+    const TabletSchemaCSPtr& src_schema =
+            (read_tablet_schema != nullptr) ? read_tablet_schema : _tablet_schema.schema();
+
+    // Build a read schema PB = the dcg entry's update columns + a synthetic reserved-uid
+    // source_rowid column, so the opened Segment exposes a ColumnReader for kSDCGSourceRowidUid.
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(src_schema->keys_type());
+    schema_pb.set_next_column_unique_id(src_schema->next_column_unique_id());
+    schema_pb.set_num_short_key_columns(0);
+    schema_pb.set_num_rows_per_row_block(src_schema->num_rows_per_row_block());
+
+    // The update value columns referenced by this dcg entry (by uid), preserving schema order.
+    const auto& wanted_uids = dcg.column_ids()[idx];
+    std::unordered_set<int32_t> uid_filter(wanted_uids.begin(), wanted_uids.end());
+    for (size_t cid = 0; cid < src_schema->num_columns(); ++cid) {
+        const auto& column = src_schema->column(cid);
+        if (uid_filter.count(column.unique_id()) > 0) {
+            column.to_schema_pb(schema_pb.add_column());
+        }
+    }
+
+    // Synthetic source_rowid column: uid == kSDCGSourceRowidUid, u32, non-nullable, not a key.
+    // Its physical layout in the `.spcols` footer is matched by type; we read it positionally.
+    auto* rowid_pb = schema_pb.add_column();
+    rowid_pb->set_name("__sdcg_source_rowid__");
+    rowid_pb->set_unique_id(kSDCGSourceRowidUid);
+    rowid_pb->set_type(logical_type_to_string(TYPE_BIGINT));
+    rowid_pb->set_is_key(false);
+    rowid_pb->set_is_nullable(false);
+    rowid_pb->set_length(sizeof(int64_t));
+    rowid_pb->set_index_length(sizeof(int64_t));
+    rowid_pb->set_aggregation(get_string_by_aggregation_type(STORAGE_AGGREGATE_NONE));
+
+    auto sparse_schema = std::make_shared<TabletSchema>(schema_pb);
+
+    ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
+    FileInfo info{.path = filepath};
+    if (idx < dcg.column_file_sizes().size() && dcg.column_file_sizes()[idx] > 0) {
+        info.size = dcg.column_file_sizes()[idx];
+    }
+    if (idx < dcg.encryption_metas().size()) {
+        info.encryption_meta = dcg.encryption_metas()[idx];
+    }
+    // Lake: route the `.spcols` open through the metacache so its footer is parsed once and reused
+    // across scans/apply (keyed by FileInfo::cache_key()). Local engine never produces `.spcols`,
+    // so this branch is lake-only; the fallback preserves the legacy direct open for safety.
+    if (_tablet_manager != nullptr) {
+        return _tablet_manager->load_segment(info, /*segment_id=*/0, lake_io_opts, fill_meta_cache,
+                                             std::move(sparse_schema));
+    }
+    return Segment::open(_fs, info, 0, sparse_schema, nullptr);
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

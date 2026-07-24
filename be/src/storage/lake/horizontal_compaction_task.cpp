@@ -41,6 +41,11 @@ namespace starrocks::lake {
 Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
+    // SDCG fast path: a convergence-only deep sparse-overlay chain is collapsed by merging its `.spcols`
+    // layers (no base segment read+rewrite). If it handled the compaction it emitted an op_dcg_compaction.
+    ASSIGN_OR_RETURN(bool sdcg_merged, try_execute_dcg_overlay_merge());
+    if (sdcg_merged) return Status::OK();
+
     int64_t total_num_rows = 0;
     int64_t input_bytes = 0;
     for (auto& rowset : _input_rowsets) {

@@ -1188,6 +1188,50 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
+// Regression (row-mode partial-update duplicate PK): a LEADING zero-segment op_write must not
+// advance the batch-apply rssid offset. get_rowset_id_step() returns 1 even for a 0-segment
+// op_write; if add_rowset bumped assigned_segment_idx for it, the next segment-bearing op_write
+// would re-enter the first-call branch and stamp its first segment with segment_idx=1 (instead of
+// positional 0). At read the segment's effective rssid = rowset.id()+segment_idx then lands one
+// slot above where the base-row delete vector was keyed at apply (the positional rssid), so the
+// superseded base rows are never hidden -> duplicate primary keys.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_leading_zero_segment_keeps_positional_rssid) {
+    const int64_t tablet_id = 30010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(40);
+    metadata->set_next_rowset_id(700);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Batch 1: a zero-segment op_write (e.g. a partial-update txn that deposited no new segment
+    // for this tablet). It may still carry a delete file.
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset(); // empty rowset: no segment_metas
+    op_write1.add_dels_meta()->set_name("d1.del");
+    builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    // Batch 2: one real segment, segment_idx omitted -> must be assigned positionally as 0.
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("seg0.dat");
+    builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    ASSERT_TRUE(builder.set_final_rowset().ok());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(700, final_rowset.id());
+    ASSERT_EQ(1, final_rowset.segment_metas_size());
+    EXPECT_EQ("seg0.dat", final_rowset.segment_metas(0).filename());
+    // The crux: the single segment keeps the positional rssid. effective rssid = id + segment_idx
+    // must equal the rowset id (700 + 0), matching the delvec key written at apply. The pre-fix
+    // bug stamped segment_idx=1, making rssid 701 and orphaning the base-row delete vector.
+    EXPECT_EQ(0u, final_rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ(700u, get_rssid(final_rowset, 0));
+    // next_rowset_id advances by the real segment count only (700 -> 701), not by 2.
+    EXPECT_EQ(701, metadata->next_rowset_id());
+}
+
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
     // version reference collection from SSTable delvecs during finalization
