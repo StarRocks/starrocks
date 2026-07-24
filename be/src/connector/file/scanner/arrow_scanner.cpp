@@ -319,6 +319,9 @@ Status ArrowScanner::next_batch() {
             _curr_file_reader.reset();
             _parser_buf.reset();
             _arrow_stream.reset();
+            for (auto& conv : _conv_funcs) {
+                conv = std::make_unique<ConvertFuncTree>();
+            }
             if (stream_file) {
                 _consecutive_errors = 0;
                 continue;

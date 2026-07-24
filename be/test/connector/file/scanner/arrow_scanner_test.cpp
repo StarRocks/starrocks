@@ -1102,4 +1102,82 @@ TEST_F(ArrowScannerTest, test_multi_file_scan) {
     ASSERT_EQ(7, total_rows);
 }
 
+TEST_F(ArrowScannerTest, test_multi_message_stream_schema_boundary) {
+    auto db = _runtime_state->service_ctx()->load_stream_mgr()->get_or_create_db(101);
+    std::string label = "test_multi_message_boundary_label";
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 60, 101, label);
+    ASSERT_OK(db->put(label, pipe));
+
+    auto state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+    state->set_service_ctx(_runtime_state->service_ctx());
+
+    auto profile = _obj_pool.add(new RuntimeProfile("test_profile"));
+    auto counter = _obj_pool.add(new ScannerCounter());
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    auto ranges = generate_ranges({"stream_file"}, 1, {});
+    ranges[0].__set_file_type(TFileType::FILE_STREAM);
+    ranges[0].__set_pipe_name(label);
+    ranges[0].__set_db_id(101);
+
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
+    auto broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+    broker_scan_range->ranges = ranges;
+    broker_scan_range->params.__set_strict_mode(false);
+    broker_scan_range->params.__set_dest_tuple_id(0);
+    broker_scan_range->params.__set_src_tuple_id(1);
+
+    // Message 1: 2 rows
+    auto schema1 = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    arrow::Int32Builder builder1;
+    ASSERT_ARROW_OK(builder1.AppendValues({10, 20}));
+    std::shared_ptr<arrow::Array> array1;
+    ASSERT_ARROW_OK(builder1.Finish(&array1));
+    auto batch1 = arrow::RecordBatch::Make(schema1, 2, {array1});
+
+    auto buffer_out1 = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer1 = arrow::ipc::MakeStreamWriter(buffer_out1, schema1).ValueOrDie();
+    ASSERT_ARROW_OK(writer1->WriteRecordBatch(*batch1));
+    ASSERT_ARROW_OK(writer1->Close());
+    auto buf1 = buffer_out1->Finish().ValueOrDie();
+    EXPECT_OK(pipe->append(ByteBuffer::wrap(reinterpret_cast<const char*>(buf1->data()), buf1->size())));
+
+    // Message 2: 3 rows with nullable field
+    auto schema2 = arrow::schema({arrow::field("c0_int", arrow::int32(), true)});
+    arrow::Int32Builder builder2;
+    ASSERT_ARROW_OK(builder2.AppendValues({30, 40, 50}));
+    std::shared_ptr<arrow::Array> array2;
+    ASSERT_ARROW_OK(builder2.Finish(&array2));
+    auto batch2 = arrow::RecordBatch::Make(schema2, 3, {array2});
+
+    auto buffer_out2 = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    auto writer2 = arrow::ipc::MakeStreamWriter(buffer_out2, schema2).ValueOrDie();
+    ASSERT_ARROW_OK(writer2->WriteRecordBatch(*batch2));
+    ASSERT_ARROW_OK(writer2->Close());
+    auto buf2 = buffer_out2->Finish().ValueOrDie();
+    EXPECT_OK(pipe->append(ByteBuffer::wrap(reinterpret_cast<const char*>(buf2->data()), buf2->size())));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
+    ASSERT_OK(scanner->open());
+
+    int total_rows = 0;
+    while (true) {
+        auto res = scanner->get_next();
+        if (res.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        if (chunk != nullptr) {
+            total_rows += chunk->num_rows();
+        }
+    }
+    scanner->close();
+    ASSERT_EQ(5, total_rows);
+}
+
 } // namespace starrocks
