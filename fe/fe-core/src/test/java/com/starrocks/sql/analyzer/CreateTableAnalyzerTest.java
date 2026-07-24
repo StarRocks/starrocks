@@ -585,6 +585,17 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeFail(sql1, "Sort key column[c] type not supported");
 
+            // TIME sort key on a range-distributed duplicate table -> Should fail: TIME is allowed by
+            // canDistributedBy() but has no BE key coder, so it must also be rejected here (#11611).
+            String sqlTime = "CREATE TABLE test_create_table_db.dup_range_time_sortkey\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    c  time\n" +
+                    ") DUPLICATE KEY(k1)\n" +
+                    "ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");";
+            analyzeFail(sqlTime, "Sort key column[c] type not supported");
+
             // A normal (int) sort key on a range-distributed duplicate table -> Should pass. The
             // ORDER BY reference uses a different case than the column definition to confirm the
             // range sort-key column resolution is case-insensitive (matching OlapTableFactory).

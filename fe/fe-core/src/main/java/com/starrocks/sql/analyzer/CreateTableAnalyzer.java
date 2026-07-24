@@ -502,8 +502,10 @@ public class CreateTableAnalyzer {
                 }
             } else {
                 // For a range-distributed duplicate key table the sort key defines the tablet range
-                // boundaries, so every sort key column type must be encodable as a key. Types that
-                // cannot (e.g. JSON) have no key coder on the BE and would crash the short-key encoder.
+                // boundaries, so every sort key column type must be encodable as a key on the BE.
+                // Types without a BE key coder (JSON/complex/floating-point/metric/variant via
+                // !canDistributedBy(), plus TIME which canDistributedBy() allows but has no key
+                // coder) would crash the short-key encoder, so reject them here.
                 for (OrderByElement orderByElement : orderByElements) {
                     Expr expr = orderByElement.getExpr();
                     String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
@@ -523,7 +525,7 @@ public class CreateTableAnalyzer {
                     }
                     ColumnDef cd = columnDefs.get(idx);
                     Type t = cd.getType();
-                    if (!t.canDistributedBy()) {
+                    if (!t.canDistributedBy() || t.isTime()) {
                         throw new SemanticException(
                                 "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
                     }
