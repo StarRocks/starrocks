@@ -41,6 +41,12 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    bool need_auth() const override {
+        // NORMAL (BE-to-BE tablet clone, internal load file download) is internal and
+        // already gated by a shared token; only ERROR_LOG is user-facing.
+        return _download_type == ERROR_LOG;
+    }
+
 private:
     enum DOWNLOAD_TYPE {
         NORMAL = 1,

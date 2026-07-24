@@ -53,6 +53,11 @@ public:
 
     const std::string& header(const std::string& key) const;
 
+    // Set an input request header. Production code populates `_headers` via
+    // `init_from_evhttp()` reading from libevent; this setter lets tests
+    // synthesize headers on an HttpRequest that wasn't fed through libevent.
+    void set_header(const std::string& key, const std::string& value) { _headers[key] = value; }
+
     const std::string& param(const std::string& key) const;
 
     // return params
