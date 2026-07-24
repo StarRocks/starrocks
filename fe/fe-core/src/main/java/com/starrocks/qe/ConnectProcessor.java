@@ -203,6 +203,10 @@ public class ConnectProcessor {
         ctx.getSerializer().setCapability(ctx.getCapability());
         // reset session variable
         ctx.resetSessionVariable();
+        // drop the previous logical session's diagnostics: COM_CHANGE_USER re-authenticates a
+        // different user on this same ConnectContext, and SHOW WARNINGS is the one statement that
+        // reads the buffer without clearing it first
+        ctx.clearWarnings();
     }
 
     public static long getThreadAllocatedBytes(long threadId) {
@@ -591,6 +595,7 @@ public class ConnectProcessor {
             if (authenticationProvider == null) {
                 ErrorReport.report("Unknown authentication method");
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                recordPreExecutionFailureDiagnostics();
                 return true;
             }
             authenticationProvider.checkLoginSuccess(ctx.getConnectionId(), ctx.getAccessControlContext());
@@ -602,6 +607,7 @@ public class ConnectProcessor {
                 ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED, authenticationException.getMessage());
             }
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            recordPreExecutionFailureDiagnostics();
             return true;
         } catch (Throwable e) {
             auditStmtFailureForStmt(e, parsedStmt, originStmt);
@@ -712,6 +718,11 @@ public class ConnectProcessor {
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            // executor == null means the failure happened before StmtExecutor.execute() ran
+            // (processOnce resets it per request); execute() records its own failures.
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // if parse failed, audit stmts together once
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
@@ -723,6 +734,9 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             // for safety
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
@@ -734,6 +748,23 @@ public class ConnectProcessor {
                 ctx.getSessionVariable().setCustomQueryId("");
             }
         }
+    }
+
+    // A statement rejected before StmtExecutor.execute() (parse failure, explicit-transaction
+    // validation, authentication re-check, COM_STMT_EXECUTE with an unknown statement id or
+    // malformed parameters) never reaches the execute() logic that clears the previous
+    // statement's diagnostics and records the failure into the session buffer. Do both
+    // here so SHOW WARNINGS does not return stale entries after such a failure and SHOW ERRORS
+    // mirrors the ERR packet, following MySQL diagnostics-area semantics.
+    private void recordPreExecutionFailureDiagnostics() {
+        ctx.clearWarnings();
+        String errorMessage = ctx.getState().getErrorMessage();
+        if (errorMessage == null || errorMessage.isEmpty()) {
+            // Keep in sync with MysqlErrPacket, which substitutes "Unknown error" on the wire.
+            errorMessage = "Unknown error";
+        }
+        int errorCode = ctx.getState().getErrorCode() != null ? ctx.getState().getErrorCode().getCode() : 1064;
+        ctx.addWarning(new QueryWarning("Error", String.valueOf(errorCode), errorMessage));
     }
 
     private static class QueryAttemptResult {
@@ -878,6 +909,7 @@ public class ConnectProcessor {
         PrepareStmtContext prepareCtx = ctx.getPreparedStmt(String.valueOf(stmtId));
         if (null == prepareCtx) {
             ctx.getState().setError("msg: Not Found prepared statement, stmtName: " + stmtId);
+            recordPreExecutionFailureDiagnostics();
             return;
         }
         int numParams = prepareCtx.getStmt().getParameters().size();
@@ -966,6 +998,12 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            // same contract as handleQuery: a COM_STMT_EXECUTE rejected before
+            // StmtExecutor.execute() ran (malformed parameters, etc.) must replace the previous
+            // statement's diagnostics with its own error; execute() records its own failures.
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             if (enableAudit && executeStmt != null) {
                 if (needAddFinishQueryDetail && executor != null) {
                     executor.addFinishedQueryDetail();

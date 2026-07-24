@@ -69,6 +69,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QualifiedName;
@@ -77,10 +78,13 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -659,5 +663,72 @@ public class ShowExecutorTest {
         assertThrows(SemanticException.class, () -> {
             ShowExecutor.execute(stmt, ctx);
         });
+    }
+
+    @Test
+    public void testShowWarnings() {
+        ctx.addWarning(new QueryWarning("Warning", "1265", "3 row(s) filtered"));
+        ctx.addWarning(new QueryWarning("Note", "1000", "a note"));
+        ctx.addWarning(new QueryWarning("Error", "1064", "bad value"));
+
+        // SHOW WARNINGS returns every diagnostic produced by the previous statement.
+        ShowResultSet warnings = ShowExecutor.execute(newShowWarning(false, null), ctx);
+        Assertions.assertEquals(3, warnings.getResultRows().size());
+        Assertions.assertEquals(Lists.newArrayList("Warning", "1265", "3 row(s) filtered"),
+                warnings.getResultRows().get(0));
+        Assertions.assertEquals("Error", warnings.getResultRows().get(2).get(0));
+
+        // SHOW ERRORS returns only the Error-level diagnostics.
+        ShowResultSet errors = ShowExecutor.execute(newShowWarning(true, null), ctx);
+        Assertions.assertEquals(1, errors.getResultRows().size());
+        Assertions.assertEquals(Lists.newArrayList("Error", "1064", "bad value"),
+                errors.getResultRows().get(0));
+    }
+
+    @Test
+    public void testShowWarningsEmpty() {
+        // No warning produced by the previous statement -> empty result, not an error.
+        ShowResultSet result = ShowExecutor.execute(newShowWarning(false, null), ctx);
+        Assertions.assertEquals(0, result.getResultRows().size());
+    }
+
+    @Test
+    public void testShowWarningsWhereWithLimit() throws Exception {
+        ctx.addWarning(new QueryWarning("Warning", "1265", "w"));
+        ctx.addWarning(new QueryWarning("Error", "1064", "e1"));
+        ctx.addWarning(new QueryWarning("Error", "1065", "e2"));
+
+        // WHERE must be applied before LIMIT by the generic ShowExecutor pipeline: if LIMIT ran
+        // first, the single kept row would be the leading Warning and the predicate would then
+        // drop it, returning no rows.
+        ShowWarningStmt stmt = (ShowWarningStmt) SqlParser.parseSingleStatement(
+                "show warnings where Level = 'Error' limit 1", ctx.getSessionVariable().getSqlMode());
+        ShowStmtAnalyzer.analyze(stmt, ctx);
+
+        ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, result.getResultRows().size());
+        Assertions.assertEquals(Lists.newArrayList("Error", "1064", "e1"), result.getResultRows().get(0));
+    }
+
+    @Test
+    public void testShowWarningsLimit() {
+        ctx.addWarning(new QueryWarning("Warning", "1", "w1"));
+        ctx.addWarning(new QueryWarning("Warning", "2", "w2"));
+        ctx.addWarning(new QueryWarning("Warning", "3", "w3"));
+
+        // LIMIT row_count
+        ShowResultSet limited = ShowExecutor.execute(newShowWarning(false, new LimitElement(0, 2)), ctx);
+        Assertions.assertEquals(2, limited.getResultRows().size());
+        Assertions.assertEquals("1", limited.getResultRows().get(0).get(1));
+
+        // LIMIT offset, row_count
+        ShowResultSet offset = ShowExecutor.execute(newShowWarning(false, new LimitElement(1, 1)), ctx);
+        Assertions.assertEquals(1, offset.getResultRows().size());
+        Assertions.assertEquals("2", offset.getResultRows().get(0).get(1));
+    }
+
+    private static ShowWarningStmt newShowWarning(boolean showErrors, LimitElement limit) {
+        // WHERE/ORDER BY/LIMIT are applied by ShowExecutor.execute(), same as the parser path.
+        return new ShowWarningStmt(limit, showErrors, NodePosition.ZERO);
     }
 }

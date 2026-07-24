@@ -1,0 +1,75 @@
+-- name: test_show_warnings
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_src (v varchar(16));
+-- result:
+-- !result
+insert into t_src values ('1'), ('not_a_number'), ('2');
+-- result:
+-- !result
+create table t_dst (c1 int not null);
+-- result:
+-- !result
+set enable_insert_strict = false;
+-- result:
+-- !result
+set insert_max_filter_ratio = 0.5;
+-- result:
+-- !result
+insert into t_dst select cast(v as int) from t_src;
+-- result:
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+select * from t_dst order by c1;
+-- result:
+1
+2
+-- !result
+show warnings;
+-- result:
+-- !result
+[UC]select * from table_that_does_not_exist;
+-- result:
+-- !result
+show errors;
+-- result:
+[REGEX].*Error.*table_that_does_not_exist.*
+-- !result
+[UC]selct 1;
+-- result:
+-- !result
+show errors;
+-- result:
+[REGEX].*Error.*syntax.*
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_dst select cast(v as int) from t_src;
+-- result:
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+commit;
+-- result:
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

@@ -4069,9 +4069,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         StarRocksParser.ShowPredicateClausesContext showPredicateClauses = context.showPredicateClauses();
         LimitElement limit = getLimitFrom(context.showPredicateClauses());
-        ShowWarningStmt showWarningStmt = new ShowWarningStmt(limit, pos);
-
-        showWarningStmt.markSelfPredicateOrderLimit(false, false, true);
+        ShowWarningStmt showWarningStmt = new ShowWarningStmt(limit, context.ERRORS() != null, pos);
         visitShowPredicateClauses(showPredicateClauses, showWarningStmt);
         return showWarningStmt;
     }

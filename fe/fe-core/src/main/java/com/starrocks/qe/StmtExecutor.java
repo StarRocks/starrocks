@@ -216,6 +216,7 @@ import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
@@ -926,6 +927,22 @@ public class StmtExecutor {
         context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
+        // MySQL diagnostics-area semantics: a statement that can generate new diagnostics
+        // replaces the previous statement's warnings. Statements that use no tables and generate
+        // no messages (SET, transaction control, SHOW - including SHOW WARNINGS / SHOW ERRORS,
+        // which read the buffer back) leave it unchanged, so a load's warnings stay readable
+        // across the SET / COMMIT / SHOW statements a client typically issues before checking
+        // them. A failing statement of any class still replaces the buffer with its own error
+        // (see the finally block below).
+        boolean preservesDiagnosticsArea = parsedStmt instanceof ShowStmt
+                || parsedStmt instanceof SetStmt
+                || parsedStmt instanceof BeginStmt
+                || parsedStmt instanceof CommitStmt
+                || parsedStmt instanceof RollbackStmt;
+        if (!preservesDiagnosticsArea) {
+            context.clearWarnings();
+        }
+
         SessionVariable sessionVariableBackup = context.getSessionVariable();
         ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
         // set true to change session variable
@@ -1311,6 +1328,25 @@ public class StmtExecutor {
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError()) {
+                // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /
+                // SHOW WARNINGS can read it back. The code mirrors the ERR packet (default 1064).
+                if (!(parsedStmt instanceof ShowWarningStmt)) {
+                    if (preservesDiagnosticsArea) {
+                        // A failure generates a message, which replaces the diagnostics area even
+                        // for statement classes that preserve it on success (skipped at the top).
+                        context.clearWarnings();
+                    }
+                    String errorMessage = context.getState().getErrorMessage();
+                    if (errorMessage == null || errorMessage.isEmpty()) {
+                        // MysqlErrPacket refuses to send an empty message and substitutes
+                        // "Unknown error"; record the same text so SHOW ERRORS stays a 1:1
+                        // mirror of the ERR packet the client received.
+                        errorMessage = "Unknown error";
+                    }
+                    int errorCode = context.getState().getErrorCode() != null
+                            ? context.getState().getErrorCode().getCode() : 1064;
+                    context.addWarning(new QueryWarning("Error", String.valueOf(errorCode), errorMessage));
+                }
                 ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
                 if (coord != null) {
                     coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
@@ -3849,6 +3885,12 @@ public class StmtExecutor {
             sb.append("}");
         }
 
+        if (filteredRows > 0) {
+            // Surface the silently filtered / NULL-substituted rows as a session warning so the
+            // client can read the detail back via SHOW WARNINGS (the OK packet already reports the
+            // count).
+            context.addWarning(QueryWarning.filteredRowsWarning(filteredRows, coord.getTrackingUrl()));
+        }
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
     }

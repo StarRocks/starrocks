@@ -38,7 +38,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
@@ -55,6 +57,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
@@ -361,6 +364,47 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertFalse(myContext.isKilled());
     }
 
+    // A pooled connection handed back out must not expose the previous unit of work's diagnostics:
+    // SHOW WARNINGS is the one statement that reads the buffer without clearing it first.
+    @Test
+    public void testResetConnectionClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(resetConnectionPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Error", "1064", "leftover error from the previous session"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // COM_CHANGE_USER re-authenticates a different user on the same ConnectContext
+    // (MysqlProto.changeUser mutates it in place) and then falls through to the reset path, so the
+    // previous user's error text and load tracking URL must not survive into the new user's session.
+    // changeUserPacket cannot authenticate against the test catalog, so stub a successful
+    // change-user to reach handleResetConnection.
+    @Test
+    public void testChangeUserClearsSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                return true;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265",
+                "1 row(s) filtered or substituted to NULL during load; "
+                        + "tracking_url=http://127.0.0.1:8040/api/_load_error_log?file=previous_user"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
     @Test
     public void testPing() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
@@ -483,6 +527,93 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(1, auditRecords.size());
         Assertions.assertTrue(auditRecords.get(0).startsWith("ERR:"));
         Assertions.assertEquals("ERR:select from", auditRecords.get(0));
+    }
+
+    // Verify a parse failure replaces the previous statement's diagnostics with its own error:
+    // the statement never reaches StmtExecutor.execute() (which normally clears the buffer and
+    // records the failure), so without the explicit handling in handleQuery, SHOW WARNINGS would
+    // return stale entries after a syntax error and SHOW ERRORS would not return the error.
+    @Test
+    public void testParseFailureReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select from");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a pre-execution rejection (here: the per-statement authentication re-check in
+    // validateStmtBeforeExecution) replaces the previous statement's diagnostics the same way a
+    // parse failure does: the statement parses fine but never reaches StmtExecutor.execute(), so
+    // without recording in the rejection path SHOW WARNINGS would return stale entries.
+    @Test
+    public void testPreExecutionRejectionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        Mockito.doReturn(null).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify the per-statement authentication re-check failure (AuthenticationException from
+    // checkLoginSuccess) replaces the previous statement's diagnostics like the other
+    // pre-execution rejections.
+    @Test
+    public void testAuthenticationExceptionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        AuthenticationProvider provider = Mockito.mock(AuthenticationProvider.class);
+        Mockito.doThrow(new AuthenticationException("mock: login revoked"))
+                .when(provider).checkLoginSuccess(Mockito.anyInt(), Mockito.any());
+        Mockito.doReturn(provider).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a COM_STMT_EXECUTE that fails before reaching StmtExecutor.execute() (here: unknown
+    // prepared statement id) replaces the previous statement's diagnostics with its own error,
+    // matching the COM_QUERY pre-execution contract.
+    @Test
+    public void testExecuteUnknownPreparedStmtReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createExecutePacket(42, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
