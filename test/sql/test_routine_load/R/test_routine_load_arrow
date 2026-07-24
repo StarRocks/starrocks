@@ -1,0 +1,75 @@
+-- name: test_routine_load_arrow_basic
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table arrow_table (
+    id bigint,
+    name varchar(50),
+    value double
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+create routine load test_db_${uuid0}.arrow_load_job on arrow_table
+properties
+(
+    "format" = "arrow",
+    "desired_concurrent_number" = "3",
+    "max_batch_interval" = "10",
+    "max_error_number" = "100"
+)
+from kafka
+(
+    "kafka_broker_list" = "127.0.0.1:9092",
+    "kafka_topic" = "arrow_topic",
+    "property.group.id" = "arrow_group"
+);
+-- result:
+-- !result
+show create routine load arrow_load_job;
+-- result:
+arrow_load_job	CREATE ROUTINE LOAD test_db_${uuid0}.arrow_load_job on arrow_table
+PROPERTIES
+(
+"desired_concurrent_number"="3",
+"max_error_number"="100",
+"max_filter_ratio"="1.0",
+"max_batch_interval"="10",
+"max_batch_rows"="200000",
+"task_consume_second"="15",
+"task_timeout_second"="60",
+"format"="arrow",
+"jsonpaths"="",
+"strip_outer_array"="false",
+"json_root"="",
+"strict_mode"="false",
+"pause_on_fatal_parse_error"="false",
+"partial_update"="false",
+"trim_space"="false",
+"enclose"="0",
+"escape"="0",
+"log_rejected_record_num"="0"
+)
+FROM KAFKA
+(
+"kafka_broker_list"="127.0.0.1:9092",
+"kafka_topic"="arrow_topic",
+"property.group.id"="arrow_group"
+);
+-- !result
+stop routine load for arrow_load_job;
+-- result:
+-- !result
+drop table arrow_table;
+-- result:
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result

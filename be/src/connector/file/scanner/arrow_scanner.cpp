@@ -441,6 +441,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             }
             if (status.is_end_of_file()) {
                 _curr_file_reader.reset();
+                _file.reset();
                 continue;
             }
             return status;
@@ -461,6 +462,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
         }
 
         _curr_file_reader.reset();
+        _file.reset();
         if (chunk->num_rows() > 0) {
             break;
         }
