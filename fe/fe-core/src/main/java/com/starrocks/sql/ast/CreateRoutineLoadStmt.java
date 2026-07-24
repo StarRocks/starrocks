@@ -789,17 +789,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
         String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
         if (confluentSchemaRegistryUrlString == null) {
-            if (format == null) {
-                format = jobProperties.get(FORMAT);
-                if (format != null) {
-                    if (format.equalsIgnoreCase("avro")) {
-                        format = "avro";
-                    } else if (format.equalsIgnoreCase("arrow")) {
-                        format = "arrow";
-                    }
-                }
-            }
-            if (format != null && format.equals("avro")) {
+            if (format != null && format.equalsIgnoreCase("avro")) {
                 throw new AnalysisException(CONFLUENT_SCHEMA_REGISTRY_URL + " is a required property");
             }
         } else {

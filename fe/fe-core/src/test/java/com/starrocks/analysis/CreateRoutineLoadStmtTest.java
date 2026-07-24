@@ -803,6 +803,57 @@ public class CreateRoutineLoadStmtTest {
                 "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 
+    @Test
+    public void testAnalyzeArrowFormat() throws Exception {
+        String sql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"arrow\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
+
+        String uppercaseSql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"ARROW\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        CreateRoutineLoadStmt uppercaseStmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(uppercaseSql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(uppercaseStmt, ctx);
+        Assertions.assertEquals("arrow", uppercaseStmt.getFormat());
+    }
+
+    @Test
+    public void testAnalyzeArrowFormatPulsar() throws Exception {
+        String sql = "CREATE ROUTINE LOAD routine_name ON table1\n"
+                + "PROPERTIES (\n"
+                + "\"desired_concurrent_number\" = \"3\",\n"
+                + "\"format\" = \"arrow\"\n"
+                + ")\n"
+                + "FROM PULSAR\n"
+                + "(\n"
+                + "\"pulsar_service_url\" = \"http://pulsar:6650\",\n"
+                + "\"pulsar_topic\" = \"topictest\",\n"
+                + "\"pulsar_subscription\" = \"subtest\"\n"
+                + ");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("arrow", stmt.getFormat());
+    }
+
     private Map<String, String> getCustomProperties() {
         Map<String, String> customProperties = Maps.newHashMap();
         customProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");

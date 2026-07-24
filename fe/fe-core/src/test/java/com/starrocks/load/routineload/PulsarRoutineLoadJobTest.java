@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PulsarUtil;
@@ -30,23 +30,20 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-
-import static org.mockito.Mockito.when;
 
 public class PulsarRoutineLoadJobTest {
 
@@ -142,41 +139,40 @@ public class PulsarRoutineLoadJobTest {
     }
 
     @Test
-    public void fromCreateStmt_createsJobSuccessfully() throws StarRocksException {
-        CreateRoutineLoadStmt stmt = Mockito.mock(CreateRoutineLoadStmt.class);
-        when(stmt.getDBName()).thenReturn("test_db");
-        when(stmt.getTableName()).thenReturn("test_table");
-        when(stmt.getPulsarServiceUrl()).thenReturn("http://pulsar-service");
-        when(stmt.getPulsarTopic()).thenReturn("topic1");
-        when(stmt.getPulsarSubscription()).thenReturn("sub1");
+    public void fromCreateStmt_createsJobSuccessfully(@Mocked CreateRoutineLoadStmt stmt,
+                                                       @Mocked GlobalStateMgr globalStateMgr,
+                                                       @Injectable Database db,
+                                                       @Injectable OlapTable table) throws StarRocksException {
+        new Expectations() {
+            {
+                stmt.getDBName();
+                result = "test_db";
+                stmt.getTableName();
+                result = "test_table";
+                stmt.getPulsarServiceUrl();
+                result = "http://pulsar-service";
+                stmt.getPulsarTopic();
+                result = "topic1";
+                stmt.getPulsarSubscription();
+                result = "sub1";
+                stmt.getFormat();
+                result = "csv";
+                stmt.getWarehouseName();
+                result = "default_warehouse";
 
-        Table table = Mockito.mock(OlapTable.class);
-        when(table.getName()).thenReturn("test_table");
-        when(table.getId()).thenReturn(1L);
-        when(table.isOlapOrCloudNativeTable()).thenReturn(true);
-
-        Database db = Mockito.mock(Database.class);
-        when(db.getId()).thenReturn(1L);
-
-        when(db.getTable("test_table")).thenReturn(null);
-
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return db;
-            }
-
-            @Mock
-            public Table getTable(String dbName, String tableName) {
-                return table;
-            }
-        };
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public long getNextId() {
-                return 1L;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
+                result = db;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test_db", "test_table");
+                result = table;
+                db.getId();
+                result = 1L;
+                table.getId();
+                result = 1L;
+                table.isOlapOrCloudNativeTable();
+                result = true;
             }
         };
+
         ConnectContext context = new ConnectContext();
         context.setThreadLocalInfo();
         PulsarRoutineLoadJob job = PulsarRoutineLoadJob.fromCreateStmt(stmt);
@@ -187,17 +183,60 @@ public class PulsarRoutineLoadJobTest {
     }
 
     @Test
-    public void fromCreateStmt_throwsExceptionForInvalidDb() {
-        CreateRoutineLoadStmt stmt = Mockito.mock(CreateRoutineLoadStmt.class);
-        when(stmt.getDBName()).thenReturn("invalid_db");
+    public void fromCreateStmt_createsJobWithArrowFormat(@Mocked CreateRoutineLoadStmt stmt,
+                                                          @Mocked GlobalStateMgr globalStateMgr,
+                                                          @Injectable Database db,
+                                                          @Injectable OlapTable table) throws StarRocksException {
+        new Expectations() {
+            {
+                stmt.getDBName();
+                result = "test_db";
+                stmt.getTableName();
+                result = "test_table";
+                stmt.getPulsarServiceUrl();
+                result = "http://pulsar-service";
+                stmt.getPulsarTopic();
+                result = "topic1";
+                stmt.getPulsarSubscription();
+                result = "sub1";
+                stmt.getFormat();
+                result = "arrow";
+                stmt.getWarehouseName();
+                result = "default_warehouse";
 
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return null;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db");
+                result = db;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test_db", "test_table");
+                result = table;
+                db.getId();
+                result = 1L;
+                table.getId();
+                result = 1L;
+                table.isOlapOrCloudNativeTable();
+                result = true;
             }
         };
-        Assertions.assertThrows(StarRocksException.class, () -> {
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        PulsarRoutineLoadJob job = PulsarRoutineLoadJob.fromCreateStmt(stmt);
+        Assertions.assertNotNull(job);
+        Assertions.assertEquals("arrow", job.getFormat());
+    }
+
+    @Test
+    public void fromCreateStmt_throwsExceptionForInvalidDb(@Mocked CreateRoutineLoadStmt stmt,
+                                                            @Mocked GlobalStateMgr globalStateMgr) {
+        new Expectations() {
+            {
+                stmt.getDBName();
+                result = "invalid_db";
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("invalid_db");
+                result = null;
+            }
+        };
+
+        Assertions.assertThrows(DdlException.class, () -> {
             PulsarRoutineLoadJob.fromCreateStmt(stmt);
         });
     }
