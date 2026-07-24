@@ -89,6 +89,7 @@ public class ConnectorMetricsMgr {
 
     public static final String DELETE_TYPE_POSITION = "position";
     public static final String DELETE_TYPE_METADATA = "metadata";
+    public static final String DELETE_TYPE_DELETION_VECTOR = "deletion_vector";
 
     public static final String FILE_TYPE_DATA = "data";
     public static final String FILE_TYPE_POSITION_DELETE = "position_delete";
@@ -534,6 +535,9 @@ public class ConnectorMetricsMgr {
         }
         if (DELETE_TYPE_METADATA.equalsIgnoreCase(deleteType)) {
             return DELETE_TYPE_METADATA;
+        }
+        if (DELETE_TYPE_DELETION_VECTOR.equalsIgnoreCase(deleteType)) {
+            return DELETE_TYPE_DELETION_VECTOR;
         }
         return deleteType == null ? REASON_UNKNOWN : deleteType;
     }

@@ -94,6 +94,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -3899,7 +3900,13 @@ public class StmtExecutor {
         if (dmlType == DmlType.UPDATE) {
             ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
         } else if (dmlType == DmlType.DELETE) {
-            ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+            // A DELETE on an Iceberg V3 table writes deletion vectors; the failure must land
+            // under the same delete_type label the success/duration metrics use.
+            String deleteType = targetTable.isIcebergTable()
+                    && IcebergDeletionVectorSupport.isV3((IcebergTable) targetTable)
+                    ? ConnectorMetricsMgr.DELETE_TYPE_DELETION_VECTOR
+                    : ConnectorMetricsMgr.DELETE_TYPE_POSITION;
+            ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, deleteType);
         } else if (dmlType == DmlType.MERGE_INTO) {
             ConnectorMetricsMgr.increaseIcebergMergeTotalFail(t);
         } else {

@@ -21,6 +21,7 @@
 #include "base/uid_util.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/runtime_profile.h"
 #include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "formats/column_evaluator.h"
@@ -150,6 +151,7 @@ Status IcebergDvSink::merge_previous_deletes(
     if (_previous_delete_files == nullptr) {
         return Status::OK();
     }
+    SCOPED_RAW_TIMER(&_write_stats.prev_delete_merge_ns);
     for (const auto& prev : *_previous_delete_files) {
         if (!prev.__isset.referenced_data_files || prev.referenced_data_files.empty()) {
             return Status::InternalError("previous delete file is missing referenced_data_files: " + prev.path);
@@ -170,8 +172,10 @@ Status IcebergDvSink::merge_previous_deletes(
             RETURN_IF_ERROR(read_previous_delete_rows(prev, [&](const Slice& file_path, int64_t pos) {
                 if (touched_refs.find(std::string_view(file_path)) != touched_refs.end()) {
                     _dv_writer.add(file_path, static_cast<uint64_t>(pos));
+                    _write_stats.prev_delete_rows_merged++;
                 }
             }));
+            _write_stats.prev_delete_files_merged++;
             continue;
         }
         if (prev.referenced_data_files.size() != 1) {
@@ -194,6 +198,7 @@ Status IcebergDvSink::merge_previous_deletes(
                                                buffer.data(), buffer.size(),
                                                prev.__isset.record_count ? prev.record_count : -1, nullptr));
             _dv_writer.merge_bitmap(ref, bm);
+            _write_stats.prev_delete_rows_merged += static_cast<int64_t>(roaring64_bitmap_get_cardinality(bm));
             roaring64_bitmap_free(bm);
         } else {
             // A file-scoped delete references exactly one data file; the filter guards
@@ -201,9 +206,11 @@ Status IcebergDvSink::merge_previous_deletes(
             RETURN_IF_ERROR(read_previous_delete_rows(prev, [&](const Slice& file_path, int64_t pos) {
                 if (file_path == ref) {
                     _dv_writer.add(file_path, static_cast<uint64_t>(pos));
+                    _write_stats.prev_delete_rows_merged++;
                 }
             }));
         }
+        _write_stats.prev_delete_files_merged++;
         (*rewritten_by_ref)[ref].push_back(prev);
     }
     return Status::OK();
@@ -227,18 +234,26 @@ Status IcebergDvSink::finish() {
     RETURN_IF_ERROR(merge_previous_deletes(&rewritten_by_ref));
 
     const std::string location = _location_provider->get(); // <data_root>/{prefix}_{idx}.puffin
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(location));
-    // Register cleanup right after the file exists: if the query is cancelled after finish()
-    // but before the FE commit (or the write below fails), ConnectorSinkOperator::close()
-    // invokes rollback() and this deletes the uncommitted Puffin, matching the Parquet sinks.
-    push_rollback_action([fs = _fs, location]() {
-        WARN_IF_ERROR(ignore_not_found(fs->delete_file(location)), "fail to delete file " + location);
-    });
-    ASSIGN_OR_RETURN(std::vector<formats::IcebergDvCommitEntry> entries, _dv_writer.finish(file.get()));
-    // Total Puffin size including the footer PuffinWriter appended after the last blob; the
-    // last blob's end offset would understate it. Read before close() while the file is open.
-    const int64_t file_size = static_cast<int64_t>(file->size());
-    RETURN_IF_ERROR(file->close());
+    std::vector<formats::IcebergDvCommitEntry> entries;
+    int64_t file_size = 0;
+    {
+        SCOPED_RAW_TIMER(&_write_stats.write_ns);
+        ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(location));
+        // Register cleanup right after the file exists: if the query is cancelled after finish()
+        // but before the FE commit (or the write below fails), ConnectorSinkOperator::close()
+        // invokes rollback() and this deletes the uncommitted Puffin, matching the Parquet sinks.
+        push_rollback_action([fs = _fs, location]() {
+            WARN_IF_ERROR(ignore_not_found(fs->delete_file(location)), "fail to delete file " + location);
+        });
+        ASSIGN_OR_RETURN(entries, _dv_writer.finish(file.get()));
+        // Total Puffin size including the footer PuffinWriter appended after the last blob; the
+        // last blob's end offset would understate it. Read before close() while the file is open.
+        file_size = static_cast<int64_t>(file->size());
+        RETURN_IF_ERROR(file->close());
+    }
+    _write_stats.blob_count = static_cast<int64_t>(entries.size());
+    _write_stats.write_bytes = file_size;
+    _write_stats.statement_deleted_rows = current_delete_rows;
 
     for (const auto& e : entries) {
         TIcebergDataFile df;
@@ -263,7 +278,33 @@ Status IcebergDvSink::finish() {
         _state->add_sink_commit_info(commit_info);
     }
     _state->update_num_rows_load_sink(current_delete_rows);
+    update_write_counters();
     return Status::OK();
+}
+
+void IcebergDvSink::update_write_counters() const {
+    if (_profile == nullptr) {
+        return;
+    }
+    static const char* kSection = "IcebergDeletionVector";
+    ADD_COUNTER(_profile, kSection, TUnit::NONE);
+    RuntimeProfile::Counter* prev_files =
+            ADD_CHILD_COUNTER(_profile, "IcebergDVPrevDeleteFilesMerged", TUnit::UNIT, kSection);
+    RuntimeProfile::Counter* prev_rows =
+            ADD_CHILD_COUNTER(_profile, "IcebergDVPrevDeleteRowsMerged", TUnit::UNIT, kSection);
+    RuntimeProfile::Counter* merge_time = ADD_CHILD_TIMER(_profile, "IcebergDVPrevDeleteMergeTime", kSection);
+    RuntimeProfile::Counter* blob_count = ADD_CHILD_COUNTER(_profile, "IcebergDVWriteBlobCount", TUnit::UNIT, kSection);
+    RuntimeProfile::Counter* write_bytes = ADD_CHILD_COUNTER(_profile, "IcebergDVWriteBytes", TUnit::BYTES, kSection);
+    RuntimeProfile::Counter* write_time = ADD_CHILD_TIMER(_profile, "IcebergDVWriteTime", kSection);
+    RuntimeProfile::Counter* statement_rows =
+            ADD_CHILD_COUNTER(_profile, "IcebergDVAddedDeleteRows", TUnit::UNIT, kSection);
+    COUNTER_UPDATE(prev_files, _write_stats.prev_delete_files_merged);
+    COUNTER_UPDATE(prev_rows, _write_stats.prev_delete_rows_merged);
+    COUNTER_UPDATE(merge_time, _write_stats.prev_delete_merge_ns);
+    COUNTER_UPDATE(blob_count, _write_stats.blob_count);
+    COUNTER_UPDATE(write_bytes, _write_stats.write_bytes);
+    COUNTER_UPDATE(write_time, _write_stats.write_ns);
+    COUNTER_UPDATE(statement_rows, _write_stats.statement_deleted_rows);
 }
 
 } // namespace starrocks::connector

@@ -2757,7 +2757,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                                        String dbName, String tableName, Object extra,
                                        ConnectContext context) {
         long startMs = System.currentTimeMillis();
-        String deleteType = "position";
+        // Splits the delete metrics (total/duration/rows/bytes) by V2 position deletes vs V3
+        // deletion vectors, which have distinct cost and failure profiles.
+        String deleteType = IcebergDeletionVectorSupport.isDeletionVectorDelete(dataFiles)
+                ? ConnectorMetricsMgr.DELETE_TYPE_DELETION_VECTOR
+                : ConnectorMetricsMgr.DELETE_TYPE_POSITION;
 
         // DELETE operations - use RowDelta
         RowDelta rowDelta = transaction.newRowDelta();

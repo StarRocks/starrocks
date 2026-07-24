@@ -108,12 +108,27 @@ private:
     Status read_previous_delete_rows(const TIcebergPreviousDeleteFile& prev,
                                      const formats::IcebergPositionDeleteReader::RowCallback& cb) const;
 
+    // Registers the write-side "IcebergDeletionVector" profile section (mirrors the read-side
+    // section IcebergDeletionVectorReader::update_counter emits).
+    void update_write_counters() const;
+
+    struct WriteStats {
+        int64_t prev_delete_files_merged = 0;
+        int64_t prev_delete_rows_merged = 0;
+        int64_t prev_delete_merge_ns = 0;
+        int64_t blob_count = 0;
+        int64_t write_bytes = 0;
+        int64_t write_ns = 0;
+        int64_t statement_deleted_rows = 0;
+    };
+
     std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<LocationProvider> _location_provider;
     std::unordered_map<std::string, TExprNode> _column_slot_map;
     std::shared_ptr<const std::vector<TIcebergPreviousDeleteFile>> _previous_delete_files;
 
     formats::IcebergDvWriter _dv_writer;
+    WriteStats _write_stats;
     bool _finished = false;
 };
 

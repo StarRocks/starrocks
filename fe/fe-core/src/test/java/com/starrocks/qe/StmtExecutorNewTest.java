@@ -14,8 +14,14 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -24,6 +30,11 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -234,5 +245,43 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
         
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
         assertNotNull(executor);
+    }
+
+    @Test
+    public void testExternalSinkFailureSplitsDeleteTypeByFormatVersion() throws Exception {
+        MetricRepo.init();
+        StatementBase stmt = SqlParser.parse("select 1", ctx.getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        IcebergTable v3Table = Mockito.mock(IcebergTable.class);
+        Mockito.when(v3Table.isIcebergTable()).thenReturn(true);
+        Mockito.when(v3Table.getFormatVersion()).thenReturn(3);
+        IcebergTable v2Table = Mockito.mock(IcebergTable.class);
+        Mockito.when(v2Table.isIcebergTable()).thenReturn(true);
+        Mockito.when(v2Table.getFormatVersion()).thenReturn(2);
+
+        Method method = StmtExecutor.class.getDeclaredMethod(
+                "recordExternalSinkFailure", Table.class, DmlType.class, Throwable.class);
+        method.setAccessible(true);
+        method.invoke(executor, v3Table, DmlType.DELETE, new RuntimeException("boom"));
+        method.invoke(executor, v2Table, DmlType.DELETE, new RuntimeException("boom"));
+
+        assertTrue(failedDeleteCount("deletion_vector") >= 1);
+        assertTrue(failedDeleteCount("position") >= 1);
+    }
+
+    private long failedDeleteCount(String deleteType) {
+        long count = 0;
+        for (Metric<?> metric : MetricRepo.getMetricsByName("iceberg_delete_total")) {
+            if (!(metric instanceof LongCounterMetric)) {
+                continue;
+            }
+            Map<String, String> labels = metric.getLabels().stream()
+                    .collect(Collectors.toMap(MetricLabel::getKey, MetricLabel::getValue));
+            if ("failed".equals(labels.get("status")) && deleteType.equals(labels.get("delete_type"))) {
+                count += ((LongCounterMetric) metric).getValue();
+            }
+        }
+        return count;
     }
 }

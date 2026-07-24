@@ -249,6 +249,7 @@ public class ConnectorMetricsMgrTest extends StarRocksTestBase {
 
         Assertions.assertEquals("position", ConnectorMetricsMgr.normalizeDeleteType("POSITION"));
         Assertions.assertEquals("metadata", ConnectorMetricsMgr.normalizeDeleteType("METADATA"));
+        Assertions.assertEquals("deletion_vector", ConnectorMetricsMgr.normalizeDeleteType("DELETION_VECTOR"));
         Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeDeleteType(null));
 
         Assertions.assertEquals("manual", ConnectorMetricsMgr.normalizeCompactionType("MANUAL"));

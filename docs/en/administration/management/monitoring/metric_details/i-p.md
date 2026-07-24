@@ -60,21 +60,21 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Bytes
 - Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
+- Labels: `delete_type` (`position`, `deletion_vector`, or `metadata`)
 - Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
 
 ## `iceberg_delete_duration_ms_total`
 
 - Unit: Millisecond
 - Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
-- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+- Labels: `delete_type` (`position`, `deletion_vector`, or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes the delete methods.
 
 ## `iceberg_delete_rows`
 
 - Unit: Rows
 - Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
+- Labels: `delete_type` (`position`, `deletion_vector`, or `metadata`)
 - Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
 
 ## `iceberg_delete_total`
@@ -84,8 +84,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Labels:
   - `status` (`success` or `failed`)
   - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
-  - `delete_type` (`position` or `metadata`)
-- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
+  - `delete_type` (`position`, `deletion_vector`, or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes the delete methods: `position` (generates position delete files), `deletion_vector` (writes Iceberg V3 deletion vectors), and `metadata` (metadata-level delete).
 
 ## `iceberg_merge_bytes`
 

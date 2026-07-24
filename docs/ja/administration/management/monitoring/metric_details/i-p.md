@@ -60,21 +60,21 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: バイト
 - 種類: 累積
-- ラベル: `delete_type` (`position` または `metadata`)
+- ラベル: `delete_type` (`position`、`deletion_vector`、または `metadata`)
 - 説明: Iceberg `DELETE` タスクから削除された合計バイト数。`metadata` 削除の場合、これは削除されたデータファイルのサイズを表します。`position` 削除の場合、これは作成された位置削除ファイルのサイズを表します。
 
 ## `iceberg_delete_duration_ms_total`
 
 - 単位: ミリ秒
 - タイプ: 累積
-- ラベル: `delete_type` (`position`または`metadata`)
-- 説明: Iceberg `DELETE` タスクの合計実行時間（ミリ秒）。各タスクの実行時間は、終了後に加算されます。`delete_type` は、2つの削除方法を区別します。
+- ラベル: `delete_type` (`position`、`deletion_vector`、または`metadata`)
+- 説明: Iceberg `DELETE` タスクの合計実行時間（ミリ秒）。各タスクの実行時間は、終了後に加算されます。`delete_type` は、削除方法を区別します。
 
 ## `iceberg_delete_rows`
 
 - 単位: 行
 - タイプ: 累積
-- ラベル: `delete_type` (`position` または `metadata`)
+- ラベル: `delete_type` (`position`、`deletion_vector`、または `metadata`)
 - 説明: Iceberg `DELETE` タスクから削除された行の合計数。`metadata` 削除の場合、これは削除されたデータファイル内の行数を表します。`position` 削除の場合、これは作成された位置削除の数を表します。
 
 ## `iceberg_delete_total`
@@ -84,8 +84,8 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - ラベル:
   - `status` (`success` または `failed`)
   - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
-  - `delete_type` (`position` または `metadata`)
-- 説明: Icebergテーブルをターゲットとする`DELETE`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`delete_type`は、2つの削除方法を区別します: `position` (位置削除ファイルを生成する) と `metadata` (メタデータレベルの削除)。
+  - `delete_type` (`position`、`deletion_vector`、または `metadata`)
+- 説明: Icebergテーブルをターゲットとする`DELETE`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`delete_type`は、削除方法を区別します: `position` (位置削除ファイルを生成する)、`deletion_vector` (Iceberg V3 deletion vectorを書き込む)、`metadata` (メタデータレベルの削除)。
 
 ## `iceberg_merge_bytes`
 

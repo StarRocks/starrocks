@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "formats/column_evaluator.h"
@@ -119,7 +120,12 @@ protected:
 
     // Drive init the way ConnectorSinkOperator does: pass the io poller, (optional) profile and
     // the sink memory manager, so init()'s _op_mem_mgr->init() has valid targets.
-    Status init_sink(IcebergDvSink* dv) { return dv->init(&_poller, /*profile=*/nullptr, &_mgr); }
+    Status init_sink(IcebergDvSink* dv) { return dv->init(&_poller, &_profile, &_mgr); }
+
+    int64_t profile_counter(const std::string& name) {
+        auto* counter = _profile.get_counter(name);
+        return counter == nullptr ? -1 : counter->value();
+    }
 
     // --- previous-delete merge helpers ---
 
@@ -202,6 +208,7 @@ protected:
     std::string _tmp_dir;
     formats::AsyncFlushStreamPoller _poller;
     connector::SinkMemoryManager _mgr{nullptr, nullptr};
+    RuntimeProfile _profile{"IcebergDvSinkTest"};
 };
 
 TEST_F(IcebergDvSinkTest, create_dv_sink) {
@@ -401,6 +408,12 @@ TEST_F(IcebergDvSinkTest, merges_previous_parquet_pd) {
     ASSERT_TRUE(ci.__isset.rewritten_delete_files);
     ASSERT_EQ(ci.rewritten_delete_files.size(), 1u);
     EXPECT_EQ(ci.rewritten_delete_files[0].path, pd_path);
+
+    EXPECT_EQ(profile_counter("IcebergDVPrevDeleteFilesMerged"), 1);
+    EXPECT_EQ(profile_counter("IcebergDVPrevDeleteRowsMerged"), 1); // fileA's row 7 only
+    EXPECT_EQ(profile_counter("IcebergDVWriteBlobCount"), 1);
+    EXPECT_EQ(profile_counter("IcebergDVAddedDeleteRows"), 1);
+    EXPECT_GT(profile_counter("IcebergDVWriteBytes"), 0);
 }
 
 TEST_F(IcebergDvSinkTest, untouched_previous_is_skipped) {
