@@ -374,7 +374,8 @@
         "create_child_worker_timeout_ms",
         "report_python_worker_error",
         "python_worker_reuse",
-        "python_worker_expire_time_sec"
+        "python_worker_expire_time_sec",
+        "python_udf_rpc_timeout_ms"
       ]
     },
     {

@@ -69,6 +69,10 @@ public class ScalarFunction extends Function {
     private String inputType;
     @SerializedName(value = "content")
     private String content;
+    // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects to
+    // this external worker instead of spawning a local one. The user owns its lifecycle/isolation.
+    @SerializedName(value = "serviceUrl")
+    private String serviceUrl;
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -106,6 +110,7 @@ public class ScalarFunction extends Function {
         isolationType = other.isolationType;
         inputType = other.inputType;
         content = other.content;
+        serviceUrl = other.serviceUrl;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -230,6 +235,14 @@ public class ScalarFunction extends Function {
         this.content = content;
     }
 
+    public void setServiceUrl(String serviceUrl) {
+        this.serviceUrl = serviceUrl;
+    }
+
+    public String getServiceUrl() {
+        return serviceUrl;
+    }
+
     @Override
     public String toSql(boolean ifNotExists) {
         StringBuilder sb = new StringBuilder("CREATE FUNCTION ");
@@ -243,6 +256,34 @@ public class ScalarFunction extends Function {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    private Map<String, String> synthesizePropertiesFromFields() {
+        Map<String, String> props = new LinkedHashMap<>();
+        String typeStr = binaryTypeToPropertyValue(getBinaryType());
+        if (typeStr != null) {
+            props.put(CreateFunctionStmt.TYPE_KEY, typeStr);
+        }
+        if (getLocation() != null) {
+            props.put(CreateFunctionStmt.FILE_KEY, getLocation().toString());
+        }
+        if (!Strings.isEmpty(getSymbolName())) {
+            props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
+        }
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
+        }
+        if (!Strings.isEmpty(getServiceUrl())) {
+            props.put(CreateFunctionStmt.SERVICE_URL_KEY, getServiceUrl());
+        }
+        // Default isolation is isolated (true); only emit the property when explicitly shared.
+        if (!isolationType) {
+            props.put(CreateFunctionStmt.ISOLATION_KEY, CreateFunctionStmt.ISOLATION_SHARED);
+        }
+        return props;
+    }
+
+>>>>>>> 7e0f4919b8 ([Enhancement] Add per-UDF service_url to connect an external Python UDF worker (#76466))
     @Override
     public TFunction toThrift() {
         TFunction fn = super.toThrift();
@@ -261,6 +302,9 @@ public class ScalarFunction extends Function {
         }
         if (content != null) {
             fn.setContent(content);
+        }
+        if (serviceUrl != null) {
+            fn.setService_url(serviceUrl);
         }
         return fn;
     }
@@ -299,6 +343,7 @@ public class ScalarFunction extends Function {
         boolean isolation;
         String inputType;
         String content;
+        String serviceUrl;
 
         private ScalarFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -353,6 +398,11 @@ public class ScalarFunction extends Function {
             return this;
         }
 
+        public ScalarFunction.ScalarFunctionBuilder serviceUrl(String serviceUrl) {
+            this.serviceUrl = serviceUrl;
+            return this;
+        }
+
         public ScalarFunction build() {
             ScalarFunction scalarFunction = new ScalarFunction(name, argTypes, retType, hasVarArgs);
             scalarFunction.setBinaryType(binaryType);
@@ -360,6 +410,7 @@ public class ScalarFunction extends Function {
             scalarFunction.setIsolationType(isolation);
             scalarFunction.setInputType(inputType);
             scalarFunction.setContent(content);
+            scalarFunction.setServiceUrl(serviceUrl);
             if (objectFile != null) {
                 scalarFunction.setLocation(new HdfsURI(objectFile));
             }

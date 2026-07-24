@@ -80,7 +80,13 @@ Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDe
     ARROW_ASSIGN_OR_RETURN(_arrow_client, ArrowFlightClient::Connect(location));
     ASSIGN_OR_RETURN(auto command, func_desc.to_json_string());
     FlightDescriptor descriptor = FlightDescriptor::Command(command);
-    ARROW_ASSIGN_OR_RETURN(auto result, _arrow_client->DoExchange(descriptor));
+    FlightCallOptions call_options;
+    if (config::python_udf_rpc_timeout_ms > 0) {
+        // gRPC deadline on the DoExchange stream: a dead/unreachable/hung worker fails the query
+        // instead of hanging forever. Bounds the whole stream, so it is opt-in (0 = disabled).
+        call_options.timeout = TimeoutDuration{config::python_udf_rpc_timeout_ms / 1000.0};
+    }
+    ARROW_ASSIGN_OR_RETURN(auto result, _arrow_client->DoExchange(call_options, descriptor));
     _reader = std::move(result.reader);
     _writer = std::move(result.writer);
     _process = std::move(process);
@@ -126,7 +132,15 @@ StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightFuncCallStub::do_evalua
 auto PyWorkerManager::get_client(const PyFunctionDescriptor& func_desc) -> StatusOr<WorkerClientPtr> {
     std::shared_ptr<PyWorker> handle;
     std::string url;
-    ASSIGN_OR_RETURN(handle, _acquire_worker(func_desc.driver_id, config::python_worker_reuse, &url));
+    if (!func_desc.service_url.empty()) {
+        // External-worker mode: connect to the user-provided Arrow Flight worker service (the
+        // CREATE FUNCTION "service_url" property) instead of spawning and managing a local worker.
+        // The user owns its lifecycle and isolation.
+        handle = std::make_shared<RemotePyWorker>(func_desc.service_url);
+        url = handle->url();
+    } else {
+        ASSIGN_OR_RETURN(handle, _acquire_worker(func_desc.driver_id, config::python_worker_reuse, &url));
+    }
     auto arrow_client = std::make_unique<ArrowFlightWithRW>();
     RETURN_IF_ERROR(arrow_client->init(url, func_desc, std::move(handle)));
     return arrow_client;
@@ -154,6 +168,7 @@ StatusOr<std::string> PyFunctionDescriptor::to_json_string() const {
     doc.AddMember("location", rapidjson::Value().SetString(location.c_str(), allocator), allocator);
     doc.AddMember("input_type", rapidjson::Value().SetString(input_type.c_str(), allocator), allocator);
     doc.AddMember("content", rapidjson::Value().SetString(content.c_str(), content.size(), allocator), allocator);
+    doc.AddMember("checksum", rapidjson::Value().SetString(checksum.c_str(), checksum.size(), allocator), allocator);
 
     {
         // serialize return type schema

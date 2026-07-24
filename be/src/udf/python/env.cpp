@@ -39,13 +39,21 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/udf/python/env.cpp
 void PyWorker::terminate() {
+=======
+bool LocalPyWorker::expired() {
+    return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec;
+}
+
+void LocalPyWorker::terminate() {
+>>>>>>> 7e0f4919b8 ([Enhancement] Add per-UDF service_url to connect an external Python UDF worker (#76466)):be/src/exprs/udf/python/env.cpp
     if (_pid != -1) {
         kill(_pid, SIGKILL);
     }
 }
 
-void PyWorker::wait() {
+void LocalPyWorker::wait() {
     if (_pid != -1) {
         int status;
         waitpid(_pid, &status, 0);
@@ -53,12 +61,32 @@ void PyWorker::wait() {
     }
 }
 
-void PyWorker::remove_unix_socket() {
+void LocalPyWorker::remove_unix_socket() {
     unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
 }
 
+<<<<<<< HEAD:be/src/udf/python/env.cpp
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, PythonEnvManager::getInstance().getDefault());
+=======
+std::string PyWorkerManager::unix_socket(pid_t pid) {
+    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
+    return unix_socket;
+}
+
+std::string PyWorkerManager::unix_socket_prefix() {
+    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_", config::local_library_dir);
+    return unix_socket;
+}
+
+std::string PyWorkerManager::unix_socket_path(pid_t pid) {
+    std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
+    return unix_socket_path;
+}
+
+Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process) {
+    ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
+>>>>>>> 7e0f4919b8 ([Enhancement] Add per-UDF service_url to connect an external Python UDF worker (#76466)):be/src/exprs/udf/python/env.cpp
 
     std::string python_path = py_env.get_python_path();
     int pipefd[2];
@@ -123,7 +151,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
         return Status::InternalError(fmt::format("posix_spawnp failed: {}", std::strerror(rc)));
     }
 
-    *child_process = std::make_unique<PyWorker>(pid);
+    *child_process = std::make_unique<LocalPyWorker>(pid);
 
     pollfd fds[1];
     fds[0].fd = pipefd[0];
@@ -171,7 +199,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
 StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t driver_id, size_t reusable,
                                                                      std::string* url) {
     if (!reusable) {
-        std::unique_ptr<PyWorker> child_process;
+        std::unique_ptr<LocalPyWorker> child_process;
         RETURN_IF_ERROR(_fork_py_worker(&child_process));
         *url = child_process->url();
         return child_process;
@@ -197,7 +225,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         return worker;
     }
 
-    std::unique_ptr<PyWorker> uniq_worker;
+    std::unique_ptr<LocalPyWorker> uniq_worker;
     RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
     *url = uniq_worker->url();
     worker = std::move(uniq_worker);
