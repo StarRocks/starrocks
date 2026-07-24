@@ -47,6 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.DmlType;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryWarning;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
@@ -221,6 +222,15 @@ public class TransactionStmtExecutor {
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);
             explicitTxnState.addTransactionItem(item);
 
+            if (item.getFilteredRows() > 0) {
+                // Mirror the autocommit path (StmtExecutor.handleDMLStmt): the OK packet below
+                // reports the filtered-row count, so record the matching session warning for
+                // SHOW WARNINGS. COMMIT and other no-table statements preserve the diagnostics
+                // area (see StmtExecutor.execute), so the warning stays readable both inside the
+                // transaction and right after COMMIT, until the next data statement.
+                context.addWarning(QueryWarning.filteredRowsWarning(item.getFilteredRows(),
+                        coordinator.getTrackingUrl()));
+            }
             context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
                     buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
                             transactionState.getTransactionId(), database.getId()));

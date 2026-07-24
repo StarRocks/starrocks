@@ -29,6 +29,16 @@ public class QueryWarning {
         this.message = message;
     }
 
+    // The diagnostic for rows silently filtered or NULL-substituted during a load, shared by the
+    // autocommit (StmtExecutor) and explicit-transaction (TransactionStmtExecutor) INSERT paths.
+    // MySQL code 1265 (WARN_DATA_TRUNCATED) is the closest standard diagnostic. Unlike the OK
+    // packet's int field, the message keeps the exact long count.
+    public static QueryWarning filteredRowsWarning(long filteredRows, String trackingUrl) {
+        return new QueryWarning("Warning", "1265",
+                filteredRows + " row(s) filtered or substituted to NULL during load; "
+                        + "tracking_url=" + trackingUrl);
+    }
+
     public String getLevel() {
         return level;
     }

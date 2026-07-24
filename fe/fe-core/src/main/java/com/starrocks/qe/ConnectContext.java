@@ -289,7 +289,8 @@ public class ConnectContext {
     // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
     // by the most recent warning-generating statement so they can be read back via
     // SHOW WARNINGS / SHOW ERRORS. Reset semantics follow MySQL: cleared at the start of the next
-    // warning-generating statement, but not by SHOW WARNINGS itself (see StmtExecutor.execute).
+    // statement that can generate diagnostics; SET, transaction control, and SHOW statements
+    // (including SHOW WARNINGS itself) leave it unchanged (see StmtExecutor.execute).
     private final List<QueryWarning> warnings = Lists.newArrayList();
 
     private boolean skipFinishSink = false;
