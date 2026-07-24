@@ -77,6 +77,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LogicalSinkMVMeta;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -152,6 +153,7 @@ import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.LogicalSinkMVOpLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -211,6 +213,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -2960,9 +2963,110 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             olapTable.checkStableAndNormal();
 
-            materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
+            if (stmt.isLogicalSinkMV()) {
+                // CK-compatible `... TO <table>`: register a write-triggered transformation rule on the
+                // base table. No rollup index / tablets are created and no historical data is backfilled.
+                createLogicalSinkMaterializedView(stmt, db, olapTable);
+            } else {
+                materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
+            }
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
+        }
+    }
+
+    // Register a CK-compatible logical sink MV (`CREATE MATERIALIZED VIEW ... TO <table>`) on the base
+    // table. Called while holding the base table's WRITE lock. Persists the binding via the edit log;
+    // the actual incremental maintenance happens on the load path (OlapTableSink fan-out), so there is
+    // no rollup job and no historical backfill (matching ClickHouse TO-table semantics).
+    private void createLogicalSinkMaterializedView(CreateMaterializedViewStmt stmt, Database db, OlapTable baseTable)
+            throws DdlException {
+        if (baseTable.getLogicalSinkMVs().size() >= Config.max_mv_to_table_per_base_table) {
+            throw new DdlException("Too many TO-table materialized views on base table '" + baseTable.getName()
+                    + "' (limit " + Config.max_mv_to_table_per_base_table + ", see Config.max_mv_to_table_per_base_table)");
+        }
+        OlapTable targetTable = stmt.getToTable();
+        if (targetTable == null) {
+            throw new DdlException("Target table is not resolved for logical sink MV '" + stmt.getMVName() + "'");
+        }
+        for (LogicalSinkMVMeta existing : baseTable.getLogicalSinkMVs().values()) {
+            if (existing.getMvName().equalsIgnoreCase(stmt.getMVName())) {
+                throw new DdlException("Materialized view '" + stmt.getMVName() + "' already exists on table '"
+                        + baseTable.getName() + "'");
+            }
+        }
+
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        String defineStmt = stmt.getOrigStmt() == null ? null : stmt.getOrigStmt().originStmt;
+        LogicalSinkMVMeta meta = new LogicalSinkMVMeta(mvId, stmt.getMVName(), db.getId(), baseTable.getId(),
+                targetTable.getId(), defineStmt);
+        // Phase-1 write-path mapping: record, per output column (in SELECT order), the base column it
+        // projects from when the item is a plain column reference; "" for scalar/JSON exprs.
+        List<String> projectBaseColumns = Lists.newArrayList();
+        for (MVColumnItem item : stmt.getMVColumnItemList()) {
+            Expr define = item.getDefineExpr();
+            if (define instanceof SlotRef) {
+                projectBaseColumns.add(((SlotRef) define).getColumnName());
+            } else {
+                projectBaseColumns.add("");
+            }
+        }
+        meta.setProjectBaseColumns(projectBaseColumns);
+        baseTable.addLogicalSinkMV(meta);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLogicalSinkMV(
+                LogicalSinkMVOpLog.forCreate(db.getId(), baseTable.getId(), meta));
+        LOG.info("create logical sink MV {} (id={}) on base table {} -> target table {}",
+                stmt.getMVName(), mvId, baseTable.getName(), targetTable.getName());
+    }
+
+    public void replayCreateLogicalSinkMV(LogicalSinkMVOpLog info) {
+        Database db = getDb(info.getDbId());
+        if (db == null || info.getMeta() == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            Table table = getTable(info.getDbId(), info.getBaseTableId());
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).addLogicalSinkMV(info.getMeta());
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    // Drop a logical sink (TO-table) MV registered on baseTable: remove the metadata and journal it.
+    // The target table itself is user-managed and is NOT dropped here.
+    public void dropLogicalSinkMaterializedView(Database db, OlapTable baseTable, LogicalSinkMVMeta meta) {
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            baseTable.removeLogicalSinkMV(meta.getMvId());
+            GlobalStateMgr.getCurrentState().getEditLog().logDropLogicalSinkMV(
+                    LogicalSinkMVOpLog.forDrop(db.getId(), baseTable.getId(), meta.getMvId()));
+            LOG.info("drop logical sink MV {} (id={}) on base table {}",
+                    meta.getMvName(), meta.getMvId(), baseTable.getName());
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    public void replayDropLogicalSinkMV(LogicalSinkMVOpLog info) {
+        Database db = getDb(info.getDbId());
+        if (db == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            Table table = getTable(info.getDbId(), info.getBaseTableId());
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).removeLogicalSinkMV(info.getMvId());
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 

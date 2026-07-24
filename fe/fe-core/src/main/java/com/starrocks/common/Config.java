@@ -3072,6 +3072,22 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_mv = true;
 
     /**
+     * Enable ClickHouse-compatible `CREATE MATERIALIZED VIEW ... TO <table>` (logical sink MV):
+     * the synchronous, write-triggered MV writes its transformed rows into an existing
+     * user-managed target table instead of a rollup index. Disabled by default; turn on to
+     * gray-release the feature. See materialized view TO-table design.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_mv_to_table = false;
+
+    /**
+     * Max number of logical sink (TO-table) MVs that can be attached to a single base table.
+     * Bounds the write amplification a single base load incurs (1 base write + N target writes).
+     */
+    @ConfField(mutable = true)
+    public static int max_mv_to_table_per_base_table = 5;
+
+    /**
      * Whether to support colocate mv index in olap table sink, tablet sink will only send chunk once
      * if enabled to speed up the sync mv's transformation performance.
      */

@@ -732,6 +732,16 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayConvertDistributionType(tableInfo);
                     break;
                 }
+                case OperationType.OP_CREATE_LOGICAL_SINK_MV: {
+                    LogicalSinkMVOpLog info = (LogicalSinkMVOpLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayCreateLogicalSinkMV(info);
+                    break;
+                }
+                case OperationType.OP_DROP_LOGICAL_SINK_MV: {
+                    LogicalSinkMVOpLog info = (LogicalSinkMVOpLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayDropLogicalSinkMV(info);
+                    break;
+                }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
@@ -1444,6 +1454,14 @@ public class EditLog {
 
     public void logAddPartition(PartitionPersistInfoV2 info) {
         logEdit(OperationType.OP_ADD_PARTITION_V2, info);
+    }
+
+    public void logCreateLogicalSinkMV(LogicalSinkMVOpLog info) {
+        logEdit(OperationType.OP_CREATE_LOGICAL_SINK_MV, info);
+    }
+
+    public void logDropLogicalSinkMV(LogicalSinkMVOpLog info) {
+        logEdit(OperationType.OP_DROP_LOGICAL_SINK_MV, info);
     }
 
     public void logAddPartitions(AddPartitionsInfoV2 info) {
