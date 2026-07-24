@@ -24,6 +24,8 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -127,6 +129,12 @@ public class RangeDistributionPruner implements DistributionPruner {
             List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
             if (inPredicateLiterals != null && !inPredicateLiterals.isEmpty()) {
                 for (LiteralExpr expr : inPredicateLiterals) {
+                    // A NULL entry in an IN list never matches any row (SQL three-valued logic), so
+                    // it selects no tablets -- skip it. This also avoids parsing the literal "NULL"
+                    // as the column type.
+                    if (expr instanceof NullLiteral) {
+                        continue;
+                    }
                     Variant v = Variant.of(column.getType(), expr.getStringValue());
                     lowerValues.add(v);
                     upperValues.add(v);
@@ -140,12 +148,12 @@ public class RangeDistributionPruner implements DistributionPruner {
             Variant colMax = null;
             LiteralExpr lowerBound = filter.getLowerBound();
             if (lowerBound != null) {
-                colMin = Variant.of(column.getType(), lowerBound.getStringValue());
+                colMin = toVariant(column.getType(), lowerBound);
             }
 
             LiteralExpr upperBound = filter.getUpperBound();
             if (upperBound != null) {
-                colMax = Variant.of(column.getType(), upperBound.getStringValue());
+                colMax = toVariant(column.getType(), upperBound);
             }
 
             // 3. Fill unbounded sides with type-wide min/max
@@ -275,5 +283,15 @@ public class RangeDistributionPruner implements DistributionPruner {
             }
         }
         return resultSet;
+    }
+
+    // Convert a range-bound literal to a Variant. An IS NULL predicate reaches the pruner as a
+    // NullLiteral bound whose getStringValue() is the string "NULL". A NULL sort-key value is encoded
+    // as NullVariant, which sorts as the smallest real value (matching the BE null-first key
+    // encoding), so a NULL bound must compare as NullVariant -- passing "NULL" to Variant.of() would
+    // parse it as the column type and throw for numeric/date types.
+    private static Variant toVariant(Type type, LiteralExpr literal) {
+        return literal instanceof NullLiteral ? Variant.nullVariant(type)
+                : Variant.of(type, literal.getStringValue());
     }
 }

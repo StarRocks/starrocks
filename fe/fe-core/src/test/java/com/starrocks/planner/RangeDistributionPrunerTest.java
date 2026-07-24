@@ -25,6 +25,7 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -628,6 +629,93 @@ public class RangeDistributionPrunerTest {
 
         Collection<Long> result = pruner.prune();
         Assertions.assertEquals(Collections.singleton(1L), new HashSet<>(result));
+    }
+
+    @Test
+    public void testIsNullSelectsFirstTablet() {
+        // #11612: a nullable sort key split into (-inf, 50) and [50, +inf). A NULL sort-key value is
+        // encoded as NullVariant, which sorts as the smallest real value (Min < Null < normal), so
+        // NULL rows are contained in the range that starts at -inf -- here the first tablet. Before
+        // the fix, WHERE k1 IS NULL threw IllegalArgumentException("Invalid int value: NULL") here.
+        Column k1 = new Column("k1", IntegerType.INT, true);
+        List<Tablet> tablets = Lists.newArrayList(
+                createTabletOpenBounds(1L, null, "50", k1),
+                createTabletOpenBounds(2L, "50", null, k1));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new NullLiteral(), true);
+        filter.setUpperBound(new NullLiteral(), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k1), filters);
+
+        Collection<Long> result = pruner.prune();
+        Assertions.assertEquals(Collections.singleton(1L), new HashSet<>(result));
+    }
+
+    @Test
+    public void testCompositeLeadingIsNullSelectsFirstTablet() {
+        // Two-column sort key (k1, k2) split into (-inf, (10,100)) and [(10,100), +inf). k1 IS NULL:
+        // NULL sorts before any real k1, so the matching rows are contained in the first tablet
+        // (range starts at -inf). The pruner fills the unconstrained trailing column k2 with
+        // [-inf, +inf], giving query bounds (NULL, min)..(NULL, max), which overlaps only the first.
+        Column k1 = new Column("k1", IntegerType.INT, true);
+        Column k2 = new Column("k2", IntegerType.INT, false);
+        List<Column> cols = Lists.newArrayList(k1, k2);
+
+        Tuple boundary = new Tuple(Lists.newArrayList(
+                Variant.of(k1.getType(), "10"), Variant.of(k2.getType(), "100")));
+        LocalTablet first = new LocalTablet(1L);
+        first.setRange(new TabletRange(Range.of((Tuple) null, boundary, false, false)));
+        LocalTablet second = new LocalTablet(2L);
+        second.setRange(new TabletRange(Range.of(boundary, (Tuple) null, true, false)));
+        List<Tablet> tablets = Lists.newArrayList(first, second);
+
+        PartitionColumnFilter k1Filter = new PartitionColumnFilter();
+        k1Filter.setLowerBound(new NullLiteral(), true);
+        k1Filter.setUpperBound(new NullLiteral(), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", k1Filter);
+
+        RangeDistributionPruner pruner = new RangeDistributionPruner(tablets, cols, filters);
+        Collection<Long> result = pruner.prune();
+        Assertions.assertEquals(Collections.singleton(1L), new HashSet<>(result));
+    }
+
+    @Test
+    public void testInPredicateWithNullLiteral() {
+        // WHERE k1 IN (55, NULL): under SQL three-valued logic the NULL entry never matches, so it
+        // is ignored; only 55 -> tablet [50, +inf). Must not crash parsing "NULL" as INT.
+        Column k1 = new Column("k1", IntegerType.INT, true);
+        List<Tablet> tablets = Lists.newArrayList(
+                createTabletOpenBounds(1L, null, "50", k1),
+                createTabletOpenBounds(2L, "50", null, k1));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        List<LiteralExpr> inValues = Lists.newArrayList();
+        inValues.add(new StringLiteral("55"));
+        inValues.add(new NullLiteral());
+        filter.setInPredicateLiterals(inValues);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k1", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k1), filters);
+
+        Set<Long> result = pruner.prune().stream().collect(Collectors.toSet());
+        Assertions.assertEquals(Collections.singleton(2L), result);
+    }
+
+    // Build a tablet with optional open (infinite) bounds: a null lower/upper string means -inf/+inf,
+    // matching how a split builds the first tablet (-inf, c1) and the last tablet [c_{n-1}, +inf).
+    private Tablet createTabletOpenBounds(long id, String lower, String upper, Column column) {
+        LocalTablet tablet = new LocalTablet(id);
+        Tuple lowerTuple = lower == null ? null : new Tuple(Lists.newArrayList(Variant.of(column.getType(), lower)));
+        Tuple upperTuple = upper == null ? null : new Tuple(Lists.newArrayList(Variant.of(column.getType(), upper)));
+        tablet.setRange(new TabletRange(Range.of(lowerTuple, upperTuple, lower != null, false)));
+        return tablet;
     }
 
     private Tablet createTablet(long id, String lower, String upper, Column column) {
