@@ -818,7 +818,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
-    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+    - Set the option `sink.version` to `V1` or `V2`. Both support conditional update.
 
     ```SQL
     CREATE TABLE `score_board` (

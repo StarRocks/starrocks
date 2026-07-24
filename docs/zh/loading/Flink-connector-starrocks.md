@@ -793,7 +793,7 @@ DISTRIBUTED BY HASH(`id`);
 2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
    - DDL 中包括所有列的定义。
    - 将选项  `sink.properties.merge_condition` 设置为 `score`，要求 Flink connector 使用 `score`  列作为更新条件。
-   - 将选项 `sink.version` 设置为 `V1` ，要求 Flink connector 使用 Stream Load 接口导入数据。因为只有 Stream Load 接口支持条件更新。
+   - 将选项 `sink.version` 设置为 `V1` 或 `V2`。两者均支持条件更新。
 
       ```SQL
       CREATE TABLE `score_board` (
