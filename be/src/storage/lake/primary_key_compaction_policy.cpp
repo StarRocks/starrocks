@@ -186,6 +186,31 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
     return false;
 }
 
+// Aggregate delete stats across all of a tablet's rowsets. Base compaction keys on both the
+// delete ratio (sum(num_dels)/sum(num_rows)) and the absolute delete-row count (sum(num_dels)):
+// on hot update/delete tables the deletes can be large in absolute terms -- driving delete-vector
+// size and space waste -- while the aggregate ratio stays low because many mostly-live rowsets
+// dilute it.
+struct TabletDeleteStats {
+    int64_t total_dels = 0;
+    int64_t total_rows = 0;
+    double ratio() const { return total_rows > 0 ? std::min(1.0, (double)total_dels / (double)total_rows) : 0.0; }
+};
+
+TabletDeleteStats tablet_delete_stats(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                      UpdateManager* mgr) {
+    TabletDeleteStats stats;
+    for (const auto& rowset_pb : tablet_metadata->rowsets()) {
+        stats.total_rows += rowset_pb.num_rows();
+        if (rowset_pb.has_num_dels()) {
+            stats.total_dels += rowset_pb.num_dels();
+        } else {
+            stats.total_dels += mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
+        }
+    }
+    return stats;
+}
+
 // 2b. Decide whether a picked low-score level should be skipped to avoid low-value
 // sparse mid-tier merges (high rewrite cost, negligible IO-count reduction). Returns
 // true => skip compaction this round.
@@ -401,8 +426,84 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     return rowset_indexes;
 }
 
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    // Base compaction is a full merge: collect ALL rowsets (like non-primary-key base compaction),
+    // then order them by absolute delete-row count (num_dels) descending. Both the delete-vector
+    // size and the reclaimable space scale with the absolute delete count -- not the ratio -- so
+    // when the result-bytes budget forces a subset, the rowsets holding the most delete marks are
+    // rewritten first. (Ordering by ratio would let a tiny fully-deleted rowset outrank a rowset
+    // holding orders of magnitude more delete marks, which is backwards for shrinking the delvec.)
+    std::vector<RowsetCandidate> candidates;
+    for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
+        const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
+        RowsetStat stat;
+        stat.num_rows = rowset_pb.num_rows();
+        stat.bytes = rowset_pb.data_size();
+        if (rowset_pb.has_num_dels()) {
+            stat.num_dels = rowset_pb.num_dels();
+        } else {
+            stat.num_dels = mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
+        }
+        candidates.emplace_back(&rowset_pb, stat, i);
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const RowsetCandidate& a, const RowsetCandidate& b) { return a.stat.num_dels > b.stat.num_dels; });
+
+    std::vector<RowsetPtr> input_rowsets;
+    const int64_t compaction_data_size_threshold =
+            static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+    size_t cur_compaction_result_bytes = 0;
+    for (const auto& candidate : candidates) {
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, candidate.rowset_index,
+                                                            0 /* compaction_segment_limit */));
+        if (has_dels != nullptr) {
+            has_dels->push_back(candidate.stat.num_dels > 0);
+        }
+        cur_compaction_result_bytes += candidate.read_bytes();
+        if (cur_compaction_result_bytes >
+            std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+            break;
+        }
+        if (input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
+            break;
+        }
+    }
+    VLOG(2) << strings::Substitute(
+            "lake PrimaryCompactionPolicy pick_base_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
+            tablet_metadata->version(),
+            JoinMapped(
+                    input_rowsets, [&](const RowsetPtr& rowset) -> std::string { return std::to_string(rowset->id()); },
+                    "|"));
+    return input_rowsets;
+}
+
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    // Base compaction reclaims space from delete-bearing rowsets. Trigger it when a manual
+    // ALTER TABLE ... COMPACT requested a base compaction, or when the tablet has accumulated
+    // enough deletes to be worth reclaiming -- either as a fraction of its rows
+    // (lake_pk_compaction_base_delete_ratio_threshold) or in absolute delete-row count
+    // (lake_pk_compaction_base_delete_rows_threshold). The absolute-count trigger matters because
+    // on hot update/delete tables the deletes bloat the delete vectors and waste space long before
+    // the aggregate ratio -- diluted by many mostly-live rowsets -- crosses the ratio threshold.
+    // Otherwise run the normal size-tiered cumulative selection. When base compaction finds nothing
+    // to reclaim (no delete-bearing rowsets), fall through to cumulative so a forced compaction
+    // still merges small files.
+    const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
+    // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
+    // under a forced base compaction: there is nothing for base compaction to reclaim, so skip the
+    // second rowset walk in pick_base_rowsets and go straight to cumulative selection.
+    if (del_stats.total_dels > 0 &&
+        (_force_base_compaction || del_stats.ratio() >= config::lake_pk_compaction_base_delete_ratio_threshold ||
+         del_stats.total_dels >= config::lake_pk_compaction_base_delete_rows_threshold)) {
+        ASSIGN_OR_RETURN(auto base_rowsets, pick_base_rowsets(tablet_metadata, has_dels));
+        if (!base_rowsets.empty()) {
+            return base_rowsets;
+        }
+    }
+
     std::vector<RowsetPtr> input_rowsets;
     ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, has_dels));
     input_rowsets.reserve(rowset_indexes.size());
