@@ -432,7 +432,8 @@ public class StatisticsSQLTest extends PlanTestBase {
     public void testExternalTableCollectionStatsType() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(Type.ARRAY_INT, new MapType(Type.INT, Type.STRING)));
-        assertContains(sql, "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string)");
+        assertContains(sql, "cast(max(cast(nullif(max, '') as string)) as string)," +
+                " cast(min(cast(nullif(min, '') as string)) as string)");
     }
 
     @Test
