@@ -1126,6 +1126,10 @@ public class FunctionAnalyzer {
                         fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
                         Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
             }
+            // the resolved builtin is a shared singleton: mutate a copy, or the wildcard decimal
+            // signature gets stamped with a concrete (precision, scale) and later lookups with a
+            // different scale fail until the FE restarts
+            fn = fn.copy();
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
