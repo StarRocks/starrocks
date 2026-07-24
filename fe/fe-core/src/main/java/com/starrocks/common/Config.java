@@ -1236,6 +1236,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
 
+    /**
+     * Minimum interval, in milliseconds, before a partition that failed to publish its version is retried by
+     * PublishVersionDaemon in shared-data (lake) mode. Applies to both the single-transaction and the batch
+     * publish paths: a partition that already published successfully is skipped, and a partition that recently
+     * failed is not re-attempted until this interval has elapsed since its last failure. Only failed partitions
+     * are affected; a partition that publishes on its first attempt is never delayed.
+     */
+    @ConfField(mutable = true)
+    public static long lake_publish_version_retry_interval_ms = 1000;
+
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
