@@ -21,6 +21,8 @@ keywords: ['shen ji ri zhi']
 - `sys_log_roll_num`: 控制保留的日志文件数量，以防止无限增长消耗过多磁盘空间。默认是10
 - `sys_log_roll_interval`: 指定轮换频率。默认是`DAY`，意味着日志每天轮换
 - `sys_log_delete_age`: 控制旧日志文件在删除前保留的时间。默认是7天
+- `sys_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `sys_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 - `sys_log_roll_mode`: 日志轮换模式。默认是`SIZE-MB-1024`，意味着当前日志文件达到1024 MB时将创建新文件。与sys_log_roll_interval结合使用，表示FE日志可以按天或文件大小轮换
 - `sys_log_enable_compress`: 控制是否启用日志压缩。默认是false，意味着压缩未启用
 
@@ -90,6 +92,8 @@ keywords: ['shen ji ri zhi']
 - `profile_log_roll_num`: 控制保留的profile日志文件数量，以防止无限增长和过多磁盘使用。默认是5
 - `profile_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的5个文件，删除旧文件
 - `profile_log_delete_age`: 控制旧文件在删除前保留的时间。默认是1天
+- `profile_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `profile_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 
 ### `fe.internal.log`
 
@@ -110,6 +114,8 @@ keywords: ['shen ji ri zhi']
 - `internal_log_roll_num`: 保留的文件数量。默认是90
 - `internal_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的90个文件，删除旧文件
 - `internal_log_delete_age`: 控制旧文件在删除前保留的时间。默认是7天
+- `internal_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `internal_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 
 ### `fe.audit.log`
 
@@ -126,6 +132,8 @@ keywords: ['shen ji ri zhi']
 - `audit_log_roll_num`: 保留的文件数量。默认是90
 - `audit_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的90个文件，删除旧文件
 - `audit_log_delete_age`: 控制旧文件在删除前保留的时间。默认是7天
+- `audit_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `audit_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 - `audit_log_json_format`: 是否以JSON格式记录。默认是false
 - `audit_log_enable_compress`: 是否启用压缩
 
@@ -143,6 +151,8 @@ keywords: ['shen ji ri zhi']
 - `big_query_log_modules`: 内部日志模块类型。默认是query
 - `big_query_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的10个文件，删除旧文件
 - `big_query_log_delete_age`: 控制旧文件在删除前保留的时间。默认是7天
+- `big_query_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `big_query_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 
 ### `fe.dump.log`
 
@@ -164,6 +174,8 @@ SET enable_query_dump = true;
 - `dump_log_modules`: 内部日志模块类型。默认是query
 - `dump_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的10个文件，删除旧文件
 - `dump_log_delete_age`: 控制旧文件在删除前保留的时间。默认是7天
+- `dump_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `dump_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 
 ### `fe.features.log`
 这是StarRocks的查询计划特征日志，用于收集和记录查询执行计划的特征信息。主要服务于机器学习和查询优化分析。关键目的包括：
@@ -188,6 +200,8 @@ enable_query_cost_prediction = false  // 默认禁用
 - `feature_log_roll_num`: 保留的文件数量。默认是5
 - `feature_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的5个文件，删除旧文件
 - `feature_log_delete_age`: 控制旧文件在删除前保留的时间。默认是3天
+- `feature_log_roll_file_index`: 滚动文件索引策略（`min`、`max` 或 `nomax`）。默认是 `min`
+- `feature_log_delete_count`: 磁盘上保留的滚动归档文件数量的硬性上限，由 Delete 动作强制执行。默认是 `-1`（禁用）。
 - `feature_log_roll_size_mb`: 日志轮换大小。默认是1024 MB，意味着每1 GB创建一个新文件
 
 ## BE/CN日志详解
