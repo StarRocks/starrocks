@@ -79,7 +79,11 @@ private:
 // ShortKeyIndexDecoderGroup contains decoders for each segment of SegmentGroup.
 class ShortKeyIndexDecoderGroup {
 public:
-    explicit ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments);
+    // When |use_full_sort_key| is true, each segment contributes its full sort key index decoder
+    // (full, untruncated key bytes); otherwise its legacy truncated short key decoder. The caller
+    // must have made the full decoders usable (via Segment::ensure_full_sort_key_index_usable) before
+    // requesting the full decoders.
+    explicit ShortKeyIndexDecoderGroup(const std::vector<SegmentSharedPtr>& segments, bool use_full_sort_key = false);
 
     ShortKeyIndexGroupIterator begin() const;
     ShortKeyIndexGroupIterator end() const;
@@ -109,7 +113,10 @@ private:
 // It is used to perform binary search on the short keys of all the segments.
 class SegmentGroup {
 public:
-    SegmentGroup(std::vector<SegmentSharedPtr>&& segments);
+    // |use_full_sort_key| selects, for every segment, the full sort key index decoder over the legacy
+    // truncated one when binary-searching the merged short keys. The caller must have made the full
+    // decoders usable (via Segment::ensure_full_sort_key_index_usable) before passing true.
+    SegmentGroup(std::vector<SegmentSharedPtr>&& segments, bool use_full_sort_key = false);
 
     ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group.lower_bound(key); }
 
@@ -135,6 +142,16 @@ public:
             return 0;
         }
         return _segments[0]->num_short_keys();
+    }
+
+    // Number of leading sort-key columns the group's short key index is built over. For a full-key
+    // group this is all sort-key columns; for a legacy group it is the short-key prefix count.
+    // Requires each segment's short key index to be loaded.
+    size_t num_sort_key_columns() const {
+        if (_segments.empty()) {
+            return 0;
+        }
+        return _segments[0]->num_sort_key_columns();
     }
 
     uint32_t num_rows() const;

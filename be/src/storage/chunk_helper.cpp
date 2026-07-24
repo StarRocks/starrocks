@@ -60,6 +60,12 @@ starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchem
     return starrocks::Schema(schema->schema(), short_key_cids);
 }
 
+starrocks::Schema ChunkHelper::get_full_sort_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
+    const auto& sort_key_idxes = schema->sort_key_idxes();
+    std::vector<ColumnId> full_sort_key_cids(sort_key_idxes.begin(), sort_key_idxes.end());
+    return starrocks::Schema(schema->schema(), full_sort_key_cids);
+}
+
 starrocks::Schema ChunkHelper::get_sort_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
     std::vector<ColumnId> sort_key_iota_idxes(schema->sort_key_idxes().size());
     std::iota(sort_key_iota_idxes.begin(), sort_key_iota_idxes.end(), 0);

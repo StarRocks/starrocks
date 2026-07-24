@@ -38,6 +38,7 @@
 
 #include <cstring>
 #include <limits>
+#include <random>
 
 #include "common/util/debug_util.h"
 #include "runtime/mem_pool.h"
@@ -297,6 +298,107 @@ TEST_F(KeyCoderTest, test_varchar) {
 
         ASSERT_EQ(5, check_slice.size);
         ASSERT_EQ(strncmp("12345", check_slice.data, 5), 0);
+    }
+}
+
+TEST_F(KeyCoderTest, test_int256_full_encode_ordering_and_roundtrip) {
+    auto key_coder = get_key_coder(TYPE_INT256);
+
+    // most-negative, -1, 0, 1, 2^128, most-positive, in ascending order.
+    std::vector<int256_t> values = {
+            INT256_MIN,
+            int256_t(-1),
+            int256_t(0),
+            int256_t(1),
+            int256_t(static_cast<int128_t>(1), static_cast<uint128_t>(0)), // 2^128
+            INT256_MAX,
+    };
+
+    std::vector<std::string> encoded;
+    for (const auto& v : values) {
+        std::string buf;
+        key_coder->full_encode_ascending(&v, &buf);
+        ASSERT_EQ(32, buf.size());
+        encoded.push_back(buf);
+
+        // round-trip
+        Slice slice(encoded.back());
+        int256_t decoded;
+        auto st = key_coder->decode_ascending(&slice, 32, (uint8_t*)&decoded, nullptr);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(v, decoded);
+        ASSERT_EQ(0, slice.size); // exactly 32 bytes consumed
+    }
+
+    // encoded byte order must match value order (values is already ascending).
+    for (size_t i = 0; i + 1 < encoded.size(); ++i) {
+        ASSERT_LT(memcmp(encoded[i].data(), encoded[i + 1].data(), 32), 0) << "index " << i << " vs " << (i + 1);
+    }
+
+    // full_encode_ascending_datum should agree with full_encode_ascending.
+    for (const auto& v : values) {
+        std::string buf_datum;
+        Datum datum(v);
+        key_coder->full_encode_ascending(datum, &buf_datum);
+
+        std::string buf_raw;
+        key_coder->full_encode_ascending(&v, &buf_raw);
+
+        ASSERT_EQ(buf_raw, buf_datum);
+    }
+}
+
+TEST_F(KeyCoderTest, test_int256_full_encode_fuzz) {
+    auto key_coder = get_key_coder(TYPE_INT256);
+
+    std::mt19937_64 rng(20260722); // fixed seed for reproducibility
+    auto rand_u128 = [&rng]() -> uint128_t {
+        uint64_t hi = rng();
+        uint64_t lo = rng();
+        return (static_cast<uint128_t>(hi) << 64) | lo;
+    };
+
+    for (int i = 0; i < 1000; ++i) {
+        int256_t val1(static_cast<int128_t>(rand_u128()), rand_u128());
+        int256_t val2(static_cast<int128_t>(rand_u128()), rand_u128());
+
+        std::string buf1;
+        std::string buf2;
+        key_coder->full_encode_ascending(&val1, &buf1);
+        key_coder->full_encode_ascending(&val2, &buf2);
+        ASSERT_EQ(32, buf1.size());
+        ASSERT_EQ(32, buf2.size());
+
+        if (val1 < val2) {
+            ASSERT_LT(memcmp(buf1.data(), buf2.data(), 32), 0);
+        } else if (val1 > val2) {
+            ASSERT_GT(memcmp(buf1.data(), buf2.data(), 32), 0);
+        } else {
+            ASSERT_EQ(memcmp(buf1.data(), buf2.data(), 32), 0);
+        }
+
+        // round-trip decode.
+        Slice slice1(buf1);
+        int256_t decoded1;
+        auto st = key_coder->decode_ascending(&slice1, 32, (uint8_t*)&decoded1, nullptr);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(val1, decoded1);
+    }
+}
+
+TEST_F(KeyCoderTest, test_boolean_roundtrip) {
+    auto key_coder = get_key_coder(TYPE_BOOLEAN);
+
+    for (bool v : {false, true}) {
+        std::string buf;
+        key_coder->full_encode_ascending(&v, &buf);
+        ASSERT_EQ(1, buf.size());
+
+        Slice slice(buf);
+        bool decoded;
+        auto st = key_coder->decode_ascending(&slice, sizeof(bool), (uint8_t*)&decoded, nullptr);
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(v, decoded);
     }
 }
 

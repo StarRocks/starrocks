@@ -106,4 +106,89 @@ TEST_F(ShortKeyIndexTest, buider) {
     }
 }
 
+TEST_F(ShortKeyIndexTest, finalize_with_encoding_metadata) {
+    ShortKeyIndexBuilder builder(0, 1024);
+
+    std::vector<std::string> keys;
+    for (int i = 1000; i < 2000; i += 2) {
+        keys.push_back(std::to_string(i));
+        builder.add_item(keys.back());
+    }
+    std::vector<Slice> slices;
+    PageFooterPB footer;
+    auto st = builder.finalize(9000 * 1024, &slices, &footer, /*short_key_encoding=*/SHORT_KEY_ENCODING_FULL_SORT_KEY,
+                               /*num_sort_key_columns=*/3);
+    ASSERT_TRUE(st.ok());
+
+    std::string buf;
+    for (auto& slice : slices) {
+        buf.append(slice.data, slice.size);
+    }
+
+    ShortKeyIndexDecoder decoder;
+    st = decoder.parse(buf, footer.short_key_page_footer());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(SHORT_KEY_ENCODING_FULL_SORT_KEY, decoder.short_key_encoding());
+    ASSERT_EQ(3, decoder.num_sort_key_columns());
+
+    // entries still round-trip byte-for-byte
+    ASSERT_EQ(keys.size(), decoder.num_items());
+    for (size_t i = 0; i < keys.size(); ++i) {
+        ASSERT_EQ(keys[i], decoder.key(i).to_string());
+    }
+}
+
+TEST_F(ShortKeyIndexTest, finalize_with_default_encoding_metadata) {
+    ShortKeyIndexBuilder builder(0, 1024);
+    builder.add_item("abc");
+
+    std::vector<Slice> slices;
+    PageFooterPB footer;
+    auto st = builder.finalize(1024, &slices, &footer);
+    ASSERT_TRUE(st.ok());
+
+    ShortKeyIndexDecoder decoder;
+    std::string buf;
+    for (auto& slice : slices) {
+        buf.append(slice.data, slice.size);
+    }
+    st = decoder.parse(buf, footer.short_key_page_footer());
+    ASSERT_TRUE(st.ok());
+
+    ASSERT_EQ(SHORT_KEY_ENCODING_TRUNCATED, decoder.short_key_encoding());
+    ASSERT_EQ(0, decoder.num_sort_key_columns());
+}
+
+// parse() must runtime-validate the offset table (not just DCHECK) so a checksum-valid page with a
+// corrupt/out-of-range offset is rejected cleanly instead of letting key(i) read out of bounds.
+TEST_F(ShortKeyIndexTest, parse_rejects_out_of_range_offset) {
+    ShortKeyIndexBuilder builder(0, 1024);
+    builder.add_item("aaaa");
+    builder.add_item("bbbb");
+    builder.add_item("cccc");
+    std::vector<Slice> slices;
+    PageFooterPB footer;
+    ASSERT_TRUE(builder.finalize(3000, &slices, &footer).ok());
+    const uint32_t key_bytes = footer.short_key_page_footer().key_bytes();
+
+    std::string buf;
+    for (auto& slice : slices) {
+        buf.append(slice.data, slice.size);
+    }
+    // A well-formed page parses.
+    {
+        ShortKeyIndexDecoder ok_decoder;
+        ASSERT_TRUE(ok_decoder.parse(buf, footer.short_key_page_footer()).ok());
+    }
+    // The offset region begins at key_bytes; overwrite the last offset varint with a value that
+    // exceeds key_bytes -> parse() must reject with Corruption (single-byte varint, high bit clear).
+    ASSERT_GT(buf.size(), static_cast<size_t>(key_bytes));
+    buf[buf.size() - 1] = static_cast<char>(0x7F); // 127 > key_bytes
+    ShortKeyIndexDecoder bad_decoder;
+    Status st = bad_decoder.parse(buf, footer.short_key_page_footer());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_corruption());
+}
+
 } // namespace starrocks

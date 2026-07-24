@@ -67,6 +67,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gen_cpp/types.pb.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -85,6 +86,8 @@
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/page_io.h"
+#include "storage/rowset/page_pointer.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/zone_map_index.h"
@@ -1370,6 +1373,8 @@ Status SegmentDump::dump_short_key_index(size_t key_column_count) {
     std::cout << "Short key index items count: " << key_count << std::endl;
     std::cout << "MARKER: MIN(0x00), NULL_FIRST(0x01), NORMAL(0x02), NULL_LAST(0xFE), MAX(0xFF)" << std::endl;
 
+    // Legacy short_key_index_page (footer field 9) -- always truncated in the dual-page format;
+    // typed decode against the segment's short-key columns.
     std::vector<ColItem> _cols;
     _analyze_short_key_columns(key_column_count, &_cols);
 
@@ -1386,6 +1391,45 @@ Status SegmentDump::dump_short_key_index(size_t key_column_count) {
         }
 
         std::cout << "INDEX(" << i << "): " << result << std::endl;
+    }
+
+    // Full sort key index page (footer field 11), dumped additionally when present. This tool reads
+    // a segment file standalone and reconstructs the tablet schema from ColumnMetaPB, which carries no
+    // sort-key identities, so Segment::ensure_full_sort_key_index_usable() (which validates the footer
+    // arity against the schema's sort_key_idxes) would reject every real full page. For diagnostics we
+    // therefore read + parse field 11 DIRECTLY: parse() runtime-validates the offset table, and each
+    // entry is dumped as raw hex (a typed decode isn't possible without the sort-key schema).
+    if (_footer.has_full_sort_key_index_page()) {
+        PagePointer pp(_footer.full_sort_key_index_page());
+        OlapReaderStatistics tmp_stats;
+        PageReadOptions opts;
+        opts.use_page_cache = false;
+        opts.read_file = _input_file.get();
+        opts.page_pointer = pp;
+        opts.codec = nullptr; // short key index page uses NO_COMPRESSION
+        opts.stats = &tmp_stats;
+        PageHandle handle;
+        Slice body;
+        PageFooterPB page_footer;
+        Status pst = PageIO::read_and_decompress_page(opts, &handle, &body, &page_footer);
+        if (pst.ok() && page_footer.type() == SHORT_KEY_PAGE && page_footer.has_short_key_page_footer()) {
+            ShortKeyIndexDecoder full_decoder;
+            Status parse_st = full_decoder.parse(body, page_footer.short_key_page_footer());
+            if (parse_st.ok()) {
+                std::cout << "Full sort key index page: " << full_decoder.num_items() << " items, "
+                          << full_decoder.num_sort_key_columns() << " indexed columns (untruncated); dumping raw hex"
+                          << std::endl;
+                for (size_t i = 0; i < full_decoder.num_items(); i++) {
+                    Slice key = full_decoder.key(i);
+                    std::cout << "FULL_INDEX(" << i << "): " << strings::b2a_hex(key.data, static_cast<int>(key.size))
+                              << std::endl;
+                }
+            } else {
+                std::cout << "Full sort key index page present but failed to parse: " << parse_st << std::endl;
+            }
+        } else {
+            std::cout << "Full sort key index page present but unreadable: " << pst << std::endl;
+        }
     }
 
     return Status::OK();

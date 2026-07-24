@@ -18,6 +18,7 @@
 #include <string>
 
 #include "base/string/slice.h"
+#include "gen_cpp/segment.pb.h"
 
 namespace starrocks {
 
@@ -32,7 +33,12 @@ struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 
 // ShortKeyOption represents a sub key range endpoint splitted from a key range.
-// It could be a completed tuple key, or a short key with specific short_key_schema.
+// It could be a completed tuple key, or a raw index key with its specific short_key_schema.
+// The raw |short_key| slice is read verbatim off a segment's short key index, so its bytes and the
+// paired |short_key_schema| follow that segment's encoding: for a legacy segment it is the truncated
+// short-key prefix under the short-key schema; for a full-sort-key segment it is the full, untruncated
+// sort key under the full sort-key schema. A tablet is logically split only when every scanned segment
+// shares one encoding, so a single raw boundary stays byte-comparable against all of them.
 struct ShortKeyOption {
 public:
     ShortKeyOption() : tuple_key(nullptr), short_key_schema(nullptr), short_key(""), inclusive(false) {}
@@ -56,6 +62,16 @@ public:
     const Slice short_key;
 
     const bool inclusive;
+
+    // Encoding pinned by the logical-split producer for the raw |short_key| bytes: FULL_SORT_KEY when
+    // the bytes are a full, untruncated sort key (paired with the full sort-key schema); TRUNCATED for
+    // the legacy short-key prefix. The Slice-overload consumer (segment_iterator
+    // _get_row_ranges_by_short_key_ranges -> _lookup_ordinal(Slice,...)) selects the matching short key
+    // decoder AND the row re-encode codec from THIS pin, never from a fresh read-config read, so a
+    // mid-flight flip of the mutable read config cannot desync the producer's encoding from the
+    // consumer's decode. Only meaningful for the raw-slice endpoint; tuple_key/infinite endpoints are
+    // resolved through other paths and leave it at the default.
+    ShortKeyEncodingPB encoding = SHORT_KEY_ENCODING_TRUNCATED;
 };
 
 // ShortKeyRangeOption represents a sub key range splitted from a key range.

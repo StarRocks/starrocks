@@ -94,7 +94,9 @@ public:
 
     uint64_t size() { return _key_buf.size() + _offset_buf.size(); }
 
-    Status finalize(uint32_t num_rows, std::vector<Slice>* body, PageFooterPB* footer);
+    Status finalize(uint32_t num_rows, std::vector<Slice>* body, PageFooterPB* footer,
+                    ShortKeyEncodingPB short_key_encoding = SHORT_KEY_ENCODING_TRUNCATED,
+                    uint32_t num_sort_key_columns = 0);
 
 private:
     uint32_t _segment_id;
@@ -207,6 +209,21 @@ public:
     uint32_t num_rows_per_block() const {
         DCHECK(_parsed);
         return _footer.num_rows_per_block();
+    }
+
+    uint32_t num_segment_rows() const {
+        DCHECK(_parsed);
+        return _footer.num_segment_rows();
+    }
+
+    ShortKeyEncodingPB short_key_encoding() const {
+        DCHECK(_parsed);
+        return _footer.short_key_encoding();
+    }
+
+    uint32_t num_sort_key_columns() const {
+        DCHECK(_parsed);
+        return _footer.num_sort_key_columns();
     }
 
     Slice key(ssize_t ordinal) const {

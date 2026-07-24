@@ -814,6 +814,8 @@
       "path": "be/src/common/config_rowset_fwd.h",
       "configs": [
         "segment_sort_key_sample_row_interval",
+        "enable_full_sort_key_index",
+        "enable_full_sort_key_index_read",
         "enable_transparent_data_encryption",
         "default_num_rows_per_column_file_block",
         "data_page_size",

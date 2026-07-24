@@ -118,6 +118,14 @@ message DictPageFooterPB {
     optional EncodingTypePB encoding = 1;
 }
 
+// Encoding scheme of the entries stored in a segment's short key index page.
+enum ShortKeyEncodingPB {
+    // Legacy: fixed-length truncated short key prefix (num_short_key_columns columns).
+    SHORT_KEY_ENCODING_TRUNCATED = 0;
+    // Full, untruncated, order-preserving encoding of all sort key columns.
+    SHORT_KEY_ENCODING_FULL_SORT_KEY = 1;
+}
+
 message ShortKeyFooterPB {
     // How many index item in this index.
     optional uint32 num_items = 1;
@@ -131,6 +139,12 @@ message ShortKeyFooterPB {
     optional uint32 num_rows_per_block = 5;
     // How many rows in this segment
     optional uint32 num_segment_rows = 6;
+    // Encoding of the index entries. Absent/TRUNCATED for legacy segments.
+    optional ShortKeyEncodingPB short_key_encoding = 7 [default = SHORT_KEY_ENCODING_TRUNCATED];
+    // Sort-key columns encoded in each index entry (full-key segments encode all of them).
+    // Records what THIS segment wrote at flush time; after sort-key schema evolution it may
+    // differ from the current schema, so the decoder must trust this value, not the live schema.
+    optional uint32 num_sort_key_columns = 8;
 }
 
 message PageFooterPB {
@@ -222,10 +236,16 @@ message SegmentFooterPB {
     optional CompressionTypePB compress_type = 7 [default = LZ4_FRAME]; // Deprecated
     repeated MetadataPairPB file_meta_datas = 8;                        // Deprecated
 
-    // Short key index's page
+    // Short key index's page. ALWAYS the legacy truncated short key (num_short_key_columns
+    // columns, fixed-length), for backward/downgrade compatibility.
     optional PagePointerPB short_key_index_page = 9;
     // vector index storage type
     optional VectorIndexStorageTypePB vector_index_storage_type = 10;
+    // Optional additional page holding the full, untruncated, all-sort-column order-preserving
+    // sort key index (its own ShortKeyFooterPB carries short_key_encoding=SHORT_KEY_ENCODING_FULL_SORT_KEY
+    // + num_sort_key_columns). Written only when enable_full_sort_key_index is on; absent otherwise.
+    // Old binaries ignore this field and read short_key_index_page as before.
+    optional PagePointerPB full_sort_key_index_page = 11;
 }
 
 message BTreeMetaPB {
