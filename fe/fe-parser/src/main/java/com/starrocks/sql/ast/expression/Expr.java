@@ -82,7 +82,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         super();
         pos = other.pos;
         type = other.type;
-        originType = other.type;
+        originType = other.originType;
         isAnalyzed = other.isAnalyzed;
         isConstant = other.isConstant;
         printSqlInParens = other.printSqlInParens;
