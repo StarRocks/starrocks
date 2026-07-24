@@ -850,14 +850,45 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 task = taskMaps.putIfAbsent(table.getName(), newTask);
                 if (task == null) {
                     task = newTask;
+                    boolean isFirstSubTask = taskMaps.size() == 1;
                     LOG.info("Add stream load task {}", task.getShowInfo());
                     task.tryBegin(0, 1, txnId);
+                    if (isFirstSubTask) {
+                        decideCombinedTxnLogFromFirstTable(table);
+                    }
                 }
             } finally {
                 writeUnlock();
             }
         }
         return task.tryLoad(0, tableName, resp);
+    }
+
+    // The first table to join the multi-statement stream load decides, once and for all, whether
+    // the transaction aggregates its txn logs (combined txn log). A file_bundling lake table already
+    // writes one bundled data file plus one aggregated metadata file per partition version, so it
+    // also aggregates its per-tablet txn logs into a single file per partition, matching the
+    // single-table load path where DatabaseTransactionMgr sets
+    // useCombinedTxnLog = combinedTxnLog || fileBundling.
+    //
+    // The decision is frozen after the first table because the transaction carries a single
+    // useCombinedTxnLog flag that every sub-task's sink and the publish path use uniformly. A
+    // multi-statement transaction is created (beginStmt) before any target table is known, and each
+    // sub-task's sink is planned during its own load; flipping the flag once a later table joins
+    // would make publish look for combined logs an earlier sub-task never wrote (or per-tablet logs
+    // a later sub-task did not write), wedging publish. So a later file_bundling table does not turn
+    // aggregation on if the first table did not, and a later non-file_bundling table keeps writing
+    // combined logs if the first table did -- both are correct, only the file count differs.
+    private void decideCombinedTxnLogFromFirstTable(OlapTable table) {
+        if (!table.isFileBundling()) {
+            return;
+        }
+        ExplicitTxnState explicitTxnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId);
+        if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+            return;
+        }
+        explicitTxnState.getTransactionState().setUseCombinedTxnLog(true);
     }
 
     @Override

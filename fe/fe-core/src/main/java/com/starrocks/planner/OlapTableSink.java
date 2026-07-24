@@ -214,9 +214,26 @@ public class OlapTableSink extends DataSink {
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionState(dbId, txnId);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            // Multi-statement stream load plans its sub-task sinks during the load, before the
+            // explicit transaction is upserted into the DatabaseTransactionMgr at commit time, so
+            // getTransactionState misses. Fall back to the explicit transaction registry so the sink
+            // observes the transaction's combined-txn-log decision; otherwise write_txn_log stays at
+            // the per-tablet default while publish expects combined logs, wedging publish.
+            //
+            // Restricted to MULTI_STATEMENT_STREAMING on purpose: INSERT_STREAMING (BEGIN ... COMMIT)
+            // emits per-load-id txn logs that publish reads via the load_ids branch (which takes
+            // precedence over combined_txn_log), so its sink must keep the default per-load-id mode.
+            // Honoring the combined flag here would make BE skip those per-load-id logs and lose data.
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
+            if (explicitTxnState != null && explicitTxnState.getTransactionState() != null
+                    && explicitTxnState.getTransactionState().getSourceType()
+                            == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+                txnState = explicitTxnState.getTransactionState();
+            }
+        }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
