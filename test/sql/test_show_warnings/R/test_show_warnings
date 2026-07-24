@@ -51,5 +51,25 @@ show errors;
 -- !result
 show errors;
 -- result:
-[REGEX].*Error.*
+[REGEX].*Error.*syntax.*
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_dst select cast(v as int) from t_src;
+-- result:
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+commit;
+-- result:
+-- !result
+show warnings;
+-- result:
+[REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
+-- !result
+drop database db_${uuid0} force;
+-- result:
 -- !result

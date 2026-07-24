@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "SHOW WARNINGS and SHOW ERRORS return the diagnostics produced by the previous statement on the current session, such as rows filtered or substituted to NULL during a load."
+description: "SHOW WARNINGS and SHOW ERRORS return the diagnostics of the previous statement, such as rows filtered or substituted to NULL during a load."
 ---
 
 # SHOW WARNINGS
@@ -24,7 +24,7 @@ SHOW ERRORS [LIMIT [offset,] row_count]
 | Code    | The diagnostic code.                                 |
 | Message | The human-readable description of the diagnostic.    |
 
-The warning buffer holds the diagnostics of the previous statement and is replaced when the next statement begins execution (a statement that fails to parse replaces it with its own error). `SHOW WARNINGS` and `SHOW ERRORS` are the exception: they do not clear the buffer, so they can be issued repeatedly and return the same result until another statement runs.
+The warning buffer holds the diagnostics of the previous statement and is replaced when the next statement that can generate diagnostics begins execution (a statement that fails to parse replaces it with its own error). Statements that use no tables and generate no messages — `SET`, `BEGIN` / `COMMIT` / `ROLLBACK`, and `SHOW` statements, including `SHOW WARNINGS` and `SHOW ERRORS` themselves — leave the buffer unchanged, as in MySQL. `SHOW WARNINGS` can therefore be issued repeatedly, and still returns the diagnostics of the last load after a `COMMIT`.
 
 ## Examples
 

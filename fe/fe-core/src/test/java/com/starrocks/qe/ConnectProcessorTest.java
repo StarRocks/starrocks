@@ -38,7 +38,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
@@ -559,6 +561,50 @@ public class ConnectProcessorTest extends DDLTestBase {
         Mockito.doReturn(null).when(ctx).getAuthenticationProvider();
         // ErrorReport.report writes the error message through the thread-local ConnectContext.
         ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify the per-statement authentication re-check failure (AuthenticationException from
+    // checkLoginSuccess) replaces the previous statement's diagnostics like the other
+    // pre-execution rejections.
+    @Test
+    public void testAuthenticationExceptionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        AuthenticationProvider provider = Mockito.mock(AuthenticationProvider.class);
+        Mockito.doThrow(new AuthenticationException("mock: login revoked"))
+                .when(provider).checkLoginSuccess(Mockito.anyInt(), Mockito.any());
+        Mockito.doReturn(provider).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a COM_STMT_EXECUTE that fails before reaching StmtExecutor.execute() (here: unknown
+    // prepared statement id) replaces the previous statement's diagnostics with its own error,
+    // matching the COM_QUERY pre-execution contract.
+    @Test
+    public void testExecuteUnknownPreparedStmtReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createExecutePacket(42, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
