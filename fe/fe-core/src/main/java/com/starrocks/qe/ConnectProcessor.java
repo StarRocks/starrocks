@@ -204,8 +204,9 @@ public class ConnectProcessor {
         // reset session variable
         ctx.resetSessionVariable();
         // drop the previous logical session's diagnostics: COM_CHANGE_USER re-authenticates a
-        // different user on this same ConnectContext, and SHOW WARNINGS is the one statement that
-        // reads the buffer without clearing it first
+        // different user on this same ConnectContext, and the statements that preserve the
+        // diagnostics area (SHOW, SET, transaction control) would otherwise let the new user
+        // read the previous user's warnings
         ctx.clearWarnings();
     }
 
@@ -751,8 +752,9 @@ public class ConnectProcessor {
     }
 
     // A statement rejected before StmtExecutor.execute() (parse failure, explicit-transaction
-    // validation, authentication re-check) never reaches the execute() logic that clears the
-    // previous statement's diagnostics and records the failure into the session buffer. Do both
+    // validation, authentication re-check, COM_STMT_EXECUTE with an unknown statement id or
+    // malformed parameters) never reaches the execute() logic that clears the previous
+    // statement's diagnostics and records the failure into the session buffer. Do both
     // here so SHOW WARNINGS does not return stale entries after such a failure and SHOW ERRORS
     // mirrors the ERR packet, following MySQL diagnostics-area semantics.
     private void recordPreExecutionFailureDiagnostics() {
@@ -908,6 +910,7 @@ public class ConnectProcessor {
         PrepareStmtContext prepareCtx = ctx.getPreparedStmt(String.valueOf(stmtId));
         if (null == prepareCtx) {
             ctx.getState().setError("msg: Not Found prepared statement, stmtName: " + stmtId);
+            recordPreExecutionFailureDiagnostics();
             return;
         }
         int numParams = prepareCtx.getStmt().getParameters().size();
@@ -996,6 +999,12 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            // same contract as handleQuery: a COM_STMT_EXECUTE rejected before
+            // StmtExecutor.execute() ran (malformed parameters, etc.) must replace the previous
+            // statement's diagnostics with its own error; execute() records its own failures.
+            if (executor == null) {
+                recordPreExecutionFailureDiagnostics();
+            }
             if (enableAudit && executeStmt != null) {
                 if (needAddFinishQueryDetail && executor != null) {
                     executor.addFinishedQueryDetail();

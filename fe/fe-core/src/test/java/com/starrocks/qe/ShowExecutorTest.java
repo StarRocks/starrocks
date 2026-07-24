@@ -69,6 +69,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QualifiedName;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -688,6 +690,24 @@ public class ShowExecutorTest {
         // No warning produced by the previous statement -> empty result, not an error.
         ShowResultSet result = ShowExecutor.execute(newShowWarning(false, null), ctx);
         Assertions.assertEquals(0, result.getResultRows().size());
+    }
+
+    @Test
+    public void testShowWarningsWhereWithLimit() throws Exception {
+        ctx.addWarning(new QueryWarning("Warning", "1265", "w"));
+        ctx.addWarning(new QueryWarning("Error", "1064", "e1"));
+        ctx.addWarning(new QueryWarning("Error", "1065", "e2"));
+
+        // WHERE must be applied before LIMIT by the generic ShowExecutor pipeline: if LIMIT ran
+        // first, the single kept row would be the leading Warning and the predicate would then
+        // drop it, returning no rows.
+        ShowWarningStmt stmt = (ShowWarningStmt) SqlParser.parseSingleStatement(
+                "show warnings where Level = 'Error' limit 1", ctx.getSessionVariable().getSqlMode());
+        ShowStmtAnalyzer.analyze(stmt, ctx);
+
+        ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+        Assertions.assertEquals(1, result.getResultRows().size());
+        Assertions.assertEquals(Lists.newArrayList("Error", "1064", "e1"), result.getResultRows().get(0));
     }
 
     @Test

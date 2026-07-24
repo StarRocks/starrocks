@@ -34,6 +34,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QueryWarning;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -304,6 +305,75 @@ public class ExplicitTxnTest {
         LoadMgr loadMgr = GlobalStateMgr.getCurrentState().getLoadMgr();
         LoadJob loadJob = loadMgr.getLoadJobs(label).get(0);
         Assertions.assertEquals(JobState.CANCELLED, loadJob.getState());
+    }
+
+    @Test
+    public void testFilteredRowsProduceSessionWarning() throws IOException, DdlException {
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "http://be:8040/api/_load_error_log";
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "10");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "5");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        // let the 5 filtered rows pass the ratio check instead of cancelling the load
+        context.getSessionVariable().setInsertMaxFilterRatio(1);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(20, 21));
+        context.setLastQueryId(new UUID(22L, 23L));
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+        TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+
+        // The INSERT succeeds inside the transaction and the filtered rows are surfaced as a
+        // session warning, matching the autocommit path (SHOW WARNINGS reads it back before COMMIT).
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertEquals(1, context.getWarnings().size());
+        QueryWarning warning = context.getWarnings().get(0);
+        Assertions.assertEquals("Warning", warning.getLevel());
+        Assertions.assertEquals("1265", warning.getCode());
+        Assertions.assertEquals("5 row(s) filtered or substituted to NULL during load; "
+                + "tracking_url=http://be:8040/api/_load_error_log", warning.getMessage());
     }
 
     @Test

@@ -64,4 +64,29 @@ public class ShowWarningsProducerTest {
         ShowResultSet errorsAgain = ShowExecutor.execute(new ShowWarningStmt(null, true, NodePosition.ZERO), ctx);
         Assertions.assertEquals(1, errorsAgain.getResultRows().size());
     }
+
+    @Test
+    public void testNoTableStatementsPreserveDiagnostics() throws Exception {
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ctx.clearWarnings();
+        ctx.addWarning(new QueryWarning("Warning", "1265", "seed from the previous load"));
+
+        // SHOW WARNINGS itself, SET, BEGIN and COMMIT use no tables and generate no messages, so
+        // the diagnostics area survives all of them (MySQL retention rule) and the load's warning
+        // is still readable after the transaction is committed.
+        for (String sql : new String[] {"show warnings", "set enable_profile = false", "begin", "commit"}) {
+            new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                    sql, ctx.getSessionVariable().getSqlMode())).execute();
+            Assertions.assertFalse(ctx.getState().isError(), sql + " unexpectedly failed");
+            Assertions.assertEquals(1, ctx.getWarnings().size(), sql + " must preserve the buffer");
+            Assertions.assertEquals("seed from the previous load", ctx.getWarnings().get(0).getMessage());
+        }
+
+        // A failing statement of a preserving class still replaces the buffer with its own error.
+        new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                "set variable_that_does_not_exist = 1", ctx.getSessionVariable().getSqlMode())).execute();
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
+    }
 }
