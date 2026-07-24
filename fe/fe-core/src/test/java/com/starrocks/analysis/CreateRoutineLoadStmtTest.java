@@ -562,6 +562,17 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeArrowConfig() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_arrow ON t1 " +
+                "PROPERTIES(\"format\" = \"arrow\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assertions.assertEquals("arrow", createRoutineLoadStmt.getFormat());
+    }
+
+    @Test
     public void testAnalyzeCSVConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
                 "PROPERTIES(\"format\" = \"csv\", \"trim_space\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +
