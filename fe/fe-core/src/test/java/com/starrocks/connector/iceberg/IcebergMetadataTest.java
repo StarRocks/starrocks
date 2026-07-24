@@ -157,6 +157,7 @@ import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotScan;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
@@ -169,6 +170,7 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
@@ -3986,6 +3988,43 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableB.refresh();
         Assertions.assertNull(mockedNativeTableB.currentSnapshot(),
                 "delete on an empty table must not create a snapshot");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteNoMatchProbeIOExceptionFails() {
+        // The no-match probe's scan iterable is closed via try-with-resources; an IOException from close()
+        // must surface as a StarRocksConnectorException instead of being swallowed or committing blindly.
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(0, INT, "k1", true), ConstantOperator.createInt(1));
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<SnapshotScan>() {
+            @Mock
+            public CloseableIterable<FileScanTask> planFiles() {
+                return new CloseableIterable<FileScanTask>() {
+                    @Override
+                    public CloseableIterator<FileScanTask> iterator() {
+                        return CloseableIterator.empty();
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        throw new IOException("mocked planFiles close failure");
+                    }
+                };
+            }
+        };
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.executeMetadataDelete(icebergTable, predicate, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("Failed to plan files for metadata delete"),
+                "unexpected message: " + e.getMessage());
     }
 
     @Test
