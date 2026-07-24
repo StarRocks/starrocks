@@ -1,0 +1,28 @@
+-- name: test_ivm_ret_multibucket @cloud
+-- Retractable PK projection MV whose own distribution is many hash buckets. Oracle: diff=0 both ways.
+CREATE TABLE pk_mb (id INT NOT NULL, v BIGINT, s VARCHAR(8))
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 8 PROPERTIES('replication_num'='1');
+INSERT INTO pk_mb SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,50));
+CREATE MATERIALIZED VIEW mv_mb DISTRIBUTED BY HASH(id) BUCKETS 8
+REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v, s FROM pk_mb WHERE v >= 0;
+REFRESH MATERIALIZED VIEW mv_mb WITH SYNC MODE;
+UPDATE pk_mb SET v = 7 WHERE id <= 10;
+DELETE FROM pk_mb WHERE id BETWEEN 20 AND 30;
+REFRESH MATERIALIZED VIEW mv_mb WITH SYNC MODE;
+SELECT COUNT(*) AS diff FROM (SELECT id,v,s FROM mv_mb EXCEPT SELECT id,v,s FROM pk_mb WHERE v>=0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pk_mb WHERE v>=0 EXCEPT SELECT id,v,s FROM mv_mb) t;
+
+-- name: test_ivm_ret_random_distribution @cloud
+CREATE TABLE pk_rd (id INT NOT NULL, v BIGINT, s VARCHAR(8))
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES('replication_num'='1');
+INSERT INTO pk_rd SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,50));
+CREATE MATERIALIZED VIEW mv_rd DISTRIBUTED BY RANDOM
+REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v, s FROM pk_rd WHERE v >= 0;
+REFRESH MATERIALIZED VIEW mv_rd WITH SYNC MODE;
+UPDATE pk_rd SET v = 7 WHERE id <= 10;
+DELETE FROM pk_rd WHERE id BETWEEN 20 AND 30;
+REFRESH MATERIALIZED VIEW mv_rd WITH SYNC MODE;
+SELECT COUNT(*) AS diff FROM (SELECT id,v,s FROM mv_rd EXCEPT SELECT id,v,s FROM pk_rd WHERE v>=0) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pk_rd WHERE v>=0 EXCEPT SELECT id,v,s FROM mv_rd) t;

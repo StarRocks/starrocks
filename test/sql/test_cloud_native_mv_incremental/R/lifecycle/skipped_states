@@ -1,0 +1,73 @@
+-- name: test_ivm_ret_no_change_skipped @cloud
+CREATE TABLE pk_sk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_sk VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sk REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM pk_sk;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+DELETE FROM pk_sk WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT id, v FROM mv_sk ORDER BY id;
+-- result:
+2	20
+3	30
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT id, v FROM mv_sk ORDER BY id;
+-- result:
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_sk EXCEPT SELECT id,v FROM pk_sk) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_sk EXCEPT SELECT id,v FROM mv_sk) t;
+-- result:
+0
+-- !result
+-- name: test_ivm_ret_delete_to_empty @cloud
+CREATE TABLE pk_em (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_em VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_em REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM pk_em;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+DELETE FROM pk_em WHERE id IN (1,2);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+SELECT COUNT(*) AS empty_cnt FROM mv_em;
+-- result:
+0
+-- !result
+INSERT INTO pk_em VALUES (3,30),(4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+SELECT id, v FROM mv_em ORDER BY id;
+-- result:
+3	30
+4	40
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_em EXCEPT SELECT id,v FROM pk_em) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_em EXCEPT SELECT id,v FROM mv_em) t;
+-- result:
+0
+-- !result

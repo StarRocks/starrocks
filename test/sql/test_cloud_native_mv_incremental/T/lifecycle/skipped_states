@@ -1,0 +1,33 @@
+-- name: test_ivm_ret_no_change_skipped @cloud
+-- Retractable PK MV: a refresh with no base change is a no-op (data stays correct). A delete then a
+-- no-change refresh must keep the MV equal to the base. diff=0 both ways after each refresh.
+CREATE TABLE pk_sk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO pk_sk VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_sk REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM pk_sk;
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+DELETE FROM pk_sk WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT id, v FROM mv_sk ORDER BY id;
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT id, v FROM mv_sk ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_sk EXCEPT SELECT id,v FROM pk_sk) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_sk EXCEPT SELECT id,v FROM mv_sk) t;
+
+-- name: test_ivm_ret_delete_to_empty @cloud
+-- Delete every row of a group / the whole table, then re-insert. The MV must empty out and refill,
+-- never retaining stale rows. diff=0 both ways.
+CREATE TABLE pk_em (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO pk_em VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_em REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM pk_em;
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+DELETE FROM pk_em WHERE id IN (1,2);
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+SELECT COUNT(*) AS empty_cnt FROM mv_em;
+INSERT INTO pk_em VALUES (3,30),(4,40);
+REFRESH MATERIALIZED VIEW mv_em WITH SYNC MODE;
+SELECT id, v FROM mv_em ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_em EXCEPT SELECT id,v FROM pk_em) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_em EXCEPT SELECT id,v FROM mv_em) t;

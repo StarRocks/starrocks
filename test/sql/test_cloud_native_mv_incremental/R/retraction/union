@@ -1,136 +1,356 @@
 -- name: test_ivm_pk_union_retraction @cloud
--- Top-level UNION ALL of cloud-native PRIMARY KEY branches, retractable (delete/update) refresh. Each branch's
--- row id is encode(branch ordinal, branch pk), so two branches that produce an identical (id, v) row stay two
--- distinct MV rows instead of collapsing to one. Oracle: the MV equals a full UNION ALL recompute, diff=0 both
--- ways, and the row count matches (a diff=0 alone would miss a collapsed duplicate, which is set-eliminated).
 CREATE TABLE pk_ua (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_ub (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_ua VALUES (1,10),(2,20);
+-- result:
+-- !result
 INSERT INTO pk_ub VALUES (1,100),(3,300);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_union
 DISTRIBUTED BY HASH(id) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT id, v FROM pk_ua UNION ALL SELECT id, v FROM pk_ub;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- update a left-branch value: only that branch's row for id=1 re-emits
+-- result:
+1	10
+1	100
+2	20
+3	300
+-- !result
 UPDATE pk_ua SET v = 11 WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- make both branches carry an identical (1,10) row: the branch ordinal must keep them as two rows
+-- result:
+1	11
+1	100
+2	20
+3	300
+-- !result
 UPDATE pk_ua SET v = 10 WHERE id = 1;
+-- result:
+-- !result
 UPDATE pk_ub SET v = 10 WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- delete id=1 from one branch: only that branch's row disappears, the other branch's id=1 stays
+-- result:
+1	10
+1	10
+2	20
+3	300
+-- !result
 DELETE FROM pk_ua WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- insert into a branch
+-- result:
+1	10
+2	20
+3	300
+-- !result
 INSERT INTO pk_ub VALUES (4,400);
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- change a primary key via delete+insert (PK tables reject UPDATE SET pk): id 2 -> 5
+-- result:
+1	10
+2	20
+3	300
+4	400
+-- !result
 DELETE FROM pk_ua WHERE id = 2;
+-- result:
+-- !result
 INSERT INTO pk_ua VALUES (5,20);
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union ORDER BY id, v;
--- oracle: MV equals a full UNION ALL recompute, diff=0 both ways, and equal cardinality
+-- result:
+1	10
+3	300
+4	400
+5	20
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union EXCEPT SELECT id,v FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u EXCEPT SELECT id,v FROM mv_pk_union) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS mv_cnt FROM mv_pk_union;
+-- result:
+4
+-- !result
 SELECT COUNT(*) AS base_cnt FROM (SELECT id,v FROM pk_ua UNION ALL SELECT id,v FROM pk_ub) u;
+-- result:
+4
+-- !result
 DROP MATERIALIZED VIEW mv_pk_union;
+-- result:
+-- !result
 DROP TABLE pk_ua;
+-- result:
+-- !result
 DROP TABLE pk_ub;
-
--- Three-branch UNION ALL: the branch ordinal spans three encodes; a delete/update on any branch touches only
--- that branch's rows. Oracle: diff=0 both ways.
+-- result:
+-- !result
 CREATE TABLE pk_va (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_vb (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_vc (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_va VALUES (1,10),(2,20);
+-- result:
+-- !result
 INSERT INTO pk_vb VALUES (1,10),(3,30);
+-- result:
+-- !result
 INSERT INTO pk_vc VALUES (1,10),(4,40);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_union3
 DISTRIBUTED BY HASH(id) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT id, v FROM pk_va UNION ALL SELECT id, v FROM pk_vb UNION ALL SELECT id, v FROM pk_vc;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union3 WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union3 ORDER BY id, v;
--- update the middle branch, delete from the last branch, in one interval
+-- result:
+1	10
+1	10
+1	10
+2	20
+3	30
+4	40
+-- !result
 UPDATE pk_vb SET v = 33 WHERE id = 3;
+-- result:
+-- !result
 DELETE FROM pk_vc WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union3 WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union3 ORDER BY id, v;
+-- result:
+1	10
+1	10
+2	20
+3	33
+4	40
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union3 EXCEPT SELECT id,v FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u EXCEPT SELECT id,v FROM mv_pk_union3) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS mv_cnt FROM mv_pk_union3;
+-- result:
+5
+-- !result
 SELECT COUNT(*) AS base_cnt FROM (SELECT id,v FROM pk_va UNION ALL SELECT id,v FROM pk_vb UNION ALL SELECT id,v FROM pk_vc) u;
+-- result:
+5
+-- !result
 DROP MATERIALIZED VIEW mv_pk_union3;
+-- result:
+-- !result
 DROP TABLE pk_va;
+-- result:
+-- !result
 DROP TABLE pk_vb;
+-- result:
+-- !result
 DROP TABLE pk_vc;
-
--- UNION ALL where one branch is an inner join of two PK tables (row id = encode(ordinal, a.pk, b.pk)) and the
--- other is a plain projection. Because the union contains a join, net-collapse fires the join tuple
--- cancellation; when both join sides change the same key in one interval it must still land on the final
--- combined row, not a stale intermediate. Oracle: diff=0 both ways.
+-- result:
+-- !result
 CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_jc (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_ja VALUES (1,10),(2,20);
+-- result:
+-- !result
 INSERT INTO pk_jb VALUES (1,100),(2,200);
+-- result:
+-- !result
 INSERT INTO pk_jc VALUES (7,70);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_union_join
 DISTRIBUTED BY HASH(id) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id
    UNION ALL SELECT id, v FROM pk_jc;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
--- both join sides change the same key in one interval: land on the final combined (11 + 222), not a stale mix
+-- result:
+1	110
+2	220
+7	70
+-- !result
 UPDATE pk_ja SET v = 11 WHERE id = 1;
+-- result:
+-- !result
 UPDATE pk_jb SET w = 222 WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
--- delete a join-side row: its joined row drops from the join branch
+-- result:
+1	233
+2	220
+7	70
+-- !result
 DELETE FROM pk_jb WHERE id = 2;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
--- update the projection branch
+-- result:
+1	233
+7	70
+-- !result
 UPDATE pk_jc SET v = 77 WHERE id = 7;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_union_join WITH SYNC MODE;
 SELECT id, v FROM mv_pk_union_join ORDER BY id, v;
+-- result:
+1	233
+7	77
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_pk_union_join EXCEPT SELECT id,v FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u EXCEPT SELECT id,v FROM mv_pk_union_join) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS mv_cnt FROM mv_pk_union_join;
+-- result:
+2
+-- !result
 SELECT COUNT(*) AS base_cnt FROM (SELECT a.id AS id, a.v + b.w AS v FROM pk_ja a JOIN pk_jb b ON a.id = b.id UNION ALL SELECT id, v FROM pk_jc) u;
+-- result:
+2
+-- !result
 DROP MATERIALIZED VIEW mv_pk_union_join;
+-- result:
+-- !result
 DROP TABLE pk_ja;
+-- result:
+-- !result
 DROP TABLE pk_jb;
+-- result:
+-- !result
 DROP TABLE pk_jc;
-
--- Rejected union shapes: a branch that is GROUP BY or DISTINCT lowers to an aggregation (no per-base-row
--- identity) and must not be admitted as a retractable union branch.
+-- result:
+-- !result
 CREATE TABLE pk_ug (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE pk_uh (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
--- a GROUP BY branch (no aggregate function) is rejected
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_union_groupby DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM pk_ug UNION ALL SELECT id, v FROM pk_uh GROUP BY id, v;
--- a DISTINCT branch is rejected
+-- result:
+[REGEX].*does not support a GROUP BY or DISTINCT branch in a UNION ALL.*
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_union_distinct DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM pk_ug UNION ALL SELECT DISTINCT id, v FROM pk_uh;
+-- result:
+[REGEX].*does not support a GROUP BY or DISTINCT branch in a UNION ALL.*
+-- !result
 DROP TABLE pk_ug;
+-- result:
+-- !result
 DROP TABLE pk_uh;
+-- result:
+-- !result
+-- name: test_ivm_pk_union_cross_branch_collision @cloud
+CREATE TABLE uca (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE ucb (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO uca VALUES (1,10),(2,20);
+-- result:
+-- !result
+INSERT INTO ucb VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ucc REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM uca UNION ALL SELECT id, v FROM ucb;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ucc WITH SYNC MODE;
+UPDATE uca SET v = 99 WHERE id = 1;
+-- result:
+-- !result
+DELETE FROM ucb WHERE id = 2;
+-- result:
+-- !result
+INSERT INTO ucb VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ucc WITH SYNC MODE;
+SELECT id, v FROM mv_ucc ORDER BY id, v;
+-- result:
+1	10
+1	99
+2	20
+3	30
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_ucc EXCEPT SELECT id,v FROM (SELECT id,v FROM uca UNION ALL SELECT id,v FROM ucb) u) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM (SELECT id,v FROM uca UNION ALL SELECT id,v FROM ucb) u EXCEPT SELECT id,v FROM mv_ucc) t;
+-- result:
+0
+-- !result

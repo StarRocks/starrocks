@@ -1,0 +1,81 @@
+-- name: test_ivm_ret_range_partition @cloud
+CREATE TABLE pk_rp (id INT NOT NULL, dt DATE NOT NULL, v BIGINT)
+  PRIMARY KEY(id, dt)
+  PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+                          PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+                          PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_rp VALUES (1,'2026-01-15',10),(2,'2026-02-15',20),(3,'2026-03-15',30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_rp REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, dt, v FROM pk_rp WHERE v >= 0;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+UPDATE pk_rp SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+DELETE FROM pk_rp WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+DELETE FROM pk_rp WHERE id = 1;
+-- result:
+-- !result
+INSERT INTO pk_rp VALUES (1,'2026-03-20',10);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_rp WITH SYNC MODE;
+SELECT id, dt, v FROM mv_rp ORDER BY id;
+-- result:
+1	2026-03-20	10
+2	2026-02-15	99
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,dt,v FROM mv_rp EXCEPT SELECT id,dt,v FROM pk_rp WHERE v>=0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,dt,v FROM pk_rp WHERE v>=0 EXCEPT SELECT id,dt,v FROM mv_rp) t;
+-- result:
+0
+-- !result
+-- name: test_ivm_ret_list_partition @cloud
+CREATE TABLE pk_lp (id INT NOT NULL, region VARCHAR(8) NOT NULL, v BIGINT)
+  PRIMARY KEY(id, region)
+  PARTITION BY LIST(region) (PARTITION pa VALUES IN ('us'), PARTITION pb VALUES IN ('eu'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_lp VALUES (1,'us',10),(2,'eu',20),(3,'us',30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_lp REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, region, v FROM pk_lp;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_lp WITH SYNC MODE;
+UPDATE pk_lp SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_lp WITH SYNC MODE;
+DELETE FROM pk_lp WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_lp WITH SYNC MODE;
+SELECT id, region, v FROM mv_lp ORDER BY id;
+-- result:
+1	us	10
+2	eu	99
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,region,v FROM mv_lp EXCEPT SELECT id,region,v FROM pk_lp) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,region,v FROM pk_lp EXCEPT SELECT id,region,v FROM mv_lp) t;
+-- result:
+0
+-- !result

@@ -1,155 +1,359 @@
 -- name: test_ivm_pk_projection_retraction @cloud
--- Single-table PRIMARY KEY projection/filter IVM MV, retractable (delete/update) refresh.
--- Oracle: after every incremental refresh the MV must exactly equal (base WHERE v>=0), diff=0 both ways.
 CREATE TABLE pk_proj_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_proj_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_proj
 DISTRIBUTED BY HASH(id) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT id, v, name FROM pk_proj_base WHERE v >= 0;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- value update, stays in the filter
+-- result:
+1	10	a
+2	20	b
+3	30	c
+-- !result
 UPDATE pk_proj_base SET v = 99 WHERE id = 2;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- update out of the filter (v<0): row must leave the MV (predicate-induced retraction)
+-- result:
+1	10	a
+2	99	b
+3	30	c
+-- !result
 UPDATE pk_proj_base SET v = -5 WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- delete: row must leave the MV
+-- result:
+2	99	b
+3	30	c
+-- !result
 DELETE FROM pk_proj_base WHERE id = 3;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- insert a new row
+-- result:
+2	99	b
+-- !result
 INSERT INTO pk_proj_base VALUES (4,40,'d');
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- update back into the filter (v>=0): row must re-appear
+-- result:
+2	99	b
+4	40	d
+-- !result
 UPDATE pk_proj_base SET v = 7 WHERE id = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- change the primary key via delete+insert (PK tables reject UPDATE SET pk): id 4 -> 5
+-- result:
+1	7	a
+2	99	b
+4	40	d
+-- !result
 DELETE FROM pk_proj_base WHERE id = 4;
+-- result:
+-- !result
 INSERT INTO pk_proj_base VALUES (5,40,'d');
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_proj WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_proj ORDER BY id;
--- oracle: MV exactly equals base WHERE v>=0
+-- result:
+1	7	a
+2	99	b
+5	40	d
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT id,v,name FROM mv_pk_proj EXCEPT SELECT id,v,name FROM pk_proj_base WHERE v>=0) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,name FROM pk_proj_base WHERE v>=0 EXCEPT SELECT id,v,name FROM mv_pk_proj) t;
+-- result:
+0
+-- !result
 DROP MATERIALIZED VIEW mv_pk_proj;
+-- result:
+-- !result
 DROP TABLE pk_proj_base;
-
+-- result:
+-- !result
 -- name: test_ivm_pk_projection_varchar_key @cloud
--- VARCHAR single-column primary key (a non-integer key type). All PK cases here use the v1 row-id
--- encoding: the derived row-id SlotRefs carry no analyzed type, so v0 is not selected.
 CREATE TABLE pk_vk_base (k VARCHAR(64) NOT NULL, v BIGINT)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_vk_base VALUES ('alpha',10),('beta',20),('gamma',30);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_vk
 DISTRIBUTED BY HASH(k) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT k, v FROM pk_vk_base WHERE v >= 0;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_vk WITH SYNC MODE;
 SELECT k, v FROM mv_pk_vk ORDER BY k;
+-- result:
+alpha	10
+beta	20
+gamma	30
+-- !result
 UPDATE pk_vk_base SET v = 99 WHERE k = 'beta';
+-- result:
+-- !result
 DELETE FROM pk_vk_base WHERE k = 'gamma';
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_vk WITH SYNC MODE;
 SELECT k, v FROM mv_pk_vk ORDER BY k;
+-- result:
+alpha	10
+beta	99
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT k,v FROM mv_pk_vk EXCEPT SELECT k,v FROM pk_vk_base WHERE v>=0) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT k,v FROM pk_vk_base WHERE v>=0 EXCEPT SELECT k,v FROM mv_pk_vk) t;
+-- result:
+0
+-- !result
 DROP MATERIALIZED VIEW mv_pk_vk;
+-- result:
+-- !result
 DROP TABLE pk_vk_base;
-
+-- result:
+-- !result
 -- name: test_ivm_pk_retraction_rejects @cloud
--- Shapes this foundation does not yet maintain over a cloud-native PK base must be rejected at CREATE.
 CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
--- UNION ALL mixing a retractable PK branch with an append-only (DUPLICATE KEY) branch: the union would carry
--- __ROW_ID__ on the PK branch only, so the analyzer rejects the mix. A pure-PK UNION ALL is now supported --
--- see test_ivm_pk_union_retraction.
+-- result:
+-- !result
 CREATE TABLE rej_dup (id INT NOT NULL, v BIGINT)
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_mixed_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk UNION ALL SELECT id, v FROM rej_dup;
--- MV-level ORDER BY folds the sort column into the key, widening the PK past __ROW_ID__ (sort-only: a later PR)
+-- result:
+[REGEX].*does not support a UNION ALL that mixes a retractable.*
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_orderby DISTRIBUTED BY HASH(id) BUCKETS 2 ORDER BY (v) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk;
--- aggregate over a PK base with MV-level ORDER BY on a mutable aggregate output folds it into the key too
+-- result:
+[REGEX].*does not yet support ORDER BY for a materialized view.*
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_agg_orderby DISTRIBUTED BY HASH(g) BUCKETS 2 ORDER BY (sv) REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT g, SUM(v) AS sv FROM rej_pk GROUP BY g;
--- LIMIT over a PK base: no IVM delta rule for limit, so the CREATE-time trial rewrite rejects it
+-- result:
+[REGEX].*does not yet support ORDER BY for a materialized view.*
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_limit DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM rej_pk LIMIT 1;
--- non-inner/cross join over PK bases: only inner/cross are maintainable, so the analyzer rejects the join type
+-- result:
+[REGEX].*IVM rewrite failed to fully resolve incremental markers.*
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_leftjoin DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a LEFT JOIN rej_pk2 b ON a.id = b.id;
--- join over PK bases with a non-orderable output column: net-collapse orders by every output column to
--- cancel cross-base intermediate rows, and JSON has no order, so the join is rejected at CREATE
+-- result:
+[REGEX].*does not support join type: LEFT OUTER JOIN.*
+-- !result
 CREATE TABLE rej_pk_json (id INT NOT NULL, j JSON)
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json a JOIN rej_pk2 b ON a.id = b.id;
+-- result:
+[REGEX].*non-orderable output column type.*
+-- !result
 DROP TABLE rej_pk_json;
+-- result:
+-- !result
 DROP TABLE rej_dup;
+-- result:
+-- !result
 DROP TABLE rej_pk;
+-- result:
+-- !result
 DROP TABLE rej_pk2;
-
+-- result:
+-- !result
 -- name: test_ivm_pk_composite_key @cloud
--- Composite (multi-column) PRIMARY KEY exercises __ROW_ID__ = encode(k1, k2).
 CREATE TABLE pk_ck_base (a INT NOT NULL, b INT NOT NULL, v BIGINT)
 PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_ck_base VALUES (1,1,10),(1,2,20),(2,1,30);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_ck
 DISTRIBUTED BY HASH(a) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT a, b, v FROM pk_ck_base WHERE v >= 0;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_ck WITH SYNC MODE;
 SELECT a, b, v FROM mv_pk_ck ORDER BY a, b;
--- value update, composite key stays
+-- result:
+1	1	10
+1	2	20
+2	1	30
+-- !result
 UPDATE pk_ck_base SET v = 99 WHERE a = 1 AND b = 2;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_ck WITH SYNC MODE;
 SELECT a, b, v FROM mv_pk_ck ORDER BY a, b;
--- delete one composite-key row
+-- result:
+1	1	10
+1	2	99
+2	1	30
+-- !result
 DELETE FROM pk_ck_base WHERE a = 2 AND b = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_ck WITH SYNC MODE;
 SELECT a, b, v FROM mv_pk_ck ORDER BY a, b;
--- update a composite-key row out of the filter
+-- result:
+1	1	10
+1	2	99
+-- !result
 UPDATE pk_ck_base SET v = -1 WHERE a = 1 AND b = 1;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_ck WITH SYNC MODE;
 SELECT a, b, v FROM mv_pk_ck ORDER BY a, b;
--- insert a new composite key
+-- result:
+1	2	99
+-- !result
 INSERT INTO pk_ck_base VALUES (3,3,40);
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_ck WITH SYNC MODE;
 SELECT a, b, v FROM mv_pk_ck ORDER BY a, b;
+-- result:
+1	2	99
+3	3	40
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT a,b,v FROM mv_pk_ck EXCEPT SELECT a,b,v FROM pk_ck_base WHERE v>=0) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT a,b,v FROM pk_ck_base WHERE v>=0 EXCEPT SELECT a,b,v FROM mv_pk_ck) t;
+-- result:
+0
+-- !result
 DROP MATERIALIZED VIEW mv_pk_ck;
+-- result:
+-- !result
 DROP TABLE pk_ck_base;
-
+-- result:
+-- !result
 -- name: test_ivm_pk_projection_star @cloud
--- SELECT * over a PK base: the star SelectListItem (expr==null) must survive __ROW_ID__ prepend.
 CREATE TABLE pk_star_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
 PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
 INSERT INTO pk_star_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_pk_star
 DISTRIBUTED BY HASH(id) BUCKETS 2
 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT * FROM pk_star_base;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_star WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_star ORDER BY id;
+-- result:
+1	10	a
+2	20	b
+3	30	c
+-- !result
 UPDATE pk_star_base SET v = 99 WHERE id = 1;
+-- result:
+-- !result
 DELETE FROM pk_star_base WHERE id = 2;
+-- result:
+-- !result
 REFRESH MATERIALIZED VIEW mv_pk_star WITH SYNC MODE;
 SELECT id, v, name FROM mv_pk_star ORDER BY id;
+-- result:
+1	99	a
+3	30	c
+-- !result
 SELECT COUNT(*) AS diff FROM (SELECT id,v,name FROM mv_pk_star EXCEPT SELECT id,v,name FROM pk_star_base) t;
+-- result:
+0
+-- !result
 SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,name FROM pk_star_base EXCEPT SELECT id,v,name FROM mv_pk_star) t;
+-- result:
+0
+-- !result
 DROP MATERIALIZED VIEW mv_pk_star;
+-- result:
+-- !result
 DROP TABLE pk_star_base;
+-- result:
+-- !result
+-- name: test_ivm_pk_proj_mixed_batch_fold @cloud
+CREATE TABLE pk_mbf (id INT NOT NULL, v BIGINT, tag VARCHAR(8))
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_mbf SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,1000));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mbf REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v, tag FROM pk_mbf WHERE v >= 0;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mbf WITH SYNC MODE;
+UPDATE pk_mbf SET v = v + 1 WHERE id <= 500;
+-- result:
+-- !result
+UPDATE pk_mbf SET v = v + 1 WHERE id <= 500;
+-- result:
+-- !result
+DELETE FROM pk_mbf WHERE id <= 100;
+-- result:
+-- !result
+UPDATE pk_mbf SET v = -1 WHERE id BETWEEN 101 AND 200;
+-- result:
+-- !result
+INSERT INTO pk_mbf SELECT generate_series, 0, 'b' FROM TABLE(generate_series(1001,1100));
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mbf WITH SYNC MODE;
+SELECT COUNT(*) AS diff FROM (SELECT id,v,tag FROM mv_mbf EXCEPT SELECT id,v,tag FROM pk_mbf WHERE v>=0) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,tag FROM pk_mbf WHERE v>=0 EXCEPT SELECT id,v,tag FROM mv_mbf) t;
+-- result:
+0
+-- !result

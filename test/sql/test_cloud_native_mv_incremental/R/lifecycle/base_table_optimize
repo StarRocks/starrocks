@@ -1,0 +1,81 @@
+-- name: test_ivm_ret_bucket_only_optimize_keeps_active @cloud
+CREATE TABLE pk_bo (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_bo VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_bo REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT id, v FROM pk_bo;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_bo WITH SYNC MODE;
+ALTER TABLE pk_bo DISTRIBUTED BY HASH(id) BUCKETS 8;
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bo';
+-- result:
+true
+-- !result
+INSERT INTO pk_bo VALUES (4,40);
+-- result:
+-- !result
+DELETE FROM pk_bo WHERE id = 1;
+-- result:
+-- !result
+UPDATE pk_bo SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_bo WITH SYNC MODE;
+SELECT id, v FROM mv_bo ORDER BY id;
+-- result:
+2	99
+3	30
+4	40
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id,v FROM mv_bo EXCEPT SELECT id,v FROM pk_bo) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_bo EXCEPT SELECT id,v FROM mv_bo) t;
+-- result:
+0
+-- !result
+-- name: test_ivm_distkey_optimize_inactivates @cloud
+CREATE TABLE pk_dk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_dk VALUES (1,1,10),(2,2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_dk REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, k2, v FROM pk_dk;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_dk WITH SYNC MODE;
+ALTER TABLE pk_dk DISTRIBUTED BY HASH(k, k2) BUCKETS 2;
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dk';
+-- result:
+false
+-- !result
+-- name: test_ivm_sortkey_optimize_inactivates @cloud
+CREATE TABLE pk_sk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_sk VALUES (1,1,10),(2,2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sk_opt REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, k2, v FROM pk_sk;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk_opt WITH SYNC MODE;
+ALTER TABLE pk_sk ORDER BY (v);
+-- result:
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_sk_opt';
+-- result:
+false
+-- !result

@@ -313,3 +313,80 @@ DROP MATERIALIZED VIEW mv_pk_metric;
 DROP TABLE pk_metric;
 -- result:
 -- !result
+-- name: test_ivm_ret_minmax_recompute @cloud
+CREATE TABLE pk_mm (id INT NOT NULL, g INT, v BIGINT)
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_mm VALUES (1,10,100),(2,10,500),(3,10,300),(4,20,50),(5,20,50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mm REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT g, MAX(v) mx, MIN(v) mn, COUNT(*) c FROM pk_mm GROUP BY g;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mm WITH SYNC MODE;
+SELECT g,mx,mn,c FROM mv_mm ORDER BY g;
+-- result:
+10	500	100	3
+20	50	50	2
+-- !result
+DELETE FROM pk_mm WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mm WITH SYNC MODE;
+UPDATE pk_mm SET v = 10 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mm WITH SYNC MODE;
+DELETE FROM pk_mm WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mm WITH SYNC MODE;
+SELECT g,mx,mn,c FROM mv_mm ORDER BY g;
+-- result:
+10	300	10	2
+20	50	50	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT g,mx,mn,c FROM mv_mm EXCEPT SELECT g,MAX(v),MIN(v),COUNT(*) FROM pk_mm GROUP BY g) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT g,MAX(v),MIN(v),COUNT(*) FROM pk_mm GROUP BY g EXCEPT SELECT g,mx,mn,c FROM mv_mm) t;
+-- result:
+0
+-- !result
+-- name: test_ivm_ret_agg_ndv_coexist @cloud
+CREATE TABLE pk_nd (id INT NOT NULL, g INT, v BIGINT)
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO pk_nd VALUES (1,10,1),(2,10,1),(3,10,2),(4,20,5),(5,20,6);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_nd REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT g, APPROX_COUNT_DISTINCT(v) nd, SUM(v) sv, MAX(v) mx, COUNT(*) c FROM pk_nd GROUP BY g;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+UPDATE pk_nd SET v = 2 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+DELETE FROM pk_nd WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+SELECT g,nd,sv,mx,c FROM mv_nd ORDER BY g;
+-- result:
+10	2	5	2	3
+20	1	6	6	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT g,nd,sv,mx,c FROM mv_nd EXCEPT SELECT g,APPROX_COUNT_DISTINCT(v),SUM(v),MAX(v),COUNT(*) FROM pk_nd GROUP BY g) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT g,APPROX_COUNT_DISTINCT(v),SUM(v),MAX(v),COUNT(*) FROM pk_nd GROUP BY g EXCEPT SELECT g,nd,sv,mx,c FROM mv_nd) t;
+-- result:
+0
+-- !result

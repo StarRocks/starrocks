@@ -463,22 +463,22 @@ PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' 
 CREATE MATERIALIZED VIEW mv_rej_sub_agg DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.sv FROM (SELECT id, SUM(v) AS sv FROM sq_rej GROUP BY id) t;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+[REGEX].*does not support a derived table whose inner block computes a row id that cannot be forwarded.*
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_sub_union DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t.id, t.v FROM (SELECT id, v FROM sq_rej UNION ALL SELECT id, v FROM sq_rej2) t;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+[REGEX].*does not support a derived table whose inner block computes a row id that cannot be forwarded.*
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_sub_star DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT * FROM (SELECT id, v FROM sq_rej) t;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support SELECT * over a derived table on a cloud-native PRIMARY KEY base; list the columns explicitly.')
+[REGEX].*over a derived table on a cloud-native PRIMARY KEY base.*
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_sub_nested DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT t1.id, t1.v FROM (SELECT t2.id, t2.v FROM (SELECT id, v FROM sq_rej) t2) t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support a derived table whose inner block computes a row id that cannot be forwarded (an aggregate / DISTINCT / union inner).')
+[REGEX].*does not support a derived table whose inner block computes a row id that cannot be forwarded.*
 -- !result
 DROP TABLE sq_rej;
 -- result:

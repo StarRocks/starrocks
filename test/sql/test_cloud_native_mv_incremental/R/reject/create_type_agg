@@ -111,5 +111,5 @@ REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT k, APPROX_COUNT_DISTINCT(uid) AS a FROM apx_b GROUP BY k;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: IVM on cloud-native AGGREGATE KEY base 'apx_b' does not support aggregate 'approx_count_distinct'; AGG_KEYS base only accepts delta-rollup-compatible aggregates [sum, max, min].")
+[REGEX].*does not support aggregate 'approx_count_distinct'.*
 -- !result
