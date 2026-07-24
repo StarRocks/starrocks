@@ -38,7 +38,10 @@ public:
             RETURN_IF_ERROR(convert(value, {}, false, &builder));
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
-            std::string_view view(value.get_raw_json_string().raw());
+            // raw_json_token() returns a bounded string_view into the input buffer. Constructing a
+            // string_view from get_raw_json_string().raw() instead (a bare, non-NUL-terminated
+            // const char*) runs strlen off the end of a non-NUL-terminated load buffer.
+            std::string_view view = value.raw_json_token();
             // truncate the raw json string if it is too large
             bool too_large = view.size() > MAX_VALUE_LENGTH_FOR_ERRMSG;
             size_t size = too_large ? MAX_VALUE_LENGTH_FOR_ERRMSG : view.size();
@@ -59,8 +62,15 @@ public:
             RETURN_IF_ERROR(convert(value, {}, false, &builder));
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
-            std::string_view view(value.raw_json());
-            auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view.data(),
+            // raw_json() spans the object but consume()s it, so on a malformed document (iterate()
+            // validates lazily, so a value-materialization error can fire before a structural error)
+            // it can return an error. get() is noexcept and leaves `view` empty on error, so a
+            // failing raw_json() cannot throw a second exception out of this catch. Pass the bounded
+            // view (never view.data(), which would run strlen off the end of a non-NUL-terminated
+            // load buffer).
+            std::string_view view;
+            (void)value.raw_json().get(view);
+            auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view,
                                                simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
