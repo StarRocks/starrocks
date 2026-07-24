@@ -455,6 +455,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             auto tablet_id_in_txn_log = tablet_ids_in_txn_logs[j];
             auto& txn_logs = txn_logs_vector[j];
             for (auto& txn_log : txn_logs) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("convert_txn_log_us");
                 ASSIGN_OR_RETURN(auto converted_txn_log, convert_txn_log(txn_log, base_metadata, tablet_info));
                 txn_log = std::move(converted_txn_log);
             }
