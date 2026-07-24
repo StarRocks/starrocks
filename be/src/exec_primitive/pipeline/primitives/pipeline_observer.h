@@ -78,7 +78,7 @@ public:
         return DeferOp([this]() { _source_observable.notify_source_observers(); });
     }
     auto defer_notify_sink() {
-        return DeferOp([this]() { _sink_observable.notify_source_observers(); });
+        return DeferOp([this]() { _sink_observable.notify_sink_observers(); });
     }
 
 private:
