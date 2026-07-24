@@ -14,6 +14,8 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include <fmt/format.h>
+
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -173,29 +175,43 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     RETURN_IF_ERROR(segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
-                // Pre-declare every segment's row count so the iterator can fire
-                // up to K parallel per-segment reads (each on its own RAF) and
-                // pipeline our processing of segment N against the still-pending
-                // downloads for segments N+1..N+K-1.
+                // Pre-declare every output segment's row count so the rows-mapper iterator can fire
+                // up to K parallel per-segment reads and pipeline processing against pending reads.
+                // This path never reads segment data -- only the row count -- so on the default path the
+                // counts come from the tablet metadata (segment_metas) via output_segment_num_rows() and
+                // `segments` is left empty, opening no segment footer. `segments` is only materialised as a
+                // fallback (metadata missing num_rows), where the count comes from the loaded segment.
+                const auto seg_num_rows = output_segment_num_rows();
+                const bool segments_loaded = !segments.empty();
+                const size_t num_segments = segments_loaded ? segments.size() : seg_num_rows.size();
                 std::vector<size_t> per_segment_rows;
-                per_segment_rows.reserve(segments.size());
-                for (const auto& seg : segments) {
-                    per_segment_rows.push_back(seg->num_rows());
+                per_segment_rows.reserve(num_segments);
+                for (size_t i = 0; i < num_segments; i++) {
+                    if (segments_loaded) {
+                        per_segment_rows.push_back(segments[i]->num_rows());
+                    } else if (i < seg_num_rows.size() && seg_num_rows[i] != kUnknownSegmentNumRows) {
+                        per_segment_rows.push_back(seg_num_rows[i]);
+                    } else {
+                        return Status::InternalError(
+                                fmt::format("cannot determine row count for output segment (index {}) during "
+                                            "compaction conflict resolution",
+                                            i));
+                    }
                 }
                 RETURN_IF_ERROR(mapper_iter.prepare_segments(per_segment_rows));
 
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
-                for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
+                for (size_t segment_id = 0; segment_id < num_segments; segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
                     // 2. get input rssid & rowids, so we can generate delvec
                     vector<uint32_t> tmp_deletes;
                     std::vector<uint64_t> rssid_rowids;
                     {
                         const int64_t t0 = MonotonicMicros();
-                        RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
+                        RETURN_IF_ERROR(mapper_iter.next_values(per_segment_rows[segment_id], &rssid_rowids));
                         mapper_read_us_accum += MonotonicMicros() - t0;
                     }
-                    DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
+                    DCHECK(per_segment_rows[segment_id] == rssid_rowids.size());
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;
                         const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
