@@ -1,5 +1,176 @@
 {
   "version": 1,
   "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
-  "suppressions": []
+  "suppressions": [
+    {
+      "fingerprint": "sha256:0ff1361dae876f56ac5548ad47569cf536a000c819e33910c897f824884cb2c9",
+      "file": "docs/en/sql-reference/System_variable.md",
+      "line": 156,
+      "snippet": "SELECT /*+ SET_VAR ( exec_mem_limit = 515396075520, query_ti",
+      "category": "illustrative",
+      "reason": "SET_VAR hint synopsis using placeholder table name TABLE",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:98729ced60a41fa319e5aca9171e11e523ae6299c05d96a37ae759cf438476a4",
+      "file": "docs/en/sql-reference/data-types/numeric/DECIMAL.md",
+      "line": 135,
+      "snippet": "INSERT INTO test_decimal256(p50s48) SELECT 333",
+      "category": "expected-error",
+      "reason": "Doc explicitly documents this INSERT returns 'filtered data' on overflow",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:59885fd64695eef87e1a35d409d257e3bcd9da1258e83e8ca6e58b566de01ee9",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 97,
+      "snippet": "insert into bitmap_table1 select id, to_bitmap(id2) from tab",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:e7ffb9ed60d78678fbc7d736796f1eeb9202f2fa02eb21ddbd803c917746910c",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 104,
+      "snippet": "insert into bitmap_table1 select id, bitmap_hash(id2) from t",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:6a971baa3beb539defadcd07bed7e29b51ed1805aee3470fa45e4c91039163d4",
+      "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
+      "line": 111,
+      "snippet": "insert into bitmap_table1 select id, bitmap_hash64(id2) from",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:abb34226190e92afa73c803df925e6a814b1c713e8361793546fbd53fdb5fd73",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
+      "line": 29,
+      "snippet": "-- Calculate users retention under different tags today and ",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table` in subquery",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:8ba1860993a57cbe1a5a25fa6302be6910745ec8e5ff03c5cb1c7e26fbc405d3",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
+      "line": 42,
+      "snippet": "--Find out users retained under different tags today and yes",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table` in subquery",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:014d7325202d02e85dea1257366cd319b73a9ec24e4efb4030bcb80c6503a8eb",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 20,
+      "snippet": "select page_id, bitmap_union(user_id) from table group by pa",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:9dcdc00acc863f7f518de09263b4c4ba2e125f9c27c14e945abba0cb241ece39",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 28,
+      "snippet": "select page_id, bitmap_count(bitmap_union(user_id)) from tab",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:7e17e16a0ef345cf8f917d2de8aa334c330aaaa761824a6eff85cdb94f436600",
+      "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
+      "line": 36,
+      "snippet": "select page_id, count(distinct user_id) from table group by ",
+      "category": "illustrative",
+      "reason": "Uses placeholder source table named `table`",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:1c13991486da935c81f3989c3a86535347c5f48205466155954f235c0f129bc1",
+      "file": "docs/en/sql-reference/sql-functions/utility-functions/bar.md",
+      "line": 26,
+      "snippet": "MYSQL > select r, bar(r, 0, 10, 20) as x from table(generate",
+      "category": "illustrative",
+      "reason": "MySQL client transcript (MYSQL > prompt with sample output)",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:99a086ef533ceb9ee8aed6d8848653484f372ee9dba306518b59d0482ae6bc62",
+      "file": "docs/en/sql-reference/sql-functions/utility-functions/equiwidth_bucket.md",
+      "line": 26,
+      "snippet": "MYSQL > select r, equiwidth_bucket(r, 0, 10, 20) as x from t",
+      "category": "illustrative",
+      "reason": "MySQL client transcript (MYSQL > prompt with sample output)",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:0e2066d0b50921b957a1b54232e4c159b1d28e40fed5df35d71bc6860fe1586d",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md",
+      "line": 20,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"key\" = \"value\")",
+      "category": "illustrative",
+      "reason": "Synopsis with placeholder \"key\"=\"value\" config",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:7c69c56584d8dc4bf23dee9b484ee4bd93316ebff1ad7762651fdf4990609553",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/file/CREATE_FILE.md",
+      "line": 47,
+      "snippet": "CREATE FILE \"test.pem\" PROPERTIES ( \"url\" = \"https://starroc",
+      "category": "needs-setup",
+      "reason": "References an external OSS URL that an isolated run cannot fetch",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:70cd953356ffc40161747466752a14085f18490790941fd585935b25c63b28c3",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/file/DROP_FILE.md",
+      "line": 41,
+      "snippet": "DROP FILE \"ca.pem\" properties(\"catalog\" = \"kafka\")",
+      "category": "needs-setup",
+      "reason": "Depends on a file/catalog created by a prior CREATE FILE example",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:21e1f9058d26d2e09cf34f80a27ea2b70221a2ffe7d589c794313d5e7b5135cf",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKEND_BLACKLIST.md",
+      "line": 20,
+      "snippet": "SHOW { BACKEND | COMPUTE NODE } BLACKLIST",
+      "category": "illustrative",
+      "reason": "Grammar synopsis using { A | B } alternation notation",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:915b73a4de906cc764944247204708586c538a1d1dcaec0612bd909be194c901",
+      "file": "docs/en/sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SKIP_COMMITTED_TRANSACTION.md",
+      "line": 41,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"enable_admin_skip_committed_txn\"",
+      "category": "version-gated",
+      "reason": "Config enable_admin_skip_committed_txn absent in the 4.1.1 build (verified via ADMIN SHOW FRONTEND CONFIG)",
+      "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    }
+  ]
 }
