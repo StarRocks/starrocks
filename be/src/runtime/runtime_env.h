@@ -79,6 +79,7 @@ public:
     MemTracker* page_cache_mem_tracker() const { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() const { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() const { return _update_mem_tracker.get(); }
+    MemTracker* lake_publish_mem_tracker() const { return _lake_publish_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() const { return _passthrough_mem_tracker.get(); }
     MemTracker* brpc_iobuf_mem_tracker() const { return _brpc_iobuf_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() const { return _clone_mem_tracker.get(); }
@@ -191,6 +192,7 @@ private:
 
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
+    std::shared_ptr<MemTracker> _lake_publish_mem_tracker;
 
     // record mem usage in passthrough
     std::shared_ptr<MemTracker> _passthrough_mem_tracker;

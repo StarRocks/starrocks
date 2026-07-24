@@ -845,6 +845,9 @@
     {
       "path": "be/src/common/config_lake_fwd.h",
       "configs": [
+        "lake_publish_memory_limit_percent",
+        "lake_publish_metadata_estimate_multiplier",
+        "lake_publish_process_memory_urgent_pct",
         "lake_replication_slow_log_ms",
         "lake_replication_read_buffer_size",
         "lake_replication_max_file_copy_retry",

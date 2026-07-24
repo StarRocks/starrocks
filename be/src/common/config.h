@@ -1562,6 +1562,17 @@ CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+// P3 (SR-38350): bound lake publish-path transient metadata memory. See docs BE_configuration.
+// Percent of the process memory limit the lake publish reservation tracker may hold. Immutable
+// (the tracker byte limit is computed once at init, matching update_memory_limit_percent). Clamped
+// to [0,100] at init; 0 disables the per-tracker gate (registers an unlimited tracker) -- the rollback lever.
+CONF_Int32(lake_publish_memory_limit_percent, "30");
+// Transient-footprint multiplier k: estimate = k * base_metadata_size. Mutable (read per publish).
+CONF_mInt32(lake_publish_metadata_estimate_multiplier, "3");
+// Process-memory backstop for the lake publish path, as a percent of the process limit. Mutable; read
+// per publish so it can be tuned/disabled live. 0 disables the backstop (its rollback lever). Kept
+// separate from memory_urgent_level, which also drives pindex flush / datacache shrink.
+CONF_mInt32(lake_publish_process_memory_urgent_pct, "85");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");

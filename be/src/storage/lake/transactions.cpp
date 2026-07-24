@@ -14,6 +14,10 @@
 
 #include "storage/lake/transactions.h"
 
+#include <bvar/bvar.h>
+
+#include <atomic>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
@@ -22,9 +26,11 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/publish_mem_reservation.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -43,6 +49,9 @@ using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_h
                                                   phmap::priv::Allocator<T>, 4, std::mutex, true>;
 ParallelSet<int64_t> tablet_txns;
 
+// P3 (SR-38350): process-wide slot bounding oversized (estimate > limit) lake publishes to concurrency 1.
+std::atomic<bool> g_lake_publish_oversized_inflight{false};
+
 // publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
 // and need to increase version number of the tablet,
 // the situation happens in create rollup.
@@ -51,6 +60,9 @@ const int64_t EMPTY_TXNLOG_TXNID = -1;
 } // namespace
 
 namespace starrocks::lake {
+
+// P3 (SR-38350): counter of publishes rejected by the memory gate (per-tablet reservation or process backstop).
+bvar::Adder<int64_t> g_lake_publish_mem_rejected("lake_publish_mem_rejected");
 
 bool acquire_publish_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
@@ -267,6 +279,16 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata, int64_t fe_built_version) {
+    // P3 (SR-38350): coarse process-memory backstop, placed before EVERY branch (including the early
+    // empty-txnlog/reshard path below, which returns before acquire_publish_tablet). Gated on a dedicated
+    // mutable knob (0 disables it); uses the "urgent" level so it only trips near genuine OOM.
+    {
+        int32_t urgent_pct = std::max(0, std::min(100, config::lake_publish_process_memory_urgent_pct));
+        if (urgent_pct > 0 && RuntimeEnv::GetInstance()->process_mem_tracker()->limit_exceeded_by_ratio(urgent_pct)) {
+            g_lake_publish_mem_rejected << 1;
+            return Status::ResourceBusy("publish throttled: process memory urgent");
+        }
+    }
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -384,6 +406,27 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     }
 
     auto base_metadata = std::move(base_metadata_or).value();
+
+    // P3 (SR-38350): reserve an estimate of the transient publish footprint (working copy + normalize +
+    // serialize ~= k x base metadata size) against the off-tree lake publish tracker; released on scope exit.
+    // Race-free oversized handling (bounded to concurrency 1, without charging the shared tracker) lives in
+    // the RAII class. base_metadata->SpaceUsedLong() here is dominated by the deep copy the apply path performs
+    // shortly after, so it adds no new latency class to the hot path.
+    // Clamp k to a sane range so a bad mutable config cannot silently disable the gate (k<=0 -> estimate 0,
+    // fail-open); saturate the product so an absurd k fails CLOSED (reject/retry), never overflows negative.
+    int32_t lake_publish_k = std::max(1, std::min(64, config::lake_publish_metadata_estimate_multiplier));
+    int64_t lake_publish_estimate;
+    if (__builtin_mul_overflow(int64_t(lake_publish_k), int64_t(base_metadata->SpaceUsedLong()),
+                               &lake_publish_estimate)) {
+        lake_publish_estimate = INT64_MAX;
+    }
+    PublishMemReservation lake_publish_resv(RuntimeEnv::GetInstance()->lake_publish_mem_tracker(),
+                                            lake_publish_estimate, g_lake_publish_oversized_inflight);
+    if (!lake_publish_resv.admitted()) {
+        g_lake_publish_mem_rejected << 1;
+        return Status::ResourceBusy("publish throttled: lake publish memory limit");
+    }
+
     std::unique_ptr<TxnLogApplier> log_applier;
     std::shared_ptr<TabletMetadataPB> new_metadata;
     std::vector<std::string> files_to_delete;

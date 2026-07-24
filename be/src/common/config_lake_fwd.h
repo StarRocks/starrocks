@@ -104,6 +104,20 @@ CONF_mInt64(lake_max_garbage_version_distance, "100");
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
+// P3 (SR-38350): bound lake publish-path transient metadata memory. See docs BE_configuration.
+// Percent of the process memory limit the lake publish reservation tracker may hold. Immutable
+// (the tracker byte limit is computed once at init, matching update_memory_limit_percent). Clamped
+// to [0,100] at init; 0 disables the per-tracker gate (registers an unlimited tracker) -- the rollback lever.
+CONF_Int32(lake_publish_memory_limit_percent, "30");
+
+// Transient-footprint multiplier k: estimate = k * base_metadata_size. Mutable (read per publish).
+CONF_mInt32(lake_publish_metadata_estimate_multiplier, "3");
+
+// Process-memory backstop for the lake publish path, as a percent of the process limit. Mutable; read
+// per publish so it can be tuned/disabled live. 0 disables the backstop (its rollback lever). Kept
+// separate from memory_urgent_level, which also drives pindex flush / datacache shrink.
+CONF_mInt32(lake_publish_process_memory_urgent_pct, "85");
+
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
