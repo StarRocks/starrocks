@@ -1,45 +1,45 @@
 ---
 displayed_sidebar: docs
-description: "Iceberg Catalog テーブルのみでサポートされる半構造化データ型。"
+description: "VARIANTタイプは、Iceberg Catalogのテーブルにのみサポートされています。"
 ---
 
 # VARIANT
 
 :::important
-VARIANT 型は Iceberg Catalog のテーブルでのみサポートされています。StarRocks ネイティブテーブルではサポートされていません。
+VARIANT型はIceberg Catalogのテーブルでのみサポートされています。StarRocksネイティブテーブルではサポートされていません。
 :::
 
-v4.1 以降、StarRocks は Parquet 形式の Iceberg テーブルから半構造化データをクエリするための VARIANT データ型をサポートしています。本記事では、VARIANT の基本概念、StarRocks における VARIANT 型データのクエリ方法、および VARIANT 関数による処理方法について説明します。
+v4.1以降、StarRocksはParquet形式のIcebergテーブルから半構造化データをクエリするためのVARIANTデータ型をサポートしています。この記事では、VARIANTの基本概念と、StarRocksがVARIANT型データをクエリしてVARIANT関数で処理する方法を紹介します。
 
-## VARIANT とは
+## VARIANTとは
 
-VARIANT は半構造化データ型であり、複数の異なるデータ型の値を格納できます。これには、プリミティブ型（整数、浮動小数点数、文字列、ブール値、日付、タイムスタンプ）および複雑型（STRUCT、MAP、ARRAY）が含まれます。VARIANT データは効率的な保存およびクエリ処理のためにバイナリ形式でエンコードされます。
+VARIANTは、プリミティブ型（整数、浮動小数点数、文字列、ブール値、日付、タイムスタンプ）や複合型（構造体、マップ、配列）を含む、さまざまなデータ型の値を格納できる半構造化データ型です。VARIANTデータは、効率的なストレージとクエリのためにバイナリ形式でエンコードされます。
 
-VARIANT 型は、Variant エンコーディングを使用する Parquet 形式の Apache Iceberg テーブルのデータを扱う場合に特に有用です。このエンコーディングにより、柔軟なスキーマ進化と異種データの効率的な保存が可能になります。
+VARIANT型は、バリアントエンコーディングを使用したParquet形式のApache Icebergテーブルのデータを扱う際に特に有用であり、柔軟なスキーマ進化と異種データの効率的なストレージを可能にします。
 
-Parquet の Variant エンコーディング形式の詳細については、[Parquet Variant Encoding 仕様](https://github.com/apache/parquet-format/blob/master/VariantEncoding.md)を参照してください。
+Parquetバリアントエンコーディング形式の詳細については、[Parquet Variant Encoding仕様](https://github.com/apache/parquet-format/blob/master/VariantEncoding.md)を参照してください。
 
-## VARIANT データの使用
+## VARIANTデータの使用
 
-### Iceberg テーブルからの VARIANT 型データのクエリ
+### IcebergテーブルからのVARIANT型データのクエリ
 
-StarRocks は、Parquet 形式で保存された Iceberg テーブルの VARIANT 型データのクエリをサポートしています。Parquet の Variant エンコーディングを使用する Iceberg テーブルをクエリする際、VARIANT 列は自動的に認識されます。
+StarRocksは、Parquet形式で保存されたIcebergテーブルからVARIANT型データのクエリをサポートしています。VARIANTカラムは、ParquetのバリアントエンコーディングをするIcebergテーブルをクエリする際に自動的に認識されます。
 
-Iceberg テーブルの VARIANT 列をクエリする例：
+VARIANTカラムを持つIcebergテーブルのクエリ例：
 
 ```SQL
--- VARIANT 列を持つテーブルをクエリする
+-- VARIANTカラムを持つテーブルのクエリ
 SELECT
     id,
     variant_col
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-### VARIANT データからの値の抽出
+### VARIANTデータからの値の抽出
 
-StarRocks は、VARIANT データから型付きの値を抽出するための複数の関数を提供しています。
+StarRocksは、VARIANTデータから型付きの値を抽出するためのいくつかの関数を提供しています。
 
-例 1: 型付き getter 関数を使用してプリミティブ値を抽出する。
+例1：型付きゲッター関数を使用してプリミティブ値を抽出する。
 
 ```SQL
 SELECT
@@ -50,7 +50,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-例 2: JSON パス式を使用してネストされた構造をナビゲートする。
+例2：JSONパス式を使用してネストされた構造をナビゲートする。
 
 ```SQL
 SELECT
@@ -60,7 +60,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-例 3: 配列要素にアクセスする。
+例3：配列要素にアクセスする。
 
 ```SQL
 SELECT
@@ -69,7 +69,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-例 4: ネストされた VARIANT データをクエリし、VARIANT 型として返す。
+例4：ネストされたバリアントデータをクエリしてVARIANT型を返す。
 
 ```SQL
 SELECT
@@ -78,7 +78,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-例 5: VARIANT 値の型を確認する。
+例5：VARIANT値の型を確認する。
 
 ```SQL
 SELECT
@@ -87,9 +87,9 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-### JSON から VARIANT へのキャスト
+### JSONからVARIANTへのキャスト
 
-StarRocks は JSON 値を VARIANT にキャストすることをサポートしています。入力が STRING 型の場合は、まず JSON に変換してから VARIANT にキャストしてください。
+StarRocksはJSON値をVARIANTにキャストすることをサポートしています。入力がSTRINGの場合は、まずJSONに変換してください。
 
 ```SQL
 SELECT
@@ -102,9 +102,9 @@ SELECT
 FROM db.table_with_json;
 ```
 
-### VARIANT から SQL 型へのキャスト
+### VARIANTデータのSQL型へのキャスト
 
-CAST 関数を使用して、VARIANT データを標準的な SQL 型に変換できます。
+CAST関数を使用してVARIANTデータを標準SQL型に変換できます：
 
 ```SQL
 SELECT
@@ -115,7 +115,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-複雑型も VARIANT からキャストできます。
+複合型もVARIANTからキャストできます：
 
 ```SQL
 SELECT
@@ -125,37 +125,37 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-### SQL 型から VARIANT へのキャスト
+### SQL型からVARIANTへのキャスト
 
-SQL値をVARIANT型にキャストできます。サポートされる入力型には、BOOLEAN、整数型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME、および複合型（ARRAY、MAP、STRUCT）が含まれます。MAP 型の場合、エンコード時にキーは文字列へキャストされます。HLL、BITMAP、PERCENTILE、VARBINARY などの型はサポートされていません。
+SQL値をVARIANTにキャストできます。サポートされている入力型には、BOOLEAN、整数型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME、および複合型（ARRAY、MAP、STRUCT）が含まれます。MAPの場合、キーはエンコード時に文字列にキャストされます。HLL、BITMAP、PERCENTILE、VARBINARYなどの型はサポートされていません。
 
 ```SQL
 SELECT
     CAST(123 AS VARIANT) AS v_int,
     CAST(3.14 AS VARIANT) AS v_double,
-    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST(CAST('12.34' AS DECIMAL(10,2)) AS VARIANT) AS v_decimal,
     CAST('hello' AS VARIANT) AS v_string,
     CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
 ```
 
-## VARIANT 関数
+## VARIANT関数
 
-VARIANT 関数は、VARIANT 列からデータをクエリおよび抽出するために使用されます。詳細については、各関数のドキュメントを参照してください。
+VARIANT関数は、VARIANTカラムからデータをクエリおよび抽出するために使用できます。詳細については、各関数のドキュメントを参照してください：
 
-- [variant_query](../../sql-functions/variant-functions/variant_query.md): VARIANT 値内の指定パスをクエリし、VARIANT を返します
-- [get_variant](../../sql-functions/variant-functions/get_variant.md): VARIANT から型付きの値（int、bool、double、string）を抽出します
-- [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md): VARIANT 値の型名を返します
+- [variant_query](../../sql-functions/variant-functions/variant_query.md)：VARIANT値のパスをクエリしてVARIANTを返す
+- [get_variant](../../sql-functions/variant-functions/get_variant.md)：VARIANTから型付きの値（int、bool、double、string）を抽出する
+- [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md)：VARIANT値の型名を返す
 
-## VARIANT パス式
+## VARIANTパス式
 
-VARIANT 関数では、データ構造をナビゲートするために JSON パス式を使用します。パス構文は JSON パスと類似しています。
+VARIANT関数はJSONパス式を使用してデータ構造をナビゲートします。パス構文はJSONパスに似ています：
 
-- `$` は VARIANT 値のルートを表します
-- `.` はオブジェクトのフィールドにアクセスするために使用します
-- `[index]` は配列要素（0 始まり）にアクセスするために使用します
-- 特殊文字（例: ドット）を含むフィールド名は引用符で囲むことができます（例: `$."field.name"`）
+- `$` はVARIANT値のルートを表します
+- `.` はオブジェクトフィールドへのアクセスに使用されます
+- `[index]` は配列要素へのアクセスに使用されます（0ベースのインデックス）
+- 特殊文字（ドットなど）を含むフィールド名はクォートできます: `$."field.name"`
 
-パス式の例：
+パス式の例:
 
 ```plaintext
 $                      -- Root element
@@ -170,9 +170,9 @@ $.config["key"]        -- Map-style access
 
 ## データ型変換
 
-Variant エンコーディングを使用した Parquet ファイルからデータを読み取る際、以下の型変換がサポートされています。
+バリアントエンコーディングを使用したParquetファイルからデータを読み取る場合、以下の型変換がサポートされています:
 
-| Parquet Variant 型 | StarRocks VARIANT 型 |
+| Parquet バリアント型 | StarRocks VARIANT 型 |
 | -------------------- | ------------ |
 | INT8, INT16, INT32, INT64 | int8, int16, int32, int64 |
 | FLOAT, DOUBLE | float, double |
@@ -185,10 +185,10 @@ Variant エンコーディングを使用した Parquet ファイルからデー
 | MAP | Object |
 | ARRAY | Array |
 
-## 制限事項および注意点
+## 制限事項と注意点
 
-- VARIANT は、variant エンコーディングを使用した Parquet 形式の Iceberg テーブルからの読み取り、および StarRocks のファイルライターによる Parquet ファイル（unshredded variant encoding）の書き込みでサポートされます。
-- VARIANT 値のサイズは最大 16 MB です。
-- 現在、読み取りおよび書き込みの両方で unshredded variant 値のみサポートされています。
-- VARIANT は、JSON 値またはサポートされている SQL 型（ARRAY、MAP、STRUCT を含む）からのキャストによって作成できます。
-- ネスト構造の最大深度は、基盤となる Parquet ファイルの構造に依存します。
+- VARIANTは、バリアントエンコーディングを使用したParquet形式のIcebergテーブルからのデータ読み取り、およびStarRocksファイルライター（非シュレッドバリアントエンコーディング）を使用したParquetファイルへの書き込みに対応しています。
+- VARIANT値のサイズは16 MBに制限されています。
+- 現在、読み取りと書き込みの両方において、非シュレッドバリアント値のみがサポートされています。
+- VARIANTは、JSON値またはサポートされているSQLタイプ（ARRAY、MAP、STRUCTを含む）からのキャストによって作成できます。
+- ネスト構造の最大深度は、基となるParquetファイルの構造に依存します。
