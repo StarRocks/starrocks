@@ -15,6 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.SqlUtils;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -126,5 +128,122 @@ public class OptimizeClause extends AlterTableClause {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+
+        // PARTITIONS (p1, p2)
+        if (partitionNames != null && !partitionNames.getPartitionNames().isEmpty()) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionNames.toString());
+        }
+
+        // DUPLICATE KEY(`col1`, `col2`) etc.
+        if (keysDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(keysDesc.getKeysType().toSql());
+            List<String> keyColumns = keysDesc.getKeysColumnNames();
+            if (keyColumns != null && !keyColumns.isEmpty()) {
+                sb.append("(");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(keyColumns.get(i)));
+                }
+                sb.append(")");
+            }
+        }
+
+        // PARTITION BY RANGE(...)
+        if (partitionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionDesc);
+        }
+
+        // ORDER BY (`col1`, `col2`)
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("ORDER BY (");
+            for (int i = 0; i < sortKeys.size(); i++) {
+                if (i != 0) {
+                    sb.append(", ");
+                }
+                sb.append(SqlUtils.getIdentSql(sortKeys.get(i)));
+            }
+            sb.append(")");
+        }
+
+        // DISTRIBUTED BY HASH(`col1`) BUCKETS 10
+        if (distributionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            if (distributionDesc instanceof HashDistributionDesc) {
+                HashDistributionDesc hashDesc = (HashDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY HASH(");
+                List<String> distCols = hashDesc.getDistributionColumnNames();
+                for (int i = 0; i < distCols.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(distCols.get(i)));
+                }
+                sb.append(")");
+                if (hashDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(hashDesc.getBuckets());
+                }
+            } else if (distributionDesc instanceof RandomDistributionDesc) {
+                RandomDistributionDesc randomDesc = (RandomDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY RANDOM");
+                if (randomDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(randomDesc.getBuckets());
+                }
+            } else {
+                sb.append(distributionDesc);
+            }
+        }
+
+        // BETWEEN start AND end
+        if (range != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("BETWEEN ");
+            if (range.getStart() != null) {
+                sb.append(toSqlStringLiteral(range.getStart())).append(" ");
+            }
+            sb.append("AND");
+            if (range.getEnd() != null) {
+                sb.append(" ").append(toSqlStringLiteral(range.getEnd()));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Render a {@link StringLiteral} as a single-quoted,
+     * backslash-and-quote-escaped SQL string. Using {@code getStringValue()} directly would drop the
+     * surrounding quotes (and the escaping), producing e.g. {@code BETWEEN 2024-01-01 AND 2024-12-31}
+     * which is neither the submitted clause nor valid for the {@code optimizeRange} grammar.
+     */
+    private static String toSqlStringLiteral(StringLiteral literal) {
+        return "'" + SqlUtils.escapeSqlString(literal.getStringValue()) + "'";
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 }
