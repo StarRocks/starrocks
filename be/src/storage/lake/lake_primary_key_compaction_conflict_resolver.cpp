@@ -14,6 +14,9 @@
 
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 
+#include <algorithm>
+
+#include "common/config.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -98,10 +101,24 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
 Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
         const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
-    // load all segments
+    // This "without read data" path never touches segment data -- it only needs each output
+    // segment's row count, which execute_without_update_index otherwise reads from the tablet
+    // metadata via output_segment_num_rows(). Opening every output segment's footer just to fetch
+    // num_rows is pure overhead on a large compaction, so skip it on the default path and leave
+    // `segments` empty (the handler then derives all row counts from metadata).
+    //
+    // Fall back to loading the segments (the pre-optimization behavior) when either:
+    //   - experimental_lake_ignore_lost_segment is on -- keep the previous load + size-check behavior; or
+    //   - the metadata is missing num_rows for some output segment -- e.g. a compaction txn log written
+    //     by an older BE during a rolling upgrade; the segment footer then supplies the row count.
+    const auto output_num_rows = output_segment_num_rows();
+    const bool metadata_missing_num_rows = std::any_of(output_num_rows.begin(), output_num_rows.end(),
+                                                       [](uint32_t n) { return n == kUnknownSegmentNumRows; });
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
-    RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    if (config::experimental_lake_ignore_lost_segment || metadata_missing_num_rows) {
+        RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
+        RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    }
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
@@ -122,6 +139,21 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
         (*_segment_id_to_add_dels)[rssid] += num_dels;
         _delvecs->emplace_back(rssid, dv);
     });
+}
+
+std::vector<uint32_t> LakePrimaryKeyCompactionConflictResolver::output_segment_num_rows() const {
+    // segment_metas order matches the positionally-aligned segment vector produced by load_segments,
+    // so index i here is the i-th output segment.
+    const auto& rowset_meta = _rowset->metadata();
+    std::vector<uint32_t> result;
+    result.reserve(rowset_meta.segment_metas_size());
+    for (int i = 0; i < rowset_meta.segment_metas_size(); i++) {
+        const auto& seg_meta = rowset_meta.segment_metas(i);
+        // num_rows is optional; report "unknown" for an old rowset that lacks it so the base resolver
+        // falls back to loading the segment instead of under-advancing the rows-mapper.
+        result.push_back(seg_meta.has_num_rows() ? static_cast<uint32_t>(seg_meta.num_rows()) : kUnknownSegmentNumRows);
+    }
+    return result;
 }
 
 } // namespace starrocks::lake

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "common/status.h"
@@ -28,6 +29,12 @@ class DelvecLoader;
 class Schema;
 class PrimaryIndex;
 class Segment;
+
+// Sentinel returned by output_segment_num_rows() for an output segment whose row count is unavailable
+// (e.g. a cross-version rowset whose metadata has no num_rows). Lets execute_without_update_index() fail
+// clearly and fall back to loading the segment for that count instead of silently under-advancing the
+// rows-mapper and failing later with a confusing row-count mismatch.
+inline constexpr uint32_t kUnknownSegmentNumRows = UINT32_MAX;
 
 struct CompactConflictResolveParams {
     int64_t tablet_id = 0;
@@ -55,6 +62,9 @@ public:
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>&
                     handler) = 0;
     // This function won't read data from each segment files. Only need to get segment's row count.
+    // The handler's `segments` argument may be EMPTY: a backend that gets row counts from metadata
+    // (see output_segment_num_rows()) leaves it empty to avoid opening segment footers. Callers must
+    // derive the segment count from output_segment_num_rows() when `segments` is empty.
     virtual Status segment_iterator(
             const std::function<
                     Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
@@ -63,6 +73,13 @@ public:
     Status execute();
 
     Status execute_without_update_index();
+
+protected:
+    // Per-output-segment row counts, in segment_metas order, so execute_without_update_index() can
+    // advance the rows-mapper without opening segment footers. The default empty vector means the
+    // backend has no metadata source and always materialises `segments`; only the lake resolver
+    // overrides it.
+    virtual std::vector<uint32_t> output_segment_num_rows() const { return {}; }
 };
 
 } // namespace starrocks
