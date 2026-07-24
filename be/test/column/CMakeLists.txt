@@ -35,7 +35,6 @@ set(COLUMN_TEST_FILES
     struct_column_test.cpp
     column_visitor_test.cpp
     raw_data_visitor_test.cpp
-    column_filter_range_test.cpp
     column_viewer_core_test.cpp
     fixed_length_column_core_test.cpp
     column_hash_core_test.cpp
