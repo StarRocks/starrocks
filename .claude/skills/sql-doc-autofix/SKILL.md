@@ -79,7 +79,11 @@ the filled template yourself):
 - behavior-change question → `- [x] No, this PR will not result in a change in
   behavior.` (a docs-only fix) and uncheck the default `Yes`
 - put the **Fixes** table (`file:line`, before → after, "verified: runs on
-  `<cluster version>`") under *What I'm doing:*, and write `Fixes #<tracking issue>`
+  `<cluster version>`") under *What I'm doing:*
+- reference the tracking issue with a **non-closing** keyword — `Tracking: #<issue>`
+  (or `Refs #<issue>`). Do **not** use `Fixes/Closes/Resolves #`: those auto-close
+  the issue on merge, and it holds the *un*-fixed work. Clear the template's
+  placeholder `Fixes #issue` line unless this PR truly closes a separate bug issue.
 - backport section → `- [x] I have checked the version labels ...` and the
   `- [x] <version>` box for the release you verified (e.g. `4.1`)
 
