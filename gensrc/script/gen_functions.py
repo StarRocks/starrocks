@@ -268,11 +268,8 @@ ${default_values}
 
     content = java_template.substitute(value)
 
-    try:
-        with open(path, mode="w+") as f:
-            f.write(content)
-    except PermissionError:
-        print("gen_functions.py: PermissionError ignored for " + path)
+    with open(path, mode="w+") as f:
+        f.write(content)
 
 
 def generate_cpp(path):
@@ -382,14 +379,11 @@ def generate_cpp(path):
             )
 
     for module in modules:
-        try:
-            with open(path + module + ".inc", mode="w+") as f:
-                content = cpp_template.format(
-                    module=module, content=modules_contents[module]
-                )
-                f.write(content)
-        except PermissionError:
-            print("gen_functions.py: PermissionError ignored for " + path + module + ".inc")
+        with open(path + module + ".inc", mode="w+") as f:
+            content = cpp_template.format(
+                module=module, content=modules_contents[module]
+            )
+            f.write(content)
 
 
 if __name__ == "__main__":
