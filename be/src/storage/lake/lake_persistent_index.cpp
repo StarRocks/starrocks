@@ -1168,6 +1168,25 @@ static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB&
     return {file_cnt, row_cnt};
 }
 
+// Sum the tombstone rows across a rowset's del files. Exact for del files written with a recorded
+// num_rows; del files written before that field existed contribute 0 (preserving pre-upgrade
+// behavior). This lets tombstone volume count toward the rebuild-rows threshold, which previously
+// only saw segment rows.
+//
+// Unlike segments (filtered by rebuild_rss_id in rebuild_segment_counts), del files are summed
+// wholesale. That matches the actual rebuild work: load_dels() replays every del file of a rowset
+// that needs_rowset_rebuild(), filtering only per key, so counting all of them is accurate, not an
+// overcount. This mirrors how del files are already added to file_cnt wholesale.
+static int64_t rebuild_del_row_count(const RowsetMetadataPB& rowset) {
+    int64_t row_cnt = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        if (rowset.del_files(i).has_num_rows()) {
+            row_cnt += rowset.del_files(i).num_rows();
+        }
+    }
+    return row_cnt;
+}
+
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
 bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
     if (rowset.segment_metas_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
@@ -1203,6 +1222,7 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
             continue; // skip rowset
         }
         file_cnt += rowset.del_files_size();
+        row_cnt += rebuild_del_row_count(rowset);
         auto [seg_file_cnt, seg_row_cnt] = rebuild_segment_counts(rowset, rebuild_rss_id);
         file_cnt += seg_file_cnt;
         row_cnt += seg_row_cnt;

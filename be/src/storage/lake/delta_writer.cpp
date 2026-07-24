@@ -876,6 +876,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
             }
         }
+        // Carry the per-del tombstone count (parallel to dels_meta, index by del_id). Unlike
+        // del_op_offsets this has no downgrade-safety concern: a pre-fix reader simply ignores
+        // DelfileWithRowsetId.num_rows, so it is emitted unconditionally.
+        const auto& del_num_rows = _tablet_writer->del_num_rows();
+        for (size_t i = 0; i < del_idx; ++i) {
+            op_write->add_del_num_rows(i < del_num_rows.size() ? del_num_rows[i] : 0);
+        }
     }
     for (const auto& sst : _tablet_writer->ssts()) {
         to_file_meta_pb(sst, op_write->add_ssts());

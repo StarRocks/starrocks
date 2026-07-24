@@ -1077,7 +1077,8 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk
 
 // Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
 // and an optional del file count.
-static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0) {
+static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0,
+                                    int64_t del_rows_per_file = -1) {
     RowsetMetadataPB rowset;
     rowset.set_id(id);
     int64_t total_rows = 0;
@@ -1089,7 +1090,12 @@ static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg
     }
     rowset.set_num_rows(total_rows);
     for (int i = 0; i < del_file_cnt; ++i) {
-        rowset.add_del_files();
+        auto* del = rowset.add_del_files();
+        // del_rows_per_file < 0 leaves num_rows unset, simulating del files written before the
+        // per-del-file row count existed.
+        if (del_rows_per_file >= 0) {
+            del->set_num_rows(del_rows_per_file);
+        }
     }
     return rowset;
 }
@@ -1161,8 +1167,9 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         EXPECT_EQ(row_cnt, 100);
     }
 
-    // Case 5: del files are counted in file_cnt but not in row_cnt.
-    // Rowset id=0: 1 segment (100 rows) + 2 del files.
+    // Case 5: del files without a recorded num_rows (pre-upgrade metadata) are counted in file_cnt
+    // but contribute 0 to row_cnt (backward-compatible fallback).
+    // Rowset id=0: 1 segment (100 rows) + 2 del files, num_rows unset.
     {
         metadata.Clear();
         sstable_meta.Clear();
@@ -1171,6 +1178,19 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
         EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
         EXPECT_EQ(row_cnt, 100);
+    }
+
+    // Case 6: del files with a recorded num_rows contribute their tombstone count to row_cnt, so a
+    // tombstone-heavy workload can cross the rebuild-rows threshold even with few segment rows.
+    // Rowset id=0: 1 segment (100 rows) + 3 del files each recording 40 tombstones.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/3, /*del_rows_per_file=*/40);
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 4u);          // 1 segment + 3 del files
+        EXPECT_EQ(row_cnt, 100 + 3 * 40); // 100 segment rows + 120 tombstone rows
     }
 }
 

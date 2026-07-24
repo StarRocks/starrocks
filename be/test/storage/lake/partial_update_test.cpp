@@ -4097,6 +4097,17 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         int original_dels_count = op_write.dels_meta_size();
         LOG(INFO) << "Original del files count: " << original_dels_count;
 
+        // The writer must emit del_num_rows parallel to dels_meta, and it must account every
+        // tombstone (kChunkSize/4 deletes). This is the input that _handle_column_upsert_mode
+        // has to carry onto the synthesized new_rows_op.
+        ASSERT_GT(original_dels_count, 0);
+        ASSERT_EQ(op_write.del_num_rows_size(), op_write.dels_meta_size());
+        int64_t txnlog_del_rows = 0;
+        for (int i = 0; i < op_write.del_num_rows_size(); i++) {
+            txnlog_del_rows += op_write.del_num_rows(i);
+        }
+        EXPECT_EQ(txnlog_del_rows, kChunkSize / 4);
+
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
@@ -4142,6 +4153,26 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         // Verify metadata: the dels should have been properly handled
         // Check that rowsets have proper del file info or delvec metadata
         ASSERT_GE(metadata->rowsets_size(), 1);
+
+        // The fix under test: _handle_column_upsert_mode must carry op_write.del_num_rows onto the
+        // synthesized new_rows_op, so the persisted del files record their tombstone count. Sum
+        // num_rows across every persisted del file; it must match the tombstones written above and
+        // every persisted del file must carry a recorded count.
+        int64_t persisted_del_rows = 0;
+        int del_files_seen = 0;
+        int del_files_with_count = 0;
+        for (const auto& rs : metadata->rowsets()) {
+            for (const auto& df : rs.del_files()) {
+                ++del_files_seen;
+                if (df.has_num_rows()) {
+                    ++del_files_with_count;
+                    persisted_del_rows += df.num_rows();
+                }
+            }
+        }
+        ASSERT_GT(del_files_seen, 0);
+        EXPECT_EQ(del_files_with_count, del_files_seen); // every persisted del file carries a count
+        EXPECT_EQ(persisted_del_rows, kChunkSize / 4);   // matches the tombstones written
 
         LOG(INFO) << "Final version: " << version;
         LOG(INFO) << "Total rowsets: " << metadata->rowsets_size();
