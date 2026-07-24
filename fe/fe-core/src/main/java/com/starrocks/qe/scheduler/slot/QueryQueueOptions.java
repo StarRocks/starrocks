@@ -19,13 +19,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
 import java.util.Objects;
 
 public class QueryQueueOptions {
@@ -54,18 +52,15 @@ public class QueryQueueOptions {
             policy = SchedulePolicy.createDefault();
         }
 
-        int concurrencyLevel = Config.query_queue_v2_concurrency_level;
-        if (!RunMode.isSharedNothingMode()) {
-            // To avoid warehouse's cpu/mem usage too low, we can use concurrency level to scale up
-            // the total slots, the behavior is not changed by default.
-            concurrencyLevel = Math.max(1, Config.query_queue_v2_concurrency_level / 4);
-        }
-        final V2 v2 = new V2(concurrencyLevel,
+        SlotEstimatorFactory.EstimatorPolicy estimatorPolicy = SlotEstimatorFactory.getEstimatorPolicy();
+        final V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
                 BackendResourceStat.getInstance().getNumBes(warehouseId),
                 BackendResourceStat.getInstance().getAvgNumCoresOfBe(warehouseId),
                 BackendResourceStat.getInstance().getAvgMemLimitBytes(warehouseId),
+                Config.query_queue_v2_mem_bytes_per_slot,
                 Config.query_queue_v2_num_rows_per_slot,
-                Config.query_queue_v2_cpu_costs_per_slot);
+                Config.query_queue_v2_cpu_costs_per_slot,
+                estimatorPolicy);
 
         return new QueryQueueOptions(true, v2, policy);
     }
@@ -125,6 +120,7 @@ public class QueryQueueOptions {
     }
 
     public static class V2 {
+        private static final int DEFAULT_CONCURRENCY_LEVEL = 4;
         public static final V2 DEFAULT = new V2();
 
         @SerializedName("NumWorkers")
@@ -143,29 +139,89 @@ public class QueryQueueOptions {
 
         @VisibleForTesting
         V2() {
-            this(1, 1, 1, 1, 1, 1);
+            this(1, 1, 1, 1, 0, 1, 1);
         }
 
         @VisibleForTesting
         V2(int concurrencyLevel, int numWorkers, int numCoresPerWorker, long memLimitBytesPerWorker, int numRowsPerSlot,
                 long cpuCostsPerSlot) {
-            if (concurrencyLevel <= 0) {
-                concurrencyLevel = 4;
-            }
+            this(concurrencyLevel, numWorkers, numCoresPerWorker, memLimitBytesPerWorker, 0,
+                    numRowsPerSlot, cpuCostsPerSlot);
+        }
+
+        @VisibleForTesting
+        V2(int concurrencyLevel, int numWorkers, int numCoresPerWorker, long memLimitBytesPerWorker,
+                long memBytesPerSlot, int numRowsPerSlot, long cpuCostsPerSlot) {
+            this(concurrencyLevel, numWorkers, numCoresPerWorker, memLimitBytesPerWorker, memBytesPerSlot,
+                    numRowsPerSlot, cpuCostsPerSlot, SlotEstimatorFactory.EstimatorPolicy.createDefault());
+        }
+
+        @VisibleForTesting
+        V2(int concurrencyLevel, int numWorkers, int numCoresPerWorker, long memLimitBytesPerWorker,
+                long memBytesPerSlot, int numRowsPerSlot, long cpuCostsPerSlot,
+                SlotEstimatorFactory.EstimatorPolicy estimatorPolicy) {
             int normNumWorkers = Math.max(1, numWorkers);
             int normNumCoresPerWorker = Math.max(1, numCoresPerWorker);
             int normNumRowsPerSlot = Math.max(1, numRowsPerSlot);
             long normCpuCostsPerSlot = Math.max(1, cpuCostsPerSlot);
+            int effectiveConcurrencyLevel = concurrencyLevel <= 0 ? DEFAULT_CONCURRENCY_LEVEL : concurrencyLevel;
+            double capacityRatio = (double) effectiveConcurrencyLevel / DEFAULT_CONCURRENCY_LEVEL;
+            long normMemBytesPerSlot = normalizeMemBytesPerSlot(memBytesPerSlot, memLimitBytesPerWorker,
+                    numCoresPerWorker);
 
             this.numWorkers = normNumWorkers;
             this.numRowsPerSlot = normNumRowsPerSlot;
 
-            this.totalSlots = normNumCoresPerWorker * concurrencyLevel * normNumWorkers;
-            int totalSlotsPerWorker = normNumCoresPerWorker * concurrencyLevel;
-            this.totalSmallSlots = normNumCoresPerWorker;
-            this.memBytesPerSlot = isAnyZero(memLimitBytesPerWorker, numCoresPerWorker) ? Long.MAX_VALUE :
-                    memLimitBytesPerWorker / totalSlotsPerWorker;
+            // SlotSelectionStrategyV2.WeightedRoundRobinQueue computes Utils.log2(totalSlots / numWorkers) and
+            // relies on totalSlots >= numWorkers. A below-default capacity level on a low-core warehouse can
+            // otherwise drive totalSlots under numWorkers (e.g. 3 one-core workers at level 1 => 1), making
+            // numSlotsPerWorker == 0 => log2(0) == -1 => negative/overflowed sub-queue bounds. Clamp to numWorkers.
+            this.totalSlots = Math.max(normNumWorkers, normalizeTotalSlots(estimatorPolicy, normNumWorkers,
+                    normNumCoresPerWorker, memLimitBytesPerWorker, normMemBytesPerSlot, capacityRatio));
+            this.totalSmallSlots = 0;
+            this.memBytesPerSlot = normMemBytesPerSlot;
             this.cpuCostsPerSlot = normCpuCostsPerSlot;
+        }
+
+        private static int normalizeTotalSlots(SlotEstimatorFactory.EstimatorPolicy estimatorPolicy, int numWorkers,
+                                               int numCoresPerWorker, long memLimitBytesPerWorker,
+                                               long memBytesPerSlot, double capacityRatio) {
+            if (estimatorPolicy == SlotEstimatorFactory.EstimatorPolicy.MBE) {
+                return normalizeMemoryTotalSlots(numWorkers, memLimitBytesPerWorker, memBytesPerSlot, capacityRatio);
+            }
+            return normalizeCoreTotalSlots(numWorkers, numCoresPerWorker, capacityRatio);
+        }
+
+        private static int normalizeCoreTotalSlots(int numWorkers, int numCoresPerWorker, double capacityRatio) {
+            double rawTotalSlots = numWorkers * (double) numCoresPerWorker * capacityRatio;
+            if (rawTotalSlots >= Integer.MAX_VALUE) {
+                return Integer.MAX_VALUE;
+            }
+            return Math.max(1, (int) Math.round(rawTotalSlots));
+        }
+
+        private static int normalizeMemoryTotalSlots(int numWorkers, long memLimitBytesPerWorker,
+                                                     long memBytesPerSlot, double capacityRatio) {
+            if (memLimitBytesPerWorker <= 0 || memBytesPerSlot <= 0 || Double.isNaN(capacityRatio)
+                    || capacityRatio <= 0) {
+                return 1;
+            }
+            double rawTotalSlots = numWorkers * (double) memLimitBytesPerWorker * capacityRatio / memBytesPerSlot;
+            if (rawTotalSlots >= Integer.MAX_VALUE) {
+                return Integer.MAX_VALUE;
+            }
+            return Math.max(1, (int) Math.floor(rawTotalSlots));
+        }
+
+        private static long normalizeMemBytesPerSlot(long memBytesPerSlot, long memLimitBytesPerWorker,
+                                                     int numCoresPerWorker) {
+            if (memBytesPerSlot > 0) {
+                return memBytesPerSlot;
+            }
+            if (memLimitBytesPerWorker <= 0 || numCoresPerWorker <= 0) {
+                return Long.MAX_VALUE;
+            }
+            return Math.max(1, memLimitBytesPerWorker / numCoresPerWorker);
         }
 
         public int getNumWorkers() {
@@ -236,10 +292,6 @@ public class QueryQueueOptions {
         public static SchedulePolicy create(String value) {
             return EnumUtils.getEnumIgnoreCase(SchedulePolicy.class, value);
         }
-    }
-
-    private static boolean isAnyZero(long... values) {
-        return Arrays.stream(values).anyMatch(val -> val == 0);
     }
 
     public static int correctSlotNum(int slotNum) {

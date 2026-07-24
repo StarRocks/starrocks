@@ -69,9 +69,11 @@ public class WarehouseQueryQueueOptionsTest {
         GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(warehouseId, "wh10000"));
         connectContext.setCurrentWarehouseId(warehouseId);
 
-        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10003L, 16);
-        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10004L, 16);
-        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10005L, 16);
+        final int numWorkers = 3;
+        final int numCores = 16;
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10003L, numCores);
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10004L, numCores);
+        BackendResourceStat.getInstance().setNumCoresOfBe(warehouseId, 10005L, numCores);
 
         {
             Config.enable_query_queue_v2 = false;
@@ -93,10 +95,15 @@ public class WarehouseQueryQueueOptionsTest {
             assertThat(opts.isEnableQueryQueueV2()).isTrue();
             assertThat(opts.v2()).isNotEqualTo(new QueryQueueOptions.V2());
             QueryQueueOptions.V2 v2 = opts.v2();
-            assertThat(v2.getNumWorkers()).isEqualTo(3);
+            int effectiveConcurrencyLevel = Config.query_queue_v2_concurrency_level <= 0 ? 4 :
+                    Config.query_queue_v2_concurrency_level;
+            double capacityRatio = (double) effectiveConcurrencyLevel / 4;
+
+            assertThat(v2.getNumWorkers()).isEqualTo(numWorkers);
             assertThat(v2.getNumRowsPerSlot()).isEqualTo(Config.query_queue_v2_num_rows_per_slot);
-            assertThat(QueryQueueOptions.correctSlotNum(v2.getTotalSlots())).isEqualTo(48);
-            assertThat(v2.getTotalSmallSlots()).isEqualTo(16);
+            assertThat(QueryQueueOptions.correctSlotNum(v2.getTotalSlots()))
+                    .isEqualTo((int) Math.round(numWorkers * numCores * capacityRatio));
+            assertThat(v2.getTotalSmallSlots()).isZero();
             assertThat(v2.getCpuCostsPerSlot()).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
         }
     }
