@@ -16,13 +16,16 @@
 
 #include <array>
 #include <atomic>
+#include <unordered_map>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -45,6 +48,7 @@
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/inverted/inverted_index_common.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -59,8 +63,11 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/bm25_search_option.h"
 #include "storage_primitive/vector_search_option.h"
+#include "types/datum.h"
 
 namespace starrocks::lake {
 
@@ -787,6 +794,214 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
     ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
     EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+}
+
+// Drive a BM25 score() scan end-to-end through LakeDataSource. Exercises the connector-layer plumbing the
+// existing BM25 unit tests (which drive the storage helpers directly) never reach:
+//   * open(): parse TBM25SearchOptions from the TLakeScanNode thrift into _params.bm25_search_option.
+//   * _init_bm25_stats(): collect the tablet's lake segments and fold Phase-1 stats (build_tablet_bm25_stats).
+//   * init_scanner_columns(): the synthetic __bm25_score slot branch (id == score_slot_id -> index past the
+//     real columns), then read the emitted per-row scores back.
+TEST_F(LakeDataSourceTest, open_with_bm25_search_options) {
+    // 1) A lake tablet whose `doc` VARCHAR column carries a builtin GIN DOCS_AND_FREQS index. No schema_key
+    //    on the scan node, so get_tablet() reads this schema straight from the tablet metadata.
+    auto gin_metadata = std::make_unique<TabletMetadata>();
+    gin_metadata->set_id(next_id());
+    gin_metadata->set_version(1);
+    auto* gin_schema_pb = gin_metadata->mutable_schema();
+    gin_schema_pb->set_id(next_id());
+    gin_schema_pb->set_num_short_key_columns(1);
+    gin_schema_pb->set_keys_type(DUP_KEYS);
+    gin_schema_pb->set_num_rows_per_row_block(65535);
+    gin_schema_pb->set_next_column_unique_id(3);
+    {
+        auto* c0 = gin_schema_pb->add_column();
+        c0->set_unique_id(1);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        c0->set_length(4);
+        c0->set_index_length(4);
+    }
+    {
+        auto* doc = gin_schema_pb->add_column();
+        doc->set_unique_id(2);
+        doc->set_name("doc");
+        doc->set_type("VARCHAR");
+        doc->set_is_key(false);
+        doc->set_is_nullable(true);
+        doc->set_length(1024);
+        doc->set_index_length(4);
+        doc->set_aggregation("NONE");
+    }
+    {
+        // Builtin GIN on `doc`, built the same way a real schema serializes index_properties.
+        TabletIndex props;
+        props.add_common_properties(INVERTED_IMP_KEY, TYPE_BUILTIN);
+        props.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_ENGLISH);
+        props.add_index_properties(INVERTED_INDEX_OPTIONS_KEY, INVERTED_INDEX_OPTIONS_DOCS_AND_FREQS);
+        auto* idx = gin_schema_pb->add_table_indices();
+        idx->set_index_id(1);
+        idx->set_index_name("gin_doc");
+        idx->set_index_type(GIN);
+        idx->add_col_unique_id(2);
+        idx->set_index_properties(props.properties_to_json());
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*gin_metadata));
+
+    // 2) Write text rows through the lake writer; the GIN index is built inline into the segment.
+    auto gin_tablet_schema = TabletSchema::create(*gin_schema_pb);
+    auto chunk_schema = ChunkHelper::convert_schema(gin_tablet_schema);
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(gin_metadata->id()));
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        auto write_segment = [&](const std::vector<std::pair<int32_t, std::string>>& rows) {
+            auto chunk = ChunkFactory::new_chunk(chunk_schema, rows.size());
+            auto cols = chunk->columns();
+            for (const auto& [k, text] : rows) {
+                cols[0]->as_mutable_ptr()->append_datum(Datum(k));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(text)));
+            }
+            ASSERT_OK(writer->write(*chunk));
+            ASSERT_OK(writer->finish());
+        };
+        write_segment({{0, "apple banana apple"}, {1, "banana cherry"}});
+        write_segment({{2, "apple cherry cherry cherry"}});
+
+        auto* rowset = gin_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        rowset->set_num_rows(3);
+        for (const auto& file : writer->segments()) {
+            rowset->add_segment_metas()->set_filename(file.path);
+        }
+        writer->close();
+    }
+    gin_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*gin_metadata));
+
+    // 3) TLakeScanNode with bm25_search_options. is_preaggregation -> skip_aggregation, so reader_columns is
+    //    a copy of scanner_columns and the synthetic score cid never indexes past the tablet schema.
+    constexpr int32_t kScoreSlotId = 2;
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    lake_scan_node.__set_is_preaggregation(true);
+    TBM25SearchOptions bm25;
+    bm25.__set_enable(true);
+    bm25.__set_score_column_name("__bm25_score");
+    bm25.__set_score_slot_id(kScoreSlotId);
+    bm25.__set_k1(1.2);
+    bm25.__set_b(0.75);
+    bm25.__set_topk(0); // score all matched rows
+    TBM25ColumnQuery col_query;
+    col_query.__set_column_id("doc"); // resolved via field_index(column_id)
+    col_query.__set_query("apple cherry");
+    bm25.__set_columns({col_query});
+    lake_scan_node.__set_bm25_search_options(bm25);
+
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    auto runtime_state = create_runtime_state_for_test();
+
+    // 4) Descriptor table: c0 INT, doc VARCHAR, plus the synthetic __bm25_score DOUBLE slot whose id equals
+    //    score_slot_id so init_scanner_columns takes the BM25 synthetic-slot branch for it.
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build();
+    auto slot1 = slot_desc_builder.string_type(1024).column_name("doc").column_pos(1).nullable(true).build();
+    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_DOUBLE)
+                         .column_name("__bm25_score")
+                         .column_pos(2)
+                         .nullable(true)
+                         .build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("bm25_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    // 5) Drive open() -> _init_bm25_stats -> init_scanner_columns.
+    starrocks::connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(gin_metadata->id());
+    internal_scan_range.__set_version(std::to_string(gin_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    ASSIGN_OR_ABORT(auto read_tablet, _tablet_mgr->get_tablet(gin_metadata->id(), gin_metadata->version()));
+    auto lake_rowsets = read_tablet.get_rowsets();
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    base_rowsets.reserve(lake_rowsets.size());
+    for (auto& rs : lake_rowsets) {
+        base_rowsets.emplace_back(rs);
+    }
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    starrocks::connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
+
+    ASSERT_OK(ds.open(runtime_state.get()));
+
+    // open() parsed the option (thrift -> _params.bm25_search_option), _init_bm25_stats folded Phase-1 stats
+    // over all three lake rows.
+    const auto& params = ds.TEST_params();
+    ASSERT_NE(params.bm25_search_option, nullptr);
+    EXPECT_TRUE(params.bm25_search_option->enable);
+    EXPECT_EQ(params.bm25_search_option->column_id, "doc");
+    EXPECT_EQ(params.bm25_search_option->score_slot_id, kScoreSlotId);
+    EXPECT_DOUBLE_EQ(params.bm25_search_option->k1, 1.2);
+    EXPECT_DOUBLE_EQ(params.bm25_search_option->b, 0.75);
+    ASSERT_NE(params.bm25_stats, nullptr);
+    EXPECT_EQ(params.bm25_stats->N, 3);
+
+    // 6) Read the scored rows back: the segment iterator emits the synthetic __bm25_score column per row.
+    std::unordered_map<int32_t, double> k_to_score;
+    while (true) {
+        ChunkPtr chunk;
+        auto st = ds.get_next(runtime_state.get(), &chunk);
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        ASSERT_TRUE(chunk->is_slot_exist(kScoreSlotId)) << "score column not emitted";
+        const auto& c0_col = chunk->get_column_by_slot_id(0);
+        const auto& score_col = chunk->get_column_by_slot_id(kScoreSlotId);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            k_to_score[c0_col->get(i).get_int32()] = score_col->get(i).get_double();
+        }
+    }
+    ASSERT_EQ(3u, k_to_score.size());
+    for (const auto& [k, score] : k_to_score) {
+        EXPECT_GT(score, 0.0) << "row " << k; // every row matches apple or cherry
+    }
+    // Row 2 (apple + cherry x3) carries both query terms most heavily -> the top scorer.
+    EXPECT_GT(k_to_score[2], k_to_score[0]);
+    EXPECT_GT(k_to_score[2], k_to_score[1]);
 }
 
 TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {

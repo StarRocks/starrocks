@@ -1,0 +1,57 @@
+-- name: test_bm25_score_shared_nothing
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+create database bm25_${uuid0};
+-- result:
+-- !result
+use bm25_${uuid0};
+-- result:
+-- !result
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into docs values
+  (1, 'the quick brown fox'),
+  (2, 'the lazy dog'),
+  (3, 'quick quick fox'),
+  (4, 'a slow green turtle');
+-- result:
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'quick fox' ORDER BY score() DESC LIMIT 10;
+-- result:
+3
+1
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'dog' ORDER BY score() DESC LIMIT 10;
+-- result:
+2
+-- !result
+SELECT id, content, round(s, 4) AS s FROM (
+    SELECT id, content, score() AS s FROM docs WHERE content MATCH_ANY 'quick fox' ORDER BY score() DESC LIMIT 2
+) t;
+-- result:
+3	quick quick fox	1.7291
+1	the quick brown fox	1.3098
+-- !result
+DELETE FROM docs WHERE id = 3;
+-- result:
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'quick fox' ORDER BY score() DESC LIMIT 1;
+-- result:
+1
+-- !result
+SELECT count(*) FROM docs WHERE content MATCH_ANY 'zzz';
+-- result:
+0
+-- !result
+drop database bm25_${uuid0};
+-- result:
+-- !result

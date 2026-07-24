@@ -791,6 +791,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.tablet_schema = options.tablet_schema;
     seg_options.use_vector_index = options.use_vector_index;
     seg_options.vector_search_option = options.vector_search_option;
+    seg_options.bm25_search_option = options.bm25_search_option;
+    seg_options.bm25_stats = options.bm25_stats;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;

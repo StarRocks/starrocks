@@ -752,6 +752,13 @@ Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletInd
     return Status::OK();
 }
 
+Status ColumnReader::get_inverted_reader(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                                         const IndexReadOptions& index_opt, InvertedReader** reader) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    *reader = _inverted_index.get();
+    return Status::OK();
+}
+
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
                                           const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
     if (index_meta == nullptr || _inverted_index_loaded()) {

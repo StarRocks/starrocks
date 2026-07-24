@@ -200,6 +200,12 @@ public:
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
+    // Ensure this column's inverted index is loaded (once, cached) and hand back the shared, immutable
+    // InvertedReader itself -- used by BM25 Phase-1 (tablet stats) and Phase-2 (scoring) to read the GIN
+    // reader without minting a query iterator. Shares the same OnceFlag load as new_inverted_index_iterator.
+    Status get_inverted_reader(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts,
+                               const IndexReadOptions& index_opt, InvertedReader** reader);
+
     Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
                                        const SegmentReadOptions& opts, const IndexReadOptions& index_opt);
 

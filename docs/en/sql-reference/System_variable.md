@@ -260,7 +260,7 @@ Used for MySQL client compatibility. No practical usage.
 ### bm25_b
 
 * **Scope**: Session
-* **Description**: The BM25 length-normalization parameter `b` used by the builtin GIN full-text `score()` relevance ranking (enabled by the FE config `enable_experimental_bm25`). Higher values penalize longer documents more. Must be in the range [0, 1].
+* **Description**: The BM25 length-normalization parameter `b` used by the builtin GIN full-text `score()` relevance ranking. Higher values penalize longer documents more. Must be in the range [0, 1].
 * **Default**: 0.75
 * **Data type**: Double
 * **Introduced in**: -
@@ -268,7 +268,7 @@ Used for MySQL client compatibility. No practical usage.
 ### bm25_k1
 
 * **Scope**: Session
-* **Description**: The BM25 term-frequency saturation parameter `k1` used by the builtin GIN full-text `score()` relevance ranking (enabled by the FE config `enable_experimental_bm25`). Higher values let repeated terms keep increasing the score. Must be a finite, non-negative number.
+* **Description**: The BM25 term-frequency saturation parameter `k1` used by the builtin GIN full-text `score()` relevance ranking. Higher values let repeated terms keep increasing the score. Must be a finite, non-negative number.
 * **Default**: 1.2
 * **Data type**: Double
 * **Introduced in**: -

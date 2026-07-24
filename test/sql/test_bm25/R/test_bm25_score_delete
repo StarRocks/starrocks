@@ -1,0 +1,54 @@
+-- name: test_bm25_score_delete @cloud
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+create database bm25_${uuid0};
+-- result:
+-- !result
+use bm25_${uuid0};
+-- result:
+-- !result
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into docs values
+  (1, 'fox'),
+  (2, 'fox jumps'),
+  (3, 'fox jumps over'),
+  (4, 'fox jumps over lazy'),
+  (5, 'fox jumps over lazy dog');
+-- result:
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+-- result:
+1
+2
+3
+-- !result
+DELETE FROM docs WHERE id = 1;
+-- result:
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+-- result:
+2
+3
+4
+-- !result
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 1;
+-- result:
+2
+-- !result
+SELECT count(*) FROM docs WHERE content MATCH_ANY 'fox';
+-- result:
+4
+-- !result
+drop database bm25_${uuid0};
+-- result:
+-- !result

@@ -28,6 +28,7 @@
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/inverted/builtin/builtin_gin_tokenizer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 
 namespace starrocks {
@@ -37,37 +38,24 @@ BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr
                                                            const size_t& segment_rows)
         : SegmentInvertedIndexIterator(index_meta, reader, stats),
           _bitmap_itr(std::move(bitmap_itr)),
-          _segment_rows(segment_rows) {
-    if (_analyser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-        bool lower_case = get_lower_case_from_properties(_index_meta->index_properties());
-        _builtin_query_analyzer = std::make_unique<SimpleAnalyzer>(lower_case);
-    } else if (_analyser_type == InvertedIndexParserType::PARSER_STANDARD) {
-        _query_analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
-    } else if (_analyser_type == InvertedIndexParserType::PARSER_CHINESE) {
-        auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
-        chinese_analyzer->setLanguage(L"cjk");
-        _query_analyzer.reset(chinese_analyzer);
-    }
+          _segment_rows(segment_rows) {}
 
-    if (_query_analyzer != nullptr) {
-        _query_string_reader = std::make_unique<lucene::util::StringReader>(L"");
-    }
-}
-
-Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens) {
+Status tokenize_builtin_gin_query(InvertedIndexParserType parser_type, bool lower_case, const Slice& query,
+                                  std::vector<std::string>* tokens) {
     tokens->clear();
     std::string query_str = query.to_string();
     if (query_str.empty()) {
         return Status::OK();
     }
 
-    switch (_analyser_type) {
+    switch (parser_type) {
     case InvertedIndexParserType::PARSER_NONE:
         tokens->emplace_back(std::move(query_str));
         return Status::OK();
     case InvertedIndexParserType::PARSER_ENGLISH: {
+        SimpleAnalyzer analyzer(lower_case);
         std::vector<SliceToken> slice_tokens;
-        _builtin_query_analyzer->tokenize(query_str.data(), query_str.size(), slice_tokens);
+        analyzer.tokenize(query_str.data(), query_str.size(), slice_tokens);
         tokens->reserve(slice_tokens.size());
         for (const auto& token : slice_tokens) {
             if (!token.empty()) {
@@ -78,10 +66,19 @@ Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& quer
     }
     case InvertedIndexParserType::PARSER_STANDARD:
     case InvertedIndexParserType::PARSER_CHINESE: {
+        std::unique_ptr<lucene::analysis::Analyzer> analyzer;
+        if (parser_type == InvertedIndexParserType::PARSER_STANDARD) {
+            analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
+        } else {
+            auto* chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
+            chinese_analyzer->setLanguage(L"cjk");
+            analyzer.reset(chinese_analyzer);
+        }
+        auto string_reader = std::make_unique<lucene::util::StringReader>(L"");
         try {
             std::wstring wquery = boost::locale::conv::utf_to_utf<TCHAR>(query_str);
-            _query_string_reader->init(wquery.c_str(), wquery.size(), false);
-            auto stream = _query_analyzer->reusableTokenStream(L"", _query_string_reader.get());
+            string_reader->init(wquery.c_str(), wquery.size(), false);
+            auto stream = analyzer->reusableTokenStream(L"", string_reader.get());
             lucene::analysis::Token token;
             while (stream->next(&token)) {
                 if (token.termLength() == 0) {
@@ -94,13 +91,18 @@ Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& quer
             return Status::InvalidArgument(fmt::format("Invalid UTF-8 query for inverted index: {}", e.what()));
         } catch (const std::exception& e) {
             return Status::InternalError(fmt::format("Failed to tokenize inverted index query with parser {}: {}",
-                                                     inverted_index_parser_type_to_string(_analyser_type), e.what()));
+                                                     inverted_index_parser_type_to_string(parser_type), e.what()));
         }
         return Status::OK();
     }
     default:
         return Status::NotSupported("Unsupported parser type for builtin inverted query tokenization");
     }
+}
+
+Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens) {
+    const bool lower_case = get_lower_case_from_properties(_index_meta->index_properties());
+    return tokenize_builtin_gin_query(_analyser_type, lower_case, query, tokens);
 }
 
 std::string get_next_prefix(const Slice& prefix_s) {

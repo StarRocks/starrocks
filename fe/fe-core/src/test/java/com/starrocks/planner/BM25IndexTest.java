@@ -42,7 +42,6 @@ public class BM25IndexTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        Config.enable_experimental_bm25 = true;
         Config.enable_experimental_gin = true;
         FeConstants.enablePruneEmptyOutputScan = false;
 
@@ -343,48 +342,23 @@ public class BM25IndexTest extends PlanTestBase {
     }
 
     @Test
-    public void testFeatureFlagOffRejected() {
-        Config.enable_experimental_bm25 = false;
-        try {
-            String sql = "select id, score() from test.test_bm25 "
-                    + "where content MATCH_ANY 'starrocks' order by score() desc limit 10";
-            assertThatThrownBy(() -> getVerboseExplain(sql))
-                    .isInstanceOf(SemanticException.class)
-                    .hasMessageContaining("not enabled");
-        } finally {
-            Config.enable_experimental_bm25 = true;
-        }
-    }
-
-    @Test
-    public void testFeatureFlagOffRejectedOutsideSelectBlock() {
+    public void testScoreOutsideSelectBlockRejected() {
         // Bm25ScoreValidator only runs on SelectRelation. score() reaching a context it does not see --
-        // here an INSERT ... VALUES row (a ValuesRelation) -- is rejected during analysis regardless of
-        // the flag, rather than surviving to fail later against its nullptr BE implementation. With the
-        // flag off it must still be rejected.
-        Config.enable_experimental_bm25 = false;
-        try {
-            String sql = "insert into test.test_bm25 (id) values (score())";
-            assertThatThrownBy(() -> getFragmentPlan(sql))
-                    .isInstanceOf(SemanticException.class)
-                    .hasMessageContaining("score()");
-        } finally {
-            Config.enable_experimental_bm25 = true;
-        }
+        // here an INSERT ... VALUES row (a ValuesRelation) -- is rejected during analysis, rather than
+        // surviving to fail later against its nullptr BE implementation.
+        String sql = "insert into test.test_bm25 (id) values (score())";
+        assertThatThrownBy(() -> getFragmentPlan(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("score()");
     }
 
     @Test
-    public void testScoreWithArgumentsIsNotTreatedAsBm25Gate() {
-        // score(col) has arguments, so it is a user function, not the zero-arg BM25 builtin. With the
-        // feature off it must NOT be captured by the BM25 gate (which would wrongly say "not enabled");
-        // it just fails to resolve as an unknown function signature instead.
-        Config.enable_experimental_bm25 = false;
-        try {
-            assertThatThrownBy(() -> getFragmentPlan("select score(id) from test.test_bm25"))
-                    .satisfies(e -> assertThat(e.getMessage()).doesNotContain("not enabled"));
-        } finally {
-            Config.enable_experimental_bm25 = true;
-        }
+    public void testScoreWithArgumentsIsNotBm25Builtin() {
+        // score(col) has arguments, so it is a user function, not the zero-arg BM25 builtin
+        // (isBM25ScoreCall requires zero args): it must NOT be captured by the BM25 shape validator, and
+        // just fails to resolve as an unknown function signature instead.
+        assertThatThrownBy(() -> getFragmentPlan("select score(id) from test.test_bm25"))
+                .satisfies(e -> assertThat(e.getMessage()).doesNotContain("MATCH"));
     }
 
     @Test

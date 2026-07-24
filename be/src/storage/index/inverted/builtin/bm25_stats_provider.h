@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "base/string/slice.h"
@@ -25,6 +26,10 @@
 namespace starrocks {
 
 class BuiltinInvertedReader;
+class Segment;
+class TabletSchema;
+struct OlapReaderStatistics;
+struct LakeIOOptions;
 
 // I4: produces tablet-local BM25Stats. Abstract so the delivery mechanism (tablet-local now, global
 // DFS later) can change without touching the scorer.
@@ -62,5 +67,15 @@ private:
     double _k1;
     double _b;
 };
+
+// Storage-agnostic BM25 Phase-1, shared by the lake and local scan paths: resolve the GIN column, tokenize
+// the query with the index analyzer, open each segment's GIN reader, and fold N/avgdl/idf via
+// TabletLocalProvider. `segments` is the tablet's full set at the query version -- the one storage-specific
+// step the caller supplies. An empty/stopword-only query yields empty N/avgdl/idf (every score is then 0).
+StatusOr<std::shared_ptr<BM25Stats>> build_tablet_bm25_stats(const TabletSchema& tablet_schema,
+                                                             const BM25SearchOption& option,
+                                                             const std::vector<std::shared_ptr<Segment>>& segments,
+                                                             const LakeIOOptions& lake_io_opts, bool use_page_cache,
+                                                             OlapReaderStatistics* stats);
 
 } // namespace starrocks

@@ -58,8 +58,12 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/extends_column_utils.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/index/inverted/builtin/bm25_stats_provider.h"
 #include "storage/metadata_util.h"
+#include "storage/options.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/rowset.h"
+#include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
 #include "storage_primitive/projection_iterator.h"
@@ -305,6 +309,25 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
     }
+    // BM25 scoring (builtin GIN), shared-nothing path. Mirrors LakeDataSource: v1 carries one MATCH column,
+    // so read columns[0]. Only the request is carried here; the tablet-local Phase-1 stats are computed later
+    // (in _init_olap_reader, once the rowsets are known) via the shared build_tablet_bm25_stats.
+    if (thrift_olap_scan_node.__isset.bm25_search_options && thrift_olap_scan_node.bm25_search_options.enable &&
+        !thrift_olap_scan_node.bm25_search_options.columns.empty()) {
+        const auto& bm25 = thrift_olap_scan_node.bm25_search_options;
+        const auto& column = bm25.columns[0];
+        auto option = std::make_shared<BM25SearchOption>();
+        option->enable = true;
+        option->query = column.query;
+        option->column_id = column.column_id;
+        option->score_column_name = bm25.score_column_name;
+        option->score_slot_id = bm25.score_slot_id;
+        option->k1 = bm25.k1;
+        option->b = bm25.b;
+        option->topk = bm25.topk;
+        _params.bm25_search_option = std::move(option);
+    }
+
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
@@ -386,6 +409,12 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
             _params.vector_search_option->vector_slot_id = slot->id();
+        } else if (_params.bm25_search_option != nullptr && _params.bm25_search_option->enable &&
+                   slot->id() == _params.bm25_search_option->score_slot_id) {
+            // Synthetic __bm25_score column: not a real tablet column, so it has no field_index. Give it an
+            // index past the real columns -- Schema(cids) drops any cid beyond the tablet schema (kept out of
+            // the storage read); the segment iterator computes the score and appends it (like the vector column).
+            index = _tablet_schema->num_columns();
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
@@ -609,6 +638,22 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<RowsetSharedPtr> rowsets;
     for (auto& rowset : _morsel->rowsets()) {
         rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+    }
+
+    // BM25 Phase-1 (shared-nothing): compute tablet-local stats over the same rowsets this scan reads, before
+    // _reader->open consumes them. Shared with the lake path via build_tablet_bm25_stats; only obtaining the
+    // segments differs (local rowsets, loaded on demand -- Rowset::load() is idempotent).
+    if (_params.bm25_search_option != nullptr && _params.bm25_search_option->enable) {
+        std::vector<SegmentSharedPtr> segments;
+        for (const auto& rowset : rowsets) {
+            RETURN_IF_ERROR(rowset->load());
+            auto segs = rowset->get_segments();
+            segments.insert(segments.end(), segs.begin(), segs.end());
+        }
+        OlapReaderStatistics phase1_stats;
+        ASSIGN_OR_RETURN(_params.bm25_stats,
+                         build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments,
+                                                 LakeIOOptions{}, _params.use_page_cache, &phase1_stats));
     }
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),

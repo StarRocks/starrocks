@@ -55,6 +55,9 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/builtin/bm25_scorer.h"
+#include "storage/index/inverted/builtin/bm25_wand_scorer.h"
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -330,6 +333,18 @@ private:
         bool always_build_rowid() const { return use_vector_index && !refine_distance; }
     };
 
+    // BM25 relevance-scoring context, only created when a BM25 search option is present. Phase-2:
+    // after the MATCH filter fixes the survivor rowids, ScoreAllScorer fills id2score_map, then the
+    // __bm25_score column is emitted per output chunk.
+    struct BM25Context {
+        std::unordered_map<rowid_t, double> id2score_map;
+        BM25Stats stats;               // tablet-local Phase-1 result (N/avgdl/idf/terms), injected via read opts
+        SlotId score_slot_id = -1;     // output slot the synthesized score column fills
+        int index_column_id = -1;      // column uid whose builtin GIN index carries the freqs
+        std::string score_column_name; // "__bm25_score"
+        int64_t topk = 0;              // LIMIT+OFFSET pushed from the FE; 0 = keep/emit all scored rows
+    };
+
     // Inverted index related context, only created when needed
     struct InvertedIndexContext {
         InvertedIndexContext() = default;
@@ -444,6 +459,8 @@ private:
     Status _encode_to_global_id(ScanContext* ctx);
 
     FieldPtr _make_field(size_t i);
+    // BM25 Phase-2: after the MATCH filter fixes survivors, score them into _bm25_ctx->id2score_map.
+    Status _apply_bm25_scoring();
 
     Status _switch_context(ScanContext* to);
 
@@ -464,7 +481,8 @@ private:
     Status _apply_del_vector();
     // Fold the non-PK delete survivors into _scan_range BEFORE _rewrite_predicates, so a rank-truncating
     // ANN search ranks live rows only. Evaluates the original (un-rewritten) predicates over decoded values
-    // -- no global-dict-code wrapping, no dict/raw mismatch. Vector queries only (_del_predicate_preapplied).
+    // -- no global-dict-code wrapping, no dict/raw mismatch. Runs for a vector (ANN) or BM25 top-k query
+    // (whenever _del_predicate_preapplied is set).
     Status _apply_del_predicate();
 
     Status _init_inverted_index_iterators();
@@ -550,7 +568,7 @@ private:
     // True for a vector (ANN) query on a table carrying non-PK delete predicates: the delete survivors are
     // folded into _scan_range up front by _apply_del_predicate, so the ANN search, the PRE gates and the
     // exact rescan see live rows only. It also tells the read loop to skip its (now redundant) per-chunk
-    // delete evaluation. False for non-vector scans (they rely on the read loop's per-chunk filter).
+    // delete evaluation. False for scans without a top-k pushdown (they rely on the read loop's per-chunk filter).
     bool _del_predicate_preapplied = false;
 
     Status _get_del_vec_st;
@@ -605,6 +623,7 @@ private:
 
     // Vector index context - only created when needed
     std::unique_ptr<VectorIndexContext> _vector_index_ctx;
+    std::unique_ptr<BM25Context> _bm25_ctx;
 
     // Inverted index context - only created when needed
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
@@ -877,10 +896,14 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
-    // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
-    // before the search. For the lake split-child path (precomputed scan range) this stays true because
-    // the seed already applied it to the range the child inherits.
-    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
+    // A vector (ANN) query and a BM25 top-k pushdown both truncate candidates by rank, so both must fold
+    // deletes into _scan_range before the search (else a deleted row holds a top-k slot and the LIMIT under-
+    // returns). Running before _rewrite_predicates keeps the predicates original-typed, so _apply_del_predicate
+    // matches decoded column values -- no global-dict mismatch. The lake split-child inherits it from the seed.
+    _del_predicate_preapplied =
+            !_opts.delete_predicates.empty() &&
+            (_opts.use_vector_index || (_opts.bm25_search_option != nullptr && _opts.bm25_search_option->enable &&
+                                        _opts.bm25_search_option->topk > 0));
     // Initialize vector index context only when needed
     if (_opts.use_vector_index) {
         _vector_index_ctx = std::make_unique<VectorIndexContext>();
@@ -909,6 +932,26 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
                 .elem_type = tenann::PrimitiveType::kFloatType};
 #endif
     }
+
+    // Initialize BM25 scoring context (lightweight; the actual scoring runs in _init_internal after the
+    // MATCH filter). Stats come from Phase-1 (injected via read options).
+    if (_opts.bm25_search_option != nullptr && _opts.bm25_search_option->enable) {
+        _bm25_ctx = std::make_unique<BM25Context>();
+        _bm25_ctx->score_slot_id = _opts.bm25_search_option->score_slot_id;
+        // Resolve the FE's column_id to the column unique id (field_index -> column -> unique id) against
+        // this segment's schema; each phase re-resolves from column_id independently, not via the option.
+        const auto& seg_schema = _segment->tablet_schema();
+        const size_t bm25_field_idx = seg_schema.field_index(_opts.bm25_search_option->column_id);
+        if (bm25_field_idx < seg_schema.num_columns()) {
+            _bm25_ctx->index_column_id = seg_schema.column(bm25_field_idx).unique_id();
+        }
+        _bm25_ctx->score_column_name = _opts.bm25_search_option->score_column_name;
+        _bm25_ctx->topk = _opts.bm25_search_option->topk;
+        if (_opts.bm25_stats != nullptr) {
+            _bm25_ctx->stats = *_opts.bm25_stats;
+        }
+    }
+
     // For small segment file (the number of rows is less than chunk_size),
     // the segment iterator will reserve a large amount of memory,
     // especially when there are many columns, many small files, many versions,
@@ -985,7 +1028,10 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     // Recompute from the reuse-time options: this flag licenses skipping the read loop's per-chunk delete
     // filter, so it must track the current delete_predicates, not the ctor-time ones (a reuse with a
     // different delete-predicate set would otherwise skip filtering on a non-delete-narrowed range).
-    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
+    _del_predicate_preapplied =
+            !_opts.delete_predicates.empty() &&
+            (_opts.use_vector_index || (_opts.bm25_search_option != nullptr && _opts.bm25_search_option->enable &&
+                                        _opts.bm25_search_option->topk > 0));
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
@@ -1063,7 +1109,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
             RETURN_IF_ERROR(_apply_del_vector());
         }
         // After the index filters (smallest candidate) and before _rewrite_predicates (predicates still
-        // original-typed). ANN queries only.
+        // original-typed). ANN and BM25 top-k queries.
         if (_del_predicate_preapplied) {
             RETURN_IF_ERROR(_apply_del_predicate());
         }
@@ -1089,6 +1135,10 @@ Status SegmentIterator::_init_scan_range_and_context() {
     }
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
+
+    // BM25 scoring: the MATCH filter above has fixed the survivor rowids in _scan_range; score them
+    // now (once), before the range is split/reversed for the read loop.
+    RETURN_IF_ERROR(_apply_bm25_scoring());
 
     // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
     if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
@@ -1116,6 +1166,12 @@ Status SegmentIterator::_init_reused_scan() {
     _cur_rowid = 0;
     if (_vector_index_ctx) {
         _vector_index_ctx->id2distance_map.clear();
+    }
+    if (_bm25_ctx) {
+        // Must clear before the reused scan re-scores: ScoreAllScorer/WandScorer accumulate into
+        // id2score_map (and topk-trim over the whole map), so stale entries from the previous split
+        // child would pollute this child's top-k selection.
+        _bm25_ctx->id2score_map.clear();
     }
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
@@ -1176,7 +1232,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     // Fold non-PK delete survivors into the prepared range so split children inherit a delete-free range
-    // (ANN only). No _rewrite_predicates runs on this path, so the predicates are already original-typed.
+    // (ANN and BM25 top-k). No _rewrite_predicates runs on this path, so the predicates are already original-typed.
     if (_del_predicate_preapplied) {
         RETURN_IF_ERROR(_apply_del_predicate());
     }
@@ -2747,6 +2803,9 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
         p_rowids = &_inverted_index_ctx->rowid_buffer;
     } else if (_vector_index_ctx && _vector_index_ctx->always_build_rowid()) {
         p_rowids = &local_rowids;
+    } else if (_bm25_ctx != nullptr) {
+        // BM25 needs each output row's rowid to look up its score in id2score_map.
+        p_rowids = &local_rowids;
     }
     do {
         st = _do_get_next(chunk, p_rowids);
@@ -2977,6 +3036,36 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     if (_context->_has_force_dict_encode) {
         RETURN_IF_ERROR(_encode_to_global_id(_context));
         chunk = _context->_adapt_global_dict_chunk.get();
+    }
+
+    if (_bm25_ctx != nullptr) {
+        DCHECK(rowid != nullptr);
+        DoubleColumn::MutablePtr score_column = DoubleColumn::create();
+        score_column->reserve(rowid->size());
+        for (const auto& rid : *rowid) {
+            auto it = _bm25_ctx->id2score_map.find(rid);
+            // A survivor with none of the query terms scores 0 (it passed a non-MATCH predicate).
+            score_column->append(it != _bm25_ctx->id2score_map.end() ? it->second : 0.0);
+        }
+        // append_vector_column check_or_die's every column, but a pruned/internal column (an index-served
+        // predicate column whose read was skipped, or one not carried into the global-dict chunk) can be
+        // shorter than the chunk -- pad it to the row count first or check_or_die aborts the BE.
+        const size_t bm25_nrows = chunk->num_rows();
+        for (const auto& col : chunk->columns()) {
+            if (col->size() < bm25_nrows) {
+                col->as_mutable_raw_ptr()->resize(bm25_nrows);
+            }
+        }
+        // The synthesized score column has no storage column id; pick a small free cid for this chunk
+        // (append_vector_column keys placement on the slot id, but needs a unique field id, and a huge
+        // sentinel would blow up max_column_id-based vector sizing).
+        ColumnId score_cid = static_cast<ColumnId>(std::max(0, _bm25_ctx->index_column_id));
+        while (chunk->is_cid_exist(score_cid)) {
+            ++score_cid;
+        }
+        auto field =
+                std::make_shared<Field>(score_cid, _bm25_ctx->score_column_name, get_type_info(TYPE_DOUBLE), false);
+        chunk->append_vector_column(std::move(score_column), field, _bm25_ctx->score_slot_id);
     }
 
     if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
@@ -3234,6 +3323,87 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(v
 FieldPtr SegmentIterator::_make_field(size_t i) {
     DCHECK(_vector_index_ctx != nullptr);
     return std::make_shared<Field>(i, _vector_index_ctx->vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
+}
+
+Status SegmentIterator::_apply_bm25_scoring() {
+    if (_bm25_ctx == nullptr || _scan_range.empty()) {
+        return Status::OK();
+    }
+    // The ctor leaves index_column_id at -1 when the BM25 column_id is absent from this segment's schema.
+    // Guard before get_inverted_reader(uint32_t) silently turns -1 into UINT32_MAX and reports a lookup
+    // for the wrong key. (MATCH resolves the same column_id, so a non-empty scan range here means the
+    // column exists; a negative id is an inconsistent state worth surfacing.)
+    if (_bm25_ctx->index_column_id < 0) {
+        return Status::InternalError(fmt::format("BM25 scoring: column_id {} not present in segment {} schema",
+                                                 _opts.bm25_search_option->column_id, _segment->file_name()));
+    }
+    // Open (once, cached) this segment's builtin GIN reader for the index column via its own file
+    // handle. The reader load is shared with the MATCH path through the ColumnReader OnceFlag.
+    ASSIGN_OR_RETURN(auto rfile, _segment->new_segment_read_file(_opts.lake_io_opts));
+    IndexReadOptions index_opts;
+    index_opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
+    index_opts.lake_io_opts = _opts.lake_io_opts;
+    index_opts.read_file = rfile.get();
+    index_opts.stats = _opts.stats;
+    index_opts.segment_rows = _segment->num_rows();
+
+    InvertedReader* raw = nullptr;
+    RETURN_IF_ERROR(_segment->get_inverted_reader(_bm25_ctx->index_column_id, _opts, index_opts, &raw));
+    if (raw == nullptr) {
+        return Status::InternalError(fmt::format("BM25 scoring: column uid {} has no builtin GIN index in segment {}",
+                                                 _bm25_ctx->index_column_id, _segment->file_name()));
+    }
+    auto* reader = down_cast<BuiltinInvertedReader*>(raw);
+    if (!reader->has_freqs()) {
+        return Status::InternalError(
+                "BM25 scoring requires index_options=DOCS_AND_FREQS but the segment was built with DOCS only");
+    }
+    ASSIGN_OR_RETURN(auto freqs, reader->new_freqs_iterator(index_opts));
+
+    // Resolve the (already tokenized in Phase-1) query terms to this segment's dict ordinals.
+    std::vector<Slice> term_slices(_bm25_ctx->stats.terms.begin(), _bm25_ctx->stats.terms.end());
+    std::vector<int64_t> ordinals;
+    RETURN_IF_ERROR(reader->lookup_term_ordinals(index_opts, term_slices, &ordinals));
+
+    // _scan_range already excludes deleted rows: for a top-k pushdown _apply_del_predicate folded the delete
+    // survivors in before _rewrite_predicates (so WAND ranks live rows only and the LIMIT holds real
+    // survivors), and PK delete vectors were applied earlier. A score-all query (topk == 0) does not narrow,
+    // so it needs no pre-apply -- the read loop's per-chunk filter still removes deleted rows.
+    roaring::Roaring candidates = range2roaring(_scan_range);
+    // Top-k pushdown also requires the MATCH filter to have narrowed _scan_range. With enable_gin_filter off,
+    // _apply_inverted_index skipped the index and left MATCH residual (evaluated per-chunk), so a MATCH_ALL row
+    // matching only some terms could take a top-k slot and then be dropped -> under-return. Fall back to score-
+    // all there and let the residual MATCH + coordinator TopN pick the top-k.
+    const bool topk_pushdown = _bm25_ctx->topk > 0 && _opts.enable_gin_filter;
+
+    // Pushdown on: block-max WAND skips rows that cannot enter this segment's top-k. Otherwise (score-all --
+    // projected score() without LIMIT, or the gin-off fallback): plain TAAT scorer over every matched row.
+    // Both are BM25Scorer::run() and return identical scores.
+    std::unique_ptr<BM25Scorer> scorer;
+    if (topk_pushdown) {
+        // shared_threshold lets each segment seed its WAND pruning bound from earlier segments' k-th best
+        // (one atomic per tablet, created in Phase-1); null falls back to per-segment pruning.
+        scorer = std::make_unique<WandScorer>(_bm25_ctx->stats, freqs.get(), index_opts, std::move(ordinals),
+                                              &candidates, _bm25_ctx->topk, _bm25_ctx->stats.shared_threshold.get());
+    } else {
+        // topk=0: ScoreAllScorer trims id2score to _topk when _topk>0, which would re-drop real MATCH_ALL rows
+        // in the gin-off fallback -- pass 0 so every matched row is scored and the coordinator TopN takes the limit.
+        scorer = std::make_unique<ScoreAllScorer>(_bm25_ctx->stats, freqs.get(), index_opts, std::move(ordinals),
+                                                  &candidates, /*topk=*/0);
+    }
+    RETURN_IF_ERROR(scorer->run(&_bm25_ctx->id2score_map));
+
+    // Top-k pushdown: the scorer kept only this segment's top-k rows by score, so narrow _scan_range to
+    // those rows -- the scan reads/emits only the top-k, not every matched row (the coordinator TopN still
+    // merges across segments). candidates came from the delete-narrowed _scan_range, so all are live.
+    if (topk_pushdown) {
+        roaring::Roaring topk_ids;
+        for (const auto& kv : _bm25_ctx->id2score_map) {
+            topk_ids.add(kv.first);
+        }
+        _scan_range = _scan_range.intersection(roaring2range(topk_ids));
+    }
+    return Status::OK();
 }
 
 FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Column* vector_column) {

@@ -290,15 +290,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否支持 DECIMAL V3 数据类型。
 - 引入版本: -
 
-### `enable_experimental_bm25`
-
-- 默认值: false
-- 类型: Boolean
-- 单位: -
-- 是否可变: Yes
-- 描述: 是否启用实验性的 BM25 全文相关性排序。启用后，可在形如 `SELECT ... WHERE <col> MATCH_ANY|MATCH_ALL '<query>' ORDER BY score() [DESC] LIMIT <n>` 的单表全文 top-N 查询中使用零参函数 `score()`，其中 MATCH 列须建有 `index_options='DOCS_AND_FREQS'` 的 GIN 索引。禁用（默认）时，任何对 `score()` 的使用都会报错。
-- 引入版本: -
-
 ### `enable_experimental_mv`
 
 - 默认值: true

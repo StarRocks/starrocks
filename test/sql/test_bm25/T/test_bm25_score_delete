@@ -1,0 +1,47 @@
+-- name: test_bm25_score_delete @cloud
+-- Regression: a DELETE ... WHERE on a duplicate-key builtin GIN table produces a condition-based delete
+-- predicate that the read loop applies AFTER the BM25 top-k pushdown narrows the scan. If a deleted row
+-- occupies a segment's top-k by score, the pushdown must drop it before ranking; otherwise the delete
+-- filter removes it only after lower-scoring live rows were already pruned and the LIMIT under-returns.
+-- score() is enabled by default; the GIN index feature still needs its FE config.
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+create database bm25_${uuid0};
+use bm25_${uuid0};
+
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Every row contains 'fox' exactly once; shorter documents score higher (BM25 length normalization), so the
+-- score ranking for 'fox' is strictly id 1 > 2 > 3 > 4 > 5.
+insert into docs values
+  (1, 'fox'),
+  (2, 'fox jumps'),
+  (3, 'fox jumps over'),
+  (4, 'fox jumps over lazy'),
+  (5, 'fox jumps over lazy dog');
+
+-- Baseline ranking before the delete: the top-3 is 1, 2, 3.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+
+-- Delete the top-scoring row. On a duplicate-key table this is a condition-based delete predicate evaluated
+-- at read time, not a primary-key delete vector.
+DELETE FROM docs WHERE id = 1;
+
+-- After deleting the #1 row the top-3 live rows are 2, 3, 4 -- and there must be 3 of them. Before the fix
+-- the segment top-k was computed over all 5 rows (including the deleted #1), so the delete filter left only
+-- {2, 3} and this query under-returned 2 rows instead of 3.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 3;
+
+-- The deleted row must never surface even when it would top the ranking.
+SELECT id FROM docs WHERE content MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 1;
+
+-- Sanity: the four live rows still match.
+SELECT count(*) FROM docs WHERE content MATCH_ANY 'fox';
+
+drop database bm25_${uuid0};

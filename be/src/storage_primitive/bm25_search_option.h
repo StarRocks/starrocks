@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,6 +33,10 @@ struct BM25Stats {
                                     // to each segment's dict ordinals. Tokenized once in Phase-1.
     double k1 = 1.2;                // term-frequency saturation
     double b = 0.75;                // length normalization
+    // WAND cross-segment pruning threshold shared by every WandScorer of one tablet scan (created in
+    // Phase-1). A runtime monotonic max of each segment's k-th best score, not a corpus statistic: each
+    // segment seeds its bound from it and publishes its k-th best back. Null = per-segment pruning.
+    std::shared_ptr<std::atomic<double>> shared_threshold;
 };
 using BM25StatsPtr = std::shared_ptr<BM25Stats>;
 

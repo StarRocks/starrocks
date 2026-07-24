@@ -356,6 +356,8 @@ Status Rowset::init_segment_read_options(const RowsetReadOptions& options, const
     segment_options->column_access_paths = options.column_access_paths;
     segment_options->use_vector_index = options.use_vector_index;
     segment_options->vector_search_option = options.vector_search_option;
+    segment_options->bm25_search_option = options.bm25_search_option;
+    segment_options->bm25_stats = options.bm25_stats;
     segment_options->belonged_to_cloud_native = true;
     segment_options->has_preaggregation = options.has_preaggregation;
     segment_options->sample_options = options.sample_options;

@@ -267,6 +267,7 @@ SET(DW_TEST_FILES
     ./storage/index/block_posting_test.cpp
     ./storage/index/builtin_gin_freqs_test.cpp
     ./storage/index/bm25_scoring_test.cpp
+    ./storage/index/bm25_stats_provider_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
@@ -376,6 +377,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/bm25_segment_scoring_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp

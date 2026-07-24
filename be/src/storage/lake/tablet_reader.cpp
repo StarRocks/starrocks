@@ -663,6 +663,8 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
     options->column_access_paths = params.column_access_paths;
     options->use_vector_index = params.use_vector_index;
     options->vector_search_option = params.vector_search_option;
+    options->bm25_search_option = params.bm25_search_option;
+    options->bm25_stats = params.bm25_stats;
     options->sample_options = params.sample_options;
     options->has_preaggregation = true;
     if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {

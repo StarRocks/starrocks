@@ -1,0 +1,44 @@
+-- name: test_bm25_score @cloud
+-- BM25 relevance scoring on a shared-data (lake) builtin GIN index (index_options=docs_and_freqs).
+-- Exercises the full BE execution layer: Phase-1 tablet-local stats + Phase-2 scoring + __bm25_score.
+-- score() is enabled by default; the GIN index feature still needs its FE config.
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+create database bm25_${uuid0};
+use bm25_${uuid0};
+
+CREATE TABLE docs (
+    id INT NOT NULL,
+    content VARCHAR(65533) NOT NULL,
+    INDEX idx_content (content) USING GIN ("imp_lib" = "builtin", "parser" = "english", "index_options" = "docs_and_freqs")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into docs values
+  (1, 'the quick brown fox'),
+  (2, 'the lazy dog'),
+  (3, 'quick quick fox'),
+  (4, 'a slow green turtle');
+
+-- Ranking: doc 3 (quick x2 + fox) outranks doc 1 (quick + fox); docs 2/4 do not match. score() is a
+-- real per-row DOUBLE fed to the TopN. The supported shape is a single bare score() ORDER BY key; the
+-- two matched docs have distinct scores, so the DESC order is deterministic without a tie-breaker.
+SELECT id FROM docs WHERE content MATCH_ANY 'quick fox' ORDER BY score() DESC LIMIT 10;
+
+-- Single-term query returns only the matching row.
+SELECT id FROM docs WHERE content MATCH_ANY 'dog' ORDER BY score() DESC LIMIT 10;
+
+-- Projected score() alongside a large text column (late materialization defers `content` to a FetchNode
+-- above the TopN, so only the top-k rows read it). score() must appear as a bare call -- the BM25 plan
+-- rewrite only substitutes a bare score(), so a wrapped score() like round() survives it and is rejected
+-- before execution -- so the BM25 top-N runs in the inner query and the outer query rounds the
+-- materialized score column for a stable recorded result.
+SELECT id, content, round(s, 4) AS s FROM (
+    SELECT id, content, score() AS s FROM docs WHERE content MATCH_ANY 'quick fox' ORDER BY score() DESC LIMIT 2
+) t;
+
+-- A term absent from the corpus matches nothing.
+SELECT count(*) FROM docs WHERE content MATCH_ANY 'zzz';
+
+drop database bm25_${uuid0};

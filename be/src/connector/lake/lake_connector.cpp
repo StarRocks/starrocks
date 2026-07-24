@@ -43,6 +43,7 @@
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
+#include "gutil/casts.h"
 #include "platform/key_cache.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
@@ -50,6 +51,10 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/index/inverted/builtin/bm25_stats_provider.h"
+#include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -58,9 +63,11 @@
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/bm25_search_option.h"
 #include "storage_primitive/projection_iterator.h"
 #include "storage_primitive/vector_search_option.h"
 
@@ -184,6 +191,26 @@ Status LakeDataSource::open(RuntimeState* state) {
             _vector_slot_id = vector_search_options.vector_slot_id;
             _params.vector_search_option = std::make_shared<VectorSearchOption>();
         }
+    }
+
+    // BM25 relevance scoring (builtin GIN). v1 carries exactly one MATCH column (constraint C2), so we
+    // read columns[0]. The tablet-local Phase-1 stats are computed later at scan setup and injected via
+    // SegmentReadOptions; here we only carry the request down through TabletReaderParams.
+    if (thrift_lake_scan_node.__isset.bm25_search_options && thrift_lake_scan_node.bm25_search_options.enable &&
+        !thrift_lake_scan_node.bm25_search_options.columns.empty()) {
+        const auto& bm25 = thrift_lake_scan_node.bm25_search_options;
+        const auto& column = bm25.columns[0];
+        auto option = std::make_shared<BM25SearchOption>();
+        option->enable = true;
+        option->query = column.query;
+        // Stable column id; resolved to the column's unique id in _init_bm25_stats (needs _tablet_schema).
+        option->column_id = column.column_id;
+        option->score_column_name = bm25.score_column_name;
+        option->score_slot_id = bm25.score_slot_id;
+        option->k1 = bm25.k1;
+        option->b = bm25.b;
+        option->topk = bm25.topk;
+        _params.bm25_search_option = std::move(option);
     }
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
@@ -411,6 +438,12 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
             _params.vector_search_option->vector_slot_id = slot->id();
+        } else if (_params.bm25_search_option != nullptr && _params.bm25_search_option->enable &&
+                   slot->id() == _params.bm25_search_option->score_slot_id) {
+            // Synthetic __bm25_score column: not a real tablet column, so it has no field_index. Give it an
+            // index past the real columns -- Schema(cids) drops any cid beyond the tablet schema (kept out of
+            // the storage read); the segment iterator computes the score and appends it (like the vector column).
+            index = _tablet_schema->num_columns();
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
@@ -578,6 +611,27 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     return Status::OK();
 }
 
+Status LakeDataSource::_init_bm25_stats() {
+    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
+        return Status::OK();
+    }
+    // Phase-1 over the FULL version rowsets (not the morsel's rowid subset): the tablet-local IDF barrier
+    // must see every segment. Reader loads are shared via the metacache + ColumnReader OnceFlag. The storage-
+    // agnostic resolve/tokenize/fold is shared with the local path via build_tablet_bm25_stats; only the
+    // segment set differs (lake rowsets here vs local rowsets in OlapChunkSource).
+    std::vector<SegmentSharedPtr> segments;
+    for (const auto& rowset : lake::Rowset::get_rowsets(_provider->tablet_manager(), _tablet.metadata())) {
+        auto segs = rowset->get_segments();
+        segments.insert(segments.end(), segs.begin(), segs.end());
+    }
+
+    OlapReaderStatistics phase1_stats;
+    ASSIGN_OR_RETURN(_params.bm25_stats,
+                     build_tablet_bm25_stats(*_tablet_schema, *_params.bm25_search_option, segments,
+                                             _params.lake_io_opts, _params.use_page_cache, &phase1_stats));
+    return Status::OK();
+}
+
 Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_prepared_state) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -615,6 +669,10 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+
+    // BM25 Phase-1 tablet-local stats: must run after _params is built (has the search option) and
+    // before the reader is created, so bm25_stats travels down with the read options.
+    RETURN_IF_ERROR(_init_bm25_stats());
 
     // Setup SST warmup callback for CACHE SELECT on PK tables
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
@@ -851,10 +909,15 @@ void LakeDataSource::reset_reader_before_runtime_filter_reinit(RuntimeState* sta
         _reader.reset();
     }
 
+    // Preserve the BM25 request across the reset: it is parsed from thrift only in open(), and the stats are
+    // recomputed from it on reinit. Without this a BM25 scan reopened for late runtime filters loses scoring
+    // and errors on the synthetic __bm25_score slot (mirrors the vector option preserved below).
+    auto bm25_search_option = std::move(_params.bm25_search_option);
     _params = TabletReaderParams{};
     if (_use_vector_index) {
         _params.vector_search_option = std::make_shared<VectorSearchOption>();
     }
+    _params.bm25_search_option = std::move(bm25_search_option);
     _tablet_schema.reset();
     _reusable_reader_key = {};
     _observed_runtime_filter_snapshots.clear();

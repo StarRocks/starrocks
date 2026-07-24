@@ -60,6 +60,7 @@ class ShortKeyIndexDecoder;
 
 class ChunkIterator;
 class IndexReadOptions;
+class InvertedReader;
 class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
@@ -211,6 +212,14 @@ public:
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
                                        const IndexReadOptions& index_opt);
+
+    // Shared InvertedReader for column `cid`'s GIN index, or *reader = nullptr if it has none. For BM25 stats.
+    Status get_inverted_reader(uint32_t cid, const SegmentReadOptions& opts, const IndexReadOptions& index_opt,
+                               InvertedReader** reader);
+
+    // Open a file handle over this segment's data file with encryption + bundling applied. BM25's own
+    // IndexReadOptions.read_file MUST use this; a raw new_random_access_file misreads bundled/encrypted segments.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_segment_read_file(const LakeIOOptions& lake_io_opts = {});
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 

@@ -38,7 +38,6 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -1191,14 +1190,10 @@ public class ExpressionAnalyzer {
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             // Detect the builtin score() after resolution (isBM25ScoreCall excludes a user function named
-            // score): mark use so the shape validator runs, and reject under a disabled feature flag. It has
-            // no BE implementation and must be rewritten to __bm25_score by RewriteToBM25PlanRule.
+            // score): mark use so the shape validator runs. It has no BE implementation and must be
+            // rewritten to __bm25_score by RewriteToBM25PlanRule.
             if (node.isBM25ScoreCall()) {
                 analyzeState.setUsesBm25Score(true);
-                if (!Config.enable_experimental_bm25) {
-                    throw new SemanticException("score() (BM25 full-text ranking) is an experimental feature that is "
-                            + "not enabled; set the FE config `enable_experimental_bm25` to true to use it");
-                }
             }
             return null;
         }

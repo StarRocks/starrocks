@@ -112,6 +112,9 @@ private:
     Status init_tablet_reader(RuntimeState* state, bool use_prepared_state = true);
     Status reopen_reader(RuntimeState* state);
     void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
+    // BM25 Phase-1: compute tablet-local stats (N/avgdl/idf) over the full version rowsets and store
+    // them in _params.bm25_stats. No-op unless a BM25 search option is present.
+    Status _init_bm25_stats();
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);

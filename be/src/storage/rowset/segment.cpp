@@ -389,6 +389,20 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
     return Status::OK();
 }
 
+Status Segment::get_inverted_reader(uint32_t ucid, const SegmentReadOptions& opts, const IndexReadOptions& index_opt,
+                                    InvertedReader** reader) {
+    *reader = nullptr;
+    auto column_reader_iter = _column_readers.find(ucid);
+    if (column_reader_iter != _column_readers.end()) {
+        std::shared_ptr<TabletIndex> index_meta;
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
+        if (index_meta.get() != nullptr) {
+            return column_reader_iter->second->get_inverted_reader(index_meta, opts, index_opt, reader);
+        }
+    }
+    return Status::OK(); // column has no GIN index -> *reader stays nullptr
+}
+
 Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
@@ -436,6 +450,20 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
 
     _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
     return _sk_index_decoder->parse(body, footer.short_key_page_footer());
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> Segment::new_segment_read_file(const LakeIOOptions& lake_io_opts) {
+    // Apply the segment file's encryption info + bundling offset (like _open/_load_index) so reads land at
+    // the right offset on bundled/encrypted segments. Don't cache into _encryption_info here (OnceFlag owns it).
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size};
+    if (_encryption_info) {
+        file_opts.encryption_info = *_encryption_info;
+    } else if (!_segment_file_info.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
+        file_opts.encryption_info = std::move(info);
+    }
+    return _fs->new_random_access_file_with_bundling(file_opts, _segment_file_info);
 }
 
 void Segment::_reset() {

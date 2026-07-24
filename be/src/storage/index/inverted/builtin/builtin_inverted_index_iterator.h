@@ -29,6 +29,9 @@ class FunctionContext;
 
 std::string get_next_prefix(const Slice& prefix_s);
 
+// tokenize_builtin_gin_query lives in builtin_gin_tokenizer.h (a CLucene-free header) so callers that only
+// need the tokenizer don't pull in this iterator header.
+
 class BuiltinInvertedIndexIterator final : public SegmentInvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
@@ -49,12 +52,6 @@ private:
 
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
-    // Reused CLucene analyzer for parser=standard/chinese query tokenization.
-    std::unique_ptr<lucene::analysis::Analyzer> _query_analyzer;
-    // Reused input buffer paired with _query_analyzer to avoid per-query allocations.
-    std::unique_ptr<lucene::util::StringReader> _query_string_reader;
-    // Reused builtin analyzer for parser=english query tokenization.
-    std::unique_ptr<SimpleAnalyzer> _builtin_query_analyzer;
     std::unique_ptr<SegmentBitmapIndexIterator> _bitmap_itr;
     size_t _segment_rows;
 };
