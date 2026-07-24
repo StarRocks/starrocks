@@ -240,4 +240,16 @@ public class PulsarRoutineLoadJobTest {
             PulsarRoutineLoadJob.fromCreateStmt(stmt);
         });
     }
+
+    @Test
+    public void testPrepareAndConvertCustomProperties() throws Exception {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob();
+        job.prepare();
+
+        Map<String, String> customProperties = Deencapsulation.getField(job, "customProperties");
+        customProperties.put("pulsar.service.url", "pulsar://localhost:6650");
+        job.prepare();
+        job.convertCustomProperties(false);
+    }
 }
+

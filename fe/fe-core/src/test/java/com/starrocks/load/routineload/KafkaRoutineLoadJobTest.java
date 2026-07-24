@@ -1401,4 +1401,16 @@ public class KafkaRoutineLoadJobTest {
                 jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=col1 + 1,`a,b`,`a``b`\""),
                 jobProperties);
     }
+
+    @Test
+    public void testCheckProgressVal() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob();
+        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", (Object) null));
+        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_ZERO));
+        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_END));
+        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", KafkaProgress.OFFSET_BEGINNING));
+        Assertions.assertFalse(Deencapsulation.invoke(job, "checkProgressVal", "invalid_numeric"));
+        Assertions.assertTrue(Deencapsulation.invoke(job, "checkProgressVal", "100"));
+    }
 }
+
