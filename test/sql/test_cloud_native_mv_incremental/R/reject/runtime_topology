@@ -206,7 +206,6 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_dpb';
 -- result:
 false	1
 -- !result
-
 -- name: test_ivm_rename_base_rejected @cloud
 CREATE TABLE rnb (k INT, v BIGINT) DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
@@ -237,7 +236,6 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_rnb';
 -- result:
 false	1
 -- !result
-
 -- name: test_ivm_swap_base_rejected @cloud
 CREATE TABLE swb (k INT, v BIGINT) DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
@@ -275,7 +273,6 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_swb';
 -- result:
 false	1
 -- !result
-
 -- name: test_ivm_delete_refresh_rejected @cloud
 CREATE TABLE del_base (k INT, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -316,6 +313,45 @@ SELECT k, v FROM mv_ivm_delete_reject ORDER BY k;
 SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
 FROM information_schema.task_runs
 WHERE (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%') AND STATE = 'FAILED'
+ORDER BY 1;
+-- result:
+FAILED	1
+-- !result
+-- name: test_ivm_delete_in_added_partition_rejected @cloud
+CREATE TABLE del_ap_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO del_ap_base VALUES ('2024-01-10', 1, 10);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_del_ap
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, v FROM del_ap_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_del_ap WITH SYNC MODE;
+SELECT dt, k, v FROM mv_del_ap ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+-- !result
+ALTER TABLE del_ap_base ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+-- result:
+-- !result
+INSERT INTO del_ap_base VALUES ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
+-- result:
+-- !result
+DELETE FROM del_ap_base WHERE dt = '2024-02-06' AND k = 3;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_del_ap WITH SYNC MODE;
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_del_ap%' OR DEFINITION LIKE '%mv_del_ap%') AND STATE = 'FAILED'
 ORDER BY 1;
 -- result:
 FAILED	1

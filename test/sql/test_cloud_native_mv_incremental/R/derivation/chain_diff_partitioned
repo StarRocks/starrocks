@@ -1,0 +1,200 @@
+-- name: test_ivm_pk_partitioned_netfold @cloud
+CREATE TABLE base_pk_part (dt date, k int, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_pk_part VALUES ('2024-01-10', 1, 10), ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk_part
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, v FROM base_pk_part;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_part WITH SYNC MODE;
+SELECT dt, k, v FROM mv_pk_part ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+2024-02-05	2	20
+2024-02-06	3	30
+-- !result
+INSERT INTO base_pk_part VALUES ('2024-02-07', 4, 40);
+-- result:
+-- !result
+UPDATE base_pk_part SET v = 99 WHERE dt = '2024-02-05' AND k = 2;
+-- result:
+-- !result
+DELETE FROM base_pk_part WHERE dt = '2024-02-06' AND k = 3;
+-- result:
+-- !result
+INSERT INTO base_pk_part VALUES ('2024-01-11', 5, 50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk_part WITH SYNC MODE;
+SELECT dt, k, v FROM mv_pk_part ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+2024-01-11	5	50
+2024-02-05	2	99
+2024-02-07	4	40
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, v FROM mv_pk_part EXCEPT SELECT dt, k, v FROM base_pk_part
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, v FROM base_pk_part EXCEPT SELECT dt, k, v FROM mv_pk_part
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_pk_part%' OR DEFINITION LIKE '%mv_pk_part%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_agg_partitioned_chain_diff @cloud
+CREATE TABLE base_agg_part (dt date, k int, v bigint SUM)
+AGGREGATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_agg_part VALUES ('2024-01-10', 1, 10), ('2024-02-05', 2, 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_part
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_agg_part GROUP BY dt, k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg_part WITH SYNC MODE;
+SELECT dt, k, s FROM mv_agg_part ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+2024-02-05	2	20
+-- !result
+INSERT INTO base_agg_part VALUES ('2024-02-05', 2, 5);
+-- result:
+-- !result
+INSERT INTO base_agg_part VALUES ('2024-02-07', 3, 30);
+-- result:
+-- !result
+INSERT INTO base_agg_part VALUES ('2024-01-10', 1, 7);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg_part WITH SYNC MODE;
+SELECT dt, k, s FROM mv_agg_part ORDER BY dt, k;
+-- result:
+2024-01-10	1	17
+2024-02-05	2	25
+2024-02-07	3	30
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_agg_part EXCEPT SELECT dt, k, sum(v) FROM base_agg_part GROUP BY dt, k
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_agg_part GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_agg_part
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_agg_part%' OR DEFINITION LIKE '%mv_agg_part%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+-- name: test_ivm_compaction_existing_partition @cloud
+CREATE TABLE base_cmp (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO base_cmp VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cmp
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_cmp GROUP BY dt, k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cmp WITH SYNC MODE;
+SELECT dt, k, s FROM mv_cmp ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+2024-01-11	2	20
+-- !result
+INSERT INTO base_cmp VALUES ('2024-01-12', 3, 30);
+-- result:
+-- !result
+INSERT INTO base_cmp VALUES ('2024-01-13', 4, 40);
+-- result:
+-- !result
+INSERT INTO base_cmp VALUES ('2024-01-14', 5, 50);
+-- result:
+-- !result
+[UC]ALTER TABLE base_cmp COMPACT;
+SELECT sleep(15);
+-- result:
+1
+-- !result
+REFRESH MATERIALIZED VIEW mv_cmp WITH SYNC MODE;
+SELECT dt, k, s FROM mv_cmp ORDER BY dt, k;
+-- result:
+2024-01-10	1	10
+2024-01-11	2	20
+2024-01-12	3	30
+2024-01-13	4	40
+2024-01-14	5	50
+-- !result
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_cmp EXCEPT SELECT dt, k, sum(v) FROM base_cmp GROUP BY dt, k
+) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_cmp GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_cmp
+) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_cmp%' OR DEFINITION LIKE '%mv_cmp%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result

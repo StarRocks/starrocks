@@ -1,0 +1,115 @@
+-- name: test_ivm_mixed_derivation_dup @cloud
+-- One incremental refresh whose delta contains BOTH derivation modes at once: an old partition
+-- that existed at the base bookmark and gained data (DataChanged -> VERSION_CHAIN_DIFF over its
+-- fenced chain) and a brand-new partition (PartitionAdded -> FULL_SCAN of head). Verifies the two
+-- paths compose correctly in a single refresh. Oracle: incremental MV == full recompute.
+CREATE TABLE base_mix (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_mix VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_mix
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_mix GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_mix WITH SYNC MODE;
+SELECT dt, k, s FROM mv_mix ORDER BY dt, k;
+-- p1 (old, fenced) advances two versions; p2 (new) is added and loaded -- same refresh spans both.
+INSERT INTO base_mix VALUES ('2024-01-12', 1, 5);
+INSERT INTO base_mix VALUES ('2024-01-13', 3, 15);
+ALTER TABLE base_mix ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_mix VALUES ('2024-02-05', 4, 40);
+INSERT INTO base_mix VALUES ('2024-02-06', 5, 50);
+REFRESH MATERIALIZED VIEW mv_mix WITH SYNC MODE;
+SELECT dt, k, s FROM mv_mix ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_mix EXCEPT SELECT dt, k, sum(v) FROM base_mix GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_mix GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_mix
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_mix%' OR DEFINITION LIKE '%mv_mix%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_mixed_derivation_pk @cloud
+-- Primary-key variant of mixed derivation: one refresh spans an old fenced partition that takes
+-- multi-version updates+deletes (DataChanged -> VERSION_CHAIN_DIFF, so the PK net-fold runs) AND a
+-- brand-new partition (PartitionAdded -> FULL_SCAN, which skips the fold). The two paths must compose
+-- in one refresh: the old partition's net DELETE/INSERT pairs and the new partition's head inserts.
+CREATE TABLE base_mix_pk (dt date, k int, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_mix_pk VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_mix_pk
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, v FROM base_mix_pk;
+REFRESH MATERIALIZED VIEW mv_mix_pk WITH SYNC MODE;
+SELECT dt, k, v FROM mv_mix_pk ORDER BY dt, k;
+-- old p1: two more versions (update + delete) so the chain diff spans >1 version and the fold runs.
+UPDATE base_mix_pk SET v = 99 WHERE dt = '2024-01-10' AND k = 1;
+DELETE FROM base_mix_pk WHERE dt = '2024-01-11' AND k = 2;
+-- new p2 in the same refresh: added then loaded (FULL_SCAN).
+ALTER TABLE base_mix_pk ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_mix_pk VALUES ('2024-02-05', 3, 30), ('2024-02-06', 4, 40);
+REFRESH MATERIALIZED VIEW mv_mix_pk WITH SYNC MODE;
+SELECT dt, k, v FROM mv_mix_pk ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, v FROM mv_mix_pk EXCEPT SELECT dt, k, v FROM base_mix_pk
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, v FROM base_mix_pk EXCEPT SELECT dt, k, v FROM mv_mix_pk
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_mix_pk%' OR DEFINITION LIKE '%mv_mix_pk%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_mixed_derivation_agg @cloud
+-- Aggregate-key variant of mixed derivation: one refresh spans an old fenced partition that gains
+-- more pre-aggregated rows (VERSION_CHAIN_DIFF) AND a new partition (FULL_SCAN). Both fold into SUM.
+CREATE TABLE base_mix_agg (dt date, k int, v bigint SUM)
+AGGREGATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_mix_agg VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_mix_agg
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_mix_agg GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_mix_agg WITH SYNC MODE;
+SELECT dt, k, s FROM mv_mix_agg ORDER BY dt, k;
+-- old p1: more pre-agg rows into an existing key and a new key (chain diff over the fenced chain).
+INSERT INTO base_mix_agg VALUES ('2024-01-10', 1, 5);
+INSERT INTO base_mix_agg VALUES ('2024-01-12', 3, 15);
+-- new p2 in the same refresh (FULL_SCAN).
+ALTER TABLE base_mix_agg ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_mix_agg VALUES ('2024-02-05', 4, 40);
+INSERT INTO base_mix_agg VALUES ('2024-02-05', 4, 2);
+REFRESH MATERIALIZED VIEW mv_mix_agg WITH SYNC MODE;
+SELECT dt, k, s FROM mv_mix_agg ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_mix_agg EXCEPT SELECT dt, k, sum(v) FROM base_mix_agg GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_mix_agg GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_mix_agg
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_mix_agg%' OR DEFINITION LIKE '%mv_mix_agg%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

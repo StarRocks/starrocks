@@ -1,0 +1,117 @@
+-- name: test_ivm_pk_partitioned_netfold @cloud
+-- Primary-key net-fold over a PARTITIONED base. Every partition is populated at the bookmark, then
+-- an existing partition takes several versions (insert + update + delete as separate transactions)
+-- before ONE refresh -- refreshing after each DML instead would make every diff single-version and
+-- skip the fold. The >1-version chain diff runs the PK net-fold (each key folds to a net
+-- DELETE/INSERT pair). Oracle: MV == full recompute; refresh stays INCREMENTAL.
+CREATE TABLE base_pk_part (dt date, k int, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_pk_part VALUES ('2024-01-10', 1, 10), ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
+CREATE MATERIALIZED VIEW mv_pk_part
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, v FROM base_pk_part;
+REFRESH MATERIALIZED VIEW mv_pk_part WITH SYNC MODE;
+SELECT dt, k, v FROM mv_pk_part ORDER BY dt, k;
+-- three versions into the existing, bookmarked p2 before one refresh -> multi-version chain diff.
+INSERT INTO base_pk_part VALUES ('2024-02-07', 4, 40);
+UPDATE base_pk_part SET v = 99 WHERE dt = '2024-02-05' AND k = 2;
+DELETE FROM base_pk_part WHERE dt = '2024-02-06' AND k = 3;
+-- one change into the existing p1 too, so more than one partition is diffed in the refresh.
+INSERT INTO base_pk_part VALUES ('2024-01-11', 5, 50);
+REFRESH MATERIALIZED VIEW mv_pk_part WITH SYNC MODE;
+SELECT dt, k, v FROM mv_pk_part ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, v FROM mv_pk_part EXCEPT SELECT dt, k, v FROM base_pk_part
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, v FROM base_pk_part EXCEPT SELECT dt, k, v FROM mv_pk_part
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_pk_part%' OR DEFINITION LIKE '%mv_pk_part%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_agg_partitioned_chain_diff @cloud
+-- AGGREGATE-KEY base + PARTITIONED + append into an existing bookmarked partition -- the chain-diff
+-- branch on an aggregate base (not the FULL_SCAN added-partition path), where pre-aggregated rowsets
+-- fold into the MV's SUM. Oracle: MV == full recompute.
+CREATE TABLE base_agg_part (dt date, k int, v bigint SUM)
+AGGREGATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_agg_part VALUES ('2024-01-10', 1, 10), ('2024-02-05', 2, 20);
+CREATE MATERIALIZED VIEW mv_agg_part
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_agg_part GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_agg_part WITH SYNC MODE;
+SELECT dt, k, s FROM mv_agg_part ORDER BY dt, k;
+-- append into the existing p2 (same key folds, new key added) and existing p1, then one refresh.
+INSERT INTO base_agg_part VALUES ('2024-02-05', 2, 5);
+INSERT INTO base_agg_part VALUES ('2024-02-07', 3, 30);
+INSERT INTO base_agg_part VALUES ('2024-01-10', 1, 7);
+REFRESH MATERIALIZED VIEW mv_agg_part WITH SYNC MODE;
+SELECT dt, k, s FROM mv_agg_part ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_agg_part EXCEPT SELECT dt, k, sum(v) FROM base_agg_part GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_agg_part GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_agg_part
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_agg_part%' OR DEFINITION LIKE '%mv_agg_part%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_compaction_existing_partition @cloud
+-- Compaction on a partition that ALREADY had a committed bookmark, then an incremental refresh over
+-- its version chain. The chain diff must fold the compaction output (a merged rowset) without
+-- double-counting the pre-compaction rowsets it subsumes. added_partition compacts a NEW partition
+-- (FULL_SCAN); this is the VERSION_CHAIN_DIFF counterpart. Oracle: MV == full recompute.
+CREATE TABLE base_cmp (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_cmp VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_cmp
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_cmp GROUP BY dt, k;
+-- first refresh commits a bookmark on the existing p1.
+REFRESH MATERIALIZED VIEW mv_cmp WITH SYNC MODE;
+SELECT dt, k, s FROM mv_cmp ORDER BY dt, k;
+-- several appends into the SAME bookmarked p1, then compact those rowsets into one.
+INSERT INTO base_cmp VALUES ('2024-01-12', 3, 30);
+INSERT INTO base_cmp VALUES ('2024-01-13', 4, 40);
+INSERT INTO base_cmp VALUES ('2024-01-14', 5, 50);
+[UC]ALTER TABLE base_cmp COMPACT;
+SELECT sleep(15);
+REFRESH MATERIALIZED VIEW mv_cmp WITH SYNC MODE;
+SELECT dt, k, s FROM mv_cmp ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_cmp EXCEPT SELECT dt, k, sum(v) FROM base_cmp GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_cmp GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_cmp
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_cmp%' OR DEFINITION LIKE '%mv_cmp%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

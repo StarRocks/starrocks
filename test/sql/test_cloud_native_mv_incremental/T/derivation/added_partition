@@ -1,0 +1,138 @@
+-- name: test_ivm_added_partition_dup @cloud
+-- A partition added between two IVM refreshes is read head-only (no diffable base), so a compaction
+-- output -- which the version-chain-diff path skips -- must still surface. Oracle: MV == full recompute.
+CREATE TABLE base_ap_dup (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_ap_dup VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_ap_dup
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_ap_dup GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_ap_dup WITH SYNC MODE;
+SELECT dt, k, s FROM mv_ap_dup ORDER BY dt, k;
+ALTER TABLE base_ap_dup ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_ap_dup VALUES ('2024-02-05', 3, 30);
+INSERT INTO base_ap_dup VALUES ('2024-02-06', 4, 40);
+INSERT INTO base_ap_dup VALUES ('2024-02-07', 5, 50);
+[UC]ALTER TABLE base_ap_dup COMPACT;
+SELECT sleep(15);
+REFRESH MATERIALIZED VIEW mv_ap_dup WITH SYNC MODE;
+SELECT dt, k, s FROM mv_ap_dup ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_ap_dup EXCEPT SELECT dt, k, sum(v) FROM base_ap_dup GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_ap_dup GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_ap_dup
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ap_dup%' OR DEFINITION LIKE '%mv_ap_dup%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_added_partition_pk @cloud
+-- Primary-key variant: FULL_SCAN of the added partition's head must apply the head delete vector
+-- (dropped rows must not surface) and any delta column group (updated column values must surface).
+CREATE TABLE base_ap_pk (dt date, k int, v bigint)
+PRIMARY KEY(dt, k)
+PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_ap_pk VALUES ('2024-01-10', 1, 10);
+CREATE MATERIALIZED VIEW mv_ap_pk
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, v FROM base_ap_pk;
+REFRESH MATERIALIZED VIEW mv_ap_pk WITH SYNC MODE;
+SELECT dt, k, v FROM mv_ap_pk ORDER BY dt, k;
+ALTER TABLE base_ap_pk ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_ap_pk VALUES ('2024-02-05', 3, 30), ('2024-02-06', 4, 40);
+UPDATE base_ap_pk SET v = 99 WHERE dt = '2024-02-05' AND k = 3;
+DELETE FROM base_ap_pk WHERE dt = '2024-02-06' AND k = 4;
+REFRESH MATERIALIZED VIEW mv_ap_pk WITH SYNC MODE;
+SELECT dt, k, v FROM mv_ap_pk ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, v FROM mv_ap_pk EXCEPT SELECT dt, k, v FROM base_ap_pk
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, v FROM base_ap_pk EXCEPT SELECT dt, k, v FROM mv_ap_pk
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ap_pk%' OR DEFINITION LIKE '%mv_ap_pk%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_added_partition_agg @cloud
+-- Aggregate-key variant: the added partition's pre-aggregated rows (including a compaction output)
+-- must be surfaced by FULL_SCAN as inserts and fold correctly into the MV's SUM.
+CREATE TABLE base_ap_agg (dt date, k int, v bigint SUM)
+AGGREGATE KEY(dt, k)
+PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_ap_agg VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
+CREATE MATERIALIZED VIEW mv_ap_agg
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, sum(v) AS s FROM base_ap_agg GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_ap_agg WITH SYNC MODE;
+SELECT dt, k, s FROM mv_ap_agg ORDER BY dt, k;
+ALTER TABLE base_ap_agg ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
+INSERT INTO base_ap_agg VALUES ('2024-02-05', 3, 30);
+INSERT INTO base_ap_agg VALUES ('2024-02-05', 3, 5);
+INSERT INTO base_ap_agg VALUES ('2024-02-06', 4, 40);
+[UC]ALTER TABLE base_ap_agg COMPACT;
+SELECT sleep(15);
+REFRESH MATERIALIZED VIEW mv_ap_agg WITH SYNC MODE;
+SELECT dt, k, s FROM mv_ap_agg ORDER BY dt, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT dt, k, s FROM mv_ap_agg EXCEPT SELECT dt, k, sum(v) FROM base_ap_agg GROUP BY dt, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT dt, k, sum(v) FROM base_ap_agg GROUP BY dt, k EXCEPT SELECT dt, k, s FROM mv_ap_agg
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ap_agg%' OR DEFINITION LIKE '%mv_ap_agg%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_added_partition_list @cloud
+-- LIST-partition variant of the added-partition FULL_SCAN path: a list partition added between two
+-- refreshes is absent at the base bookmark, so it is read head-only (PartitionAdded -> FULL_SCAN),
+-- exactly as the RANGE case. Oracle: MV == full recompute; the added-partition refresh stays INCREMENTAL.
+CREATE TABLE base_ap_list (region varchar(16), k int, v bigint)
+DUPLICATE KEY(region, k)
+PARTITION BY LIST(region) (
+    PARTITION pcn VALUES IN ('CN'),
+    PARTITION pus VALUES IN ('US')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_ap_list VALUES ('CN', 1, 10), ('US', 2, 20);
+CREATE MATERIALIZED VIEW mv_ap_list
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, k, sum(v) AS s FROM base_ap_list GROUP BY region, k;
+REFRESH MATERIALIZED VIEW mv_ap_list WITH SYNC MODE;
+SELECT region, k, s FROM mv_ap_list ORDER BY region, k;
+ALTER TABLE base_ap_list ADD PARTITION pjp VALUES IN ('JP');
+INSERT INTO base_ap_list VALUES ('JP', 3, 30);
+INSERT INTO base_ap_list VALUES ('JP', 4, 40);
+REFRESH MATERIALIZED VIEW mv_ap_list WITH SYNC MODE;
+SELECT region, k, s FROM mv_ap_list ORDER BY region, k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT region, k, s FROM mv_ap_list EXCEPT SELECT region, k, sum(v) FROM base_ap_list GROUP BY region, k
+) t;
+SELECT COUNT(*) AS diff_rev FROM (
+    SELECT region, k, sum(v) FROM base_ap_list GROUP BY region, k EXCEPT SELECT region, k, s FROM mv_ap_list
+) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_ap_list%' OR DEFINITION LIKE '%mv_ap_list%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
