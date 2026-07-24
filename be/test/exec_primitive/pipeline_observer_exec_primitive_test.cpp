@@ -94,8 +94,8 @@ TEST(PipelineObserverExecPrimitiveTest, PipeObservableNotifiesAttachedSides) {
     EXPECT_EQ(sink_observer.source_trigger_count, 0);
 
     { auto notify = pipe_observable.defer_notify_sink(); }
-    EXPECT_EQ(sink_observer.source_trigger_count, 1);
-    EXPECT_EQ(sink_observer.sink_trigger_count, 0);
+    EXPECT_EQ(sink_observer.source_trigger_count, 0);
+    EXPECT_EQ(sink_observer.sink_trigger_count, 1);
 }
 
 TEST(PipelineObserverExecPrimitiveTest, RuntimeFilterHubInstallsCollectorAndNotifiesObserver) {
