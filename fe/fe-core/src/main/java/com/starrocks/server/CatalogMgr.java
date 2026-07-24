@@ -198,18 +198,15 @@ public class CatalogMgr {
 
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
-        readLock();
-        try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
-        } finally {
-            readUnlock();
-        }
-
         writeLock();
         try {
+<<<<<<< HEAD
             connectorMgr.removeConnector(catalogName);
             Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
+=======
+            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+>>>>>>> 535124a048 ([BugFix] Make catalog drop existence check atomic under write lock (#76778))
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
                 GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
