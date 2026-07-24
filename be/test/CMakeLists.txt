@@ -1,6 +1,7 @@
 add_subdirectory(testutil)
 
 set(EXEC_FILES
+        ./exec/aggregator_limited_mem_state_test.cpp
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp

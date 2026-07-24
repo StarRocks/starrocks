@@ -70,11 +70,8 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
         _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
     }
-    if (_aggregator->hash_map_memory_usage() > config::streaming_agg_limited_memory_size) {
-        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
-    } else {
-        _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
-    }
+    _limited_mem_state.limited_memory_size = LimitedMemAggState::clamp_budget(
+            _aggregator->hash_map_memory_usage(), config::streaming_agg_limited_memory_size);
 }
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
