@@ -1,0 +1,38 @@
+-- name: test_routine_load_arrow_basic
+create database test_db_${uuid0};
+
+use test_db_${uuid0};
+
+create table arrow_table (
+    id bigint,
+    name varchar(50),
+    value double
+)
+duplicate key(id)
+distributed by hash(id) buckets 1
+properties (
+    "replication_num" = "1"
+);
+
+create routine load test_db_${uuid0}.arrow_load_job on arrow_table
+properties
+(
+    "format" = "arrow",
+    "desired_concurrent_number" = "3",
+    "max_batch_interval" = "10",
+    "max_error_number" = "100"
+)
+from kafka
+(
+    "kafka_broker_list" = "127.0.0.1:9092",
+    "kafka_topic" = "arrow_topic",
+    "property.group.id" = "arrow_group"
+);
+
+show create routine load arrow_load_job;
+
+stop routine load for arrow_load_job;
+
+drop table arrow_table;
+
+drop database test_db_${uuid0};

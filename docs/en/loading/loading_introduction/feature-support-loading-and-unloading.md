@@ -67,7 +67,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.0+) [1]</td>
         <td>To be supported</td>
         <td>To be supported</td>
-        <td>To be supported</td>
+        <td>Yes (v3.4.0+)</td>
     </tr>
     <tr>
         <td>Spark Load</td>
@@ -417,7 +417,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes [4]</td>
         <td>To be supported</td>
         <td>To be supported</td>
-        <td>To be supported</td>
+        <td>Yes [4]</td>
         <td>To be supported</td>
     </tr>
 </table>
