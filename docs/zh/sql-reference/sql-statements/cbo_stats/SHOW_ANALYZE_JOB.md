@@ -1,53 +1,53 @@
 ---
 displayed_sidebar: docs
-description: "SHOW ANALYZE JOB 查看自定义自动采集任务的信息和状态。"
+description: "SHOW ANALYZE JOB 查看自定义采集任务的信息和状态。"
 ---
 
 # SHOW ANALYZE JOB
 
-## 功能
+SHOW ANALYZE JOB 查看自定义采集任务的信息和状态。
 
-查看自定义自动采集任务的信息和状态。自定义自动采集任务用于采集 CBO 统计信息。该语句从 2.4 版本开始支持。
+默认情况下，StarRocks 会自动对表进行全量统计信息采集。它每 5 分钟检查一次数据更新情况。如果检测到数据变化，将自动触发数据采集。如果您不想使用自动全量采集，可以将 FE 配置项 `enable_collect_full_statistic` 设置为 `false`，并自定义采集任务。
 
-默认情况下，StarRocks 会周期性自动采集表的全量统计信息。默认检查更新时间为 5 分钟一次，如果发现有数据更新，会自动触发采集。如果您不希望使用自动全量采集，可以设置 FE 配置项 `enable_collect_full_statistic` 为 `false`，系统会停止自动全量采集，根据您创建的自定义任务进行定制化采集。
+该语句从 v2.4 版本开始支持。
 
 ## 语法
 
 ```SQL
-SHOW ANALYZE JOB [WHERE predicate]
+SHOW ANALYZE JOB [WHERE]
 ```
 
-您可以使用 WHERE 子句设定筛选条件，进行返回结果筛选。该语句会返回如下列。
+您可以使用 WHERE 子句过滤结果。该语句返回以下列。
 
-| **列名**     | **说明**                                                     |
+| **列**   | **描述**                                              |
 | ------------ | ------------------------------------------------------------ |
-| Id           | 采集任务的 ID。                                               |
-| Database     | 数据库名。                                                   |
-| Table        | 表名。                                                       |
-| Columns      | 列名列表。                                                   |
-| Type         | 统计信息的类型。取值： FULL，SAMPLE。                        |
-| Schedule     | 调度的类型。自动采集任务固定为 `SCHEDULE`。                   |
-| Properties   | 自定义参数信息。                                             |
-| Status       | 任务状态，包括 PENDING（等待）、RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
-| LastWorkTime | 最近一次采集时间。                                           |
-| Reason       | 任务失败的原因。如果执行成功则为 `NULL`。                    |
+| Id           | 采集任务的 ID。                               |
+| Database     | 数据库名称。                                           |
+| Table        | 表名称。                                              |
+| Columns      | 列名称。                                            |
+| Type         | 统计信息类型，包括 `FULL` 和 `SAMPLE`。       |
+| Schedule     | 调度类型。自动任务的类型为 `SCHEDULE`。 |
+| Properties   | 自定义参数。                                           |
+| Status       | 任务状态，包括 PENDING、RUNNING、SUCCESS 和 FAILED。 |
+| LastWorkTime | 上次采集的时间。                             |
+| Reason       | 任务失败的原因。如果任务执行成功，则返回 NULL。 |
 
 ## 示例
 
 ```SQL
--- 查看集群全部自定义采集任务。
-SHOW ANALYZE JOB
+-- 查看所有自定义采集任务。
+SHOW ANALYZE JOB;
 
--- 查看数据库 `test` 下的自定义采集任务。
+-- 查看数据库 `test` 的自定义采集任务。
 SHOW ANALYZE JOB where `database` = 'test';
 ```
 
-## 相关文档
+## 参考
 
-[CREATE ANALYZE](CREATE_ANALYZE.md)：创建自定义自动采集任务。
+[CREATE ANALYZE](CREATE_ANALYZE.md)：自定义自动采集任务。
 
-[DROP ANALYZE](DROP_ANALYZE.md)：删除自动采集任务。
+[DROP ANALYZE](DROP_ANALYZE.md)：删除自定义采集任务。
 
-[KILL ANALYZE](KILL_ANALYZE.md)：取消正在运行中（Running）的统计信息收集任务。
+[KILL ANALYZE](KILL_ANALYZE.md)：取消正在运行的自定义采集任务。
 
-想了解更多 CBO 统计信息采集的内容，参见 [CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
+有关为 CBO 收集统计信息的更多信息，请参阅[为 CBO 收集统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
