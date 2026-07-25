@@ -19,15 +19,34 @@ genuinely fixable; flag the rest. English docs only — never edit `docs/zh/**` 
   running cluster the docs were tested against.
 - A cluster of the version under test is up:
   `SR_VERSION=<v> docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait`.
-- A checkout of the docs at the matching release branch (e.g. `branch-4.1`).
+- A checkout of the docs **on a local branch named exactly `branch-<version>`**
+  (e.g. `branch-4.1`) — see Step 0 for why the branch *name* matters.
 
 ## Step 0 — Resolve the version and build the candidate list
 Determine the version being verified: use the skill's argument if one was given,
 otherwise the `$SR_VERSION` env var (exported in the runbook's Step 1). Its docs
 live in the release-branch worktree created in the runbook, at
-`../sr-branch-$SR_VERSION/docs/en/sql-reference`. Run from the repo root:
+`../sr-branch-$SR_VERSION/docs/en/sql-reference`.
+
+The worktree must sit **on a local branch named exactly `branch-$SR_VERSION`**.
+`docs_version()` in `run_sql_samples.py` reads
+`git rev-parse --abbrev-ref HEAD`, so a worktree created with `--detach` reports
+the literal string `HEAD`, and one on any other branch name (`docs/my-fix`)
+reports that name — either way the run looks unversioned and every failure is
+untriageable. Create or refresh it with:
 ```bash
 : "${SR_VERSION:?set SR_VERSION (or pass a version, e.g. 4.1)}"
+git fetch origin "refs/heads/branch-$SR_VERSION:refs/remotes/origin/branch-$SR_VERSION"
+git worktree add "../sr-branch-$SR_VERSION" -B "branch-$SR_VERSION" "origin/branch-$SR_VERSION"
+# already exists? refresh it in place instead of creating it:
+#   git -C "../sr-branch-$SR_VERSION" checkout -B "branch-$SR_VERSION" "origin/branch-$SR_VERSION"
+git -C "../sr-branch-$SR_VERSION" rev-parse --abbrev-ref HEAD   # must print branch-$SR_VERSION
+```
+If you must run against a checkout that cannot be on that branch, pass
+`--docs-version $SR_VERSION` to `run_sql_samples.py` rather than renaming it.
+
+Then run from the repo root:
+```bash
 DOCS=../sr-branch-$SR_VERSION/docs/en/sql-reference
 python3 docs/scripts/run_sql_samples.py --docs-root "$DOCS" \
     --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run.json
@@ -38,8 +57,18 @@ Triage **every** FAIL in the run — do not cap the batch. Suppression means a
 triaged item won't recur, so there's no benefit to leaving a remainder for a later
 run. (`autofix_candidates.py` defaults to all candidates; pass `--limit N` only if
 you deliberately want a smaller batch.)
-Check the `meta` block: if docs and cluster versions are **not aligned**, stop —
-misaligned failures are not doc rot.
+
+Check the `meta` block before triaging anything, and distinguish the two ways
+`aligned: false` happens — they need opposite responses:
+- **`NOTE: docs '<x>' is unversioned …`** — a setup problem on your side, not doc
+  rot. The checkout is detached or on an off-pattern branch. Fix it as above (or
+  pass `--docs-version`) and re-run. Do **not** triage this output.
+- **`WARNING: docs <a> vs cluster <b> …`** — a genuine version mismatch. **Stop**;
+  failures here are not doc rot.
+
+A `verdict` starting `OK:` still carries a caveat worth heeding: a release branch
+can be ahead of the released image, so a feature documented on the branch may be
+absent from the build you are testing. Verify before calling it rot (Step 1).
 
 ## Step 1 — Classify each candidate (the guardrail)
 Read `doc_context` to understand what the example *teaches*, use the MCP server to
@@ -59,6 +88,14 @@ entry, **unsure** → tracking issue.
 - **version/build-gated** — the function/config/keyword isn't in this build
   (verify it's absent). Docs may be correct for a newer release. → **do not
   rewrite**; *suppress* (and recommend a "Since vX.Y" note if the doc lacks one).
+  **But first check whether the same example text exists on `main`.** Suppression
+  is global, not per-version (see Step 3), so if the block is byte-identical on
+  `main` and the feature *does* work there, an entry would silence it for the
+  newer release too and mask a regression. In that case it is **unsure**, not
+  version-gated: route it to the tracking issue and say why. A newer-release doc
+  backported to an older branch without its code change is the usual cause, and
+  the decision (revert on the release branch, add a version note, or backport the
+  code) belongs to a human.
 - **needs-setup** — references objects an isolated run can't have; fix only if
   making it self-contained is trivial and preserves intent, else *suppress*.
 - **illustrative** — synopsis, cross-dialect comparison, documented expected-error,
@@ -104,6 +141,25 @@ this PR merges, the checker skips these by content hash — they never reappear 
 re-surface only if the example text meaningfully changes). Suppression is a
 judgment call, so it lands **only** via the human-reviewed PR — never edit the file
 outside the PR, and **never suppress a `fixable` or `unsure` item**.
+
+**A suppression is global — it is not scoped to a version or a language.**
+`load_suppressions()` keeps only `fingerprint` → `category` and drops every other
+field; `category` is descriptive metadata, *not* a filter, and there is no version
+key in the schema (the top-level `"version": 1` is the schema version). The
+default path resolves relative to the *script*, so one list applies to every
+`--docs-root` you check. Consequences to respect:
+- An entry added while triaging an old release also silences the same block on
+  `main` and every other branch whose text matches. Before suppressing, confirm
+  the example is *durably* not runnable **everywhere**, not just in the build
+  under test — otherwise it belongs in the tracking issue (see Step 1).
+- `expected-error` and `illustrative` are usually safe globally: a synopsis or a
+  deliberate error example is one on every branch.
+- Duplicated example text shares one fingerprint, so a single entry can cover
+  several `file:line` locations. Dedupe by fingerprint before writing, and note
+  the extra locations in the entry's `reason`.
+- If a doc block is byte-identical across `docs/en`, `docs/zh`, and `docs/ja`,
+  one entry covers all three; translated `--` comments change the hash and need
+  their own entries.
 
 **Draft PR — the verified fixes _and_ the suppression additions.** Branch off
 `origin/main` in a git worktree (docs fixes target `main`, then backport). Confirm
