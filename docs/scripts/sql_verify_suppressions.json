@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
+  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Entries are added by the sql-doc-autofix skill in a reviewed PR \u2014 never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
   "suppressions": [
     {
       "fingerprint": "sha256:0ff1361dae876f56ac5548ad47569cf536a000c819e33910c897f824884cb2c9",
@@ -150,6 +150,106 @@
       "category": "version-gated",
       "reason": "Config enable_admin_skip_committed_txn absent in the 4.1.1 build (verified via ADMIN SHOW FRONTEND CONFIG)",
       "added": "2026-07-23",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:a6792fb6bf1887b7b498d03ffec985d2bcbb1d02454fbc3615b3ef8b8421695b",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 414,
+      "snippet": "-- This will cause an error! SELECT *, array_agg(score) OVER",
+      "category": "expected-error",
+      "reason": "Doc deliberately shows an unsupported ROWS window frame returning an error",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:a6d11cd18b78a2b25f0fd87cfd7df516d1e9a9177aa25523cc7c0ace69c0f80c",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 92,
+      "snippet": "CREATE DICTIONARY dict_obj USING dict (order_uuid KEY, order",
+      "category": "needs-setup",
+      "reason": "Requires the `dict` base table and a clean dictionary namespace from earlier examples in the page",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:c475d4bac09a8cb4a973f201f86cd5d1cbadbba58a282b53eb32efd05c4b1fea",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 100,
+      "snippet": "SELECT dictionary_get(\"dict_obj\", \"a1\")",
+      "category": "needs-setup",
+      "reason": "dictionary_get on dict_obj, which is CANCELLED without its base table",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:7436ea2bc6e77f77d923064dbe72db501508394ee988c4fa861f923e19fbf393",
+      "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
+      "line": 165,
+      "snippet": "CREATE DICTIONARY dimension_obj USING ProductDimension (Prod",
+      "category": "needs-setup",
+      "reason": "Requires the ProductDimension base table created earlier in the page",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:ed12103dc96ae56eac6c784305ac07ef934177535b883c0c686f8809da009477",
+      "file": "docs/en/sql-reference/sql-statements/keywords.md",
+      "line": 29,
+      "snippet": "CREATE DATABASE LIKE",
+      "category": "expected-error",
+      "reason": "Doc deliberately shows the reserved-word error for an unquoted identifier",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:1ebcee08099c8794c49ef70a839ef3bece7ff33abb5ff8e29d0064789d2e4931",
+      "file": "docs/en/sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md",
+      "line": 73,
+      "snippet": "ADMIN SET FRONTEND CONFIG (\"label_keep_max_second\" = \"value\"",
+      "category": "illustrative",
+      "reason": "Synopsis using the literal placeholder \"value\" for label_keep_max_second",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:0be4d5cf42b42e7718a30d03afd47dcfb19f55522b4e74eedad1e2930925304c",
+      "file": "docs/en/sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md",
+      "line": 309,
+      "snippet": "\"property.security.protocol\" = \"SASL_PLAINTEXT\", -- Specify ",
+      "category": "illustrative",
+      "reason": "Kafka property-list fragment, not a complete statement",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:635e17a35df9bacf33cbb28420c6efdbedf1ade9c7a754afc66598460cd5628e",
+      "file": "docs/en/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md",
+      "line": 991,
+      "snippet": "-- The partition expression of the base table contains multi",
+      "category": "illustrative",
+      "reason": "Spark/Iceberg DDL (USING ICEBERG / PARTITIONED BY), not StarRocks SQL",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:19d07e09a558a5dfcebb1a27f9606f2ff2147079d27c2836a10393f3b9f68777",
+      "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 785,
+      "snippet": "DROP INDEX index_name",
+      "category": "illustrative",
+      "reason": "Syntax synopsis fragment: DROP INDEX without its ALTER TABLE prefix",
+      "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:49295a863f6db626484c695b68c9ee7c4b67d50cd13e225b1bfaba9e217b8f7f",
+      "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md",
+      "line": 953,
+      "snippet": "CREATE TABLE `t1` ( `id` int(11) COMMENT \"\", `value` varchar",
+      "category": "needs-setup",
+      "reason": "Joins the colocate group created by an earlier example with a different bucket count",
+      "added": "2026-07-25",
       "added_by": "sql-doc-autofix"
     }
   ]
