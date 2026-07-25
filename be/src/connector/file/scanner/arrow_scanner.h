@@ -34,6 +34,7 @@ class StreamLoadPipeInputStream;
 #include "common/status.h"
 #include "connector/file/scanner/file_scanner.h"
 #include "fs/fs.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -68,6 +69,14 @@ private:
 
     const TBrokerScanRange& _scan_range;
     int _next_file{0};
+    // Index into _scan_range.ranges for the file whose rows are in the current
+    // chunk being built.  Captured in initialize_src_chunk() and used by
+    // finalize_src_chunk() so that path/partition columns are always attributed
+    // to the correct file, even when get_next() breaks at a file boundary after
+    // opening a new file (which would otherwise advance _next_file past the
+    // current chunk's file).
+    int _chunk_file_idx{0};
+    bool _message_boundary{false};
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
     std::shared_ptr<arrow::RecordBatch> _batch;

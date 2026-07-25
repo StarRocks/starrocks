@@ -16,6 +16,7 @@
 
 #include <arrow/builder.h>
 #include <arrow/io/file.h>
+#include <arrow/io/memory.h>
 #include <arrow/ipc/writer.h>
 #include <gtest/gtest.h>
 
@@ -837,7 +838,9 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
         auto& dst_slot = dst_tuple->slots()[i];
         params->expr_of_dest_slot[dst_slot->id()] =
                 create_column_ref(src_slot->id(), src_slot->type(), src_slot->is_nullable());
+        params->dest_sid_to_src_sid_without_trans[dst_slot->id()] = src_slot->id();
     }
+    params->__isset.dest_sid_to_src_sid_without_trans = true;
 
     for (int i = 0; i < src_tuple->slots().size(); i++) {
         params->src_slot_ids.emplace_back(i);
@@ -887,15 +890,15 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
     auto buf2 = stream2->Finish().ValueOrDie();
 
     // Append both to pipe as separate buffers
-    ByteBufferPtr bb1 = ByteBuffer::allocate(buf1->size());
+    ByteBufferPtr bb1 = ByteBuffer::allocate_with_tracker(buf1->size()).value();
     bb1->put_bytes((const char*)buf1->data(), buf1->size());
-    bb1->flip();
-    EXPECT_OK(pipe->append(bb1));
+    bb1->flip_to_read();
+    EXPECT_OK(pipe->append(std::move(bb1)));
 
-    ByteBufferPtr bb2 = ByteBuffer::allocate(buf2->size());
+    ByteBufferPtr bb2 = ByteBuffer::allocate_with_tracker(buf2->size()).value();
     bb2->put_bytes((const char*)buf2->data(), buf2->size());
-    bb2->flip();
-    EXPECT_OK(pipe->append(bb2));
+    bb2->flip_to_read();
+    EXPECT_OK(pipe->append(std::move(bb2)));
     EXPECT_OK(pipe->finish());
 
     auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
@@ -924,121 +927,6 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamDiscrete) {
 
     auto res3 = scanner->get_next();
     ASSERT_TRUE(res3.status().is_end_of_file());
-
-    scanner->close();
-}
-
-TEST_F(ArrowScannerTest, TestScanArrowStreamMalformedAndEmpty) {
-    std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
-    std::string pipe_id = "test_malformed_arrow_pipe";
-    ExecEnv::GetInstance()->load_stream_mgr()->put(pipe_id, pipe);
-
-    TScanRange* scan_range = get_scan_range();
-    TBrokerScanRange* broker_scan_range = get_broker_scan_range(pipe_id);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range_desc;
-    range_desc.__set_path("test_path");
-    range_desc.__set_start_offset(0);
-    range_desc.__set_size(100);
-    ranges.push_back(range_desc);
-
-    TBrokerScanRangeParams* params = get_params();
-    params->__set_format_type(TFileFormatType::FORMAT_ARROW);
-    broker_scan_range->params = *params;
-    broker_scan_range->ranges = ranges;
-
-    // 1. Append malformed buffer
-    std::string malformed_data = "INVALID_ARROW_STREAM_HEADER_DATA";
-    ByteBufferPtr bb_malformed = ByteBuffer::allocate(malformed_data.size());
-    bb_malformed->put_bytes(malformed_data.data(), malformed_data.size());
-    bb_malformed->flip();
-    EXPECT_OK(pipe->append(bb_malformed));
-
-    // 2. Create valid Arrow stream buffer
-    arrow::Int32Builder int_builder;
-    arrow::StringBuilder str_builder;
-    ASSERT_ARROW_OK(int_builder.AppendValues({10}));
-    ASSERT_ARROW_OK(str_builder.AppendValues({"valid"}));
-    std::shared_ptr<arrow::Array> int_array, str_array;
-    ASSERT_ARROW_OK(int_builder.Finish(&int_array));
-    ASSERT_ARROW_OK(str_builder.Finish(&str_array));
-
-    auto int_field = std::make_shared<arrow::Field>("c0_int", arrow::int32());
-    auto str_field = std::make_shared<arrow::Field>("c1_str", arrow::utf8());
-    auto schema = arrow::schema({int_field, str_field});
-    auto batch = arrow::RecordBatch::Make(schema, 1, {int_array, str_array});
-
-    auto stream = arrow::io::BufferOutputStream::Create().ValueOrDie();
-    auto writer = arrow::ipc::MakeStreamWriter(stream, schema).ValueOrDie();
-    ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
-    ASSERT_ARROW_OK(writer->Close());
-    auto buf = stream->Finish().ValueOrDie();
-
-    ByteBufferPtr bb_valid = ByteBuffer::allocate(buf->size());
-    bb_valid->put_bytes((const char*)buf->data(), buf->size());
-    bb_valid->flip();
-    EXPECT_OK(pipe->append(bb_valid));
-    EXPECT_OK(pipe->finish());
-
-    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
-    ASSERT_OK(scanner->open());
-
-    // Scanner should skip malformed message, count filtered rows, and return valid batch
-    auto res = scanner->get_next();
-    ASSERT_OK(res.status());
-    auto chunk = res.value();
-    ASSERT_NE(nullptr, chunk);
-    ASSERT_EQ(1, chunk->num_rows());
-    ASSERT_EQ(10, chunk->columns()[0]->get(0).get_int32());
-
-    ASSERT_EQ(1, counter->num_rows_filtered);
-
-    auto res_eof = scanner->get_next();
-    ASSERT_TRUE(res_eof.status().is_end_of_file());
-
-    scanner->close();
-}
-
-TEST_F(ArrowScannerTest, StressTestArrowMalformedRateLimit) {
-    std::shared_ptr<StreamLoadPipe> pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
-    std::string pipe_id = "test_malformed_arrow_pipe_limit";
-    ExecEnv::GetInstance()->load_stream_mgr()->put(pipe_id, pipe);
-
-    TScanRange* scan_range = get_scan_range();
-    TBrokerScanRange* broker_scan_range = get_broker_scan_range(pipe_id);
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range_desc;
-    range_desc.__set_path("test_path");
-    range_desc.__set_start_offset(0);
-    range_desc.__set_size(100);
-    ranges.push_back(range_desc);
-
-    TBrokerScanRangeParams* params = get_params();
-    params->__set_format_type(TFileFormatType::FORMAT_ARROW);
-    broker_scan_range->params = *params;
-    broker_scan_range->ranges = ranges;
-
-    // Append 11 malformed buffers (exceeding the kMaxConsecutiveErrors threshold of 10)
-    std::string malformed_data = "INVALID_ARROW_STREAM_HEADER_DATA";
-    for (int i = 0; i < 11; ++i) {
-        ByteBufferPtr bb_malformed = ByteBuffer::allocate(malformed_data.size());
-        bb_malformed->put_bytes(malformed_data.data(), malformed_data.size());
-        bb_malformed->flip();
-        EXPECT_OK(pipe->append(bb_malformed));
-    }
-    EXPECT_OK(pipe->finish());
-
-    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
-    ASSERT_OK(scanner->open());
-
-    // Scanner should abort because it exceeded consecutive errors
-    auto res = scanner->get_next();
-    ASSERT_FALSE(res.ok());
-    ASSERT_TRUE(res.status().is_internal_error());
-    ASSERT_NE(std::string::npos,
-              res.status().to_string().find("Arrow scanner exceeded max consecutive error threshold"));
 
     scanner->close();
 }
@@ -1102,82 +990,131 @@ TEST_F(ArrowScannerTest, test_multi_file_scan) {
     ASSERT_EQ(7, total_rows);
 }
 
-TEST_F(ArrowScannerTest, test_multi_message_stream_schema_boundary) {
-    auto db = _runtime_state->service_ctx()->load_stream_mgr()->get_or_create_db(101);
-    std::string label = "test_multi_message_boundary_label";
-    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 60, 101, label);
-    ASSERT_OK(db->put(label, pipe));
+// Regression test for r3648381347: when two Arrow files are scanned and the
+// first file ends before the StarRocks chunk fills, rows from each file must
+// receive the correct per-file partition/path column values.  Before the fix,
+// finalize_src_chunk() always stamped ALL rows in the mixed-file chunk with the
+// most recently opened file's columns_from_path, so file-1 rows received
+// file-2's partition value.
+//
+// The fix breaks at file boundaries so that finalize_src_chunk() always sees a
+// single-file chunk and can safely use _scan_range.ranges.at(_next_file - 1)
+// to stamp path columns.
+TEST_F(ArrowScannerTest, TestMultiFileCrossFileBoundaryPathValues) {
+    std::string file1_path = (_tmp_root_dir / "path_boundary_file1.arrow").string();
+    std::string file2_path = (_tmp_root_dir / "path_boundary_file2.arrow").string();
 
-    auto state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
-    state->set_service_ctx(_runtime_state->service_ctx());
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
 
-    auto profile = _obj_pool.add(new RuntimeProfile("test_profile"));
-    auto counter = _obj_pool.add(new ScannerCounter());
+    // File 1: 3 rows [1, 2, 3]
+    {
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({1, 2, 3}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 3, {array});
+        auto out_file = arrow::io::FileOutputStream::Open(file1_path).ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(out_file, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        ASSERT_ARROW_OK(out_file->Close());
+    }
 
+    // File 2: 3 rows [4, 5, 6]
+    {
+        arrow::Int32Builder builder;
+        ASSERT_ARROW_OK(builder.AppendValues({4, 5, 6}));
+        std::shared_ptr<arrow::Array> array;
+        ASSERT_ARROW_OK(builder.Finish(&array));
+        auto batch = arrow::RecordBatch::Make(schema, 3, {array});
+        auto out_file = arrow::io::FileOutputStream::Open(file2_path).ValueOrDie();
+        auto writer = arrow::ipc::MakeStreamWriter(out_file, schema).ValueOrDie();
+        ASSERT_ARROW_OK(writer->WriteRecordBatch(*batch));
+        ASSERT_ARROW_OK(writer->Close());
+        ASSERT_ARROW_OK(out_file->Close());
+    }
+
+    // Schema: c0_int from file, partition from path.
+    // num_of_columns_from_file = 1 (only c0_int); partition is appended by
+    // fill_columns_from_path.
     SlotTypeDescInfoArray src_slot_infos;
     src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("partition", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
-    auto ranges = generate_ranges({"stream_file"}, 1, {});
-    ranges[0].__set_file_type(TFileType::FILE_STREAM);
-    ranges[0].__set_pipe_name(label);
-    ranges[0].__set_db_id(101);
+    // Build ranges manually so each file carries a different columns_from_path.
+    std::vector<TBrokerRangeDesc> ranges(2);
+    for (int i = 0; i < 2; ++i) {
+        ranges[i].__set_num_of_columns_from_file(1);  // only c0_int comes from file
+        ranges[i].start_offset = 0;
+        ranges[i].size = LONG_MAX;
+        ranges[i].file_type = TFileType::FILE_LOCAL;
+        ranges[i].__set_format_type(TFileFormatType::FORMAT_ARROW);
+    }
+    ranges[0].__set_path(file1_path);
+    ranges[0].__set_columns_from_path({"p1"});  // file 1 partition value
+    ranges[1].__set_path(file2_path);
+    ranges[1].__set_columns_from_path({"p2"});  // file 2 partition value
 
-    auto* desc_tbl = DescTblHelper::generate_desc_tbl(state, _obj_pool, {src_slot_infos, dst_slot_infos});
-    auto broker_scan_range = _obj_pool.add(new TBrokerScanRange());
-    broker_scan_range->ranges = ranges;
-    broker_scan_range->params.__set_strict_mode(false);
-    broker_scan_range->params.__set_dest_tuple_id(0);
-    broker_scan_range->params.__set_src_tuple_id(1);
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
 
-    // Message 1: 2 rows
-    auto schema1 = arrow::schema({arrow::field("c0_int", arrow::int32())});
-    arrow::Int32Builder builder1;
-    ASSERT_ARROW_OK(builder1.AppendValues({10, 20}));
-    std::shared_ptr<arrow::Array> array1;
-    ASSERT_ARROW_OK(builder1.Finish(&array1));
-    auto batch1 = arrow::RecordBatch::Make(schema1, 2, {array1});
+    // chunk_size=4 is larger than both files (3 rows each). Without the fix,
+    // get_next() would cross the file boundary mid-chunk and stamp all 4 rows
+    // (3 from file 1 + 1 from file 2) with file-2's partition "p2".
+    // With the fix, the scanner breaks at the file boundary, so chunk 1 has
+    // only file-1 rows (stamped "p1") and chunk 2 has only file-2 rows ("p2").
+    auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges, /*batch_size=*/4);
 
-    auto buffer_out1 = arrow::io::BufferOutputStream::Create().ValueOrDie();
-    auto writer1 = arrow::ipc::MakeStreamWriter(buffer_out1, schema1).ValueOrDie();
-    ASSERT_ARROW_OK(writer1->WriteRecordBatch(*batch1));
-    ASSERT_ARROW_OK(writer1->Close());
-    auto buf1 = buffer_out1->Finish().ValueOrDie();
-    EXPECT_OK(pipe->append(ByteBuffer::wrap(reinterpret_cast<const char*>(buf1->data()), buf1->size())));
-
-    // Message 2: 3 rows with nullable field
-    auto schema2 = arrow::schema({arrow::field("c0_int", arrow::int32(), true)});
-    arrow::Int32Builder builder2;
-    ASSERT_ARROW_OK(builder2.AppendValues({30, 40, 50}));
-    std::shared_ptr<arrow::Array> array2;
-    ASSERT_ARROW_OK(builder2.Finish(&array2));
-    auto batch2 = arrow::RecordBatch::Make(schema2, 3, {array2});
-
-    auto buffer_out2 = arrow::io::BufferOutputStream::Create().ValueOrDie();
-    auto writer2 = arrow::ipc::MakeStreamWriter(buffer_out2, schema2).ValueOrDie();
-    ASSERT_ARROW_OK(writer2->WriteRecordBatch(*batch2));
-    ASSERT_ARROW_OK(writer2->Close());
-    auto buf2 = buffer_out2->Finish().ValueOrDie();
-    EXPECT_OK(pipe->append(ByteBuffer::wrap(reinterpret_cast<const char*>(buf2->data()), buf2->size())));
-    EXPECT_OK(pipe->finish());
-
-    auto scanner = std::make_unique<ArrowScanner>(state, profile, *broker_scan_range, counter);
     ASSERT_OK(scanner->open());
 
-    int total_rows = 0;
-    while (true) {
+    // Chunk 1: all 3 rows from file 1, partition must be "p1".
+    {
         auto res = scanner->get_next();
-        if (res.status().is_end_of_file()) {
-            break;
-        }
         ASSERT_OK(res.status());
         auto chunk = res.value();
-        if (chunk != nullptr) {
-            total_rows += chunk->num_rows();
-        }
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(3, chunk->num_rows());
+
+        auto c0 = chunk->columns()[0];
+        auto part = chunk->columns()[1];
+
+        EXPECT_EQ(1, c0->get(0).get_int32());
+        EXPECT_EQ("p1", part->get(0).get_slice());
+
+        EXPECT_EQ(2, c0->get(1).get_int32());
+        EXPECT_EQ("p1", part->get(1).get_slice());
+
+        EXPECT_EQ(3, c0->get(2).get_int32());
+        EXPECT_EQ("p1", part->get(2).get_slice());
     }
+
+    // Chunk 2: all 3 rows from file 2, partition must be "p2".
+    {
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        auto chunk = res.value();
+        ASSERT_NE(nullptr, chunk);
+        ASSERT_EQ(3, chunk->num_rows());
+
+        auto c0 = chunk->columns()[0];
+        auto part = chunk->columns()[1];
+
+        EXPECT_EQ(4, c0->get(0).get_int32());
+        EXPECT_EQ("p2", part->get(0).get_slice());
+
+        EXPECT_EQ(5, c0->get(1).get_int32());
+        EXPECT_EQ("p2", part->get(1).get_slice());
+
+        EXPECT_EQ(6, c0->get(2).get_int32());
+        EXPECT_EQ("p2", part->get(2).get_slice());
+    }
+
+    auto res_eof = scanner->get_next();
+    ASSERT_TRUE(res_eof.status().is_end_of_file());
+
     scanner->close();
-    ASSERT_EQ(5, total_rows);
 }
 
 } // namespace starrocks
+

@@ -261,8 +261,11 @@ Status ArrowScanner::next_batch() {
                     }
 
                     if (auto meta = _parser_buf->meta()) {
-                        _conv_ctx.consumer_partition = meta->partition;
-                        _conv_ctx.consumer_offset = meta->offset;
+                        if (meta->type() != ByteBufferMetaType::NONE) {
+                            auto msg_meta = static_cast<const StreamMessageMeta*>(meta);
+                            _conv_ctx.consumer_partition = msg_meta->partition();
+                            _conv_ctx.consumer_offset = msg_meta->offset();
+                        }
                     }
 
                     // Always create a new BufferReader wrapping the new buffer pointer.
@@ -324,6 +327,7 @@ Status ArrowScanner::next_batch() {
             }
             if (stream_file) {
                 _consecutive_errors = 0;
+                _message_boundary = true;
                 continue;
             }
             _file.reset();
@@ -339,6 +343,10 @@ Status ArrowScanner::next_batch() {
 
 Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
+    // Record which file this chunk belongs to.  Used by finalize_src_chunk() to
+    // attribute path/partition columns correctly even when get_next() breaks at
+    // a file boundary after next_batch() has already advanced _next_file.
+    _chunk_file_idx = _next_file - 1;
     _pool.clear();
     (*chunk) = std::make_shared<Chunk>();
     _chunk_filter.clear();
@@ -381,6 +389,14 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
                                                                    slot_desc->col_name()));
             }
         } else {
+            if (_conv_funcs[i]->func == nullptr) {
+                auto& type_desc = slot_desc->type();
+                TypeDescriptor raw_type_desc;
+                bool need_cast = false;
+                RETURN_IF_ERROR(build_arrow_column_convert_plan(array_ptr->type().get(), &type_desc,
+                                                                slot_desc->is_nullable(), &raw_type_desc,
+                                                                _conv_funcs[i].get(), need_cast, _strict_mode));
+            }
             auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
                                                     _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
             if (!st.ok()) {
@@ -412,7 +428,7 @@ Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
             column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
         }
-        auto range = _scan_range.ranges.at(_next_file - 1);
+        auto range = _scan_range.ranges.at(_chunk_file_idx);
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
                                    cast_chunk->num_rows());
@@ -456,8 +472,22 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
         if (chunk_is_full()) {
             break;
         }
+        // Snapshot the current file index before fetching the next batch.  If
+        // next_batch() opens a new file (i.e. _next_file advances), break here
+        // so that finalize_src_chunk() can stamp all rows in this chunk with the
+        // correct per-file path/partition values.  Mixing rows from two files in
+        // one chunk would cause finalize_src_chunk() to apply the second file's
+        // columns_from_path to every row, corrupting partition metadata for the
+        // rows that came from the first file.
+        const int file_before = _next_file;
         auto status = next_batch();
         if (status.ok()) {
+            if (_next_file != file_before || _message_boundary) {
+                _message_boundary = false;
+                // A new file or stream message was opened; finalize the current chunk
+                // before processing the new file/message in the next get_next() call.
+                break;
+            }
             continue;
         }
         if (!status.is_end_of_file()) {
