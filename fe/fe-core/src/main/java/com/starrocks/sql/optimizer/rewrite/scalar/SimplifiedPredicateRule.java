@@ -23,6 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -281,7 +282,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     return ConstantOperator.createBoolean(true);
                 }
 
-                return predicate;
+                break;
             }
             case OR: {
                 if (constantChildren.stream().anyMatch(d -> (!d.isNull() && d.getBoolean()))) {
@@ -309,7 +310,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     return ConstantOperator.createBoolean(false);
                 }
 
-                return predicate;
+                break;
             }
             case NOT: {
                 ScalarOperator child = predicate.getChild(0);
@@ -322,6 +323,80 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             }
         }
 
+        return tryAbsorb(predicate);
+    }
+
+    /**
+     * Apply boolean absorption law:
+     *   a AND (a OR b) -> a
+     *   a OR (a AND b)  -> a
+     *
+     * Skips absorption if the expression being kept (the absorber) contains a
+     * non-deterministic function such as rand()/uuid(), because each evaluation
+     * of that expression may yield a different value.
+     */
+    private ScalarOperator tryAbsorb(CompoundPredicateOperator predicate) {
+        if (predicate.isAnd()) {
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+            Set<Integer> absorbed = Sets.newHashSet();
+            for (int i = 0; i < conjuncts.size(); i++) {
+                ScalarOperator absorber = conjuncts.get(i);
+                if (Utils.hasNonDeterministicFunc(absorber)) {
+                    continue;
+                }
+                for (int j = 0; j < conjuncts.size(); j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    ScalarOperator target = conjuncts.get(j);
+                    if (target instanceof CompoundPredicateOperator &&
+                            ((CompoundPredicateOperator) target).isOr()) {
+                        if (Utils.extractDisjunctive(target).contains(absorber)) {
+                            absorbed.add(j);
+                        }
+                    }
+                }
+            }
+            if (!absorbed.isEmpty()) {
+                List<ScalarOperator> remaining = Lists.newArrayList();
+                for (int i = 0; i < conjuncts.size(); i++) {
+                    if (!absorbed.contains(i)) {
+                        remaining.add(conjuncts.get(i));
+                    }
+                }
+                return Utils.compoundAnd(remaining);
+            }
+        } else if (predicate.isOr()) {
+            List<ScalarOperator> disjuncts = Utils.extractDisjunctive(predicate);
+            Set<Integer> absorbed = Sets.newHashSet();
+            for (int i = 0; i < disjuncts.size(); i++) {
+                ScalarOperator absorber = disjuncts.get(i);
+                if (Utils.hasNonDeterministicFunc(absorber)) {
+                    continue;
+                }
+                for (int j = 0; j < disjuncts.size(); j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    ScalarOperator target = disjuncts.get(j);
+                    if (target instanceof CompoundPredicateOperator &&
+                            ((CompoundPredicateOperator) target).isAnd()) {
+                        if (Utils.extractConjuncts(target).contains(absorber)) {
+                            absorbed.add(j);
+                        }
+                    }
+                }
+            }
+            if (!absorbed.isEmpty()) {
+                List<ScalarOperator> remaining = Lists.newArrayList();
+                for (int i = 0; i < disjuncts.size(); i++) {
+                    if (!absorbed.contains(i)) {
+                        remaining.add(disjuncts.get(i));
+                    }
+                }
+                return Utils.compoundOr(remaining);
+            }
+        }
         return predicate;
     }
 
