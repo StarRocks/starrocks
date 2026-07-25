@@ -1046,16 +1046,16 @@ TEST_F(ArrowScannerTest, TestMultiFileCrossFileBoundaryPathValues) {
     // Build ranges manually so each file carries a different columns_from_path.
     std::vector<TBrokerRangeDesc> ranges(2);
     for (int i = 0; i < 2; ++i) {
-        ranges[i].__set_num_of_columns_from_file(1);  // only c0_int comes from file
+        ranges[i].__set_num_of_columns_from_file(1); // only c0_int comes from file
         ranges[i].start_offset = 0;
         ranges[i].size = LONG_MAX;
         ranges[i].file_type = TFileType::FILE_LOCAL;
         ranges[i].__set_format_type(TFileFormatType::FORMAT_ARROW);
     }
     ranges[0].__set_path(file1_path);
-    ranges[0].__set_columns_from_path({"p1"});  // file 1 partition value
+    ranges[0].__set_columns_from_path({"p1"}); // file 1 partition value
     ranges[1].__set_path(file2_path);
-    ranges[1].__set_columns_from_path({"p2"});  // file 2 partition value
+    ranges[1].__set_columns_from_path({"p2"}); // file 2 partition value
 
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
 
@@ -1117,4 +1117,3 @@ TEST_F(ArrowScannerTest, TestMultiFileCrossFileBoundaryPathValues) {
 }
 
 } // namespace starrocks
-

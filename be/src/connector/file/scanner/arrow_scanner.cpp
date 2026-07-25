@@ -272,7 +272,7 @@ Status ArrowScanner::next_batch() {
                     // BufferReader is a thin wrapper (no data copy); the real cost is
                     // RecordBatchStreamReader::Open which is done once per discrete message.
                     _arrow_buffer_reader = std::make_shared<arrow::io::BufferReader>(
-                            reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining());
+                            arrow::Buffer::Wrap(reinterpret_cast<const uint8_t*>(_parser_buf->ptr), _parser_buf->remaining()));
                     _arrow_stream = _arrow_buffer_reader;
 
                     auto reader_res = arrow::ipc::RecordBatchStreamReader::Open(_arrow_stream);
