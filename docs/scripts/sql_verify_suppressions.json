@@ -368,6 +368,96 @@
       "reason": "SUM(DISTINCT ...) OVER (... RANGE ...) rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
       "added": "2026-07-26",
       "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:0792177ef5e30a5ee246c87fa07b50a893beed3969ab87bbba35ad1ed9c9d43a",
+      "file": "docs/zh/sql-reference/sql-functions/array-functions/array_map.md",
+      "line": 100,
+      "snippet": "select array_map(x -> x,[1],[2,4])",
+      "category": "expected-error",
+      "reason": "The page documents this as an error case (示例六 … 返回报错): the lambda's arity deliberately mismatches the number of input arrays. zh-only; en/ja carry no runnable SQL on this page.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:54a0480fcacfe39d885b97dea6065fb06d4aebf3f86fdc2503e548df5e5f0bfb",
+      "file": "docs/zh/sql-reference/sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md",
+      "line": 52,
+      "snippet": "REFRESH MATERIALIZED VIEW lo_mv1",
+      "category": "needs-setup",
+      "reason": "Refreshes lo_mv1, which the page never creates. zh-only because en/ja label the same blocks ```Plain so they are never executed; zh's ```SQL label is the convention-correct one. See issue #76813.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:edb9c3069455ba9ef07b20a13ce7a4006efb043341a66181a88962b163c60726",
+      "file": "docs/zh/sql-reference/sql-statements/materialized_view/REFRESH_MATERIALIZED_VIEW.md",
+      "line": 74,
+      "snippet": "REFRESH MATERIALIZED VIEW lo_mv1 WITH SYNC MODE",
+      "category": "needs-setup",
+      "reason": "Same as the block above: lo_mv1 is never created on this page.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:765aade78f55cb69ca2cdc10fd263a2ef6e1ab58563f8675316dc3fead59c67e",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 394,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time)",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:394 and ja:394.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:83f69aea6b6cdce8c2060961e6c8a6985eb145655e2e8d62e25b020d8a507132",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 406,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id) BUCKETS 10",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:406 and ja:406.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:389359b8e7d24ae1a552e29ed3e7632833d6d8e62eb70d5c54ce6ccfac954d6c",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 412,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id) DEFAULT BUC",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:412 and ja:412.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3750d411867a2c8cdf12d27ca2fac4cfa5537f3482ea6310fc70cf5dbf7fb04a",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 422,
+      "snippet": "ALTER TABLE details PARTITIONS (p20231127, p20231128) DISTRI",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:422 and ja:423.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:3f323b0bb5d27a4489264a146b42613baf673ada8b7796215a9b12cc902e8441",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 438,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY RANDOM BUCKETS 10",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:438 and ja:439.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "skel256:286165ddb1c8985dd827988a84b6a998a4bf751939628d94790dbb3c5942e231",
+      "file": "docs/zh/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
+      "line": 444,
+      "snippet": "ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time)",
+      "category": "needs-setup",
+      "reason": "Mutually-exclusive alternative bucketing examples executed back-to-back: the first ALTER starts an async OPTIMIZE and this one hits 'table details is currently in state OPTIMIZE'. Each is individually valid. This one skel256 covers zh:444 and ja:445.",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
     }
   ]
 }
