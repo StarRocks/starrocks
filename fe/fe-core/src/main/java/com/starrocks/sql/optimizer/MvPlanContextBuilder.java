@@ -15,9 +15,17 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,10 +38,11 @@ public class MvPlanContextBuilder {
 
     /**
      * Get plan context for the given materialized view.
+     *
      * @param mv
      * @param isThrowException: whether to throw exception when failed to build plan context:
-     *                        - when in altering table, we want to throw exception to fail the alter table operation
-     *                        - when in generating mv plan, we want to ignore the exception and continue the query
+     *                          - when in altering table, we want to throw exception to fail the alter table operation
+     *                          - when in generating mv plan, we want to ignore the exception and continue the query
      */
     public static List<MvPlanContext> getPlanContext(MaterializedView mv,
                                                      boolean isThrowException) {
@@ -45,6 +54,10 @@ public class MvPlanContextBuilder {
         List<MvPlanContext> results = Lists.newArrayList();
         ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get());
         ConnectContext connectContext = scope.getContext();
+        if (connectContext.getCurrentUserIdentity() == null) {
+            switchMvMaintenanceUser(connectContext, mv);
+        }
+
         try (scope; var guard = connectContext.bindScope()) {
             Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext), isThrowException))
                     .map(results::add);
@@ -68,6 +81,62 @@ public class MvPlanContextBuilder {
             if (isThrowException) {
                 throw e;
             }
+        }
+        return null;
+    }
+
+    /**
+     * When MV plan building runs on a background maintenance thread (the mv-plan-cache pool), its
+     * ConnectContext has no current user, so analyzing a UDF-referencing MV would fail its
+     * authorization check with an NPE. Give the context a valid identity, mirroring
+     * {@code TaskRun.switchUser} so plan-cache building authorizes the MV the same way MV refresh
+     * does, honoring {@link Config#mv_use_creator_based_authorization}.
+     */
+    private static void switchMvMaintenanceUser(ConnectContext connectContext, MaterializedView mv) {
+        UserIdentity user = resolveMvMaintenanceUser(mv);
+        connectContext.setQualifiedUser(user.getUser());
+        connectContext.setCurrentUserIdentity(user);
+        if (UserIdentity.ROOT.equals(user)) {
+            connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        } else {
+            try {
+                // Activate all the creator's roles (not just default roles), mirroring TaskRun.switchUser:
+                // unattended MV maintenance can't SET ROLE, so a privilege granted via a non-default role would
+                // otherwise be missing and the UDF authorization would fail (rewrite silently broken).
+                connectContext.setCurrentRoleIds(
+                        GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(user));
+            } catch (PrivilegeException e) {
+                LOG.warn("MV {} plan build: failed to resolve creator roles; using default roles",
+                        mv.getName(), e);
+                connectContext.setCurrentRoleIds(user);
+            }
+        }
+    }
+
+    private static UserIdentity resolveMvMaintenanceUser(MaterializedView mv) {
+        if (!Config.mv_use_creator_based_authorization) {
+            return UserIdentity.ROOT;
+        }
+        UserIdentity creator = creatorOfRefreshTask(mv);
+        if (creator != null) {
+            return creator;
+        }
+        LOG.warn("MV {} plan build: creator-based authorization is enabled but the refresh task/creator " +
+                "could not be resolved (task not registered yet?); falling back to ROOT", mv.getName());
+        return UserIdentity.ROOT;
+    }
+
+    private static UserIdentity creatorOfRefreshTask(MaterializedView mv) {
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager()
+                .getTask(TaskBuilder.getMvTaskName(mv.getId()));
+        if (task == null) {
+            return null;
+        }
+        if (task.getUserIdentity() != null) {
+            return task.getUserIdentity();
+        }
+        if (task.getCreateUser() != null) {
+            return UserIdentity.createAnalyzedUserIdentWithIp(task.getCreateUser(), "%");
         }
         return null;
     }
