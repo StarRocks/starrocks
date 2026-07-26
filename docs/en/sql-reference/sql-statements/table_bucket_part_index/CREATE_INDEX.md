@@ -58,10 +58,10 @@ PROPERTIES (
 );
 ```
 
-Create a bitmap index `index` on the `item_id` column of `sales_records`。
+Create a bitmap index `index_item_id` on the `item_id` column of `sales_records`.
 
 ```SQL
-CREATE INDEX index ON sales_records (item_id) USING BITMAP COMMENT '';
+CREATE INDEX index_item_id ON sales_records (item_id) USING BITMAP COMMENT '';
 ```
 
 ## Relevant SQLs
