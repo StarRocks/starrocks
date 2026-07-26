@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Entries are added by the sql-doc-autofix skill in a reviewed PR \u2014 never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
+  "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Optional 'versions' (e.g. [\"3.5\"] or [\"3.5\",\"4.0\"]) scopes an entry to the major.minor versions where the example is durably-not-runnable; omit it (or use []) for a global entry that is suppressed on every version — the default and original behavior. Scope version-gated entries; leave illustrative/expected-error global. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
   "suppressions": [
     {
       "fingerprint": "sha256:0ff1361dae876f56ac5548ad47569cf536a000c819e33910c897f824884cb2c9",
@@ -250,6 +250,123 @@
       "category": "needs-setup",
       "reason": "Joins the colocate group created by an earlier example with a different bucket count",
       "added": "2026-07-25",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:2e2a040abe2f01c28b4450240162baf448567be2e46db9dad5889d58cb3c3e4d",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 259,
+      "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg is not an analytic function in 3.5 (isAnalyticFn=false); array_agg(...) OVER (...) added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:08e63ddd8514fc02d100997e7d52a1ac506d28d59c4d34aa9c6cd2311b1d03b5",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 291,
+      "snippet": "SELECT *, array_agg(DISTINCT score) OVER ( PARTITION BY subj",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "DISTINCT is rejected unconditionally in 3.5 analytic functions; array_agg(DISTINCT ...) OVER (...) added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:d94e3a3562e1b64f375b8ea5357fbec5ca8dfe520d2ea901bc2b49bcdc631271",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 321,
+      "snippet": "SELECT *, array_agg(score ORDER BY score DESC) OVER ( PARTIT",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(... ORDER BY ...) OVER (...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:af92c8d239edc9c3b554af01a08d8ac76433e96709d12152f1d0730818728fa2",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 350,
+      "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(...) OVER (... RANGE ...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:7b63571bdbbba1b56c3807318cd6a423bd69df0a5e18012c626690ccff769e03",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 381,
+      "snippet": "SELECT stock_symbol, closing_date, closing_price, array_agg(",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "array_agg(...) OVER (...) not an analytic function in 3.5; added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:afbf5c2d9a5ab7b70679a4a508f92c287deb6a00e82de4e470f8b999ac15eb40",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 500,
+      "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER () AS ",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "COUNT(DISTINCT ...) OVER () rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:6209f7b38b342f07c2a0fdad26833e5848e37464a259c6b57240605e817dca4a",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 527,
+      "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER ( PART",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "COUNT(DISTINCT ...) OVER (... RANGE ...) rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:2bc0d9a5105c76275262004aeae804d7aafe7c27cb9c2e37efdc80245dfd5870",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 1661,
+      "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER () AS di",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "SUM(DISTINCT ...) OVER () rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
+      "added_by": "sql-doc-autofix"
+    },
+    {
+      "fingerprint": "sha256:c93f5e2dcbbaf752bbe938a4ec3babca240319620a3b2b77e55dcb918e8684b1",
+      "file": "docs/en/sql-reference/sql-functions/Window_function.md",
+      "line": 1688,
+      "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER ( PARTIT",
+      "category": "version-gated",
+      "versions": [
+        "3.5"
+      ],
+      "reason": "SUM(DISTINCT ...) OVER (... RANGE ...) rejected in 3.5; analytic DISTINCT carve-out added in 4.0",
+      "added": "2026-07-26",
       "added_by": "sql-doc-autofix"
     }
   ]

@@ -77,154 +77,138 @@ Before contributing, please read this article carefully to quickly understand th
 ## Verifying SQL samples
 
 The `sql-reference` docs contain thousands of runnable SQL examples. This procedure
-checks that they still run on a StarRocks release and drafts fixes for the ones
-that don't.
+checks that they still run on **every supported StarRocks release** and drafts fixes
+for the ones that don't.
 
-**The one rule: test one version at a time, and match it.** The docs you check and
-the cluster you run must be the **same StarRocks version** — otherwise examples for
-newer features look "broken" when the release simply doesn't have them yet.
+**The one rule still holds — each version's docs are tested against a cluster of that
+same version** — but the `sql-doc-autofix` skill now does this for the whole supported
+set in one run, **one cluster at a time** on `127.0.0.1:9030`. This is what makes
+backporting safe: a fix reaches a release branch only if it was verified against that
+version's own cluster, and each PR checks only the backport boxes it verified.
 
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) (includes Compose)
 - Python 3 and [`uv`](https://docs.astral.sh/uv/)
+- [`gh`](https://cli.github.com/), authenticated — used to discover the supported
+  versions and to open PRs/issues.
 - A clone of this repo (`git clone https://github.com/StarRocks/starrocks.git`) — a
   normal clone has this tooling and knows every release branch via `origin/*`, so
   you never switch its branch.
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) with the `starrocks`
-  MCP server (from the repo's `.mcp.json`) — used in step 5.
+  MCP server (from the repo's `.mcp.json`) — used in step 4.
 
 ### 0. Overview
 
-You verify one release end to end — say **4.1**. `SR_VERSION` is the only thing you
-set; every step below uses it:
+The skill runs the full supported set end to end. You mainly confirm the version set
+and review the results; the skill drives the clusters:
 
-1. **Set `SR_VERSION`** to the release you're verifying.
-2. **Create a worktree** of that release branch — its docs are what you check.
-3. **Start a StarRocks cluster** on that version — the examples run there.
-4. **Check the cluster is healthy.**
-5. **Run the `sql-doc-autofix` skill** — it checks the docs' SQL on the cluster.
-6. **Open the draft PR** of suggested fixes (and pick the branches to backport to).
-7. **Tear down.**
+1. **Confirm the version set** — auto-discovered from GitHub (e.g. `4.1 4.0 3.5`).
+2. **Create/refresh a worktree** per version — their docs are what's checked.
+3. **Run the `sql-doc-autofix` skill** — for each version it starts a matching
+   cluster on `9030`, checks that version's docs, verifies fixes, and stops the cluster
+   before the next version.
+4. **Review the draft PR(s)** of suggested fixes (backport boxes already match the
+   verified versions).
+5. **Tear down** anything left over.
 
-### 1. Set the version
-
-> Important:
->
 > All commands are run from the root of the StarRocks/starrocks repo:
->
 > `cd <wherever you have the repo checked out>`
 
-```bash
-export SR_VERSION=4.1   # the release you're verifying; every step below uses this
-```
+### 1. Confirm the version set
 
-### 2. Create a worktree of that release branch
-
-A one-time command per version. It fetches the branch and checks it out in a new
-directory, without touching your current branch:
+The skill discovers the supported versions for you and asks you to confirm or edit
+them. To preview or pin the set yourself:
 
 ```bash
-git fetch origin branch-$SR_VERSION
-git worktree add ../sr-branch-$SR_VERSION -b branch-$SR_VERSION origin/branch-$SR_VERSION
+docs/scripts/supported_versions.sh            # e.g. -> "4.1 4.0 3.5"
+docs/scripts/supported_versions.sh --max 4.1  # pin the newest, if not the latest
 ```
 
-Before a later run, refresh it with `git -C ../sr-branch-$SR_VERSION pull`.
+It reads GitHub Releases, keeps the newest distinct `major.minor` lines (top 3 by
+default), and stays correct as new releases ship — no edits needed when `4.2` lands.
+To skip discovery, export an explicit list: `export SR_VERSIONS="4.1 4.0 3.5"`.
 
-### 3. Start a matching StarRocks cluster
+### 2. Create a worktree per release branch
+
+One command per version (skip any you already have). Each fetches the branch and
+checks it out in its own directory on a branch named exactly `branch-<version>`,
+without touching your current branch:
 
 ```bash
-docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait
+for v in 4.1 4.0 3.5; do
+  git fetch origin branch-$v
+  git worktree add ../sr-branch-$v -b branch-$v origin/branch-$v
+done
 ```
 
-The FE is on `127.0.0.1:9030` (user `root`, no password). For the shared-data
-(cloud-native) cluster or teardown details, see
-[docs/docker/doc-verification/README.md](docker/doc-verification/README.md).
+Before a later run, refresh each with `git -C ../sr-branch-$v pull`.
 
-### 4. Check the status of the cluster
-
-```bash
-docker compose \
--f docs/docker/doc-verification/docker-compose-shared-nothing.yml \
-ps -a --format "table {{.Service}}\t{{.Status}}"
-```
-
-Look for both services to be healthy:
-
-```bash
-SERVICE        STATUS
-starrocks-be   Up 3 minutes (healthy)
-starrocks-fe   Up 3 minutes (healthy)
-```
-
-### 5. Check the examples and draft fixes
+### 3. Check the examples and draft fixes
 
 In Claude Code (with the `starrocks` MCP server attached), run the
-**`sql-doc-autofix`** skill and have it verify `$SR_VERSION`, whose docs are at
-`../sr-branch-$SR_VERSION/docs/en/sql-reference`.
+**`sql-doc-autofix`** skill. For each version in the set it:
 
-The skill:
-
-- runs the checker against those docs on your cluster and sorts every example into
-  **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not self-contained),
-  **ENV** (test-cluster limitation), or **SKIP** (not runnable by design);
-- for the genuinely fixable **FAIL** items, proposes a corrected statement, verifies
-  it on the cluster, and opens a **draft** PR — it never merges;
+- brings up a matching cluster on `127.0.0.1:9030` (user `root`, no password),
+- runs the checker against `../sr-branch-<v>/docs/en/sql-reference` and sorts every
+  example into **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not
+  self-contained), **ENV** (test-cluster limitation), or **SKIP** (not runnable by
+  design),
+- for the genuinely fixable **FAIL** items, proposes a corrected statement and verifies
+  it on that cluster,
 - flags version-gated or illustrative examples instead of "fixing" them, because
-  *runs on the cluster* is not the same as *correct documentation*.
+  *runs on the cluster* is not the same as *correct documentation*,
+- then stops that cluster and moves to the next version.
 
 ```bash
 claude
 ```
 
-If you see that a new MCP server is found for StarRocks enable it:
+If a new MCP server is found for StarRocks, enable it:
 
 ```bash
 New MCP server found in this project: starrocks
 ```
 
-After the StarRocks MCP server is allowed for use you can use the `sql-doc-autofix` skill:
+Then run the skill (optionally passing a version list):
 
 ```bash
 /sql-doc-autofix
 ```
 
-### 6. Open a PR
+> For a shared-data (cloud-native) cluster, or manual start/stop and health-check
+> details, see
+> [docs/docker/doc-verification/README.md](docker/doc-verification/README.md).
 
-Claude will ask how you want to proceed. If you choose to open a `draft PR off main` a PR will be opened.
+### 4. Review the PR(s)
 
-```bash
-How should I deliver the 2 verified fixes?
+Claude will ask how you want to proceed before opening anything. The skill produces:
 
-❯ 1. Open draft PR off main
-     Create a worktree off origin/main, apply both edits, open a draft [Doc] PR with Fixes + Not-fixed sections. You review and un-draft.
-  2. Apply edits locally only
-     Make the two edits in a main-based worktree/branch but do not push or open a PR. You handle the PR.
-  3. Just the report
-     Stop here with the triage above; make no code changes.
-  4. Type something.
-```
-
-The skill produces:
-
-- A **draft `[Doc]` PR** with the verified fixes. Its body is filled from the repo's
-  PR template — including the type, behavior-change, and version **backport** boxes —
-  so it can actually be merged. The same PR also adds any **suppressions** (a
-  `## Suppressions` section) for examples that legitimately can't run here
-  (version-gated, illustrative, needs external setup). Once merged, those stop being
-  reported on every run — so the noise shrinks over time. Review the edits and the
-  suppressions, confirm the backport version(s), then un-draft.
-- A **tracking issue** holding only the examples that genuinely need a human's
-  judgment, so those aren't lost when the run scrolls by. It's updated in place each
-  run (and closed when empty). Work through that issue separately.
+- **One or more draft `[Doc]` PRs**, grouped so every fix in a PR was verified on every
+  version whose **backport** box is checked. A fix that passes on all supported versions
+  becomes one PR with all boxes; a fix that fails on an older version becomes a separate
+  PR with a narrower box set. Each body is filled from the repo's PR template
+  (type, behavior-change, verified backport versions) and adds any **suppressions**
+  (a `## Suppressions` section, each with its version scope) for examples that
+  legitimately can't run — version-gated, illustrative, or needing external setup.
+  Once merged, those stop being reported every run, so the noise shrinks over time.
+  Review the edits and suppressions, then un-draft.
+- A **tracking issue** holding only the examples that genuinely need a human's judgment,
+  so those aren't lost when the run scrolls by. It's updated in place each run (and
+  closed when empty). Work through that issue separately.
 
 Full behavior and the report format:
 [.claude/skills/sql-doc-autofix/README.md](../.claude/skills/sql-doc-autofix/README.md).
 
-### 7. Tear down
+### 5. Tear down
+
+The skill stops each cluster as it finishes, but to be sure nothing is left running,
+and to remove the worktrees:
 
 ```bash
 docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml down
-git worktree remove ../sr-branch-$SR_VERSION   # optional
+for v in 4.1 4.0 3.5; do
+  git worktree remove ../sr-branch-$v   # optional
+done
 ```
 

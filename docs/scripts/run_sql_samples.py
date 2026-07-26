@@ -61,7 +61,10 @@ DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en/sql-reference"   # Phase 1 scope
 # Content-hashed "known / won't-fix" list, keyed by sample_fingerprint. Lives with
 # the tooling (not the docs checkout), so one list serves every version. Populated
 # by the sql-doc-autofix skill via reviewed PRs; a matched sample becomes
-# SKIP:suppressed and is never run or reported. See docs/scripts/README notes.
+# SKIP:suppressed and is never run or reported. An entry may carry an optional
+# "versions" scope (e.g. ["3.5"]) so a version-gated example is suppressed only on
+# the versions where it's durably-not-runnable; no "versions" = global (every
+# version), the original behavior. See docs/scripts/README notes.
 DEFAULT_SUPPRESSIONS = Path(__file__).resolve().parent / "sql_verify_suppressions.json"
 
 # ── Skip rules: samples a bare cluster can't or shouldn't run ────────────────
@@ -169,11 +172,17 @@ class Result:
     statement: str = ""       # the specific statement that failed
 
 
-def load_suppressions(path) -> dict[str, str]:
-    """Read the suppression list → {fingerprint: category}. A fingerprint here is
-    an example a human has already reviewed and judged won't-fix (version-gated,
-    illustrative, needs-setup, expected-error), so the checker should stop
-    re-reporting it. A missing/empty/unreadable file means no suppressions."""
+def load_suppressions(path) -> dict[str, dict]:
+    """Read the suppression list → {fingerprint: {"category", "versions"}}. A
+    fingerprint here is an example a human has already reviewed and judged won't-fix
+    (version-gated, illustrative, needs-setup, expected-error), so the checker should
+    stop re-reporting it. A missing/empty/unreadable file means no suppressions.
+
+    ``versions`` is an optional major.minor scope: ``None`` (field absent/empty) means
+    the entry is global — suppressed on every version, the original behavior — while a
+    list (e.g. ``["3.5"]``) suppresses the example only when the run's version matches.
+    If the same fingerprint appears in more than one entry, their scopes are merged;
+    any global entry makes the merged scope global."""
     if not path:
         return {}
     p = Path(path)
@@ -183,20 +192,37 @@ def load_suppressions(path) -> dict[str, str]:
         data = json.loads(p.read_text())
     except Exception:                                # noqa: BLE001
         return {}
-    out: dict[str, str] = {}
+    out: dict[str, dict] = {}
     for e in data.get("suppressions", []):
         fp = e.get("fingerprint")
-        if fp:
-            out[fp] = e.get("category", "suppressed")
+        if not fp:
+            continue
+        raw = e.get("versions")
+        vers = None if not raw else [(_major_minor(str(v)) or str(v)) for v in raw]
+        if fp in out:                                # same text suppressed by >1 entry
+            prev = out[fp]
+            prev["versions"] = (None if prev["versions"] is None or vers is None
+                                else sorted(set(prev["versions"]) | set(vers)))
+        else:
+            out[fp] = {"category": e.get("category", "suppressed"), "versions": vers}
     return out
 
 
-def classify(body: str, profile: str, suppressed: dict | None = None) -> tuple[str, str]:
-    """Return (action, reason): action is 'run' or 'skip'."""
+def classify(body: str, profile: str, suppressed: dict | None = None,
+             run_version: str | None = None) -> tuple[str, str]:
+    """Return (action, reason): action is 'run' or 'skip'.
+
+    ``run_version`` is the current run's major.minor; a version-scoped suppression
+    (``versions`` list) only applies when it matches."""
     # A previously-reviewed won't-fix example: skip before running or matching any
-    # rule, so it drops out of FAIL and the report entirely.
-    if suppressed and sample_fingerprint(body) in suppressed:
-        return "skip", "suppressed"
+    # rule, so it drops out of FAIL and the report entirely. A global entry
+    # (versions None) always skips; a scoped entry skips only on a listed version.
+    if suppressed:
+        entry = suppressed.get(sample_fingerprint(body))
+        if entry is not None:
+            vers = entry["versions"]
+            if not vers or (run_version and run_version in vers):
+                return "skip", "suppressed"
     for reason, rx in _SKIP_RULES:
         if rx.search(body):
             return "skip", reason
@@ -251,7 +277,7 @@ def split_statements(sql: str) -> list[str]:
 
 # ── Execution ────────────────────────────────────────────────────────────────
 def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: str,
-             suppressed: dict | None = None) -> list[Result]:
+             suppressed: dict | None = None, run_version: str | None = None) -> list[Result]:
     import pymysql  # lazy: only needed for live runs
 
     def connect():
@@ -308,7 +334,7 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
             continue
 
         for s in samples:
-            action, reason = classify(s.body, profile, suppressed)
+            action, reason = classify(s.body, profile, suppressed, run_version)
             if action == "skip":
                 results.append(Result(s, "SKIP", reason)); continue
             failed = None
@@ -366,11 +392,11 @@ def run_live(by_file: dict[str, list[SqlSample]], conn_kwargs: dict, profile: st
 
 
 def plan_only(by_file: dict[str, list[SqlSample]], profile: str,
-              suppressed: dict | None = None) -> list[Result]:
+              suppressed: dict | None = None, run_version: str | None = None) -> list[Result]:
     results = []
     for _, samples in sorted(by_file.items()):
         for s in samples:
-            action, reason = classify(s.body, profile, suppressed)
+            action, reason = classify(s.body, profile, suppressed, run_version)
             results.append(Result(s, "SKIP" if action == "skip" else "RUN", reason))
     return results
 
@@ -535,6 +561,11 @@ def main() -> int:
 
     suppressed = {} if args.no_suppressions else load_suppressions(args.suppressions)
 
+    # The run's docs version (major.minor) scopes version-specific suppressions and
+    # feeds the alignment check; computed once and reused for build_meta.
+    docs_v = docs_version(args.docs_root, args.docs_version)
+    run_version = _major_minor(docs_v)
+
     samples = [s for s in extract_samples(args.docs_root) if s.runnable]
     by_file: dict[str, list[SqlSample]] = {}
     for s in samples:
@@ -543,15 +574,14 @@ def main() -> int:
         v.sort(key=lambda x: x.line_start)
 
     if args.dry_run:
-        results, cluster_version = plan_only(by_file, args.profile, suppressed), ""
+        results, cluster_version = plan_only(by_file, args.profile, suppressed, run_version), ""
     else:
         results, cluster_version = run_live(
             by_file, dict(host=args.host, port=args.port,
                           user=args.user, password=args.password), args.profile,
-            suppressed)
+            suppressed, run_version)
 
-    meta = build_meta(cluster_version, docs_version(args.docs_root, args.docs_version),
-                      args.profile, args.docs_root)
+    meta = build_meta(cluster_version, docs_v, args.profile, args.docs_root)
     print(meta["verdict"], file=sys.stderr)          # always visible in logs
 
     if args.format == "json":
