@@ -35,7 +35,7 @@ SHOW ANALYZE JOB [WHERE predicate]
 
 ```SQL
 -- 查看集群全部自定义采集任务。
-SHOW ANALYZE JOB
+SHOW ANALYZE JOB;
 
 -- 查看数据库 `test` 下的自定义采集任务。
 SHOW ANALYZE JOB where `database` = 'test';

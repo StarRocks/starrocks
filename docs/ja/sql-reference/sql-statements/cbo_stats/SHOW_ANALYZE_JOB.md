@@ -37,7 +37,7 @@ WHERE 句を使用して結果をフィルタリングできます。このス�
 
 ```SQL
 -- すべてのカスタムコレクションタスクを表示します。
-SHOW ANALYZE JOB
+SHOW ANALYZE JOB;
 
 -- データベース `test` のカスタムコレクションタスクを表示します。
 SHOW ANALYZE JOB where `database` = 'test';

@@ -917,25 +917,25 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 1. 不相关标量子查询，谓词为 = 号。例如输出最高工资的人的信息。
 
     ```sql
-    SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
+    SELECT name FROM employees WHERE salary = (SELECT MAX(salary) FROM employees);
     ```
 
 2. 不相关标量子查询，谓词为 >,< 等。例如输出比平均工资高的人的信息。
 
     ```sql
-    SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
+    SELECT name FROM employees WHERE salary > (SELECT AVG(salary) FROM employees);
     ```
 
 3. 相关标量子查询。例如输出各个部门工资最高的信息。
 
     ```sql
-    SELECT name FROM table a WHERE salary = （SELECT MAX(salary) FROM table b WHERE b.部门= a.部门）;
+    SELECT name FROM employees a WHERE salary = (SELECT MAX(salary) FROM employees b WHERE b.Department= a.Department);
     ```
 
 4. 标量子查询作为普通函数的参数。
 
     ```sql
-    SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
+    SELECT name FROM employees WHERE salary = abs((SELECT MAX(salary) FROM employees));
     ```
 
 ### WHERE 与操作符
