@@ -827,8 +827,8 @@ CREATE TABLE example_db.example_tbl3 (
     country varchar(26) NULL, 
     pay_time bigint(20) NULL, 
     price double SUM NULL) 
-AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
+AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
@@ -973,7 +973,7 @@ CREATE TABLE sensor.sensor_log2 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
@@ -1053,7 +1053,7 @@ CREATE TABLE sensor.sensor_log3 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
