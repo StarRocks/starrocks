@@ -85,21 +85,21 @@ Example 1: Synchronously query a table `order` and create a new table `order_new
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT * FROM order;
+AS SELECT * FROM `order`;
 ```
 
 Example 2: Synchronously query the `k1`, `k2`, and `k3` columns in the table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `a`, `b`, and `c`.
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-AS SELECT k1, k2, k3 FROM order;
+AS SELECT k1, k2, k3 FROM `order`;
 ```
 
 or
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
+AS SELECT k1 AS a, k2 AS b, k3 AS c FROM `order`;
 ```
 
 Example 3: Synchronously query the largest value of the `salary` column in the table `employee` and create a new table `employee_new` based on the query result, and then insert the query result into the new table. Additionally, set the column name of the new table to `salary_max`.
@@ -221,7 +221,9 @@ Check information of the Task.
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
+```
 
+```plaintext
 -- Information of the Task
 
 TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
@@ -236,7 +238,9 @@ Check the state of the TaskRun.
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;
+```
 
+```plaintext
 -- State of the TaskRun
 
 QUERY_ID: 37bd2b63-eba8-11ec-8d41-bab8ee315bf2
