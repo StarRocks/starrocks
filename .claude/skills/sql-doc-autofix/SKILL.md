@@ -1,6 +1,6 @@
 ---
 name: sql-doc-autofix
-description: Propose verified fixes for documentation SQL examples that fail the doc-rot checker (docs/scripts/run_sql_samples.py). Verifies against every supported version (auto-discovered), classifies each FAILing example, and only for genuinely fixable ones proposes a corrected statement, verifies it against a live cluster of each version via the StarRocks MCP server, and opens DRAFT [Doc] PRs whose backport boxes match exactly the versions each fix was verified on. Never auto-merges.
+description: Propose verified fixes for documentation SQL examples that fail the doc-rot checker (docs/scripts/run_sql_samples.py). Checks all three languages (docs/en, docs/zh, docs/ja) against every supported version (auto-discovered), classifies each FAILing example, and only for genuinely fixable ones proposes a corrected statement, verifies it against a live cluster of each version via the StarRocks MCP server, applies it to every language that carries the example, and opens DRAFT [Doc] PRs whose backport boxes match exactly the versions each fix was verified on. Also emits a cross-language parity report. Never auto-merges.
 argument-hint: "[optional version list, e.g. '4.1 4.0 3.5' — default: auto-discover supported versions and confirm]"
 allowed-tools: Read, Edit, Grep, Glob, Bash, Agent, mcp__starrocks__read_query, mcp__starrocks__write_query, mcp__starrocks__table_overview, mcp__starrocks__db_overview
 ---
@@ -10,15 +10,31 @@ allowed-tools: Read, Edit, Grep, Glob, Bash, Agent, mcp__starrocks__read_query, 
 Turn the checker's **detect** output into **suggested fixes**, safely. Golden rule:
 **"executes" ≠ "correct documentation."** Making a statement run by changing what
 it teaches is worse than leaving it broken. Classify first; only rewrite the
-genuinely fixable; flag the rest. English docs only — never edit `docs/zh/**` or
-`docs/ja/**`.
+genuinely fixable; flag the rest.
 
-**Every run verifies against all supported versions** (e.g. `4.1 4.0 3.5`). This
-is what makes backporting safe: a fix ships to a release branch **only** if it was
-verified against that version's own cluster. The other governing rule follows from
-it — **a backport box is checked only for a version whose fix was verified there.**
-Backport is Mergify-driven: a checked box auto-cherry-picks the merged PR to
-`branch-X.Y`, so an unverified checked box means an unverified edit on that branch.
+**Every run covers all three languages × all supported versions.** Two independent
+axes, and both matter:
+
+- **Versions** (e.g. `4.1 4.0 3.5`) — makes backporting safe. A fix ships to a
+  release branch **only** if it was verified against that version's own cluster, so
+  **a backport box is checked only for a version whose fix was verified there.**
+  Backport is Mergify-driven: a checked box auto-cherry-picks the merged PR to
+  `branch-X.Y`, so an unverified checked box means an unverified edit on that branch.
+- **Languages** (`docs/en`, `docs/zh`, `docs/ja`) — this repo has a standing habit of
+  updating one language and not the others, so rot and drift hide in the languages
+  nobody checked. A fix **must be applied to every language that carries the example**
+  (see Step 3). Never fix `en` and leave `zh`/`ja` broken; that is the exact failure
+  mode this skill exists to stop.
+
+The two axes produce **different signals** and must not be conflated:
+
+| signal | question | tool | outcome |
+|---|---|---|---|
+| **rot** | does this example still run? | `run_sql_samples.py` | fix / suppress / issue |
+| **parity** | does this example *exist* in the other languages? | `sql_sample_parity.py` | translation-backfill list in the issue — **never** an auto-fix |
+
+A missing example can never fail a rot run, so parity is the only way translation
+drift is visible at all.
 
 ## Prerequisites
 - The **`starrocks` MCP server** is attached (see repo-root `.mcp.json`; tools:
@@ -48,30 +64,41 @@ Backport is Mergify-driven: a checked box auto-cherry-picks the merged PR to
   non-zero (no `gh`, network/API error), ask the operator to supply the list.
 
 ### 0b. Per version, refresh a correctly-named worktree
-Each version's docs live in `../sr-branch-<v>/docs/en/sql-reference`, and the worktree
-**must sit on a local branch named exactly `branch-<v>`**. `docs_version()` in
+Each version's docs live in `../sr-branch-<v>/docs/{en,zh,ja}/sql-reference`, and the
+worktree **must sit on a local branch named exactly `branch-<v>`**. `docs_version()` in
 `run_sql_samples.py` reads `git rev-parse --abbrev-ref HEAD`; a `--detach` worktree
 reports `HEAD` and any other branch name reports itself — either way the run looks
 unversioned and every failure is untriageable. For each `v` in the set:
 ```bash
-git fetch origin "refs/heads/branch-$v:refs/remotes/origin/branch-$v"
+git fetch origin "+refs/heads/branch-$v""$(printf ':refs/remotes/origin/branch-%s' "$v")"
 git worktree add "../sr-branch-$v" -B "branch-$v" "origin/branch-$v"
 # already exists? refresh in place:
 #   git -C "../sr-branch-$v" checkout -B "branch-$v" "origin/branch-$v"
 git -C "../sr-branch-$v" rev-parse --abbrev-ref HEAD   # must print branch-$v
 ```
+The refspec quoting is deliberate: in zsh a bare `"…branch-$v:refs/…"` has its `:r`
+eaten as a history modifier, silently fetching the wrong ref. Verify with
+`git for-each-ref` after a scripted fetch loop.
+
 If a checkout truly cannot be on that branch, pass `--docs-version $v` to the checker.
 
-### 0c. Loop: bring up each cluster, detect, verify, tear down
+### 0c. Loop: bring up each cluster, run all three languages, tear down
 Run the versions **sequentially on `9030`** (one cluster at a time — three at once
-collide on container names/ports and ~3× RAM). For each `v`:
+collide on container names/ports and ~3× RAM). Within a version, run the three
+languages against that same live cluster — the cluster is language-agnostic, so this
+costs three checker passes, not three cluster boots. That is **3 versions × 3
+languages = 9 runs**; tell the operator up front that this is the long part.
+
 ```bash
 SR_VERSION=$v docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait
-DOCS=../sr-branch-$v/docs/en/sql-reference
-python3 docs/scripts/run_sql_samples.py --docs-root "$DOCS" --docs-version "$v" \
-    --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run-$v.json
-python3 docs/scripts/autofix_candidates.py --run-json /tmp/run-$v.json \
-    --repo ../sr-branch-$v > /tmp/candidates-$v.json
+for lang in en zh ja; do
+  DOCS=../sr-branch-$v/docs/$lang/sql-reference
+  [ -d "$DOCS" ] || { echo "no $lang docs on $v — skipping"; continue; }
+  python3 docs/scripts/run_sql_samples.py --docs-root "$DOCS" --docs-version "$v" \
+      --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run-$v-$lang.json
+  python3 docs/scripts/autofix_candidates.py --run-json /tmp/run-$v-$lang.json \
+      --repo ../sr-branch-$v > /tmp/candidates-$v-$lang.json
+done
 # ... classify (Step 1) + verify fixable (Step 2) against this live cluster ...
 SR_VERSION=$v docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml down
 ```
@@ -82,6 +109,30 @@ SR_VERSION=$v docker compose -f docs/docker/doc-verification/docker-compose-shar
   error once — retry it once before treating it as a real failure.
 - Triage **every** FAIL in each run — do not cap the batch. (`autofix_candidates.py`
   defaults to all candidates; use `--limit N` only to deliberately shrink a batch.)
+- **The triage load does not triple.** Most zh/ja failures are the *same statement* as
+  an en failure and share a `skeleton` hash — one classification, one cluster
+  verification, three file edits. Only examples whose skeleton appears in one language
+  alone need independent triage. Deduplicate by `skeleton` *before* you start
+  classifying, or you will do the same work three times.
+
+### 0d. Parity report (once per version, no cluster needed)
+Rot and parity are different questions; run both.
+```bash
+python3 docs/scripts/sql_sample_parity.py --repo ../sr-branch-$v --format json \
+    > /tmp/parity-$v.json
+python3 docs/scripts/sql_sample_parity.py --repo ../sr-branch-$v > /tmp/parity-$v.md
+```
+It pairs examples on the comment-stripped `skeleton` hash — so a translated `--`
+comment is **not** reported as a difference — and reports two things: pages whose
+runnable SQL exists in some languages but not others, and per-page example
+differences.
+
+**Do not auto-fix parity findings.** Expect it to be noisy (on 4.1: 89 differing
+pages, ~142 en examples absent elsewhere, ~119 elsewhere absent from en). Some gaps
+are deliberate — a page restructured in one language only. Parity output goes to the
+tracking issue as a **translation-backfill list** for a human, and to the operator as
+a summary. Adding a missing example is a translation task, not a doc-rot fix, and it
+is out of this skill's scope.
 
 Check each run's `meta` before triaging, and distinguish the two `aligned: false`
 cases — they need opposite responses:
@@ -97,13 +148,40 @@ Because you now run *all* versions, you can confirm this directly — the same e
 passing on a newer version and failing on an older one is the version-gated signal.
 
 ## Step 1 — Classify each candidate (the guardrail)
-Per version, read `doc_context` to understand what the example *teaches*, use the MCP
-server to check reality, then assign exactly one class. Record results into a
-**cross-version map keyed by `fingerprint`**:
-`{ file, line, before, after, verified_on: set(), durable_fail_on: {version: category},
-class_per_version, exists_on_main }`. Each class routes to one of three destinations
-(Step 3): **fix** → PR edit, **durably-not-runnable** → scoped suppression entry,
-**unsure** → tracking issue.
+Read `doc_context` to understand what the example *teaches*, use the MCP server to
+check reality, then assign exactly one class. Record results into a **cross-version,
+cross-language map keyed by `skeleton`** (not `fingerprint` — the skeleton is what
+makes the en/zh/ja copies of one example a single row):
+
+```
+skeleton -> {
+  sites: [ {lang, version, file, line, fingerprint} ],   # every copy that FAILs
+  langs_present: {version: set(langs)},   # where the example exists at all
+  before, after,
+  verified_on: set(versions),             # cluster-verified, per Step 2
+  durable_fail_on: {version: category},
+  class, exists_on_main,
+}
+```
+
+`sites` is what drives the edits: one classification decision, one cluster
+verification, but **an edit at every site**. Build this map before classifying so you
+judge each example once — not once per language.
+
+Each class routes to one of three destinations (Step 3): **fix** → PR edit **in every
+language that has the example**, **durably-not-runnable** → skeleton-keyed suppression
+entry, **unsure** → tracking issue.
+
+Two language-specific classes to watch for — these are new failure modes that an
+en-only run never saw:
+- **translation-damaged SQL** — the statement was broken *by* translation: full-width
+  punctuation (`（`, `）`, `，`, `；`) substituted into SQL, a translated identifier or
+  column alias, a smart quote. This is **fixable**, and the fix is usually to restore
+  the ASCII/en token. Verify it like any other fix.
+- **language-divergent example** — the same page teaches a *different* statement in
+  each language (different skeleton, not a translation artifact). These are separate
+  candidates with separate skeletons; fix each on its own evidence, and note the
+  divergence in the tracking issue rather than silently unifying them.
 
 - **fixable** — renamed/removed function, reserved word as identifier
   (`FROM order`, `CREATE INDEX index`), clear syntax slip. Confirm the intended
@@ -137,9 +215,19 @@ a **suppression entry** so the checker stops re-reporting them — see Step 3.
 
 ## Step 2 — Propose + verify (fixable only), on each version's live cluster
 Verify a candidate fix against the cluster of **every version where that example
-appears and fails**, so you learn the exact set of versions it is verified on. Work in
-an isolated scratch database via the MCP server (which points at the current version's
-cluster on `9030`):
+appears and fails**, so you learn the exact set of versions it is verified on.
+
+**Verify once per version, not once per language.** A cluster has no notion of
+language: if the en/zh/ja copies share a `skeleton`, they are the same statement and
+one run on that version's cluster verifies all three. Re-running the identical SQL
+because it came from a different file is wasted effort. The exceptions are real:
+- the copies do **not** share a skeleton (genuinely different statements) — verify each;
+- the fix is **translation-damage repair** — verify the *repaired* statement, which is
+  the one that will land in that language's file, since it may differ from en's text
+  in string literals or comments even after repair.
+
+Work in an isolated scratch database via the MCP server (which points at the current
+version's cluster on `9030`):
 ```
 write_query: CREATE DATABASE IF NOT EXISTS docfix_scratch;
 write_query: USE docfix_scratch;   -- do ALL test writes here
@@ -156,17 +244,25 @@ write_query: USE docfix_scratch;   -- do ALL test writes here
 
 ## Step 3 — Deliver: DRAFT PR(s) (fixes + scoped suppressions) + a review-only tracking ISSUE
 
-### Suppressions — scoped by observation
+### Suppressions — keyed by skeleton, scoped by observation
 For each version-gated / needs-setup / illustrative candidate, append an entry to
 `docs/scripts/sql_verify_suppressions.json` **in the same draft PR**. Copy the
-candidate's `fingerprint` from `/tmp/candidates-<v>.json` verbatim (do not recompute):
+candidate's **`skeleton`** from `/tmp/candidates-<v>-<lang>.json` verbatim (do not
+recompute):
 ```json
-{ "fingerprint": "<from candidates-*.json>", "file": "<file>", "line": <line>,
+{ "fingerprint": "<the `skeleton` value, skel256:…>", "file": "<file>", "line": <line>,
   "snippet": "<first ~60 chars of the statement>", "category": "version-gated",
   "versions": ["3.5"],
-  "reason": "<one line: why it won't run there>", "added": "<YYYY-MM-DD>",
-  "added_by": "sql-doc-autofix" }
+  "reason": "<one line: why it won't run there; note the other languages it covers>",
+  "added": "<YYYY-MM-DD>", "added_by": "sql-doc-autofix" }
 ```
+- **Use the `skeleton` (`skel256:…`), not the verbatim `fingerprint`.** The field is
+  still named `fingerprint` and the matcher accepts either hash, but a `sha256:` key
+  matches **one language only** — the zh and ja copies carry translated comments and
+  hash differently, so a verbatim key would need three entries per example and would
+  silently miss the other two. One `skel256:` entry covers all three languages.
+  Reserve a `sha256:` key for the rare case where you deliberately want to suppress
+  one language's copy and not the others; say so in `reason`.
 - `category` ∈ `version-gated | needs-setup | illustrative | expected-error`.
 - **`versions`** = the major.minor set where the example is *durably not runnable*
   (from your cross-version evidence). **Omit `versions`** (global) only for classes that
@@ -174,11 +270,32 @@ candidate's `fingerprint` from `/tmp/candidates-<v>.json` verbatim (do not recom
   (and version-specific `needs-setup`) to exactly the failing versions, so the example
   is still checked on versions where it works. A version-gated example that *works on
   `main`* is **unsure**, not a suppression (route to the issue).
-- The matcher (`load_suppressions`/`classify`) skips a sample when its fingerprint has a
-  global entry, or a scoped entry listing the run's version. Dedupe by fingerprint
-  (duplicated text shares one hash → one entry can cover several `file:line`; note the
-  extras in `reason`). Suppression lands **only** via the human-reviewed PR — never edit
-  the file outside it, and **never suppress a `fixable` or `unsure` item**.
+- The matcher (`load_suppressions`/`classify`) skips a sample when either of its hashes
+  has a global entry, or a scoped entry listing the run's version. Dedupe by skeleton
+  (duplicated text shares one hash → one entry can cover several `file:line` across
+  several languages; note the extras in `reason`). Suppression lands **only** via the
+  human-reviewed PR — never edit the file outside it, and **never suppress a `fixable`
+  or `unsure` item**.
+
+### Apply every fix in every language that has the example
+This is the rule the repo keeps breaking, so it is mechanical, not a judgement call.
+For each fixed skeleton, walk its `sites` and edit **every** one:
+
+- The example exists in `en`, `zh` and `ja` → **all three files change in the same PR.**
+  Do not open a language-only PR and do not defer the others to a follow-up.
+- The example exists in only some languages → edit the ones that have it, and add the
+  absent ones to the **parity backfill list** in the tracking issue. Do not invent a
+  translated page.
+- **Translate only the SQL, never the prose.** These edits are inside ```sql fences.
+  If a fix forces a prose change (renaming an index the surrounding sentence names),
+  make the minimal prose edit in each language; if you cannot write that language's
+  prose confidently, make the SQL fix in all three, leave that language's prose alone,
+  and flag the sentence in the tracking issue for a native reviewer. Never machine-
+  translate a paragraph into the docs.
+- Preserve each language's own comments and string literals. A `-- 创建表` comment stays
+  Chinese; you are changing the statement, not normalizing the page to English.
+- Before opening the PR, re-extract and confirm the target skeleton is gone from **all**
+  language trees — the same check used for `en`, run per language.
 
 ### Group fixes into PR(s) by verified-version-set
 Mergify cherry-picks a whole PR to each checked branch, so **every fix in a PR must be
@@ -211,8 +328,14 @@ filled template yourself):
 - `## What type of PR is this:` → `- [x] Doc`
 - behavior-change question → `- [x] No, this PR will not result in a change in
   behavior.` and uncheck the default `Yes`
-- **Fixes** table under *What I'm doing:* — `file:line`, before → after, and
-  **"verified on: `<v1>, <v2>, …`"** (the exact cluster versions each fix ran on).
+- **Fixes** table under *What I'm doing:* — `file:line`, before → after,
+  **"verified on: `<v1>, <v2>, …`"** (the exact cluster versions each fix ran on), and
+  **"languages: `en, zh, ja`"** (the language files this PR actually changes for that
+  fix). If a fix touches fewer than all three, the table must say which and the body
+  must say why — "the example does not exist in `ja`" is a fine reason; silence is not.
+- a short **`## Language coverage`** line: the per-language file count in the diff
+  (e.g. `en 6 · zh 6 · ja 5`) and, if they differ, one sentence explaining the gap.
+  A reviewer should be able to spot an accidentally en-only PR at a glance.
 - a **`## Suppressions`** section listing each entry added (`file:line` · category ·
   `versions` scope or "global" · one-line reason), so the reviewer sees exactly what is
   being silenced and on which versions.
@@ -225,15 +348,26 @@ filled template yourself):
 
 Open each as a **draft** `[Doc]` PR; a human reviews and un-drafts.
 
-### Tracking issue — only what needs a human
+### Tracking issue — what needs a human, plus the parity backfill list
 The durably-not-runnable classes go to the (scoped) suppression list, so the issue holds
-**only `unsure` items**. Open/update a GitHub issue labeled
-`documentation,docs-maintainer`, titled `SQL doc examples needing review — <versions>`
-(e.g. `— 4.1/4.0/3.5`), with a checkbox list: each item `file:line`, the versions it was
-seen failing on, and its one-line reason. **If an open issue with that title already
-exists, update it** (don't duplicate): regenerate its body from this run's `unsure` set.
-Check off any previously-listed item you have now fixed or suppressed, with a note; if
-the list is **empty**, comment "all triaged" and **close** the issue.
+**two sections**. Open/update a GitHub issue labeled `documentation,docs-maintainer`,
+titled `SQL doc examples needing review — <versions>` (e.g. `— 4.1/4.0/3.5`).
+**If an open issue with that title already exists, update it** (don't duplicate):
+regenerate its body from this run. Check off any previously-listed item you have now
+fixed or suppressed, with a note.
+
+1. **`unsure` items** — a checkbox list: each item `file:line`, the languages and
+   versions it was seen failing on, and its one-line reason.
+2. **Cross-language parity** — from `/tmp/parity-<v>.json`. Do **not** paste the raw
+   report; it is hundreds of lines. Summarize: the per-language sample counts, the
+   number of differing pages, and then the **top pages by gap size** as a checkbox
+   backfill list. Call it out explicitly as a *translation* task list that this skill
+   does not act on, and note that some gaps are deliberate so it needs its own triage
+   pass before anyone works it.
+
+If **both** sections are empty, comment "all triaged" and **close** the issue. A
+non-empty parity list alone is enough to keep it open — that is the drift this run
+exists to make visible.
 
 Cross-link (PR body → issue when non-empty, issue → PRs) and report all URLs at the end.
 
@@ -241,6 +375,15 @@ Cross-link (PR body → issue when non-empty, issue → PRs) and report all URLs
 - Never un-draft or merge; never commit without operator review.
 - Never check a backport box for a version whose fix you did not verify on that version's
   cluster.
+- Never fix an example in one language and leave the other languages' copies of that
+  same example broken. If you fixed `en`, the `zh` and `ja` sites in that skeleton's
+  `sites` list are part of the same PR.
+- Never machine-translate documentation prose. Fix the SQL in every language; escalate
+  prose that must change to a native reviewer via the tracking issue.
+- Never key a suppression on the verbatim `sha256:` hash when the example exists in more
+  than one language — it will silence one language and leave the others reporting.
+- Never treat a cross-language parity difference as doc rot, and never auto-add a
+  missing example to a language to make the parity report quiet.
 - Never run `write_query` outside the scratch DB; never account/role, cluster
   (`ALTER SYSTEM`), `DROP` on real databases, backup/restore, or file/routine-load
   statements during verification.

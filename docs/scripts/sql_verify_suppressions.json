@@ -3,7 +3,7 @@
   "_comment": "Examples the docs team has reviewed and judged won't-fix, so the SQL-sample checker (run_sql_samples.py) stops re-reporting them. Keyed by 'fingerprint' (sample_fingerprint: a content hash, not file:line) so an entry survives the block moving and re-surfaces if the example text meaningfully changes. Categories: version-gated | illustrative | needs-setup | expected-error. Optional 'versions' (e.g. [\"3.5\"] or [\"3.5\",\"4.0\"]) scopes an entry to the major.minor versions where the example is durably-not-runnable; omit it (or use []) for a global entry that is suppressed on every version — the default and original behavior. Scope version-gated entries; leave illustrative/expected-error global. Entries are added by the sql-doc-autofix skill in a reviewed PR — never auto-committed. file/line/snippet are human context only; matching is by fingerprint.",
   "suppressions": [
     {
-      "fingerprint": "sha256:0ff1361dae876f56ac5548ad47569cf536a000c819e33910c897f824884cb2c9",
+      "fingerprint": "skel256:57e60902f26526ce42d76954d6c316f725e2af1d2ac58baa75949ce09cfd41e4",
       "file": "docs/en/sql-reference/System_variable.md",
       "line": 156,
       "snippet": "SELECT /*+ SET_VAR ( exec_mem_limit = 515396075520, query_ti",
@@ -13,7 +13,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:98729ced60a41fa319e5aca9171e11e523ae6299c05d96a37ae759cf438476a4",
+      "fingerprint": "skel256:6167c6c0d70ac9af4a1f0792ff68e14e8f61289ba6af6b130d6637bd8c99e633",
       "file": "docs/en/sql-reference/data-types/numeric/DECIMAL.md",
       "line": 135,
       "snippet": "INSERT INTO test_decimal256(p50s48) SELECT 333",
@@ -23,7 +23,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:59885fd64695eef87e1a35d409d257e3bcd9da1258e83e8ca6e58b566de01ee9",
+      "fingerprint": "skel256:a9e57d6f547259a02df389323fbea6aabbb423a422c29196a0640146220a6e83",
       "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
       "line": 97,
       "snippet": "insert into bitmap_table1 select id, to_bitmap(id2) from tab",
@@ -33,7 +33,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:e7ffb9ed60d78678fbc7d736796f1eeb9202f2fa02eb21ddbd803c917746910c",
+      "fingerprint": "skel256:0ea77206907154a4de191fcb9dd6917769ceb33043071c9353b1df06db7db7c4",
       "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
       "line": 104,
       "snippet": "insert into bitmap_table1 select id, bitmap_hash(id2) from t",
@@ -43,7 +43,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:6a971baa3beb539defadcd07bed7e29b51ed1805aee3470fa45e4c91039163d4",
+      "fingerprint": "skel256:941751d7a8f0730a11f7b691161b4177161acd9c88d4188737fa0fd90a7ffa4b",
       "file": "docs/en/sql-reference/sql-functions/aggregate-functions/bitmap.md",
       "line": 111,
       "snippet": "insert into bitmap_table1 select id, bitmap_hash64(id2) from",
@@ -53,7 +53,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:abb34226190e92afa73c803df925e6a814b1c713e8361793546fbd53fdb5fd73",
+      "fingerprint": "skel256:d5270eefc8e598deb96624b3055784959f0bd0a8a497dc6760ed647f6cc81c3f",
       "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
       "line": 29,
       "snippet": "-- Calculate users retention under different tags today and ",
@@ -63,7 +63,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:8ba1860993a57cbe1a5a25fa6302be6910745ec8e5ff03c5cb1c7e26fbc405d3",
+      "fingerprint": "skel256:306365f333cc5d73c90cade9987ddc9c54521baf59907f2ab758bb74ef5f3ce2",
       "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_intersect.md",
       "line": 42,
       "snippet": "--Find out users retained under different tags today and yes",
@@ -73,7 +73,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:014d7325202d02e85dea1257366cd319b73a9ec24e4efb4030bcb80c6503a8eb",
+      "fingerprint": "skel256:0c24948ed5a2344d98355f3f8b8716633871aea51a3bb480a675ea740ad97474",
       "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
       "line": 20,
       "snippet": "select page_id, bitmap_union(user_id) from table group by pa",
@@ -83,7 +83,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:9dcdc00acc863f7f518de09263b4c4ba2e125f9c27c14e945abba0cb241ece39",
+      "fingerprint": "skel256:f2124742fee3e25c91b9a2f4a6085cfcdf96b4e7a69a64ae31bc3477c196a09c",
       "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
       "line": 28,
       "snippet": "select page_id, bitmap_count(bitmap_union(user_id)) from tab",
@@ -93,7 +93,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:7e17e16a0ef345cf8f917d2de8aa334c330aaaa761824a6eff85cdb94f436600",
+      "fingerprint": "skel256:a565a79d19a37d0c5c24892d889c882c74a381849408962b91b0cbcd4e6556d6",
       "file": "docs/en/sql-reference/sql-functions/bitmap-functions/bitmap_union.md",
       "line": 36,
       "snippet": "select page_id, count(distinct user_id) from table group by ",
@@ -103,7 +103,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:0e2066d0b50921b957a1b54232e4c159b1d28e40fed5df35d71bc6860fe1586d",
+      "fingerprint": "skel256:b22304cea0d2874ce98f84c47c6fba7e54a7c6579a2cceb40ccb9886c0ecdc3c",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md",
       "line": 20,
       "snippet": "ADMIN SET FRONTEND CONFIG (\"key\" = \"value\")",
@@ -113,7 +113,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:7c69c56584d8dc4bf23dee9b484ee4bd93316ebff1ad7762651fdf4990609553",
+      "fingerprint": "skel256:e4fe5d46e0848313125c9b570ed56bdeee4ed305530040211cb731858006583d",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/file/CREATE_FILE.md",
       "line": 47,
       "snippet": "CREATE FILE \"test.pem\" PROPERTIES ( \"url\" = \"https://starroc",
@@ -123,7 +123,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:70cd953356ffc40161747466752a14085f18490790941fd585935b25c63b28c3",
+      "fingerprint": "skel256:2df98d9f85582a7aca3df5c32f84feb3783ec3e855b516a26c8372346b70ce83",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/file/DROP_FILE.md",
       "line": 41,
       "snippet": "DROP FILE \"ca.pem\" properties(\"catalog\" = \"kafka\")",
@@ -133,7 +133,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:21e1f9058d26d2e09cf34f80a27ea2b70221a2ffe7d589c794313d5e7b5135cf",
+      "fingerprint": "skel256:53bb62ddfb87f9f9481bb945f8760ab17d8ef1a6021fef57fce86755f1e1979c",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKEND_BLACKLIST.md",
       "line": 20,
       "snippet": "SHOW { BACKEND | COMPUTE NODE } BLACKLIST",
@@ -143,7 +143,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:915b73a4de906cc764944247204708586c538a1d1dcaec0612bd909be194c901",
+      "fingerprint": "skel256:65b309ed1ead279af05aa5819c06294d5aceecb56faaabd8d1da362ae342e174",
       "file": "docs/en/sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SKIP_COMMITTED_TRANSACTION.md",
       "line": 41,
       "snippet": "ADMIN SET FRONTEND CONFIG (\"enable_admin_skip_committed_txn\"",
@@ -153,7 +153,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:a6792fb6bf1887b7b498d03ffec985d2bcbb1d02454fbc3615b3ef8b8421695b",
+      "fingerprint": "skel256:36a0413516250995942a2210a5ce0eeb971ed0f19f43cf66ac92dd9e31514b95",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 414,
       "snippet": "-- This will cause an error! SELECT *, array_agg(score) OVER",
@@ -163,7 +163,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:a6d11cd18b78a2b25f0fd87cfd7df516d1e9a9177aa25523cc7c0ace69c0f80c",
+      "fingerprint": "skel256:e4644418e55be306957b319b0a50feb7b7a46e2c69180a0337ece714edb5907f",
       "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
       "line": 92,
       "snippet": "CREATE DICTIONARY dict_obj USING dict (order_uuid KEY, order",
@@ -173,7 +173,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:c475d4bac09a8cb4a973f201f86cd5d1cbadbba58a282b53eb32efd05c4b1fea",
+      "fingerprint": "skel256:448111ea88f86e8e2eebb0aefd1375c1fdeb10b082805fdee05c62855b86b517",
       "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
       "line": 100,
       "snippet": "SELECT dictionary_get(\"dict_obj\", \"a1\")",
@@ -183,7 +183,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:7436ea2bc6e77f77d923064dbe72db501508394ee988c4fa861f923e19fbf393",
+      "fingerprint": "skel256:8103ae5cc85cf557ac9861e4b5d4a716c0154782740d596389a4d9c7c6c393b4",
       "file": "docs/en/sql-reference/sql-statements/dictionary/CREATE_DICTIONARY.md",
       "line": 165,
       "snippet": "CREATE DICTIONARY dimension_obj USING ProductDimension (Prod",
@@ -193,7 +193,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:ed12103dc96ae56eac6c784305ac07ef934177535b883c0c686f8809da009477",
+      "fingerprint": "skel256:47fad88a270caa73b6361eb7b2f677e359c02ed59eb5fff757ee7163e001a63c",
       "file": "docs/en/sql-reference/sql-statements/keywords.md",
       "line": 29,
       "snippet": "CREATE DATABASE LIKE",
@@ -203,7 +203,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:1ebcee08099c8794c49ef70a839ef3bece7ff33abb5ff8e29d0064789d2e4931",
+      "fingerprint": "skel256:6a1c8f004a20ad654a06b1cbb4f51fccee2e96436908577f4939b9bae6eb9156",
       "file": "docs/en/sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md",
       "line": 73,
       "snippet": "ADMIN SET FRONTEND CONFIG (\"label_keep_max_second\" = \"value\"",
@@ -213,7 +213,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:0be4d5cf42b42e7718a30d03afd47dcfb19f55522b4e74eedad1e2930925304c",
+      "fingerprint": "skel256:bc50ee26dba8f570f89013469b1d77d1f22dd721d1a8431c7365ec7137cb9d22",
       "file": "docs/en/sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md",
       "line": 309,
       "snippet": "\"property.security.protocol\" = \"SASL_PLAINTEXT\", -- Specify ",
@@ -223,7 +223,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:635e17a35df9bacf33cbb28420c6efdbedf1ade9c7a754afc66598460cd5628e",
+      "fingerprint": "skel256:3bfc042a939bb67ec8f37b504febb326b0ecbfa6c2576e0f7c1b639636eddd32",
       "file": "docs/en/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md",
       "line": 991,
       "snippet": "-- The partition expression of the base table contains multi",
@@ -233,7 +233,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:19d07e09a558a5dfcebb1a27f9606f2ff2147079d27c2836a10393f3b9f68777",
+      "fingerprint": "skel256:46de70a5c1e51c4e3d736801077437747944605ce29f57774a7d4e5d8bea1ad7",
       "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md",
       "line": 785,
       "snippet": "DROP INDEX index_name",
@@ -243,7 +243,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:49295a863f6db626484c695b68c9ee7c4b67d50cd13e225b1bfaba9e217b8f7f",
+      "fingerprint": "skel256:3771a8a04197b0f4b4e61344ce853eed0924079b3a430695c0e1db1d52d1ccf1",
       "file": "docs/en/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md",
       "line": 953,
       "snippet": "CREATE TABLE `t1` ( `id` int(11) COMMENT \"\", `value` varchar",
@@ -253,7 +253,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:2e2a040abe2f01c28b4450240162baf448567be2e46db9dad5889d58cb3c3e4d",
+      "fingerprint": "skel256:f2c327f19e4c5f93c411261a7531b38f661396eca8fb5b7fd71e5b5d6ec12796",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 259,
       "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
@@ -266,7 +266,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:08e63ddd8514fc02d100997e7d52a1ac506d28d59c4d34aa9c6cd2311b1d03b5",
+      "fingerprint": "skel256:0b66b25c3f00656ae22ce7a1db96c301bd57633ccde3f6e7d3e070a58c35abea",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 291,
       "snippet": "SELECT *, array_agg(DISTINCT score) OVER ( PARTITION BY subj",
@@ -279,7 +279,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:d94e3a3562e1b64f375b8ea5357fbec5ca8dfe520d2ea901bc2b49bcdc631271",
+      "fingerprint": "skel256:664575ae9970d793529d7ae40afcdd95e60fc57dd36d1c0356c848bf938eb73f",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 321,
       "snippet": "SELECT *, array_agg(score ORDER BY score DESC) OVER ( PARTIT",
@@ -292,7 +292,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:af92c8d239edc9c3b554af01a08d8ac76433e96709d12152f1d0730818728fa2",
+      "fingerprint": "skel256:adfb018fe1b37501b98b0d344f686cde11b1cf6723e8aabfed38864bef489c72",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 350,
       "snippet": "SELECT *, array_agg(score) OVER ( PARTITION BY subject ORDER",
@@ -305,7 +305,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:7b63571bdbbba1b56c3807318cd6a423bd69df0a5e18012c626690ccff769e03",
+      "fingerprint": "skel256:dfcf349f06aaf1f8063b105e2ba8187f857053e0060720236dd84e1082433f86",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 381,
       "snippet": "SELECT stock_symbol, closing_date, closing_price, array_agg(",
@@ -318,7 +318,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:afbf5c2d9a5ab7b70679a4a508f92c287deb6a00e82de4e470f8b999ac15eb40",
+      "fingerprint": "skel256:d584bc0859de8e6cafe264e0f9e5f92d8c7c91c2ecec9a4d9c99ae6671bd5254",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 500,
       "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER () AS ",
@@ -331,7 +331,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:6209f7b38b342f07c2a0fdad26833e5848e37464a259c6b57240605e817dca4a",
+      "fingerprint": "skel256:69b199b853b483160c98f2b3a336aafd2c4f6024e78f5e9e91451a095319ff1e",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 527,
       "snippet": "SELECT id, subject, score, COUNT(DISTINCT score) OVER ( PART",
@@ -344,7 +344,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:2bc0d9a5105c76275262004aeae804d7aafe7c27cb9c2e37efdc80245dfd5870",
+      "fingerprint": "skel256:3382d572ffcfb927051e04cef84af0515dccadb10a4cace40e9c22137fd50e2b",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 1661,
       "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER () AS di",
@@ -357,7 +357,7 @@
       "added_by": "sql-doc-autofix"
     },
     {
-      "fingerprint": "sha256:c93f5e2dcbbaf752bbe938a4ec3babca240319620a3b2b77e55dcb918e8684b1",
+      "fingerprint": "skel256:bb539982dcff54eb0df2f6a871cb354d6b9dae620ae66925b27eee2c1bf40c76",
       "file": "docs/en/sql-reference/sql-functions/Window_function.md",
       "line": 1688,
       "snippet": "SELECT id, subject, score, SUM(DISTINCT score) OVER ( PARTIT",

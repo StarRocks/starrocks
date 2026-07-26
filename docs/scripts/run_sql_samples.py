@@ -54,10 +54,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_sql_samples import (  # noqa: E402
-    SqlSample, extract_samples, derive_repo_root, sample_fingerprint)
+    SqlSample, extract_samples, derive_repo_root, sample_fingerprint,
+    skeleton_fingerprint)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en/sql-reference"   # Phase 1 scope
+# Default only; the checker is language-agnostic — point --docs-root at
+# docs/en, docs/zh or docs/ja. The sql-doc-autofix skill runs all three.
+DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en/sql-reference"
 # Content-hashed "known / won't-fix" list, keyed by sample_fingerprint. Lives with
 # the tooling (not the docs checkout), so one list serves every version. Populated
 # by the sql-doc-autofix skill via reviewed PRs; a matched sample becomes
@@ -217,9 +220,14 @@ def classify(body: str, profile: str, suppressed: dict | None = None,
     # A previously-reviewed won't-fix example: skip before running or matching any
     # rule, so it drops out of FAIL and the report entirely. A global entry
     # (versions None) always skips; a scoped entry skips only on a listed version.
+    # An entry may be keyed by either hash: the verbatim `sha256:` content hash, or
+    # the `skel256:` comment-stripped skeleton, which lets ONE entry cover the
+    # en/zh/ja copies of an example whose only difference is a translated comment.
     if suppressed:
-        entry = suppressed.get(sample_fingerprint(body))
-        if entry is not None:
+        for key in (sample_fingerprint(body), skeleton_fingerprint(body)):
+            entry = suppressed.get(key)
+            if entry is None:
+                continue
             vers = entry["versions"]
             if not vers or (run_version and run_version in vers):
                 return "skip", "suppressed"
@@ -589,7 +597,8 @@ def main() -> int:
                           "results": [{"file": r.sample.file, "line": r.sample.line_start,
                                        "status": r.status, "reason": r.reason,
                                        "statement": r.statement,
-                                       "fingerprint": r.sample.fingerprint} for r in results]}, indent=2))
+                                       "fingerprint": r.sample.fingerprint,
+                                       "skeleton": r.sample.skeleton} for r in results]}, indent=2))
     elif args.format == "md":
         print(report_markdown(results, meta))
     else:

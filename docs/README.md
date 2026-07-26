@@ -150,15 +150,24 @@ In Claude Code (with the `starrocks` MCP server attached), run the
 **`sql-doc-autofix`** skill. For each version in the set it:
 
 - brings up a matching cluster on `127.0.0.1:9030` (user `root`, no password),
-- runs the checker against `../sr-branch-<v>/docs/en/sql-reference` and sorts every
-  example into **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not
+- runs the checker against **all three languages** —
+  `../sr-branch-<v>/docs/{en,zh,ja}/sql-reference` — against that one cluster, sorting
+  every example into **PASS**, **FAIL** (candidate doc bug), **UNRESOLVED** (not
   self-contained), **ENV** (test-cluster limitation), or **SKIP** (not runnable by
   design),
-- for the genuinely fixable **FAIL** items, proposes a corrected statement and verifies
-  it on that cluster,
+- for the genuinely fixable **FAIL** items, proposes a corrected statement, verifies
+  it on that cluster, and applies it to **every language that carries the example** —
+  so a fix never lands in `en` alone,
 - flags version-gated or illustrative examples instead of "fixing" them, because
   *runs on the cluster* is not the same as *correct documentation*,
+- emits a **cross-language parity report** (`docs/scripts/sql_sample_parity.py`) —
+  a separate signal that catches examples present in one language and missing from
+  the others, which a rot run can never see,
 - then stops that cluster and moves to the next version.
+
+That is 3 versions × 3 languages = 9 checker passes, so a full run takes a while. The
+triage load does not triple: the en/zh/ja copies of one example share a skeleton hash,
+so they are classified and cluster-verified once and edited three times.
 
 ```bash
 claude

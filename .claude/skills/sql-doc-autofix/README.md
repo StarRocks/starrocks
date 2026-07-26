@@ -46,16 +46,32 @@ Just invoke the **`sql-doc-autofix`** skill in Claude Code. It:
 - resolves the version set — auto-discovered via `docs/scripts/supported_versions.sh`
   (GitHub Releases → top-3 supported major.minor), or an explicit list you pass /
   export as `$SR_VERSIONS` — and asks you to confirm or edit it;
-- loops over each version: brings the cluster up on `9030`, runs the detect checker
-  and candidate prep, classifies, and verifies fixes on that live cluster;
-- consolidates results across versions and opens the PR(s)/issue below.
+- loops over each version: brings the cluster up on `9030`, then runs the detect
+  checker and candidate prep for **each of `en`, `zh`, `ja`** against that one
+  cluster, classifies, and verifies fixes;
+- consolidates results across versions *and* languages, applying every fix to each
+  language that carries the example;
+- emits a **cross-language parity report** per version;
+- opens the PR(s)/issue below.
 
-To preview the detect half for one version manually:
+3 versions × 3 languages = 9 checker passes. The triage load does not triple —
+the en/zh/ja copies of an example share a skeleton hash, so they are classified and
+verified once, then edited in three files.
+
+To preview the detect half for one version/language manually:
 ```bash
 SR_VERSION=4.1 docker compose -f docs/docker/doc-verification/docker-compose-shared-nothing.yml up -d --wait
-python3 docs/scripts/run_sql_samples.py \
-    --docs-root ../sr-branch-4.1/docs/en/sql-reference --docs-version 4.1 \
-    --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run-4.1.json
+for lang in en zh ja; do
+  python3 docs/scripts/run_sql_samples.py \
+      --docs-root ../sr-branch-4.1/docs/$lang/sql-reference --docs-version 4.1 \
+      --host 127.0.0.1 --port 9030 --user root --format json > /tmp/run-4.1-$lang.json
+done
+```
+
+Parity needs no cluster:
+```bash
+python3 docs/scripts/sql_sample_parity.py --repo ../sr-branch-4.1        # markdown
+python3 docs/scripts/sql_sample_parity.py --repo ../sr-branch-4.1 --format json
 ```
 
 ## What it produces
@@ -77,11 +93,21 @@ python3 docs/scripts/run_sql_samples.py \
 `docs/scripts/sql_verify_suppressions.json` is the durable "already reviewed —
 stop reporting this" record, so **durably-not-runnable examples aren't re-flagged
 every run**. Key points:
-- **Keyed by content hash** (`sample_fingerprint`), not `file:line` — an entry
-  survives the block moving, and **re-surfaces** if the example text is meaningfully
-  edited (reindenting doesn't count). The checker skips a match as `SKIP: suppressed`
-  before running it, and prints a "N suppressed" line so nothing is hidden silently.
-- **Lives with the tooling** (on `main`), so one list serves every version.
+- **Keyed by content hash**, not `file:line` — an entry survives the block moving,
+  and **re-surfaces** if the example text is meaningfully edited (reindenting doesn't
+  count). The checker skips a match as `SKIP: suppressed` before running it, and
+  prints a "N suppressed" line so nothing is hidden silently.
+- **Two hashes are accepted**, and the difference matters now that all three languages
+  are checked:
+  - `skel256:` — `skeleton_fingerprint`: comments stripped (but `/*+ hints */` kept),
+    whitespace collapsed, lowercased. The en/zh/ja copies of one example hash the
+    same, so **one entry covers all three languages**. This is the default the skill
+    writes.
+  - `sha256:` — `sample_fingerprint`: the sample verbatim. Matches **one language
+    only**, because the zh/ja copies carry translated comments. Use it only to
+    deliberately suppress a single language's copy.
+- **Lives with the tooling** (on `main`), so one list serves every version *and*
+  language. Do not backport it to release branches — release-branch copies are unused.
 - **Optionally version-scoped:** an entry with a `versions` list (e.g. `["3.5"]`) is
   suppressed only on those major.minor versions — so a version-gated example stays
   checked on versions where it works, and a regression there is still caught. Omit
