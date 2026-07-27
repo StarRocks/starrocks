@@ -19,6 +19,8 @@
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
 
+#include <set>
+
 #include "agent/agent_server.h"
 #include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
@@ -680,10 +682,37 @@ struct RequestContext {
     std::unique_ptr<ResponseType> resp;
 };
 
+// The tablet ids an aggregate publish is expected to return metadata for, or an empty set meaning
+// "cannot tell, skip the coverage check".
+//
+// Only plain transactions are modelled, where the bundle must contain exactly the requested
+// tablet_ids. A reshard writes a set that has little to do with what was requested: which ids it
+// covers is decided inside handle_splitting_tablet / handle_merging_tablet / handle_identical_tablet
+// and differs per reshard kind and per txn type, and both sides of a split or merge get metadata at
+// the new version. Restating those rules here would duplicate them in a second place and risk
+// failing a legitimate reshard publish, so skip the coverage check whenever any sub-request carries
+// reshard info.
+static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRequest& request,
+                                                 std::set<int64_t>* expected) {
+    for (const auto& publish_req : request.publish_reqs()) {
+        if (publish_req.resharding_tablet_infos_size() > 0) {
+            expected->clear();
+            return;
+        }
+        for (auto tablet_id : publish_req.tablet_ids()) {
+            expected->insert(tablet_id);
+        }
+    }
+}
+
 struct AggregatePublishContext {
     bthread::Mutex mutex;
     bool has_failure{false};
     std::map<int64_t, TabletMetadata> tablet_metas;
+    // Union of what every sub-request was asked to publish, derived from the request rather than
+    // from the responses, so that a response silently short of a tablet cannot pass the check in
+    // put_bundle_tablet_metadata(). Empty for reshard publishes, which skip that check.
+    std::set<int64_t> expected_tablet_ids;
     std::unique_ptr<BThreadCountDownLatch> latch;
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
@@ -761,7 +790,11 @@ struct AggregatePublishContext {
                             DeferOp defer([&] { latch.count_down(); });
                             publish_status =
                                     StorageEnv::GetInstance()->lake_tablet_manager()->put_bundle_tablet_metadata(
-                                            tablet_metas);
+                                            tablet_metas, expected_tablet_ids);
+                            if (!publish_status.ok()) {
+                                g_aggregate_publish_version_failed_tasks << 1;
+                                LOG(WARNING) << "Fail to write bundle tablet metadata: " << publish_status;
+                            }
                         },
                         [&] {
                             publish_status = Status::Cancelled("put_bundle_tablet_metadata task has been cancelled");
@@ -807,6 +840,9 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     AggregatePublishContext ctx;
     ctx.response = response;
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
+    // Collected up front, over every sub-request: the loop below stops dispatching once one of
+    // them fails, and the expected set must describe the whole publish either way.
+    collect_expected_metadata_tablet_ids(*request, &ctx.expected_tablet_ids);
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
