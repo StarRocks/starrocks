@@ -1293,6 +1293,13 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!colNameSet.add(colName)) {
                 throw new DdlException("Duplicated column[" + colName + "]");
             }
+            // The new sort key columns are encoded on the BE via an order-preserving KeyCoder; a type
+            // without one (JSON/complex/floating-point/metric/variant/TIME) would crash the BE
+            // short-key encoder on rewrite, so reject ALTER TABLE ... ORDER BY here.
+            if (!oneCol.get().getType().canBeSortKey()) {
+                throw new DdlException("Sort key column[" + colName + "] type not supported: "
+                        + oneCol.get().getType().toSql());
+            }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
             if (useSortKeyUniqueId && oneCol.get().getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {

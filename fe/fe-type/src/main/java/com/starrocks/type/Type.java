@@ -332,6 +332,18 @@ public abstract class Type implements Cloneable {
                 && !isFunctionType() && !isVariantType();
     }
 
+    /**
+     * Whether a column of this type can be used as a sort key (ORDER BY) column. Sort keys are
+     * encoded on the BE via an order-preserving KeyCoder, so only types with a registered key coder
+     * qualify. canDistributedBy() already excludes JSON/complex/floating-point/metric/variant, but it
+     * still allows TIME, which the BE has no key coder for (TIME is a compute-only double, not a
+     * storable/encodable column type). Using such a type as a sort key crashes the BE short-key
+     * encoder, so exclude TIME here as well.
+     */
+    public boolean canBeSortKey() {
+        return canDistributedBy() && !isTime();
+    }
+
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
                 || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType());

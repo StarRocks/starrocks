@@ -587,6 +587,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canBeSortKey()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
+                }
                 sortKeyIdxes.add(idx);
             }
         }
@@ -1269,10 +1276,11 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
                 }
                 // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
-                // they must be sortable -- reject JSON and other non-distributable types, mirroring base-table
-                // and rollup key validation (createRangeRollupJob re-derives key flags from these columns).
+                // they must be encodable as a key on the BE -- reject JSON/complex/floating-point/metric/
+                // variant and TIME (which the BE has no key coder for), mirroring base-table and rollup key
+                // validation (createRangeRollupJob re-derives key flags from these columns).
                 Column sortKeyColumn = table.getColumn(sk);
-                if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
+                if (sortKeyColumn != null && !sortKeyColumn.getType().canBeSortKey()) {
                     throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
                             + sortKeyColumn.getType() + "' and cannot be a range rollup sort key");
                 }
