@@ -594,7 +594,7 @@ public class CreateTableAnalyzer {
             }
             ColumnDef cd = columnDefs.get(idx);
             Type t = cd.getType();
-            if (!t.canBeSortKey()) {
+            if (!t.canDistributedBy()) {
                 throw new SemanticException(
                         "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
             }

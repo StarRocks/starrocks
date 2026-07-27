@@ -1317,7 +1317,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // metric/variant/TIME do not) -- otherwise the BE crashes on rewrite.
             for (int sortKeyIdx : sortKeyIdxes) {
                 Column col = targetIndexSchema.get(sortKeyIdx);
-                if (!col.getType().canBeSortKey()) {
+                if (!col.getType().canDistributedBy()) {
                     throw new DdlException("Sort key column[" + col.getName() + "] type not supported: "
                             + col.getType().toSql());
                 }

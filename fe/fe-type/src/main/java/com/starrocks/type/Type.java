@@ -327,21 +327,13 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
-        // Allow VARBINARY as distribution key
+        // Allow VARBINARY as distribution key.
+        // A distribution / key / sort-key column is encoded on the BE via an order-preserving
+        // KeyCoder, so its type must have a registered key coder. TIME has none (it is a compute-only
+        // double, not a storable/encodable column type) and would crash the BE short-key encoder, so
+        // exclude it here alongside the other non-encodable types.
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isVariantType();
-    }
-
-    /**
-     * Whether a column of this type can be used as a sort key (ORDER BY) column. Sort keys are
-     * encoded on the BE via an order-preserving KeyCoder, so only types with a registered key coder
-     * qualify. canDistributedBy() already excludes JSON/complex/floating-point/metric/variant, but it
-     * still allows TIME, which the BE has no key coder for (TIME is a compute-only double, not a
-     * storable/encodable column type). Using such a type as a sort key crashes the BE short-key
-     * encoder, so exclude TIME here as well.
-     */
-    public boolean canBeSortKey() {
-        return canDistributedBy() && !isTime();
+                && !isFunctionType() && !isVariantType() && !isTime();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {

@@ -590,7 +590,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
                 // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
                 // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
-                if (!columnDefs.get(idx).getType().canBeSortKey()) {
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
                     throw new SemanticException("Sort key column[" + column + "] type not supported: "
                             + columnDefs.get(idx).getType().toSql());
                 }
@@ -1277,10 +1277,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 }
                 // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
                 // they must be encodable as a key on the BE -- reject JSON/complex/floating-point/metric/
-                // variant and TIME (which the BE has no key coder for), mirroring base-table and rollup key
-                // validation (createRangeRollupJob re-derives key flags from these columns).
+                // variant and TIME (all excluded by canDistributedBy()), mirroring base-table and rollup
+                // key validation (createRangeRollupJob re-derives key flags from these columns).
                 Column sortKeyColumn = table.getColumn(sk);
-                if (sortKeyColumn != null && !sortKeyColumn.getType().canBeSortKey()) {
+                if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
                     throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
                             + sortKeyColumn.getType() + "' and cannot be a range rollup sort key");
                 }

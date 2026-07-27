@@ -582,7 +582,7 @@ public class CreateTableAnalyzerTest {
                     "Sort key column[c] type not supported");
 
             // TIME sort key, range distribution -> reject (canDistributedBy() allows TIME, but the BE
-            // has no TIME key coder; canBeSortKey() excludes it).
+            // has no TIME key coder; canDistributedBy() excludes it).
             analyzeFail("CREATE TABLE test_create_table_db.dup_range_time_sortkey\n" +
                     "(k1 int, c time) DUPLICATE KEY(k1) ORDER BY(c)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");",
@@ -613,6 +613,16 @@ public class CreateTableAnalyzerTest {
         } finally {
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
         }
+    }
+
+    @Test
+    public void testTimeKeyColumnRejected() {
+        // TIME has no BE key coder, so it can't be a key column (a key column is also the implicit
+        // short/sort key). canDistributedBy() now excludes TIME, so ColumnDefAnalyzer rejects it.
+        analyzeFail("CREATE TABLE test_create_table_db.time_key_tbl\n" +
+                "(k1 time, v int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(v)\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");",
+                "Invalid data type of key column");
     }
 
     @Test
