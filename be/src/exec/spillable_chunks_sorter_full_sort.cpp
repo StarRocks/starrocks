@@ -14,6 +14,7 @@
 
 #include <unistd.h>
 
+#include "common/config.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
@@ -68,6 +69,9 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
 Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
     FAIL_POINT_TRIGGER_EXECUTE(chunk_sorter_spill_on_set_finishing,
                                { _spill_strategy = spill::SpillStrategy::SPILL_ALL; });
+    if (config::spill_sort_force_spill_on_done) {
+        _spill_strategy = spill::SpillStrategy::SPILL_ALL;
+    }
 
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return ChunksSorterFullSort::do_done(state);
@@ -146,6 +150,9 @@ std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_proces
         // while this task is still about to read those very vectors. Widens the race window that
         // the production crashes hit by chance; test-only.
         FAIL_POINT_TRIGGER_EXECUTE(spill_sort_process_task_sleep, { sleep(3); });
+        if (int ms = config::spill_sort_process_task_sleep_ms; ms > 0) {
+            usleep(static_cast<useconds_t>(ms) * 1000);
+        }
 
         if (_unsorted_chunk != nullptr) {
             return std::move(_unsorted_chunk);
