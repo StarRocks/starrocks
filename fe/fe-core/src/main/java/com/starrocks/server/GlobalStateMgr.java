@@ -1516,6 +1516,14 @@ public class GlobalStateMgr {
     }
 
     @VisibleForTesting
+    public void openLeaderWorkAdmissionForTest() {
+        // just for test, don't call it directly: UT harnesses that force feType = LEADER (e.g.
+        // UtFrameUtils.setUpForPersistTest) must also open leader-work admission, as a really
+        // activated leader would via publishLeaderLease().
+        leaderWorkAdmissionOpen.set(true);
+    }
+
+    @VisibleForTesting
     void beginLeaderActivation() {
         // The WAL admission gate is already closed here: this node reaches activation only from INACTIVE
         // (fresh, or after a demotion/rollback that closed it), so it need not be closed again.
@@ -1679,6 +1687,12 @@ public class GlobalStateMgr {
             return true;
         }
         FrontendNodeType type = getFeType();
+        if (type == FrontendNodeType.LEADER) {
+            // Activation window: feType flips to LEADER before publishLeaderLease() opens leader-work
+            // admission (and the EditLog WAL gate), so the type alone does not make this node an ACTIVE
+            // leader yet; hold BE-mutating agent tasks until admission opens.
+            return !isLeaderWorkAdmissionOpen();
+        }
         return type == FrontendNodeType.FOLLOWER
                 || type == FrontendNodeType.OBSERVER
                 || type == FrontendNodeType.UNKNOWN;

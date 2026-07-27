@@ -1355,6 +1355,9 @@ public class UtFrameUtils {
             assert (fakeJournalWriter == null);
             GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
             GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+            // A really-activated leader has leader-work admission open (publishLeaderLease does it);
+            // tests on this harness enqueue BE agent tasks and rely on that.
+            GlobalStateMgr.getCurrentState().openLeaderWorkAdmissionForTest();
 
             // simulate the process of master journal synchronizing to the follower
             fakeJournalWriter = new Thread(new Runnable() {

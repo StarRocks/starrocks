@@ -329,6 +329,21 @@ public class LeaderDaemonTest {
         Assertions.assertTrue(leader.isAgentTaskDispatchDisallowed(),
                 "a demoting node must not dispatch even while feType is still LEADER");
 
+        // Activation window: feType is already LEADER but publishLeaderLease() has not opened
+        // leader-work admission yet -- disallowed until the node is an ACTIVE leader.
+        TestGlobalStateMgr activating = new TestGlobalStateMgr();
+        activating.beginLeaderActivation();
+        activating.setFrontendNodeType(FrontendNodeType.LEADER);
+        Assertions.assertTrue(activating.isAgentTaskDispatchDisallowed(),
+                "an activating node must not dispatch before admission opens");
+
+        // INIT keeps the upstream behavior: not gated. Plain unit tests drive leader-side task code on a
+        // GlobalStateMgr that never went through a state transfer, and production INIT nodes have no
+        // leader work to dispatch anyway.
+        TestGlobalStateMgr init = new TestGlobalStateMgr();
+        Assertions.assertFalse(init.isAgentTaskDispatchDisallowed(),
+                "an INIT node keeps the ungated upstream behavior");
+
         // Follower (not demoting): disallowed via feType.
         TestGlobalStateMgr follower = new TestGlobalStateMgr();
         follower.setFrontendNodeType(FrontendNodeType.FOLLOWER);
