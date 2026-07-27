@@ -147,6 +147,30 @@ class TestCompareMaterializedView:
         with pytest.raises(NotImplementedError, match="does not support 'ALTER MATERIALIZED VIEW DISTRIBUTED BY'"):
             _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
+    @pytest.mark.parametrize(
+        "conn_distribution",
+        [
+            "RANDOM BUCKETS 10",  # StarRocks auto-assigned an explicit bucket count
+            "HASH(id)",           # older MV that defaulted to HASH on the first column
+            "RANDOM",             # auto RANDOM (equals the default)
+        ],
+    )
+    def test_no_change_mv_distribution_omitted(self, conn_distribution):
+        """No change: metadata that omits DISTRIBUTED BY must not diff or crash.
+
+        StarRocks always auto-assigns a distribution and SHOW CREATE renders it (e.g.
+        ``DISTRIBUTED BY RANDOM BUCKETS 10`` or a defaulted ``HASH(...)``). When the user does
+        not declare distribution in metadata, the reflected value must be left untouched — not
+        compared against the default and 'reset', which raises for this immutable attribute.
+        """
+        upgrade_ops = ops.UpgradeOps([])
+        conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", distributed_by=conn_distribution)
+        meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1")  # no starrocks_distributed_by
+
+        _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
+
+        eq_(len(upgrade_ops.ops), 0)
+
     def test_modify_mv_order_by_changed(self):
         """DROP/CREATE: Order by changed."""
         upgrade_ops = ops.UpgradeOps([])
@@ -220,6 +244,12 @@ class TestCompareMaterializedView:
             ("IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
             # Both sides using the SCHEDULE spelling with a moment prefix.
             ("DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)", "DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)"),
+            # IMMEDIATE is the default refresh moment and StarRocks never renders it in SHOW CREATE
+            # (only DEFERRED is emitted), so reflection yields no moment. Metadata that explicitly
+            # declares IMMEDIATE must still be treated as equivalent to the reflected form.
+            ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)"),
+            ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+            ("ASYNC", "IMMEDIATE ASYNC"),
         ],
     )
     def test_no_change_mv_refresh_schedule_alias(self, conn_refresh, meta_refresh):
