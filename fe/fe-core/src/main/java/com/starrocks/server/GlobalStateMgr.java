@@ -844,11 +844,6 @@ public class GlobalStateMgr {
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
             @Override
-            public void notifyNewFETypeTransfer(FrontendNodeType newType) {
-                isInTransferringToLeader = newType == FrontendNodeType.LEADER;
-            }
-
-            @Override
             public void transferToLeader() {
                 isInTransferringToLeader = true;
                 try {
@@ -860,7 +855,6 @@ public class GlobalStateMgr {
 
             @Override
             public void transferToNonLeader(FrontendNodeType newType) {
-                isInTransferringToLeader = false;
                 gsm.transferToNonLeader(newType);
             }
         };

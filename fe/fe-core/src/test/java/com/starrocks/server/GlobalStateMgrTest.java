@@ -51,7 +51,6 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
-import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
@@ -121,18 +120,6 @@ public class GlobalStateMgrTest {
     public void tearDown() throws Exception {
         FileUtils.deleteQuietly(new File(testMetaDir));
         FileUtils.deleteQuietly(new File(testPluginDir));
-    }
-
-    @Test
-    public void testLeaderTransferFlagSetOnLeaderNotification() {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        StateChangeExecution execution = globalStateMgr.getStateChangeExecution();
-
-        execution.notifyNewFETypeTransfer(FrontendNodeType.LEADER);
-        Assertions.assertTrue(globalStateMgr.isInTransferringToLeader());
-
-        execution.notifyNewFETypeTransfer(FrontendNodeType.FOLLOWER);
-        Assertions.assertFalse(globalStateMgr.isInTransferringToLeader());
     }
 
     @Test

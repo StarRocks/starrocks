@@ -62,9 +62,6 @@ public class StateChangeExecutor extends Daemon {
             String msg = "notify new FE type transfer: " + newType;
             LOG.warn(msg);
             Util.stdoutWithTime(msg);
-            for (StateChangeExecution execution : executions) {
-                execution.notifyNewFETypeTransfer(newType);
-            }
             typeTransferQueue.put(newType);
         } catch (InterruptedException e) {
             LOG.error("failed to put new FE type: {}, {}.", newType, e);

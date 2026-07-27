@@ -28,12 +28,6 @@ public class StateChangeExecutorTest {
 
     private class StateChangeExecutionTest implements StateChangeExecution {
         private FrontendNodeType type;
-        private FrontendNodeType notifiedType;
-
-        @Override
-        public void notifyNewFETypeTransfer(FrontendNodeType newType) {
-            notifiedType = newType;
-        }
 
         @Override
         public void transferToLeader() {
@@ -52,21 +46,6 @@ public class StateChangeExecutorTest {
         public void setType(FrontendNodeType newType) {
             type = newType;
         }
-
-        public FrontendNodeType getNotifiedType() {
-            return notifiedType;
-        }
-    }
-
-    @Test
-    public void testNotifyNewTypeBeforeExecution() {
-        StateChangeExecutionTest execution = new StateChangeExecutionTest();
-        StateChangeExecutor executor = new StateChangeExecutor("StateChangeExecutor_notify_new_type");
-        executor.registerStateChangeExecution(execution);
-
-        executor.notifyNewFETypeTransfer(FrontendNodeType.LEADER);
-
-        Assertions.assertEquals(FrontendNodeType.LEADER, execution.getNotifiedType());
     }
 
     private void runOne(String name, FrontendNodeType oldType, FrontendNodeType newType) {
