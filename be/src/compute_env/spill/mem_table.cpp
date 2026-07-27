@@ -92,7 +92,8 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
     {
         SerdeContext serde_ctx;
         auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
-        bool need_aligned = _runtime_state->spill_enable_direct_io();
+        // envelopes are packed tight; the batching output stream owns O_DIRECT alignment now
+        bool need_aligned = false;
         while (_processed_index < _chunks.size()) {
             if (!(output->is_remote() ^ io_ctx->use_local_io_executor)) {
                 TRACE_SPILL_LOG << "yield before serialize";
@@ -181,7 +182,8 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
         }
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
         ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
-        bool need_aligned = _runtime_state->spill_enable_direct_io();
+        // envelopes are packed tight; the batching output stream owns O_DIRECT alignment now
+        bool need_aligned = false;
 
         RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
         RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);

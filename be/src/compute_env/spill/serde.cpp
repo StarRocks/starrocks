@@ -55,9 +55,9 @@ private:
     // header|encode levels|attachment...
     // header:
     // i32 sequence_id|i64 attachment size
-    static constexpr int32_t SEQUENCE_OFFSET = 0;
-    static constexpr int32_t ATTACHMENT_SIZE_OFFSET = SEQUENCE_OFFSET + sizeof(int32_t);
-    static constexpr int32_t HEADER_SIZE = ATTACHMENT_SIZE_OFFSET + sizeof(int64_t);
+    static constexpr int32_t SEQUENCE_OFFSET = serde_proto::SEQUENCE_OFFSET;
+    static constexpr int32_t ATTACHMENT_SIZE_OFFSET = serde_proto::ATTACHMENT_SIZE_OFFSET;
+    static constexpr int32_t HEADER_SIZE = serde_proto::HEADER_SIZE;
     static constexpr int32_t SEQUENCE_MAGIC_ID = 0xface;
 
     size_t _max_serialized_size(const ChunkPtr& chunk) const;

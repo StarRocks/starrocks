@@ -83,6 +83,16 @@ private:
     size_t _size{};
 };
 
+// Spill stream envelope protocol: every serialized chunk starts with
+//   i32 sequence magic | i64 attachment size | <attachment...>
+// Shared by the serde (writer/reader) and the batching output stream, which grows the LAST
+// envelope's attachment size to absorb the O_DIRECT tail padding of a coalesced write batch.
+namespace serde_proto {
+inline constexpr int32_t SEQUENCE_OFFSET = 0;
+inline constexpr int32_t ATTACHMENT_SIZE_OFFSET = SEQUENCE_OFFSET + sizeof(int32_t);
+inline constexpr int32_t HEADER_SIZE = ATTACHMENT_SIZE_OFFSET + sizeof(int64_t);
+} // namespace serde_proto
+
 struct SerdeContext {
     // Page-aligned backing store: base address must be 4096-aligned so O_DIRECT spill writes
     // (spill_enable_direct_io) satisfy pwritev's iov_base alignment requirement.
