@@ -28,11 +28,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
-<<<<<<< HEAD
-=======
 #include "io/io_profiler.h"
-#include "runtime/time_guard.h"
->>>>>>> 3cae611950 ([Enhancement] Add fine-grained metadata/delvec write trace counters in publish (#76810))
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -476,8 +472,9 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
-    // NOTE: the put_tablet_metadata_us total is already recorded by the caller's scope in
-    // MetaFileBuilder::finalize(); do not re-open it here or the counter would double-count.
+    // NOTE: the counters below deliberately break this write down into normalize vs save
+    // instead of recording one total, so they compose with whatever total-latency scope the
+    // caller already opens around put_metadata() rather than double-counting it.
     auto t0 = butil::gettimeofday_us();
 
     // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
