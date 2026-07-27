@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <set>
 
+#include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
@@ -491,6 +492,8 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         return Status::InternalError(ss.str());
     }
 
+    RETURN_IF_ERROR(SnapshotManager::instance()->restore_inverted_index_directories(snapshot_path));
+
     auto meta_file = strings::Substitute("$0/meta", snapshot_path);
     auto res = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
     if (!res.ok()) {
@@ -503,8 +506,23 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
-    // Do not need to copy GIN in pk table because it does not support GIN now
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path, tablet->tablet_schema()));
+
+    std::vector<std::string> linked_files;
+    std::set<std::string> linked_index_dirs;
+    CancelableDefer cleanup_published_files([&]() {
+        for (const auto& linked_file : linked_files) {
+            auto st = FileSystem::Default()->delete_file(linked_file);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "failed to remove linked snapshot file " << linked_file << ": " << st;
+        }
+        for (const auto& index_dir : linked_index_dirs) {
+            auto st = fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "failed to remove linked inverted index directory " << index_dir << ": " << st;
+        }
+    });
 
     if (overwrite) {
         // check all files in /clone and /tablet
@@ -529,26 +547,23 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         }
 
         // link files one by one
-        // files in snapshot dir will be moved in snapshot clean process
-        std::vector<std::string> linked_files;
+        // files in snapshot dir will be removed in snapshot clean process
         for (const std::string& file : snapshot_files) {
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
                 LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
                              << ", err: " << std::strerror(errno);
-
-                // clean the already linked files
-                for (auto& linked_file : linked_files) {
-                    remove(linked_file.c_str());
-                }
-
                 return Status::InternalError("move tablet failed");
             }
             linked_files.push_back(full_dest_path);
             VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
         }
 
+        RETURN_IF_ERROR(SnapshotManager::instance()->link_inverted_index_directories(
+                snapshot_meta, tablet->tablet_schema(), snapshot_path, tablet_path, &linked_index_dirs));
+        LOG(INFO) << "linked " << linked_index_dirs.size() << " inverted index directories from " << snapshot_path
+                  << " to " << tablet_path;
     } else {
         LOG(FATAL) << "only support overwrite now";
     }
@@ -567,6 +582,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     tablet->save_meta();
 
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
+    cleanup_published_files.cancel();
     tablet->updates()->remove_expired_versions(time(nullptr));
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
     auto st = fs::remove_all(snapshot_path);
