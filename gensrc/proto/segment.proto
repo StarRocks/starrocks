@@ -204,6 +204,11 @@ message ColumnMetaPB {
     // for json flat column only
     optional bytes name = 33;
     optional int32 compression_level = 34;
+    // E4: pointer to the per-column per-segment sampled shared-dictionary page
+    // (a DICTIONARY_PAGE holding the raw sample bytes). Present only for columns
+    // written with use_shared_dict; left unset (zero bytes) for every other
+    // column, so non-E4 segments serialize byte-identically.
+    optional PagePointerPB shared_dict_page = 35;
 }
 
 enum VectorIndexStorageTypePB {

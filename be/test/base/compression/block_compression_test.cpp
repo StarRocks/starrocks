@@ -40,6 +40,7 @@
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
+#include "base/compression/zstd_dict.h"
 #include "base/container/raw_container.h"
 #include "base/random/random.h"
 #include "base/string/faststring.h"
@@ -601,4 +602,128 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
     }
 }
 #endif
+
+// ===================== E4 shared-dict codec tests =====================
+
+// Roundtrip: a body compressed referencing a CDict decodes correctly with the
+// matching DDict built from the same sample.
+TEST_F(BlockCompressionTest, E4_dict_roundtrip) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int i = 0; i < 200; i++) {
+        sample += R"({"role":"user","parts":[{"type":"text","content":"hello world )";
+        sample += std::to_string(i);
+        sample += R"("}]})";
+    }
+    auto cdict_or = compression::ZstdCDict::create(Slice(sample), /*level=*/3);
+    ASSERT_TRUE(cdict_or.ok());
+    auto ddict_or = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(ddict_or.ok());
+
+    std::string body;
+    for (int i = 0; i < 500; i++) {
+        body += R"({"role":"assistant","parts":[{"type":"text","content":"hello world )";
+        body += std::to_string(i % 50);
+        body += R"("}]})";
+    }
+
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice cslice(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &cslice, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                                cdict_or.value().get())
+                        .ok());
+    compressed.resize(cslice.size);
+
+    std::string out(body.size(), '\0');
+    Slice oslice(out);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &oslice, ddict_or.value().get()).ok());
+    ASSERT_EQ(body.size(), oslice.size);
+    ASSERT_EQ(body, std::string(oslice.data, oslice.size));
+}
+
+// Reset-safety: a dict-bearing borrow must not leak its sticky refCDict to the
+// next borrower. Interleave dict/no-dict compresses; the no-dict output must
+// always equal a clean no-dict reference (the '命门' invariant, §5.2.5).
+TEST_F(BlockCompressionTest, E4_reset_safety_no_leak_to_next_borrow) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+    std::string sample(4096, 'x');
+    auto cdict_or = compression::ZstdCDict::create(Slice(sample), /*level=*/3);
+    ASSERT_TRUE(cdict_or.ok());
+
+    std::string body = generate_str(8000);
+    auto nodict_compress = [&](std::string* out) {
+        out->resize(codec->max_compressed_len(body.size()));
+        Slice o(*out);
+        EXPECT_TRUE(codec->compress(body, &o).ok());
+        out->resize(o.size);
+    };
+    std::string ref;
+    nodict_compress(&ref);
+
+    for (int i = 0; i < 50; i++) {
+        std::string dictc(codec->max_compressed_len(body.size()), '\0');
+        Slice dc(dictc);
+        std::vector<Slice> in{Slice(body)};
+        ASSERT_TRUE(codec->compress(in, &dc, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                                    cdict_or.value().get())
+                            .ok());
+        std::string again;
+        nodict_compress(&again);
+        ASSERT_EQ(ref, again) << "no-dict compress diverged after a dict compress at iter " << i;
+    }
+}
+
+// I5: a no-dict frame (dictID=0) decodes identically whether or not a
+// raw-content DDict is referenced. This is what makes mixed dict/no-dict pages
+// (raw pages, value-dict pages) in one E4 column safe on the read path.
+TEST_F(BlockCompressionTest, E4_nodict_frame_decodes_under_ddict_I5) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample(2048, 'q');
+    auto ddict_or = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(ddict_or.ok());
+
+    std::string body = generate_str(5000);
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice cslice(compressed);
+    ASSERT_TRUE(codec->compress(body, &cslice).ok()); // no-dict frame
+    compressed.resize(cslice.size);
+
+    std::string with_dict(body.size(), '\0');
+    Slice wd(with_dict);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &wd, ddict_or.value().get()).ok());
+
+    std::string without_dict(body.size(), '\0');
+    Slice wod(without_dict);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &wod).ok());
+
+    ASSERT_EQ(body, std::string(wd.data, wd.size));
+    ASSERT_EQ(std::string(wod.data, wod.size), std::string(wd.data, wd.size));
+}
+
+// Contract: the dict overloads fail loudly (NotSupported) on a non-ZSTD codec
+// instead of silently producing undecodable bytes.
+TEST_F(BlockCompressionTest, E4_dict_overload_not_supported_on_non_zstd) {
+    const BlockCompressionCodec* lz4 = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::LZ4, &lz4).ok());
+    std::string body = generate_str(1000);
+
+    std::string out(lz4->max_compressed_len(body.size()), '\0');
+    Slice o(out);
+    std::vector<Slice> in{Slice(body)};
+    Status s = lz4->compress(in, &o, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                             static_cast<const compression::ZstdCDict*>(nullptr));
+    ASSERT_TRUE(s.is_not_supported());
+
+    std::string dummy(body.size(), '\0');
+    Slice d(dummy);
+    Status s2 = lz4->decompress(Slice(body), &d, static_cast<const compression::ZstdDDict*>(nullptr));
+    ASSERT_TRUE(s2.is_not_supported());
+}
+
 } // namespace starrocks

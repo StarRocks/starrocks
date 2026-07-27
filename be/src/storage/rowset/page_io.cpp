@@ -65,7 +65,8 @@ namespace starrocks {
 using strings::Substitute;
 
 Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
-                                  const std::vector<Slice>& body, faststring* compressed_body) {
+                                  const std::vector<Slice>& body, faststring* compressed_body,
+                                  const compression::ZstdCDict* cdict) {
     size_t uncompressed_size = Slice::compute_total_size(body);
     auto cleanup = MakeScopedCleanup([&]() { compressed_body->clear(); });
     if (codec != nullptr && codec->exceed_max_input_size(uncompressed_size)) {
@@ -77,8 +78,17 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr,
-                                            compression_options));
+            // E4: ZSTD always uses the compression pool, so the shared-dict path
+            // lives here. Non-null cdict references the per-column dictionary.
+            // (ZstdBlockCompression ignores BlockCompressionOptions, so nothing
+            // is lost by taking the cdict overload.)
+            if (cdict != nullptr) {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, cdict));
+            } else {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, compression_options));
+            }
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);
@@ -259,7 +269,14 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    // E4: reference the per-column shared dictionary when present. A no-dict
+    // frame decodes identically whether or not a raw-content DDict is referenced
+    // (I5), so this is safe for raw pages and value-dict pages too.
+    if (opts.dict != nullptr) {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
+    } else {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    }
 
     if (decompressed_body.size != decompressed_size) {
         return Status::Corruption(strings::Substitute("Bad page: uncompressed size mismatch ($0 vs $1), file=$2",

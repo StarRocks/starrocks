@@ -339,6 +339,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
+
+                // E4: analyze shared dict columns
+                Set<String> sharedDictColumns = PropertyAnalyzer.analyzeSharedDictColumns(properties, baseSchema);
+                if (sharedDictColumns != null && sharedDictColumns.isEmpty()) {
+                    sharedDictColumns = null;
+                }
+                Set<ColumnId> sharedDictColumnIds = null;
+                if (sharedDictColumns != null && !sharedDictColumns.isEmpty()) {
+                    sharedDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    sharedDictColumnIds.addAll(
+                            sharedDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                }
+                table.setSharedDictColumns(sharedDictColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

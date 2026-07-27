@@ -78,6 +78,9 @@ message ColumnPB {
     optional bool is_auto_increment = 18;
     // agg_state type
     optional AggStateDescPB agg_state_desc = 19;
+    // E4: column-level shared ZSTD dictionary. Unset (default false) for every
+    // non-E4 column so schemas serialize byte-identically.
+    optional bool use_shared_dict = 20 [default = false];
 }
 
 message TabletSchemaPB {

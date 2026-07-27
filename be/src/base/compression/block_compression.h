@@ -45,6 +45,13 @@
 
 namespace starrocks {
 
+// E4 column-level shared ZSTD dictionary handles. Forward-declared (defined in
+// zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
+namespace compression {
+class ZstdCDict;
+class ZstdDDict;
+} // namespace compression
+
 struct BlockCompressionOptions {
     int32_t lz4_acceleration = 1;
 };
@@ -94,10 +101,26 @@ public:
         return compress(input, output, false, -1, nullptr, nullptr, options);
     }
 
+    // E4: compress `input` referencing a per-column shared ZSTD dictionary. The
+    // compression level is baked into the CDict. Only ZstdBlockCompression
+    // overrides this; the base returns NotSupported so any accidental use on a
+    // non-ZSTD codec fails loudly instead of writing undecodable bytes.
+    virtual Status compress(const std::vector<Slice>& input, Slice* output, bool use_compression_buffer,
+                            size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                            const compression::ZstdCDict* cdict) const {
+        return Status::NotSupported("dict-based compress is not supported by this codec");
+    }
+
     // Decompress input data into output, output's capacity should be large
     // enough for decompressed data. Size of decompressed data will be set in
     // output's size.
     virtual Status decompress(const Slice& input, Slice* output) const = 0;
+
+    // E4: decompress a frame referencing a per-column shared ZSTD dictionary.
+    // Only ZstdBlockCompression overrides this; the base returns NotSupported.
+    virtual Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict) const {
+        return Status::NotSupported("dict-based decompress is not supported by this codec");
+    }
 
     // Returns an upper bound on the max compressed length.
     virtual size_t max_compressed_len(size_t len) const = 0;

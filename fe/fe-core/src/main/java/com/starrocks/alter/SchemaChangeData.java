@@ -40,6 +40,8 @@ class SchemaChangeData {
     private final boolean bloomFilterColumnsChanged;
     private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
+    private final boolean sharedDictColumnsChanged;
+    private final Set<ColumnId> sharedDictColumns;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexMetaIdToShortKeyCount;
     private final boolean shortKeyChanged;
@@ -90,6 +92,15 @@ class SchemaChangeData {
         return bloomFilterFpp;
     }
 
+    boolean isSharedDictColumnsChanged() {
+        return sharedDictColumnsChanged;
+    }
+
+    @Nullable
+    Set<ColumnId> getSharedDictColumns() {
+        return sharedDictColumns;
+    }
+
     boolean isHasIndexChanged() {
         return hasIndexChanged;
     }
@@ -132,6 +143,8 @@ class SchemaChangeData {
         this.bloomFilterColumnsChanged = builder.bloomFilterColumnsChanged;
         this.bloomFilterColumns = builder.bloomFilterColumns;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.sharedDictColumnsChanged = builder.sharedDictColumnsChanged;
+        this.sharedDictColumns = builder.sharedDictColumns;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexMetaIdToShortKeyCount =
                 Objects.requireNonNull(builder.newIndexMetaIdToShortKeyCount, "newIndexShortKeyCount is null");
@@ -152,6 +165,8 @@ class SchemaChangeData {
         private boolean bloomFilterColumnsChanged = false;
         private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
+        private boolean sharedDictColumnsChanged = false;
+        private Set<ColumnId> sharedDictColumns;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
         private boolean shortKeyChanged = false;
@@ -187,6 +202,16 @@ class SchemaChangeData {
         Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
             this.bloomFilterColumns = bfColumns;
             this.bloomFilterFpp = bfFpp;
+            return this;
+        }
+
+        Builder withSharedDictColumnsChanged(boolean changed) {
+            this.sharedDictColumnsChanged = changed;
+            return this;
+        }
+
+        Builder withSharedDictColumns(@Nullable Set<ColumnId> sharedDictColumns) {
+            this.sharedDictColumns = sharedDictColumns;
             return this;
         }
 

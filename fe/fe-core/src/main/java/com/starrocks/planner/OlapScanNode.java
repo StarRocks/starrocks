@@ -1104,6 +1104,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         List<TColumn> columnsDesc = new ArrayList<TColumn>();
         Set<ColumnId> bfColumns = olapTable.getBfColumnIds();
+        Set<ColumnId> sharedDictColumns = olapTable.getSharedDictColumnIds();
         long schemaId = 0;
 
         if (!getHeavyExprs().isEmpty()) {
@@ -1121,7 +1122,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 for (Column col : olapTable.getSchemaByIndexMetaId(selectedIndexMetaId)) {
                     TColumn tColumn = col.toThrift();
                     tColumn.setColumn_name(col.getColumnId().getId());
-                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns);
+                    col.setIndexFlag(tColumn, olapTable.getIndexes(), bfColumns, sharedDictColumns);
                     columnsDesc.add(tColumn);
                 }
                 // process schema has order by columns

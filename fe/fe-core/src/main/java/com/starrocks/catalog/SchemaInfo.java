@@ -58,6 +58,8 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
+    @SerializedName("sharedDictColumns")
+    private final Set<ColumnId> sharedDictColumnNames; // E4: columns using a shared ZSTD dictionary
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -77,6 +79,7 @@ public class SchemaInfo {
         this.indexes = builder.indexes;
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.sharedDictColumnNames = builder.sharedDictColumnNames;
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
@@ -127,6 +130,10 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
+    public Set<ColumnId> getSharedDictColumnNames() {
+        return sharedDictColumnNames;
+    }
+
     public TCompressionType getCompressionType() {
         return compressionType;
     }
@@ -150,6 +157,10 @@ public class SchemaInfo {
             // is bloom filter column
             if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getColumnId())) {
                 tColumn.setIs_bloom_filter_column(true);
+            }
+            // E4: use column-level shared ZSTD dictionary
+            if (sharedDictColumnNames != null && sharedDictColumnNames.contains(column.getColumnId())) {
+                tColumn.setUse_shared_dict(true);
             }
             tColumns.add(tColumn);
         }
@@ -193,6 +204,7 @@ public class SchemaInfo {
                 Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
                 Objects.equals(indexes, that.indexes) &&
                 Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
+                Objects.equals(sharedDictColumnNames, that.sharedDictColumnNames) &&
                 compressionType == that.compressionType &&
                 primaryKeyEncodingType == that.primaryKeyEncodingType;
     }
@@ -200,8 +212,8 @@ public class SchemaInfo {
     @Override
     public int hashCode() {
         return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
-                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionType, compressionLevel,
-                primaryKeyEncodingType);
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, sharedDictColumnNames, compressionType,
+                compressionLevel, primaryKeyEncodingType);
     }
 
     public static Builder newBuilder() {
@@ -221,6 +233,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
+        private Set<ColumnId> sharedDictColumnNames; // E4
         private TCompressionType compressionType;
         private int compressionLevel = -1;
         private TPrimaryKeyEncodingType primaryKeyEncodingType;
@@ -302,6 +315,14 @@ public class SchemaInfo {
             return this;
         }
 
+        public Builder setSharedDictColumnNames(Collection<ColumnId> sharedDictColumnNames) {
+            Preconditions.checkState(this.sharedDictColumnNames == null);
+            if (sharedDictColumnNames != null) {
+                this.sharedDictColumnNames = new HashSet<>(sharedDictColumnNames);
+            }
+            return this;
+        }
+
         public Builder setSchemaHash(int schemaHash) {
             this.schemaHash = schemaHash;
             return this;
@@ -348,6 +369,7 @@ public class SchemaInfo {
                 .setIndexes(indexes)
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
+                .setSharedDictColumnNames(table.getSharedDictColumnIds())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())

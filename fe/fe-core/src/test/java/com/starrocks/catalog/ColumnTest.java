@@ -293,11 +293,14 @@ public class ColumnTest {
 
         Set<ColumnId> bfColumns = new HashSet<>();
         bfColumns.add(ColumnId.create("f0"));
+        Set<ColumnId> sharedDictColumns = new HashSet<>();
+        sharedDictColumns.add(ColumnId.create("f0"));
         TColumn t0 = f0.toThrift();
-        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
+        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns, sharedDictColumns);
 
         Assertions.assertEquals(t0.has_bitmap_index, true);
         Assertions.assertEquals(t0.is_bloom_filter_column, true);
+        Assertions.assertEquals(t0.use_shared_dict, true);
 
         Assertions.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);

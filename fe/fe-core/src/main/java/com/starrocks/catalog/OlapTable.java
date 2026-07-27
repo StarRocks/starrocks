@@ -238,6 +238,10 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    // E4: columns that use a column-level shared ZSTD dictionary
+    @SerializedName(value = "sharedDictColumns")
+    protected Set<ColumnId> sharedDictColumns;
+
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
@@ -316,6 +320,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.sharedDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -347,6 +352,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.sharedDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -398,6 +404,12 @@ public class OlapTable extends Table {
         } else {
             olapTable.bfColumns = null;
         }
+        if (sharedDictColumns != null) {
+            olapTable.sharedDictColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.sharedDictColumns.addAll(sharedDictColumns);
+        } else {
+            olapTable.sharedDictColumns = null;
+        }
 
         olapTable.keysType = this.keysType;
         if (this.relatedMaterializedViews != null) {
@@ -439,6 +451,9 @@ public class OlapTable extends Table {
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
+        }
+        if (this.sharedDictColumns != null) {
+            olapTable.sharedDictColumns = Sets.newHashSet(this.sharedDictColumns);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -1586,6 +1601,35 @@ public class OlapTable extends Table {
         } else {
             return columnNames;
         }
+    }
+
+    public Set<ColumnId> getSharedDictColumnIds() {
+        return sharedDictColumns;
+    }
+
+    public Set<String> getSharedDictColumnNames() {
+        if (sharedDictColumns == null) {
+            return null;
+        }
+
+        Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnId columnId : sharedDictColumns) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
+                continue;
+            }
+            columnNames.add(column.getName());
+        }
+        if (columnNames.isEmpty()) {
+            return null;
+        } else {
+            return columnNames;
+        }
+    }
+
+    public void setSharedDictColumns(Set<ColumnId> sharedDictColumns) {
+        this.sharedDictColumns = sharedDictColumns;
     }
 
     public List<Index> getCopiedIndexes() {
@@ -3010,6 +3054,12 @@ public class OlapTable extends Table {
         Set<String> bfColumnNames = getBfColumnNames();
         if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
+        }
+
+        // shared dict columns (E4)
+        Set<String> sharedDictColumnNames = getSharedDictColumnNames();
+        if (sharedDictColumnNames != null && !sharedDictColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_SHARED_DICT_COLUMNS, Joiner.on(", ").join(sharedDictColumnNames));
         }
 
         // colocate group

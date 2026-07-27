@@ -59,6 +59,10 @@ class TypeInfo;
 class BlockCompressionCodec;
 class WritableFile;
 
+namespace compression {
+class ZstdCDict;
+} // namespace compression
+
 class Column;
 
 static const size_t dictionary_min_rowcount = 256;
@@ -101,6 +105,15 @@ struct ColumnWriterOptions {
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;
 
+    // E4 column-level shared ZSTD dictionary. Set true (via segment_writer from
+    // the tablet schema, or propagated to flat-JSON sub-columns) to build a
+    // per-column per-segment sampled dictionary and compress every data page
+    // referencing it. Only meaningful for ZSTD PLAIN string/JSON columns.
+    bool use_shared_dict = false;
+    // Initialized from config::shared_dict_sample_bytes in the constructor
+    // (config.h is deliberately not included by this header).
+    uint32_t shared_dict_sample_bytes;
+
     std::string to_string() const {
         std::string meta_str;
         if (meta) {
@@ -127,6 +140,7 @@ struct ColumnWriterOptions {
         oss << "is_compaction=" << is_compaction << ", ";
         oss << "need_flat=" << need_flat << ", ";
         oss << "field_name=\"" << field_name << "\", ";
+        oss << "use_shared_dict=" << use_shared_dict << ", ";
         oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
         oss << "}";
         return oss.str();
@@ -317,6 +331,15 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    // E4 column-level shared ZSTD dictionary (write side). Lazily built from the
+    // first eligible page's encoded values; page 0 itself and every subsequent
+    // data page are then compressed referencing it. See finish_current_page()
+    // (sampling gate) and write_data() (dict page emission).
+    std::unique_ptr<compression::ZstdCDict> _shared_cdict;
+    std::string _shared_dict_sample; // raw sample bytes, persisted as the dict page
+    bool _shared_dict_ready = false; // _shared_cdict has been built
+    bool _cdict_used = false;        // at least one data page was actually dict-compressed
 
     Buffer<Slice> _slice_buf;
 };

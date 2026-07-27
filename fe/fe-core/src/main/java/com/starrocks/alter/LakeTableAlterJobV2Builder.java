@@ -59,6 +59,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         LakeTableSchemaChangeJob schemaChangeJob =
                 new LakeTableSchemaChangeJob(jobId, dbId, tableId, table.getName(), timeoutMs);
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
+        schemaChangeJob.setSharedDictInfo(sharedDictColumnsChanged, sharedDictColumns);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
         schemaChangeJob.setComputeResource(computeResource);

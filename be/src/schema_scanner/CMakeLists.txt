@@ -27,6 +27,7 @@ set(SCHEMA_SCANNER_FILES
     schema_be_metrics_scanner.cpp
     schema_be_tablet_write_log_scanner.cpp
     schema_be_tablets_scanner.cpp
+    schema_column_dict_stats_scanner.cpp
     schema_be_threads_scanner.cpp
     schema_be_txns_scanner.cpp
     schema_charsets_scanner.cpp

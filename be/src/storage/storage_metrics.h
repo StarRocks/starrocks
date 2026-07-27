@@ -114,6 +114,13 @@ public:
     METRIC_DEFINE_INT_COUNTER(lake_drop_index_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_idg_files_written_total, MetricUnit::OPERATIONS);
 
+    // E4 column-level shared ZSTD dictionary. Aggregate write-side health signal
+    // exported via /metrics: whether E4 is working, dictionary scale, and the
+    // rate at which the sampling gate fell back (dict never built).
+    METRIC_DEFINE_INT_COUNTER(shared_dict_pages_written, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(shared_dict_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(shared_dict_build_fallback, MetricUnit::NOUNIT);
+
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(cumulative_compaction_request_total, MetricUnit::REQUESTS);

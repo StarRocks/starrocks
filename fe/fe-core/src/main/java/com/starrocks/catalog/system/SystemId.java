@@ -149,4 +149,7 @@ public class SystemId {
 
     // ==================  Materialized View  ===================== //
     public static final long MATERIALIZED_VIEW_REFRESH_JOBS_ID = 180L;
+
+    // ==================  E4 Shared Dictionary  ================== //
+    public static final long COLUMN_DICT_STATS_ID = 190L;
 }

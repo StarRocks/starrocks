@@ -43,6 +43,7 @@
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
+#include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
@@ -757,13 +758,27 @@ public:
         return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2);
     }
 
+    // E4: same as above but referencing a per-column shared dictionary.
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const compression::ZstdCDict* cdict) const override {
+        return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2,
+                         cdict);
+    }
+
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
+
+    // E4: decompress a frame referencing a per-column shared dictionary.
+    Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict) const override {
+        return _decompress(input, output, ddict);
+    }
 
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
 
 private:
     Status _compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
-                     size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2) const {
+                     size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
+                     const compression::ZstdCDict* cdict = nullptr) const {
         StatusOr<compression::ZSTD_CCtx_Pool::Ref> ref = compression::getZSTD_CCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -777,7 +792,21 @@ private:
         // with level = ZSTD_CLEVEL_DEFAULT(3). And the context will be return to the
         // pool by reseting back to level = ZSTD_CLEVEL_DEFAULT(3).
         // What we should do here is simply set the level as we wanted.
-        if (_level != -1) {
+        if (cdict != nullptr) {
+            // E4: reference the per-column shared dictionary. The compression
+            // level is baked into the CDict, so we must NOT also set
+            // ZSTD_c_compressionLevel here (that would be ignored / conflict).
+            // The referenced CDict is sticky on the ctx but is cleared when the
+            // ctx is returned to the pool (ZSTD_CCtx_reset with
+            // reset_session_and_parameters), so it never leaks to the next
+            // borrower. See compression_context_pool_singletons.cpp.
+            ret = ZSTD_CCtx_refCDict(ctx, cdict->dict());
+            if (ZSTD_isError(ret)) {
+                context->compression_fail = true;
+                return Status::InternalError(strings::Substitute("ZSTD refCDict failed: $0",
+                                                                 ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+            }
+        } else if (_level != -1) {
             if (_level < 1 || _level > 22) {
                 return Status::InternalError(strings::Substitute("ZSTD with invalid compression level: $0", _level));
             }
@@ -872,7 +901,7 @@ private:
         return Status::OK();
     }
 
-    Status _decompress(const Slice& input, Slice* output) const {
+    Status _decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict = nullptr) const {
         StatusOr<compression::ZSTD_DCtx_Pool::Ref> ref = compression::getZSTD_DCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -881,6 +910,22 @@ private:
         compression::ZSTDDecompressContext* context = ref.value().get();
         ZSTD_DCtx* ctx = context->ctx;
         // Decompression context does not depend on level parameter
+
+        if (ddict != nullptr) {
+            // E4: reference the per-column shared dictionary. ZSTD_decompressDCtx
+            // below honors this sticky reference. It is cleared when the ctx is
+            // returned to the pool (ZSTD_DCtx_reset with
+            // reset_session_and_parameters), so it never leaks to the next
+            // borrower. A no-dict frame (dictID=0 raw content) decodes
+            // identically whether or not a raw-content DDict is referenced,
+            // which is what makes mixed dict/no-dict pages in one column safe.
+            size_t const r = ZSTD_DCtx_refDDict(ctx, ddict->dict());
+            if (ZSTD_isError(r)) {
+                context->decompression_fail = true;
+                return Status::InternalError(strings::Substitute("ZSTD refDDict failed: $0",
+                                                                 ZSTD_getErrorString(ZSTD_getErrorCode(r))));
+            }
+        }
 
         if (output->data == nullptr) {
             // We may pass a NULL 0-byte output buffer but some zstd versions

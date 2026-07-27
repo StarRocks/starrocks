@@ -250,6 +250,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         .setStorageType(TStorageType.COLUMN)
                         .setBloomFilterColumnNames(table.getBfColumnIds())
                         .setBloomFilterFpp(table.getBfFpp())
+                        .setSharedDictColumnNames(table.getSharedDictColumnIds())
                         .setIndexes(OlapTable.getIndexesBySchema(table.getCopiedIndexes(), rollupSchema))
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
                         .setSortKeyUniqueIds(null)
