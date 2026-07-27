@@ -32,7 +32,11 @@ The checker is the **detect** half (its own PR); this skill is the
    pre-start a cluster.
    > Version alignment is automatic: the skill runs each version's docs against a
    > cluster of that same version. Only the image behind `9030` swaps between versions.
-4. **The `starrocks` MCP server** — configured in the repo-root `.mcp.json`, which
+4. **`vale` 3.x** on PATH (`brew install vale`; CI pins 3.13.1) — used to lint every file
+   the skill edits before the PR opens, with that branch's own `docs/.vale.ini`. The rules
+   are Tengo scripts and need 3.x. Without it the skill states in the PR body that the
+   gate was skipped; it does not pretend the files are clean.
+5. **The `starrocks` MCP server** — configured in the repo-root `.mcp.json`, which
    reads `STARROCKS_HOST/PORT/USER/PASSWORD` from the environment (defaults to
    `127.0.0.1:9030`, `root`, empty). Bound once at session start and reused across all
    versions (only the cluster behind `9030` changes). Claude Code attaches it
@@ -51,6 +55,8 @@ Just invoke the **`sql-doc-autofix`** skill in Claude Code. It:
   cluster, classifies, and verifies fixes;
 - consolidates results across versions *and* languages, applying every fix to each
   language that carries the example;
+- **Vale-lints every file it edited** — the same gate `ci-vale.yml` runs on the PR — and
+  reports the result on a `## Vale` line in the PR body;
 - emits a **cross-language parity report** per version;
 - opens the PR(s)/issue below.
 
@@ -129,6 +135,11 @@ no rewrite) · **needs-setup** (complete only if trivial, else flag) ·
   (`ALTER SYSTEM`), destructive `DROP`, backup/restore, or file/routine-load ops.
 - Never rewrites to "make it pass" at the cost of intent; never treats a
   version/build-gated failure as doc rot.
+- Every edited file is Vale-linted before the PR opens, and the result is stated in the
+  body — including when the gate was skipped or an alert was pre-existing. Vale errors are
+  never silenced with `<!-- vale off -->`. The gate's real target is the *reformat* fix:
+  most rules skip fenced code, so the edit it can actually catch is an unbalanced fence
+  that spills transcript text into prose.
 
 ## Notes
 - Runs **all supported versions sequentially every run** on `9030` — one cluster at a

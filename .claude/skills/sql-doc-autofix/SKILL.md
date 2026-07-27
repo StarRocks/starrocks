@@ -1,6 +1,6 @@
 ---
 name: sql-doc-autofix
-description: Propose verified fixes for documentation SQL examples that fail the doc-rot checker (docs/scripts/run_sql_samples.py). Checks all three languages (docs/en, docs/zh, docs/ja) against every supported version (auto-discovered), classifies each FAILing example, and only for genuinely fixable ones proposes a corrected statement, verifies it against a live cluster of each version via the StarRocks MCP server, applies it to every language that carries the example, and opens DRAFT [Doc] PRs whose backport boxes match exactly the versions each fix was verified on. Also emits a cross-language parity report. Never auto-merges.
+description: Propose verified fixes for documentation SQL examples that fail the doc-rot checker (docs/scripts/run_sql_samples.py). Checks all three languages (docs/en, docs/zh, docs/ja) against every supported version (auto-discovered), classifies each FAILing example, and only for genuinely fixable ones proposes a corrected statement, verifies it against a live cluster of each version via the StarRocks MCP server, applies it to every language that carries the example, lints every file it touched with Vale (the same gate CI runs), and opens DRAFT [Doc] PRs whose backport boxes match exactly the versions each fix was verified on. Also emits a cross-language parity report. Never auto-merges.
 argument-hint: "[optional version list, e.g. '4.1 4.0 3.5' — default: auto-discover supported versions and confirm]"
 allowed-tools: Read, Edit, Grep, Glob, Bash, Agent, mcp__starrocks__read_query, mcp__starrocks__write_query, mcp__starrocks__table_overview, mcp__starrocks__db_overview
 ---
@@ -45,6 +45,9 @@ drift is visible at all.
 - `gh` CLI, authenticated (used for version discovery and to open PRs/issues).
 - `docker compose` available; the skill brings each version's cluster up and down
   itself (you do **not** pre-start one).
+- **`vale` 3.x** on PATH (CI pins 3.13.1) — the doc lint gate in Step 3. The rules are
+  `extends: script` (Tengo) and need 3.x. If `vale` is absent or 2.x, the gate is
+  **skipped and declared in the PR body**, never silently treated as a pass.
 
 ## Step 0 — Resolve the version SET, then loop detect+verify over each version
 
@@ -297,6 +300,69 @@ For each fixed skeleton, walk its `sites` and edit **every** one:
 - Before opening the PR, re-extract and confirm the target skeleton is gone from **all**
   language trees — the same check used for `en`, run per language.
 
+### Vale-gate every file you touched (before opening the PR)
+CI lints **every changed `docs/{en,zh,ja}/**/*.{md,mdx}` file in the PR**, whole-file, not
+just your diff (`.github/workflows/ci-vale.yml`, `MinAlertLevel = error`) — so an error
+anywhere in a file you touched turns the PR red. Reproduce that gate locally, in each
+worktree where edits landed:
+
+```bash
+cd ../sr-branch-$v                       # or the primary checkout, for main-based PRs
+BASE=origin/branch-$v                    # the PR's base ref (origin/main for main PRs)
+{ git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- docs
+  git diff --name-only --diff-filter=ACMR -- docs; } \
+  | grep -E '^docs/(en|zh|ja)/.*\.mdx?$' | sort -u > /tmp/vale-files-$v.txt
+wc -l < /tmp/vale-files-$v.txt            # MUST be > 0 and match your edit count
+tr '\n' '\0' < /tmp/vale-files-$v.txt | xargs -0 vale --config docs/.vale.ini --output line
+echo "vale exit=$?"                       # 0 = clean, 1 = errors
+```
+Two traps that make this gate lie, both verified — do not simplify around them:
+- **`vale` exits 0 on a path that does not exist**, so an empty or malformed file list
+  looks exactly like a pass. Assert the list is non-empty and every entry exists before
+  believing `exit=0`. In particular, `vale $FILES` with a newline-joined variable passes
+  **one** argument in zsh (no word splitting), lints nothing, and exits 0 — hence
+  `tr '\n' '\0' | xargs -0`. (BSD/macOS `xargs` has no `-a`.)
+- Use **that worktree's own** `docs/.vale.ini` and `docs/styles/` — the rule set is
+  branch-local and a release branch may carry an older one. Never lint a 3.5 file with
+  `main`'s config. `--config docs/.vale.ini` from the worktree root does this correctly
+  (`StylesPath = styles` resolves relative to the config).
+
+Suppression-list edits (`sql_verify_suppressions.json`) are JSON; Vale does not lint them.
+
+**Why this gate earns its place in *this* skill.** All the rules are `scope: raw`, but
+their Tengo scripts skip fenced code blocks — so an ordinary in-fence SQL edit is
+invisible to Vale, and the gate is nearly free. The payoff is the **reformat fix**
+(Step 1, "fixable by reformatting"): splitting a client transcript into a ```sql block
+plus a ```plaintext block rewrites fence structure, and an unbalanced fence un-shields
+the transcript text, which then trips `HTMLComment` / `HtmlEntities` / `HtmlCodeTag` /
+`BackslashEscape` / `JsxCloserNeedsBlankLine` in a burst. A cluster of raw-scope errors
+in a file you reformatted is a **fence-balance bug in your edit**, not a prose problem:
+re-read the block and fix the fences rather than the reported text.
+
+**New vs. pre-existing.** The `sql-reference` trees lint clean at error level in all
+three languages today, so treat any error as caused by your edit until proven otherwise.
+When that is unclear, diff against a baseline built from the base ref — copy the config
+in so the path-scoped rules still match:
+```bash
+B=/tmp/vale-base-$v; rm -rf $B; mkdir -p $B/docs
+while IFS= read -r f; do mkdir -p "$B/$(dirname "$f")"; git show "$BASE:$f" > "$B/$f"; done \
+  < /tmp/vale-files-$v.txt
+cp docs/.vale.ini $B/docs/ && cp -R docs/styles $B/docs/
+lint() { (cd "$1" && tr '\n' '\0' < /tmp/vale-files-$v.txt \
+          | xargs -0 vale --config docs/.vale.ini --output line) | cut -d: -f1,4- | sort; }
+lint "$B" > /tmp/vale-before-$v.txt; lint . > /tmp/vale-after-$v.txt
+comm -13 /tmp/vale-before-$v.txt /tmp/vale-after-$v.txt   # alerts YOUR edit introduced
+```
+Compare on `file + rule + message` (the `cut` drops line/col — your edit shifts lines).
+- **New error** → your edit's fault; fix it in the same PR.
+- **Pre-existing error** → do not fold an unrelated prose cleanup into a SQL-fix PR, but
+  do not stay quiet either: CI will fail this PR anyway. Name it (`file` · rule) on the
+  `## Vale` line and add it to the tracking issue. A one-token mechanical fix inside a
+  file you already touched (backticks around `ARRAY<INT>`) is fine to make here — call it
+  out in the body.
+- Never silence a Vale error with a `<!-- vale off -->` region, and never drop a fix
+  merely because Vale flagged the file — fix the edit or escalate.
+
 ### Group fixes into PR(s) by verified-version-set
 Mergify cherry-picks a whole PR to each checked branch, so **every fix in a PR must be
 verified on every version whose box is checked.** Therefore:
@@ -336,6 +402,11 @@ filled template yourself):
 - a short **`## Language coverage`** line: the per-language file count in the diff
   (e.g. `en 6 · zh 6 · ja 5`) and, if they differ, one sentence explaining the gap.
   A reviewer should be able to spot an accidentally en-only PR at a glance.
+- a one-line **`## Vale`** statement of the lint gate's result for this PR's files:
+  `vale --config docs/.vale.ini` on N changed files → `clean`, or the surviving alerts as
+  `file` · rule · new-or-pre-existing, or `skipped — vale <3.x not available` (never
+  omit the line, and never report `clean` for a run whose file list was empty). CI runs
+  the same gate, so this tells the reviewer up front whether Vale will be green.
 - a **`## Suppressions`** section listing each entry added (`file:line` · category ·
   `versions` scope or "global" · one-line reason), so the reviewer sees exactly what is
   being silenced and on which versions.
@@ -378,6 +449,11 @@ Cross-link (PR body → issue when non-empty, issue → PRs) and report all URLs
 - Never fix an example in one language and leave the other languages' copies of that
   same example broken. If you fixed `en`, the `zh` and `ja` sites in that skeleton's
   `sites` list are part of the same PR.
+- Never open a PR without running the Vale gate on the files it changes, and never report
+  it as clean on the strength of an `exit=0` you did not sanity-check against a non-empty
+  file list — `vale` exits 0 when handed a path that doesn't exist.
+- Never silence a Vale error with `<!-- vale off -->`, and never leave a Vale error
+  unmentioned in the PR body because it was pre-existing — CI fails the PR either way.
 - Never machine-translate documentation prose. Fix the SQL in every language; escalate
   prose that must change to a native reviewer via the tracking issue.
 - Never key a suppression on the verbatim `sha256:` hash when the example exists in more
