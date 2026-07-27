@@ -690,11 +690,11 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `query_queue_slots_estimator_strategy`
 
-- Default: MAX
+- Default: PBE
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: Selects the slot estimation strategy used for queue-based queries when `enable_query_queue_v2` is true. Valid values: MBE (memory-based), PBE (parallelism-based), MAX (take max of MBE and PBE) and MIN (take min of MBE and PBE). MBE estimates slots from predicted memory or plan costs divided by the per-slot memory target and is capped by `totalSlots`. PBE derives slots from fragment parallelism (scan range counts or cardinality / rows-per-slot) and a CPU-cost based calculation (using CPU costs per slot), then bounds the result within [numSlots/2, numSlots]. MAX and MIN combine MBE and PBE by taking their maximum or minimum respectively. If the configured value is invalid, the default (`MAX`) is used.
+- Description: Selects the slot estimation strategy used for queue-based queries when `enable_query_queue_v2` is true. Valid values: `PBE` (parallelism-based, the default), `MBE` (memory-cost-based), and `CBE` (CPU-cost-based). PBE estimates a query's slots from scan parallelism, capped by the worker count: for OLAP tables it uses the number of scan ranges left after pruning, so only very small queries fall below the worker count; a connector/external scan is treated as a full-parallelism scan (the worker count) rather than a single-slot query. MBE estimates slots from the query's memory cost divided by `query_queue_v2_mem_bytes_per_slot`. CBE estimates slots from the plan CPU cost divided by `query_queue_v2_cpu_costs_per_slot`. MBE and CBE per-query slots are additionally capped by `number_of_workers * max(1, pipeline_dop / 2)`. The legacy values `MAX` and `MIN` are still accepted for forward compatibility and are treated as the default estimator; any other value is rejected by configuration validation.
 - Introduced in: v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -703,7 +703,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls how many logical concurrency "layers" are used when computing the system's total query slots. In shared-nothing mode the total slots = `query_queue_v2_concurrency_level` * number_of_BEs * cores_per_BE (derived from BackendResourceStat). In multi-warehouse mode the effective concurrency is scaled down to max(1, `query_queue_v2_concurrency_level` / 4). If the configured value is non-positive it is treated as `4`. Changing this value increases or decreases totalSlots (and therefore concurrent query capacity) and affects per-slot resources: memBytesPerSlot is derived by dividing per-worker memory by (cores_per_worker * concurrency), and CPU accounting uses `query_queue_v2_cpu_costs_per_slot`. Set it proportional to cluster size; very large values may reduce per-slot memory and cause resource fragmentation. 
+- Description: Interpreted as a capacity level relative to the default level `4`. For the default (PBE) and CPU-cost-based (CBE) estimators, the system's total query slots are computed as `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)` (derived from BackendResourceStat). For the memory-cost-based estimator (MBE), the total slots are instead derived from the warehouse memory budget. If the configured value is non-positive it is treated as `4`. total_slots is clamped to at least `number_of_workers`. Increasing this value raises totalSlots (and therefore concurrent query capacity); at the default `4` the total capacity equals `number_of_workers * cores_per_worker`. Set it proportional to the concurrency you want for the cluster.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -712,8 +712,17 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: planner CPU cost units
 - Is mutable: Yes
-- Description: Per-slot CPU cost threshold used to estimate how many slots a query needs from its planner CPU cost. The scheduler computes slots as integer(`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) and then clamps the result to the range [1, totalSlots] (totalSlots is derived from the query queue V2 `V2` parameters). The V2 code normalizes non-positive settings to 1 (Math.max(1, value)), so a non-positive value effectively becomes `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. Tune together with `query_queue_v2_num_rows_per_slot` and concurrency settings to control parallelism vs. resource granularity.
+- Description: Per-slot CPU cost threshold used by the CPU-cost-based estimator (CBE) to estimate how many slots a query needs from its plan CPU cost. The scheduler computes slots as `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` and clamps the result to the range `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]`. A non-positive value is normalized to `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Per-slot memory target used by the memory-cost-based estimator (MBE). When `query_queue_slots_estimator_strategy` is `MBE`, the total slots are derived from the warehouse memory budget, and a query's slots are estimated from its total memory cost divided by this value, capped by `number_of_workers * max(1, pipeline_dop / 2)`. If it is non-positive, Query Queue V2 uses the average worker memory per core.
+- Introduced in: -
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -721,7 +730,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: The target number of source-row records assigned to a single scheduling slot when estimating per-query slot count. StarRocks computes `estimated_slots` = (cardinality of the Source Node) / `query_queue_v2_num_rows_per_slot`, then clamps the result to the range [1, totalSlots] and enforces a minimum of 1 if the computed value is non-positive. totalSlots is derived from available resources (roughly DOP * `query_queue_v2_concurrency_level` * number_of_workers/BE) and therefore depends on cluster/core counts. Increase this value to reduce slot count (each slot handles more rows) and lower scheduling overhead; decrease it to increase parallelism (more, smaller slots), up to the resource limit.
+- Description: Retained for backward compatibility with existing Query Queue V2 serialized and debug output. It is no longer used by the PBE, MBE, or CBE slot estimators.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
