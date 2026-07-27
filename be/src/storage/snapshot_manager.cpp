@@ -289,6 +289,19 @@ Status SnapshotManager::link_inverted_index_directories(const SnapshotMeta& snap
                                                 created_index_dirs);
 }
 
+Status SnapshotManager::link_inverted_index_directories(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                                        const TabletSchemaCSPtr& tablet_schema,
+                                                        const std::string& snapshot_dir, const std::string& tablet_dir,
+                                                        std::set<std::string>* created_index_dirs) {
+    std::vector<RowsetIndexLayout> rowset_layouts;
+    rowset_layouts.reserve(rowset_metas.size());
+    for (const auto& rowset_meta : rowset_metas) {
+        rowset_layouts.emplace_back(rowset_meta->rowset_id().to_string(), rowset_meta->num_segments());
+    }
+    return link_inverted_index_directories_impl(rowset_layouts, tablet_schema, snapshot_dir, tablet_dir,
+                                                created_index_dirs);
+}
+
 Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* snapshot_path) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
@@ -629,12 +642,10 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         }
     }
 
-    if (tablet->updates() != nullptr) {
-        if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
-            LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
-            (void)fs::remove_all(snapshot_id_path);
-            return st;
-        }
+    if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
+        LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
     }
 
     return snapshot_id_path;
