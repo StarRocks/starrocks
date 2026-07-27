@@ -32,11 +32,12 @@ public class FlussConnector implements Connector {
     public static final String BOOTSTRAP_SERVERS = "bootstrap.servers";
     private static final String FLUSS_OPTION_PREFIX = "fluss.option.";
     private static final String LAKE_PROPERTY_PREFIX = "table.datalake.";
-    private final Connection connection;
-    private final Admin admin;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
+    private final Configuration flussClientConf;
     private final Configuration catalogConf;
+    private Connection connection;
+    private Admin admin;
 
     public FlussConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -49,7 +50,7 @@ public class FlussConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", BOOTSTRAP_SERVERS);
         }
 
-        Configuration flussClientConf = new Configuration();
+        this.flussClientConf = new Configuration();
         flussClientConf.setString(BOOTSTRAP_SERVERS, bootstrapServers);
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -64,18 +65,36 @@ public class FlussConnector implements Connector {
                 this.catalogConf.setString(entry.getKey(), entry.getValue());
             }
         }
-
-        this.connection = ConnectionFactory.createConnection(flussClientConf);
-        this.admin = connection.getAdmin();
     }
 
     @Override
-    public ConnectorMetadata getMetadata() {
+    public synchronized ConnectorMetadata getMetadata() {
+        initConnection();
         return new FlussMetadata(catalogName, hdfsEnvironment, this.connection, this.admin, catalogConf);
     }
 
+    private void initConnection() {
+        if (connection != null) {
+            return;
+        }
+
+        Connection newConnection = ConnectionFactory.createConnection(flussClientConf);
+        try {
+            Admin newAdmin = newConnection.getAdmin();
+            this.connection = newConnection;
+            this.admin = newAdmin;
+        } catch (RuntimeException e) {
+            try {
+                newConnection.close();
+            } catch (Exception closeException) {
+                e.addSuppressed(closeException);
+            }
+            throw e;
+        }
+    }
+
     @Override
-    public void shutdown() {
+    public synchronized void shutdown() {
         try {
             if (admin != null) {
                 admin.close();

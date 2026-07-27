@@ -54,14 +54,15 @@ public class FlussConnectorTest {
     public void testPropertiesAndMetadata() {
         Map<String, String> properties = validProperties();
         FlussConnector connector = createConnector(properties);
+        Assertions.assertNull(capturedClientConf);
 
+        FlussMetadata metadata = Assertions.assertInstanceOf(FlussMetadata.class, connector.getMetadata());
         Map<String, String> clientConf = capturedClientConf.toMap();
         Assertions.assertEquals(BOOTSTRAP_SERVERS, clientConf.get(FlussConnector.BOOTSTRAP_SERVERS));
         Assertions.assertEquals("64mb", clientConf.get("client.writer.buffer-size"));
         Assertions.assertFalse(clientConf.containsKey("table.datalake.paimon.metastore"));
         Assertions.assertFalse(clientConf.containsKey("unrelated.option"));
 
-        FlussMetadata metadata = Assertions.assertInstanceOf(FlussMetadata.class, connector.getMetadata());
         Configuration catalogConf = Deencapsulation.getField(metadata, "catalogConf");
         Assertions.assertEquals("filesystem", catalogConf.toMap().get("table.datalake.paimon.metastore"));
         Assertions.assertEquals("/tmp/fluss-warehouse",
@@ -72,6 +73,7 @@ public class FlussConnectorTest {
     @Test
     public void testShutdown() throws Exception {
         FlussConnector connector = createConnector(validProperties());
+        connector.getMetadata();
 
         connector.shutdown();
 
@@ -88,6 +90,7 @@ public class FlussConnectorTest {
     @Test
     public void testShutdownIgnoresCloseException() throws Exception {
         FlussConnector connector = createConnector(validProperties());
+        connector.getMetadata();
         new Expectations() {
             {
                 admin.close();
