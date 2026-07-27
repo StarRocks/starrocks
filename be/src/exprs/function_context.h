@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include "column/column.h"
@@ -30,29 +33,30 @@ class RuntimeState;
 
 struct NgramBloomFilterState;
 
+// Base class for per-execution-thread function state (e.g. a Hyperscan scratch space) held by
+// a shared FunctionContext via get_or_create_thread_state(). Derive from this and put the
+// thread-private, mutable resources in the derived type.
+class FunctionThreadState {
+public:
+    virtual ~FunctionThreadState() = default;
+};
+
+// A process-stable id for the current execution thread, assigned lazily on first use. Used to
+// key per-thread state without relying on a per-thread FunctionContext clone. The pipeline
+// runs on a bounded thread pool, so the id space stays small in practice.
+int current_worker_id();
+
 class FunctionContext {
 public:
     using TypeDesc = TypeDescriptor;
 
     enum FunctionStateScope {
-        /// Indicates that the function state for this FunctionContext's UDF is shared across
-        /// the plan fragment (a query is divided into multiple plan fragments, each of which
-        /// is responsible for a part of the query execution). Within the plan fragment, there
-        /// may be multiple instances of the UDF executing concurrently with multiple
-        /// FunctionContexts sharing this state, meaning that the state must be
-        /// thread-safe. The Prepare() function for the UDF may be called with this scope
-        /// concurrently on a single host if the UDF will be evaluated in multiple plan
-        /// fragments on that host. In general, read-only state that doesn't need to be
-        /// recomputed for every UDF call should be fragment-local.
+        /// The function's prepared state is shared across the whole plan fragment: it is built
+        /// once and read concurrently by every execution thread, so it must be read-only /
+        /// thread-safe after preparation. Genuinely per-thread, mutable resources (e.g. a
+        /// Hyperscan scratch) must NOT live here — obtain them lazily during evaluation via
+        /// FunctionContext::get_or_create_thread_state<T>() instead.
         FRAGMENT_LOCAL,
-
-        /// Indicates that the function state is local to the execution thread. This state
-        /// does not need to be thread-safe. However, this state will be initialized (via the
-        /// Prepare() function) once for every execution thread, so fragment-local state
-        /// should be used when possible for better performance. In general, inexpensive
-        /// shared state that is written to by the UDF (e.g. scratch space) should be
-        /// thread-local.
-        THREAD_LOCAL,
     };
 
     /// Create a FunctionContext for a UDF. Caller is responsible for deleting it.
@@ -133,7 +137,7 @@ public:
     /// Returns a new FunctionContext with the same constant args, fragment-local state, and
     /// debug flag as this FunctionContext. The caller is responsible for calling delete on
     /// it.
-    FunctionContext* clone(MemPool* pool);
+    FunctionContext* clone();
 
     void set_constant_columns(Columns columns) { _constant_columns = std::move(columns); }
 
@@ -163,6 +167,26 @@ public:
     bool allow_throw_exception() const;
 
     std::unique_ptr<NgramBloomFilterState>& get_ngram_state() { return _ngramState; }
+
+    // Returns this worker thread's instance of T (which must derive from FunctionThreadState),
+    // creating it via factory() on first access for this (FunctionContext, worker) pair.
+    // factory() must return std::unique_ptr<T>. Thread-safe: multiple worker threads may call
+    // concurrently on the same shared FunctionContext. The returned states are owned by this
+    // FunctionContext and freed when it is destroyed (i.e. with the fragment), so a function's
+    // eval can obtain per-thread scratch without a per-thread FunctionContext clone. The lock
+    // is only taken to look up / create the slot; callers must not hold references across the
+    // lifetime of the FunctionContext.
+    template <class T, class Factory>
+    T* get_or_create_thread_state(Factory&& factory) {
+        static_assert(std::is_base_of<FunctionThreadState, T>::value, "T must derive from FunctionThreadState");
+        int w = current_worker_id();
+        std::lock_guard<std::mutex> l(_thread_state_mu);
+        auto it = _thread_states.find(w);
+        if (it == _thread_states.end()) {
+            it = _thread_states.emplace(w, std::forward<Factory>(factory)()).first;
+        }
+        return static_cast<T*>(it->second.get());
+    }
 
 private:
     friend class ExprContext;
@@ -210,6 +234,11 @@ private:
 
     // used for ngram bloom filter to speed up some function
     std::unique_ptr<NgramBloomFilterState> _ngramState;
+
+    // Per-worker thread-state registry (see get_or_create_thread_state). Owned here, so the
+    // states live as long as this FunctionContext (the fragment) and are freed with it.
+    std::mutex _thread_state_mu;
+    std::unordered_map<int, std::unique_ptr<FunctionThreadState>> _thread_states;
 };
 
 } // namespace starrocks
