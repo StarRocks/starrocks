@@ -376,16 +376,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), SV,
                         TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("13:Project\n"
+        Assertions.assertTrue(replayPair.second.contains("15:Project\n"
                 + "  |  <slot 31> : bitmap_and(20: bitmap_agg, 27: bitmap_agg)\n"
                 + "  |  \n"
-                + "  12:NESTLOOP JOIN\n"
+                + "  14:NESTLOOP JOIN\n"
                 + "  |  join op: CROSS JOIN\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  \n"
-                + "  |----11:EXCHANGE\n"
+                + "  |----13:EXCHANGE\n"
                 + "  |    \n"
-                + "  5:Project\n"
+                + "  10:Project\n"
                 + "  |  <slot 20> : 17: bitmap_agg"), replayPair.second);
     }
 

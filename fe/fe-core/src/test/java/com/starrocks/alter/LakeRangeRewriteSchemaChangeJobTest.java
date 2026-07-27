@@ -37,6 +37,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -260,7 +261,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     @Test
     public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
         // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
-        new MockUp<WarehouseManager>() {
+        // Mock WarehouseManagerEPack (the concrete runtime instance from MultiWarehouseExtension); the base
+        // WarehouseManager's method is overridden there, so MockUp<WarehouseManager> would never intercept it.
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);

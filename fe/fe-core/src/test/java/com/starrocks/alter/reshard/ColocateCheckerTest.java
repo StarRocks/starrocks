@@ -37,12 +37,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
@@ -514,10 +514,12 @@ public class ColocateCheckerTest {
 
     @Test
     public void testStaysUnstableWhenWorkerGroupResolutionFails() throws Exception {
-        // Resolving the worker group calls WarehouseManager.getBackgroundComputeResource, which throws
-        // ErrorReportException when the warehouse has no available compute nodes. The gate must fail
-        // closed locally (group stays unstable) rather than letting the exception escape. Convergence
-        // is stubbed converged so the worker-group throw is the only thing keeping the group unstable.
+        // Resolving the worker group calls getBackgroundComputeResource, which throws ErrorReportException
+        // when the warehouse has no available compute nodes. The gate must fail closed locally (group stays
+        // unstable) rather than letting the exception escape. Convergence is stubbed converged so the
+        // worker-group throw is the only thing keeping the group unstable. Mock WarehouseManagerEPack (the
+        // concrete runtime instance): the base method is overridden there, so MockUp<WarehouseManager> would
+        // never intercept the actual dispatch.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         new MockUp<StarOSAgent>() {
             @Mock
@@ -525,7 +527,7 @@ public class ColocateCheckerTest {
                 return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
             }
         };
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeResource getBackgroundComputeResource(long tableId) {
                 throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "mocked: warehouse unavailable");

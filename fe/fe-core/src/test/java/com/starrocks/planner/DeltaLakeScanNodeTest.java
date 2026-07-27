@@ -164,6 +164,11 @@ public class DeltaLakeScanNodeTest {
         new Expectations() {{
             GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
             result = connector;
+            // Force the null branch in setupCloudCredential so the connector fallback (getMetadata()) runs;
+            // otherwise JMockit cascading returns a non-null CloudConfiguration and getMetadata() is skipped,
+            // failing the implicit minTimes=1 on the recording below.
+            table.getCloudConfiguration();
+            result = null;
             connector.getMetadata().getCloudConfiguration();
             result = cc;
             table.getCatalogName();

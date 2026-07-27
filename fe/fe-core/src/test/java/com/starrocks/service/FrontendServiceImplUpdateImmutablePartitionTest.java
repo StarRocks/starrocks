@@ -20,10 +20,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TNodeInfo;
@@ -137,17 +139,23 @@ public class FrontendServiceImplUpdateImmutablePartitionTest {
                 return acquiredComputeResource;
             }
 
-            // Tablet -> node assignment depends on which worker group asks for it.
-            @Mock
-            public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
-                return nodeIdOf(computeResource, loadComputeResource, acquiredComputeResource);
-            }
-
             // nodes_info is built from the node ids of the given resource's worker group.
             @Mock
             public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
                 return Lists.newArrayList(
                         nodeIdOf(computeResource, loadComputeResource, acquiredComputeResource));
+            }
+        };
+
+        // buildTablets() resolves each tablet via WarehouseManagerEPack.getComputeNodeAssignedToTablet, an
+        // override that does NOT route through the base getAliveComputeNodeId, so the mock must target the
+        // EPack method actually invoked. Tablet -> node assignment depends on the requesting worker group.
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode(
+                        nodeIdOf(computeResource, loadComputeResource, acquiredComputeResource),
+                        "127.0.0.1", 9050);
             }
         };
 

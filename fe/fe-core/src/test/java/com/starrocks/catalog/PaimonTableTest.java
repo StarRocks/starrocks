@@ -113,6 +113,14 @@ public class PaimonTableTest {
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
         String dbName = "testDB";
         String tableName = "testTable";
+        // getUUID() derefs paimonNativeTable.uuid(); @Mocked returns null for String, so stub it (real
+        // Paimon tables always have a non-null uuid).
+        new Expectations() {
+            {
+                paimonNativeTable.uuid();
+                result = "test_uuid";
+            }
+        };
         PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
         PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
         org.junit.jupiter.api.Assertions.assertEquals(table, table2);

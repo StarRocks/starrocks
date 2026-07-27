@@ -68,8 +68,13 @@ public class RefreshTableStmtTest {
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof RefreshTableStmt);
+        // A name with more than three parts is not rejected: TableRef reads parts[0] as the catalog and the
+        // last two as db.table, so "catalog1.db1.table1.test" resolves to catalog1.table1.test and db1 is dropped.
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1.test";
-        AnalyzeTestUtil.analyzeFail(sql_1);
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assertions.assertEquals("catalog1", ((RefreshTableStmt) stmt).getCatalogName());
+        Assertions.assertEquals("table1", ((RefreshTableStmt) stmt).getDbName());
+        Assertions.assertEquals("test", ((RefreshTableStmt) stmt).getTableName());
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"p1\", \"p2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof RefreshTableStmt);
